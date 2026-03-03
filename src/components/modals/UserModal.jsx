@@ -1,0 +1,180 @@
+import React, { useState, useEffect, useRef } from 'react';
+
+export default function UserModal({ user, onClose, onSave }) {
+    const [formData, setFormData] = useState(user || {
+        prefix: '', firstName: '', middleName: '', lastName: '', suffix: '', nickName: '',
+        name: '', title: '', company: '', department: '', workLocation: '',
+        email: '', personalEmail: '', phone: '', mobile: '',
+        role: '', userType: 'User',
+        username: '', password: '',
+        address: '', city: '', state: '', zip: '', country: '',
+        homeAddress: '', notes: ''
+    });
+    const [activeUserTab, setActiveUserTab] = useState('primary');
+    const [showPassword, setShowPassword] = useState(false);
+
+    const handleChange = (field, value) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
+        if (field === 'firstName' || field === 'lastName') {
+            const fn = field === 'firstName' ? value : formData.firstName;
+            const ln = field === 'lastName' ? value : formData.lastName;
+            setFormData(prev => ({ ...prev, [field]: value, name: (fn + ' ' + ln).trim() }));
+        }
+        // Auto-generate username from first initial + last name if username empty
+        if ((field === 'firstName' || field === 'lastName') && !formData.username) {
+            const fn = field === 'firstName' ? value : formData.firstName;
+            const ln = field === 'lastName' ? value : formData.lastName;
+            if (fn && ln) {
+                const autoUsername = (fn.charAt(0) + ln).toLowerCase().replace(/[^a-z0-9]/g, '');
+                setFormData(prev => ({ ...prev, [field]: value, name: (fn + ' ' + ln).trim(), username: autoUsername }));
+            }
+        }
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const name = (formData.firstName + ' ' + formData.lastName).trim() || formData.name;
+        onSave({ ...formData, name });
+    };
+
+    const tabBtnStyle = (active) => ({
+        padding: '0.625rem 1.5rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
+        fontWeight: '700', fontSize: '0.8125rem', fontFamily: 'inherit', transition: 'all 0.2s',
+        background: active ? '#ffffff' : 'transparent', color: active ? '#1e293b' : '#64748b',
+        boxShadow: active ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+    });
+
+    return (
+        <div className="modal-overlay">
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '650px' }}>
+                <h2>{user ? 'Edit User' : 'New User'}</h2>
+
+                <div style={{ display: 'flex', background: '#f1f3f5', borderRadius: '6px', padding: '3px', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '2px' }}>
+                    <button type="button" onClick={() => setActiveUserTab('primary')} style={tabBtnStyle(activeUserTab === 'primary')}>Primary Info</button>
+                    <button type="button" onClick={() => setActiveUserTab('security')} style={tabBtnStyle(activeUserTab === 'security')}>Login & Security</button>
+                    <button type="button" onClick={() => setActiveUserTab('additional')} style={tabBtnStyle(activeUserTab === 'additional')}>Additional Info</button>
+                </div>
+
+                <form onSubmit={handleSubmit}>
+                    {activeUserTab === 'primary' && (
+                    <div className="form-grid">
+                        <div className="form-group" style={{ gridColumn: 'span 1' }}>
+                            <label>Prefix</label>
+                            <select value={formData.prefix || ''} onChange={e => handleChange('prefix', e.target.value)}>
+                                <option value="">—</option>
+                                <option value="Mr.">Mr.</option><option value="Mrs.">Mrs.</option><option value="Ms.">Ms.</option><option value="Dr.">Dr.</option><option value="Prof.">Prof.</option>
+                            </select>
+                        </div>
+                        <div className="form-group"><label>First Name*</label><input type="text" value={formData.firstName || ''} onChange={e => handleChange('firstName', e.target.value)} required /></div>
+                        <div className="form-group"><label>Middle Name</label><input type="text" value={formData.middleName || ''} onChange={e => handleChange('middleName', e.target.value)} /></div>
+                        <div className="form-group"><label>Last Name*</label><input type="text" value={formData.lastName || ''} onChange={e => handleChange('lastName', e.target.value)} required /></div>
+                        <div className="form-group"><label>Suffix</label><input type="text" value={formData.suffix || ''} onChange={e => handleChange('suffix', e.target.value)} /></div>
+                        <div className="form-group"><label>Nick Name</label><input type="text" value={formData.nickName || ''} onChange={e => handleChange('nickName', e.target.value)} /></div>
+                        <div className="form-group"><label>Title</label><input type="text" value={formData.title || ''} onChange={e => handleChange('title', e.target.value)} /></div>
+                        <div className="form-group"><label>Company</label><input type="text" value={formData.company || ''} onChange={e => handleChange('company', e.target.value)} /></div>
+                        <div className="form-group"><label>Department</label><input type="text" value={formData.department || ''} onChange={e => handleChange('department', e.target.value)} /></div>
+                        <div className="form-group"><label>Work Location</label><input type="text" value={formData.workLocation || ''} onChange={e => handleChange('workLocation', e.target.value)} /></div>
+                        <div className="form-group"><label>Work Email</label><input type="email" value={formData.email || ''} onChange={e => handleChange('email', e.target.value)} /></div>
+                        <div className="form-group"><label>Personal Email</label><input type="email" value={formData.personalEmail || ''} onChange={e => handleChange('personalEmail', e.target.value)} /></div>
+                        <div className="form-group"><label>Work Phone</label><input type="tel" value={formData.phone || ''} onChange={e => handleChange('phone', e.target.value)} /></div>
+                        <div className="form-group"><label>Mobile</label><input type="tel" value={formData.mobile || ''} onChange={e => handleChange('mobile', e.target.value)} /></div>
+                        <div className="form-group"><label>Territory</label><input type="text" value={formData.territory || ''} onChange={e => handleChange('territory', e.target.value)} placeholder="e.g., West, Northeast, EMEA" /></div>
+                        <div className="form-group"><label>Team</label><input type="text" value={formData.team || ''} onChange={e => handleChange('team', e.target.value)} placeholder="e.g., Enterprise, Mid-Market, SMB" /></div>
+                    </div>
+                    )}
+
+                    {activeUserTab === 'security' && (
+                    <div style={{ maxWidth: '400px' }}>
+                        <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '1.25rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                <span style={{ fontSize: '1.125rem' }}>🔐</span>
+                                <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>Login Credentials</span>
+                            </div>
+                            <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '0 0 1rem', lineHeight: 1.5 }}>
+                                Set a username and password for this user. They will use these credentials to log in to the application.
+                            </p>
+                            <div className="form-grid" style={{ gridTemplateColumns: '1fr' }}>
+                                <div className="form-group">
+                                    <label>Username*</label>
+                                    <input
+                                        type="text"
+                                        value={formData.username || ''}
+                                        onChange={e => setFormData(prev => ({ ...prev, username: e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, '') }))}
+                                        placeholder="e.g., jsmith"
+                                        required
+                                        autoComplete="off"
+                                        style={{ fontFamily: 'monospace, inherit' }}
+                                    />
+                                    <span style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '0.25rem', display: 'block' }}>Lowercase letters, numbers, dots, hyphens only</span>
+                                </div>
+                                <div className="form-group">
+                                    <label>Password*</label>
+                                    <div style={{ position: 'relative' }}>
+                                        <input
+                                            type={showPassword ? 'text' : 'password'}
+                                            value={formData.password || ''}
+                                            onChange={e => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                                            placeholder="Enter password"
+                                            required
+                                            autoComplete="new-password"
+                                            style={{ paddingRight: '3rem' }}
+                                        />
+                                        <button type="button" onClick={() => setShowPassword(!showPassword)}
+                                            style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8125rem', color: '#64748b', fontFamily: 'inherit', padding: '0.25rem' }}>
+                                            {showPassword ? '🙈' : '👁'}
+                                        </button>
+                                    </div>
+                                    {formData.password && (
+                                        <div style={{ marginTop: '0.375rem' }}>
+                                            <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.25rem' }}>
+                                                {[1,2,3,4].map(i => (
+                                                    <div key={i} style={{ flex: 1, height: '3px', borderRadius: '2px', background: formData.password.length >= i * 3 ? (formData.password.length >= 10 ? '#10b981' : formData.password.length >= 6 ? '#f59e0b' : '#ef4444') : '#e2e8f0' }} />
+                                                ))}
+                                            </div>
+                                            <span style={{ fontSize: '0.625rem', color: formData.password.length >= 10 ? '#10b981' : formData.password.length >= 6 ? '#f59e0b' : '#ef4444' }}>
+                                                {formData.password.length >= 10 ? 'Strong' : formData.password.length >= 6 ? 'Moderate' : 'Weak — use 6+ characters'}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                            <div className="form-group" style={{ marginBottom: 0 }}>
+                                <label>User Type / Role*</label>
+                                <select value={formData.userType || 'User'} onChange={e => setFormData(prev => ({ ...prev, userType: e.target.value }))} required>
+                                    <option value="Admin">Admin — Full access, manage settings & users</option>
+                                    <option value="Manager">Manager — View all data, edit & delete</option>
+                                    <option value="User">Sales Rep — Own data only, create & edit</option>
+                                    <option value="ReadOnly">Read-Only — View only, no changes</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    )}
+
+                    {activeUserTab === 'additional' && (
+                    <div className="form-grid">
+                        <div style={{ gridColumn: '1 / -1', fontWeight: '700', fontSize: '0.8125rem', color: '#1e293b', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.375rem', marginBottom: '0.25rem' }}>Home Address</div>
+                        <div className="form-group full"><label>Street Address</label><input type="text" value={formData.address || ''} onChange={e => handleChange('address', e.target.value)} /></div>
+                        <div className="form-group"><label>City</label><input type="text" value={formData.city || ''} onChange={e => handleChange('city', e.target.value)} /></div>
+                        <div className="form-group"><label>State</label><input type="text" value={formData.state || ''} onChange={e => handleChange('state', e.target.value)} /></div>
+                        <div className="form-group"><label>ZIP Code</label><input type="text" value={formData.zip || ''} onChange={e => handleChange('zip', e.target.value)} /></div>
+                        <div className="form-group"><label>Country</label><input type="text" value={formData.country || ''} onChange={e => handleChange('country', e.target.value)} /></div>
+                        <div className="form-group full"><label>Notes</label>
+                            <textarea value={formData.notes || ''} onChange={e => handleChange('notes', e.target.value)}
+                                rows="4" style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'inherit', resize: 'vertical' }} />
+                        </div>
+                    </div>
+                    )}
+
+                    <div className="modal-actions">
+                        <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+                        <button type="submit" className="btn">{user ? 'Update' : 'Create'}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
