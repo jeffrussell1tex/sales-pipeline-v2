@@ -222,7 +222,6 @@ function App() {
 
     // ── Soft delete with undo toast ────────────────────────────────
     const softDelete = (label, deleteFunc, restoreFunc) => {
-        console.log('softDelete called:', label);
         // Execute delete immediately
         deleteFunc();
         // Clear any previous toast
@@ -876,7 +875,6 @@ dbFetch('/.netlify/functions/contacts', {
     };
 
     const handleDelete = (id) => {
-        console.log('handleDelete called:', id);
         const opp = opportunities.find(o => o.id === id);
         if (!opp) return;
         showConfirm('Are you sure you want to delete this opportunity?', () => {
