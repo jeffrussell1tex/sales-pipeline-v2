@@ -2557,15 +2557,21 @@ dbFetch('/.netlify/functions/activities', {
                                 </div>
                                 <div style={{ width: '1px', height: '18px', background: '#bfdbfe' }} />
                                 <button onClick={() => {
-                                   showConfirm('Delete ' + selectedOpps.length + ' selected opportunit' + (selectedOpps.length===1?'y':'ies') + '? This cannot be undone.', () => {
-                                        const idsToDelete = [...selectedOpps];
-                                        setOpportunities(prev => prev.filter(o => !idsToDelete.includes(o.id)));
-                                        setSelectedOpps([]);
-                                        idsToDelete.forEach(id => {
-                                            dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
-                                                .catch(err => console.error('Failed to delete opportunity:', err));
-                                        });
-                                    });
+                                   showConfirm('Delete ' + selectedOpps.length + '...', () => {
+    const idsToDelete = [...selectedOpps];
+    const snapshot = [...opportunities];
+    setOpportunities(prev => prev.filter(o => !idsToDelete.includes(o.id)));
+    setSelectedOpps([]);
+    idsToDelete.forEach(id => {
+        dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
+            .catch(err => console.error('Failed to delete opportunity:', err));
+    });
+    softDelete(
+        `${idsToDelete.length} opportunit${idsToDelete.length === 1 ? 'y' : 'ies'}`,
+        () => {},
+        () => { setOpportunities(snapshot); setUndoToast(null); }
+    );
+});
                                 }} style={{ padding: '0.2rem 0.625rem', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     🗑 Delete
                                 </button>
@@ -3237,15 +3243,21 @@ dbFetch('/.netlify/functions/activities', {
                                 </div>
                                 <div style={{ width:'1px', height:'18px', background:'#bfdbfe' }} />
                                 <button onClick={() => {
-                                   showConfirm('Delete ' + selectedOpps.length + ' selected opportunit' + (selectedOpps.length===1?'y':'ies') + '? This cannot be undone.', () => {
-                                        const idsToDelete = [...selectedOpps];
-                                        setOpportunities(prev => prev.filter(o => !idsToDelete.includes(o.id)));
-                                        setSelectedOpps([]);
-                                        idsToDelete.forEach(id => {
-                                            dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
-                                                .catch(err => console.error('Failed to delete opportunity:', err));
-                                        });
-                                    });
+                                   showConfirm('Delete ' + selectedOpps.length + '...', () => {
+    const idsToDelete = [...selectedOpps];
+    const snapshot = [...opportunities];
+    setOpportunities(prev => prev.filter(o => !idsToDelete.includes(o.id)));
+    setSelectedOpps([]);
+    idsToDelete.forEach(id => {
+        dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
+            .catch(err => console.error('Failed to delete opportunity:', err));
+    });
+    softDelete(
+        `${idsToDelete.length} opportunit${idsToDelete.length === 1 ? 'y' : 'ies'}`,
+        () => {},
+        () => { setOpportunities(snapshot); setUndoToast(null); }
+    );
+});
                                 }} style={{ padding:'0.2rem 0.625rem', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'6px', fontSize:'0.75rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>🗑 Delete</button>
                                 <button onClick={() => { setSelectedOpps([]); setBulkAction({ stage:'', rep:'' }); }}
                                     style={{ marginLeft:'auto', background:'none', border:'none', color:'#64748b', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', fontWeight:'600' }}>Clear selection ✕</button>
