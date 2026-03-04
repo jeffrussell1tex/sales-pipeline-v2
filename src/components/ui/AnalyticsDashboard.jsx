@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { stages } from '../../utils/constants';
+import { SliceDropdown } from './ViewingBar';
 
 export default function AnalyticsDashboard({ opportunities, settings, quotaData, accounts, users }) {
     const [analyticsExpanded, setAnalyticsExpanded] = useState({ forecast: true, metrics: true, stage: true, product: true, funnel: true, dealsByAccount: true, byTeam: true, byTerritory: true });
