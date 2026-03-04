@@ -34,7 +34,7 @@ export async function verifyAuth(event) {
         const payload = await verifyRes.json();
 
         const userId   = payload.sub || payload.user_id || '';
-        const meta     = payload.metadata?.public || {};
+        const meta     = payload.public_metadata || payload.metadata?.public || payload.unsafe_metadata || {};
         const userRole = meta.role || 'User';
         const managedReps = meta.managedReps || [];
 
