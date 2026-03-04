@@ -1,4 +1,5 @@
-// Shared Clerk JWT verification helper for all Netlify functions
+import { createClerkClient } from '@clerk/backend';
+
 export async function verifyAuth(event) {
     const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
@@ -14,31 +15,15 @@ export async function verifyAuth(event) {
             return { error: 'Server configuration error', status: 500 };
         }
 
-        const verifyRes = await fetch('https://api.clerk.com/v1/tokens/verify', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${clerkSecretKey}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ token }),
-        });
+        const clerk = createClerkClient({ secretKey: clerkSecretKey });
+        const payload = await clerk.verifyToken(token);
 
-        if (!verifyRes.ok) {
-            const errText = await verifyRes.text();
-            console.error('Token verify failed:', verifyRes.status, errText);
-            return { error: 'Unauthorized: invalid token', status: 401 };
-        }
-
-        const payload = await verifyRes.json();
-
-        // Log full payload to diagnose metadata location
         console.log('JWT payload keys:', Object.keys(payload).join(', '));
-        console.log('JWT payload.public_metadata:', JSON.stringify(payload.public_metadata));
-        console.log('JWT payload.metadata:', JSON.stringify(payload.metadata));
+        console.log('public_metadata:', JSON.stringify(payload.public_metadata));
 
-        const userId   = payload.sub || payload.user_id || '';
-        const meta     = payload.public_metadata || payload.metadata?.public || {};
-        const userRole = meta.role || 'User';
+        const userId      = payload.sub || '';
+        const meta        = payload.public_metadata || {};
+        const userRole    = meta.role || 'User';
         const managedReps = meta.managedReps || [];
 
         console.log('Resolved role:', userRole, 'userId:', userId);
