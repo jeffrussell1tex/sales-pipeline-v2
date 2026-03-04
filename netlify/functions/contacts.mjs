@@ -21,7 +21,7 @@ export const handler = async (event) => {
             'title','company','department','workLocation','email','personalEmail',
             'phone','mobile','address','city','state','zip','country',
             'managers','directReports','assistantName','homeAddress','notes',
-            'assignedRep','assignedTerritory','createdAt'
+            'assignedRep','assignedTerritory'
         ];
         return Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
     };

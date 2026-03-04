@@ -18,7 +18,7 @@ export const handler = async (event) => {
         const allowed = [
             'id','title','description','type','dueDate','dueTime','reminderDate','reminderTime',
             'assignedTo','priority','status','completed','completedDate',
-            'opportunityId','contactId','accountId','relatedTo','createdAt'
+            'opportunityId','contactId','accountId','relatedTo'
         ];
         return Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
     };

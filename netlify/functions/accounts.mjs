@@ -18,7 +18,7 @@ export const handler = async (event) => {
         const allowed = [
             'id','name','verticalMarket','industry','address','city','state','zip',
             'country','website','phone','accountOwner','assignedRep','assignedTerritory',
-            'parentAccountId','notes','createdAt'
+            'parentAccountId','notes'
         ];
         return Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
     };

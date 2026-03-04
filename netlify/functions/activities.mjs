@@ -17,7 +17,7 @@ export const handler = async (event) => {
     const sanitize = (data) => {
         const allowed = [
             'id','type','date','subject','notes','outcome','duration',
-            'opportunityId','contactId','accountId','author','createdAt'
+            'opportunityId','contactId','accountId','author'
         ];
         return Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
     };
