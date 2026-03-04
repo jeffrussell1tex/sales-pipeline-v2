@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useUser, useClerk, SignIn } from '@clerk/clerk-react';
+import { useUser, useClerk, useAuth, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch } from './utils/storage';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import CsvImportModal from './components/modals/CsvImportModal';
@@ -20,7 +20,13 @@ import AnalyticsDashboard from './components/ui/AnalyticsDashboard';
 function App() {
     // Clerk auth — powered by @clerk/clerk-react
     const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
-    const { signOut, getToken } = useClerk();
+    const { signOut } = useClerk();
+    const { getToken } = useAuth();
+
+    // Make getToken available to dbFetch utility
+    useEffect(() => {
+        window.__getClerkToken = getToken;
+    }, [getToken]);
     const clerkUserMeta = clerkUser?.publicMetadata || {};
     const currentUser = clerkUser
         ? (((clerkUser.firstName || '') + ' ' + (clerkUser.lastName || '')).trim() || clerkUser.emailAddresses?.[0]?.emailAddress || 'User')
