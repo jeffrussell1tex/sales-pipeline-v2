@@ -1,4 +1,4 @@
-import { createClerkClient } from '@clerk/backend';
+import { verifyToken } from '@clerk/backend';
 
 export async function verifyAuth(event) {
     const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
@@ -15,8 +15,7 @@ export async function verifyAuth(event) {
             return { error: 'Server configuration error', status: 500 };
         }
 
-        const clerk = createClerkClient({ secretKey: clerkSecretKey });
-        const payload = await clerk.verifyToken(token);
+        const payload = await verifyToken(token, { secretKey: clerkSecretKey });
 
         console.log('JWT payload keys:', Object.keys(payload).join(', '));
         console.log('public_metadata:', JSON.stringify(payload.public_metadata));
