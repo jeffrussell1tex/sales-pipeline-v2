@@ -24,7 +24,7 @@ export default function TimePicker({ value, onChange }) {
     
     return (
         <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
-            <select value={hour || ''} onChange={e => { if (e.target.value === '') { onChange(''); update(parseInt(e.target.value), minute || 0, period); }}} style={selStyle}>
+            <select value={hour || ''} onChange={e => { if (e.target.value === '') { onChange(''); } else { update(parseInt(e.target.value), minute || 0, period); }}} style={selStyle}>
                 <option value="">--</option>
                 {[1,2,3,4,5,6,7,8,9,10,11,12].map(h => <option key={h} value={h}>{h}</option>)}
             </select>
