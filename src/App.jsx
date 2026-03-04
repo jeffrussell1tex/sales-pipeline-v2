@@ -4095,22 +4095,24 @@ dbFetch('/.netlify/functions/activities', {
                         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                             {canEdit && <button className="btn" onClick={handleAddAccount}>+ Add Account</button>}
                             {selectedAccounts.length > 0 && (
-                                <button className="btn btn-secondary" onClick={() => {
-                                   showConfirm('Delete ' + selectedAccounts.length + ' selected account(s)? This cannot be undone.', () => {
-    const accountIdsToDelete = [...selectedAccounts];
-    const snapshot = [...accounts];
-    setAccounts(prev => prev.filter(a => !accountIdsToDelete.includes(a.id)));
-    setSelectedAccounts([]);
-    accountIdsToDelete.forEach(id => {
-        dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
-            .catch(err => console.error('Failed to delete account:', err));
-    });
-    softDelete(
-        `${accountIdsToDelete.length} account${accountIdsToDelete.length === 1 ? '' : 's'}`,
-        () => {},
-        () => { setAccounts(snapshot); setUndoToast(null); }
-    );
-});
+    <button className="btn btn-secondary" onClick={() => {
+        showConfirm('Delete ' + selectedAccounts.length + ' selected account(s)? This cannot be undone.', () => {
+            const accountIdsToDelete = [...selectedAccounts];
+            const snapshot = [...accounts];
+            setAccounts(prev => prev.filter(a => !accountIdsToDelete.includes(a.id)));
+            setSelectedAccounts([]);
+            accountIdsToDelete.forEach(id => {
+                dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
+                    .catch(err => console.error('Failed to delete account:', err));
+            });
+            softDelete(
+                `${accountIdsToDelete.length} account${accountIdsToDelete.length === 1 ? '' : 's'}`,
+                () => {},
+                () => { setAccounts(snapshot); setUndoToast(null); }
+            );
+        });
+    }}>Delete ({selectedAccounts.length})</button>
+)}
                             <button className="btn" style={{ background: '#0ea5e9', color: '#fff', padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} onClick={() => exportToCSV(
                                 'accounts-' + new Date().toISOString().slice(0,10) + '.csv',
                                 ['Name','Industry','Phone','Website','Account Owner','Parent Account','Billing Address','Annual Revenue','Employees','Notes'],
