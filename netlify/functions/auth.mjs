@@ -1,4 +1,4 @@
-import { verifyToken } from '@clerk/backend';
+import { verifyToken, createClerkClient } from '@clerk/backend';
 
 export async function verifyAuth(event) {
     const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
@@ -15,17 +15,19 @@ export async function verifyAuth(event) {
             return { error: 'Server configuration error', status: 500 };
         }
 
+        // Verify the JWT
         const payload = await verifyToken(token, { secretKey: clerkSecretKey });
+        const userId = payload.sub || '';
 
-        console.log('JWT payload keys:', Object.keys(payload).join(', '));
-        console.log('public_metadata:', JSON.stringify(payload.public_metadata));
+        // Fetch user from Clerk API to get public metadata
+        const clerk = createClerkClient({ secretKey: clerkSecretKey });
+        const user = await clerk.users.getUser(userId);
+        const meta = user.publicMetadata || {};
 
-        const userId      = payload.sub || '';
-        const meta        = payload.public_metadata || {};
         const userRole    = meta.role || 'User';
         const managedReps = meta.managedReps || [];
 
-        console.log('Resolved role:', userRole, 'userId:', userId);
+        console.log('userId:', userId, 'role:', userRole);
 
         return { userId, userRole, managedReps, error: null };
 
