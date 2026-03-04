@@ -4096,17 +4096,21 @@ dbFetch('/.netlify/functions/activities', {
                             {canEdit && <button className="btn" onClick={handleAddAccount}>+ Add Account</button>}
                             {selectedAccounts.length > 0 && (
                                 <button className="btn btn-secondary" onClick={() => {
-                                    showConfirm('Delete ' + selectedAccounts.length + ' selected account(s)? This cannot be undone.', () => {
-                                        const accountIdsToDelete = [...selectedAccounts];
-                                        setAccounts(prev => prev.filter(a => !accountIdsToDelete.includes(a.id)));
-                                        setSelectedAccounts([]);
-                                        accountIdsToDelete.forEach(id => {
-                                            dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
-                                                .catch(err => console.error('Failed to delete account:', err));
-                                        });
-                                    });
-                                }}>Delete ({selectedAccounts.length})</button>
-                            )}
+                                   showConfirm('Delete ' + selectedAccounts.length + ' selected account(s)? This cannot be undone.', () => {
+    const accountIdsToDelete = [...selectedAccounts];
+    const snapshot = [...accounts];
+    setAccounts(prev => prev.filter(a => !accountIdsToDelete.includes(a.id)));
+    setSelectedAccounts([]);
+    accountIdsToDelete.forEach(id => {
+        dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
+            .catch(err => console.error('Failed to delete account:', err));
+    });
+    softDelete(
+        `${accountIdsToDelete.length} account${accountIdsToDelete.length === 1 ? '' : 's'}`,
+        () => {},
+        () => { setAccounts(snapshot); setUndoToast(null); }
+    );
+});
                             <button className="btn" style={{ background: '#0ea5e9', color: '#fff', padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} onClick={() => exportToCSV(
                                 'accounts-' + new Date().toISOString().slice(0,10) + '.csv',
                                 ['Name','Industry','Phone','Website','Account Owner','Parent Account','Billing Address','Annual Revenue','Employees','Notes'],
@@ -4586,14 +4590,20 @@ dbFetch('/.netlify/functions/activities', {
                             </div>
                             <button onClick={() => {
                                 showConfirm('Delete ' + selectedContacts.length + ' selected contact(s)? This cannot be undone.', () => {
-                                   const contactIdsToDelete = [...selectedContacts];
-setContacts(contacts.filter(c => !contactIdsToDelete.includes(c.id)));
-setSelectedContacts([]);
-contactIdsToDelete.forEach(id => {
-    dbFetch(`/.netlify/functions/contacts?id=${id}`, { method: 'DELETE' })
-.catch(err => console.error('Failed to delete contact:', err));
+    const contactIdsToDelete = [...selectedContacts];
+    const snapshot = [...contacts];
+    setContacts(contacts.filter(c => !contactIdsToDelete.includes(c.id)));
+    setSelectedContacts([]);
+    contactIdsToDelete.forEach(id => {
+        dbFetch(`/.netlify/functions/contacts?id=${id}`, { method: 'DELETE' })
+            .catch(err => console.error('Failed to delete contact:', err));
+    });
+    softDelete(
+        `${contactIdsToDelete.length} contact${contactIdsToDelete.length === 1 ? '' : 's'}`,
+        () => {},
+        () => { setContacts(snapshot); setUndoToast(null); }
+    );
 });
-                                });
                             }}
                                 style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '0.5rem 1rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.8125rem', fontFamily: 'inherit', transition: 'background 0.2s' }}
                                 onMouseEnter={e => e.target.style.background = '#dc2626'}
