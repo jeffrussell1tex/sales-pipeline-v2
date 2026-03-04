@@ -5,11 +5,15 @@ export const safeStorage = {
     removeItem(key) { try { localStorage.removeItem(key); } catch(e) {} }
 };
 
-// Authenticated fetch — injects Clerk JWT + logs HTTP errors
+// Authenticated fetch — injects Clerk JWT
 export const dbFetch = async (url, options) => {
     let token = '';
     try {
-        if (window.Clerk?.session) {
+        // Try the Clerk client session token
+        const sessions = window.Clerk?.client?.activeSessions;
+        if (sessions && sessions.length > 0) {
+            token = await sessions[0].getToken();
+        } else if (window.Clerk?.session) {
             token = await window.Clerk.session.getToken();
         }
     } catch(e) {}

@@ -20,7 +20,7 @@ import AnalyticsDashboard from './components/ui/AnalyticsDashboard';
 function App() {
     // Clerk auth — powered by @clerk/clerk-react
     const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
-    const { signOut } = useClerk();
+    const { signOut, getToken } = useClerk();
     const clerkUserMeta = clerkUser?.publicMetadata || {};
     const currentUser = clerkUser
         ? (((clerkUser.firstName || '') + ' ' + (clerkUser.lastName || '')).trim() || clerkUser.emailAddresses?.[0]?.emailAddress || 'User')
@@ -270,7 +270,7 @@ function App() {
       useEffect(() => {
     if (!clerkUser) return; // Don't load until authenticated
     const loadData = async () => {
-const token = await (window.Clerk?.session?.getToken().catch(() => '')) || '';
+const token = await getToken().catch(() => '');
 const authHeaders = token ? { 'Authorization': 'Bearer ' + token } : {};
 const checkOk = (r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r; };
 const authFetch = (url) => fetch(url, { headers: authHeaders });
