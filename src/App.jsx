@@ -8588,10 +8588,10 @@ ${bodyHtml}
 
             {/* ── Undo Toast ───────────────────────────────────────── */}
             {undoToast && (
-                <div style={{ position: 'fixed', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 9999,
+                <div style={{ position: 'fixed', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10050,
                     background: '#1e293b', color: '#fff', borderRadius: '10px', padding: '0.75rem 1.25rem',
                     display: 'flex', alignItems: 'center', gap: '1rem', boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
-                    minWidth: '320px', maxWidth: '480px', animation: 'fadeInUp 0.2s ease' }}>
+                    minWidth: '320px', maxWidth: '480px' }}>
                     <span style={{ fontSize: '0.875rem', flex: 1 }}>
                         🗑 <strong>{undoToast.label}</strong> deleted
                     </span>
