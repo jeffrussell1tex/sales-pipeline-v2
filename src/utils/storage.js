@@ -5,19 +5,22 @@ export const safeStorage = {
     removeItem(key) { try { localStorage.removeItem(key); } catch(e) {} }
 };
 
-// Authenticated fetch — injects Clerk JWT via window.__getClerkToken set by App.jsx
+// Authenticated fetch — injects Clerk JWT
+// window.__getClerkToken is set by App.jsx after useAuth() initializes
 export const dbFetch = async (url, options) => {
     let token = '';
     try {
-        if (window.__getClerkToken) {
+        if (typeof window.__getClerkToken === 'function') {
             token = await window.__getClerkToken();
         }
-    } catch(e) {}
+    } catch(e) {
+        console.warn('Failed to get Clerk token:', e);
+    }
 
     const authHeaders = token ? { 'Authorization': 'Bearer ' + token } : {};
     const mergedOptions = {
         ...options,
-        headers: { ...(options?.headers || {}), ...authHeaders }
+        headers: { 'Content-Type': 'application/json', ...(options?.headers || {}), ...authHeaders }
     };
     return fetch(url, mergedOptions)
         .then(r => {
