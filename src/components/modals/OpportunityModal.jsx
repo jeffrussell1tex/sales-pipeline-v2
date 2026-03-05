@@ -137,11 +137,13 @@ export default function OpportunityModal({ opportunity, accounts, contacts, sett
 if (formData.account && formData.account.trim()) {
     const isJustCreated = lastCreatedAccountName &&
         lastCreatedAccountName.toLowerCase() === formData.account.trim().toLowerCase();
-    const accountExists = isJustCreated || (accounts || []).some(a =>
-        a.name && a.name.toLowerCase() === formData.account.trim().toLowerCase()
-    );
-    if (!accountExists) {
-        errors.account = '__not_found__';
+    if (!isJustCreated) {
+        const accountExists = (accounts || []).some(a =>
+            a.name && a.name.toLowerCase() === formData.account.trim().toLowerCase()
+        );
+        if (!accountExists) {
+            errors.account = '__not_found__';
+        }
     }
 }
 
