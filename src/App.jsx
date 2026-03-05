@@ -139,6 +139,10 @@ function App() {
     const [accountsViewMode, setAccountsViewMode] = useState('compact');
     const [quotaForecastFilter, setQuotaForecastFilter] = useState([]);
     const [commissionsFilter, setCommissionsFilter] = useState([]);
+    const [pipelineView, setPipelineView] = useState(() => localStorage.getItem('pipelineView') || 'funnel');
+    const [funnelExpandedStage, setFunnelExpandedStage] = useState(null);
+    const [kanbanDragging, setKanbanDragging] = useState(null);
+    const [kanbanDragOver, setKanbanDragOver] = useState(null);
     const [pipelineQuarterFilter, setPipelineQuarterFilter] = useState([]);
     const [pipelineRepFilter, setPipelineRepFilter] = useState([]);
     const [pipelineTeamFilter, setPipelineTeamFilter] = useState([]);
@@ -2484,7 +2488,159 @@ dbFetch('/.netlify/functions/activities', {
                     </div>
                     {/* ════ END SUMMARY PANEL ════ */}
 
+                    {/* ════ VIEW TOGGLE ════ */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                        <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.25rem' }}>View:</span>
+                        {[{key:'funnel',label:'🔻 Funnel'},{key:'kanban',label:'🗂 Kanban'},{key:'table',label:'☰ Table'}].map(v => (
+                            <button key={v.key} onClick={() => { setPipelineView(v.key); localStorage.setItem('pipelineView', v.key); setFunnelExpandedStage(null); }}
+                                style={{ padding: '0.3rem 0.75rem', border: '1px solid ' + (pipelineView === v.key ? '#2563eb' : '#e2e8f0'), borderRadius: '6px', background: pipelineView === v.key ? '#2563eb' : '#fff', color: pipelineView === v.key ? '#fff' : '#64748b', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
+                                {v.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* ════ FUNNEL VIEW ════ */}
+                    {pipelineView === 'funnel' && (() => {
+                        const stageColors = ['#6366f1','#8b5cf6','#0ea5e9','#f59e0b','#f97316','#10b981','#16a34a','#ef4444'];
+                        return (
+                            <div style={{ padding: '1.25rem 1.5rem' }}>
+                                {stages.map((stage, idx) => {
+                                    const stageOpps = pipelineFilteredOpps.filter(o => o.stage === stage);
+                                    const stageARR = stageOpps.reduce((s, o) => s + (o.arr || 0), 0);
+                                    const maxCount = Math.max(...stages.map(s => pipelineFilteredOpps.filter(o => o.stage === s).length), 1);
+                                    const barPct = stageOpps.length === 0 ? 4 : Math.max(8, Math.round((stageOpps.length / maxCount) * 100));
+                                    const color = stageColors[idx % stageColors.length];
+                                    const isExpanded = funnelExpandedStage === stage;
+                                    return (
+                                        <div key={stage}>
+                                            <div onClick={() => setFunnelExpandedStage(isExpanded ? null : stage)}
+                                                style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.375rem', cursor: 'pointer', padding: '0.25rem 0.5rem', borderRadius: '6px', transition: 'background 0.1s' }}
+                                                onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'}
+                                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                <div style={{ width: '170px', flexShrink: 0, textAlign: 'right', paddingRight: '0.75rem' }}>
+                                                    <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#475569', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stage}</div>
+                                                    <div style={{ fontSize: '0.6875rem', color: color, fontWeight: '700' }}>${(stageARR/1000).toFixed(0)}K · {stageOpps.length} deal{stageOpps.length !== 1 ? 's' : ''}</div>
+                                                </div>
+                                                <div style={{ flex: 1, height: '38px', display: 'flex', alignItems: 'center' }}>
+                                                    <div style={{ width: barPct + '%', height: '100%', borderRadius: '5px', background: color, opacity: stageOpps.length === 0 ? 0.15 : 0.85, display: 'flex', alignItems: 'center', paddingLeft: '0.625rem', transition: 'width 0.3s ease', minWidth: '28px' }}>
+                                                        {stageOpps.length > 0 && <span style={{ fontSize: '0.6875rem', fontWeight: '800', color: '#fff' }}>{stageOpps.length}</span>}
+                                                    </div>
+                                                </div>
+                                                <div style={{ width: '80px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    {(() => { const stDef = (settings.funnelStages||[]).find(s=>s.name===stage); return stDef ? <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{stDef.weight}% prob</span> : <span />; })()}
+                                                    <span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>{isExpanded ? '▲' : '▼'}</span>
+                                                </div>
+                                            </div>
+                                            {isExpanded && stageOpps.length > 0 && (
+                                                <div style={{ marginLeft: '170px', marginBottom: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto auto', padding: '0.375rem 0.75rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', gap: '0.5rem' }}>
+                                                        <span>Opportunity</span><span>Account</span><span style={{textAlign:'right'}}>ARR</span><span>Close</span><span>Actions</span>
+                                                    </div>
+                                                    {stageOpps.map(opp => (
+                                                        <div key={opp.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto auto', padding: '0.5rem 0.75rem', borderBottom: '1px solid #f1f5f9', fontSize: '0.8125rem', alignItems: 'center', gap: '0.5rem' }}
+                                                            onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
+                                                            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                            <span style={{ fontWeight: '600', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.opportunityName || opp.account}</span>
+                                                            <span style={{ color: '#64748b', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.account}</span>
+                                                            <span style={{ fontWeight: '700', color: '#2563eb', fontSize: '0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>${((opp.arr||0)/1000).toFixed(0)}K</span>
+                                                            <span style={{ color: '#94a3b8', fontSize: '0.6875rem', whiteSpace: 'nowrap' }}>{opp.forecastedCloseDate || '—'}</span>
+                                                            <div style={{ display: 'flex', gap: '0.375rem' }}>
+                                                                <button className="action-btn" onClick={e => { e.stopPropagation(); handleEdit(opp); }} style={{ padding: '0.15rem 0.5rem', fontSize: '0.6875rem' }}>Edit</button>
+                                                                <button className="action-btn delete" onClick={e => { e.stopPropagation(); handleDelete(opp.id); }} style={{ padding: '0.15rem 0.5rem', fontSize: '0.6875rem' }}>Del</button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {isExpanded && stageOpps.length === 0 && (
+                                                <div style={{ marginLeft: '170px', marginBottom: '0.75rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '8px', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center', border: '1px dashed #e2e8f0' }}>No deals in this stage</div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })()}
+
+                    {/* ════ KANBAN VIEW ════ */}
+                    {pipelineView === 'kanban' && (() => {
+                        const stageColors = ['#6366f1','#8b5cf6','#0ea5e9','#f59e0b','#f97316','#10b981','#16a34a','#ef4444'];
+                        const handleKanbanDrop = (toStage) => {
+                            if (!kanbanDragging || kanbanDragging.fromStage === toStage) { setKanbanDragging(null); setKanbanDragOver(null); return; }
+                            const today = new Date().toISOString().split('T')[0];
+                            const updatedOpp = opportunities.find(o => o.id === kanbanDragging.oppId);
+                            if (!updatedOpp) return;
+                            const newOpp = { ...updatedOpp, stage: toStage, stageChangedDate: today, stageHistory: [...(updatedOpp.stageHistory||[]), { stage: toStage, date: today, prevStage: updatedOpp.stage, author: currentUser||'', timestamp: new Date().toISOString() }] };
+                            setOpportunities(prev => prev.map(o => o.id === kanbanDragging.oppId ? newOpp : o));
+                            dbFetch('/.netlify/functions/opportunities', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(newOpp) }).catch(console.error);
+                            setKanbanDragging(null);
+                            setKanbanDragOver(null);
+                        };
+                        return (
+                            <div style={{ overflowX: 'auto', padding: '1rem 1.25rem 1.5rem' }}>
+                                <div style={{ display: 'flex', gap: '0.75rem', minWidth: 'max-content' }}>
+                                    {stages.filter(s => s !== 'Closed Lost').map((stage, idx) => {
+                                        const color = stageColors[idx % stageColors.length];
+                                        const colOpps = pipelineFilteredOpps.filter(o => o.stage === stage);
+                                        const colARR = colOpps.reduce((s, o) => s + (o.arr||0), 0);
+                                        const isDragOver = kanbanDragOver === stage;
+                                        return (
+                                            <div key={stage}
+                                                onDragOver={e => { e.preventDefault(); setKanbanDragOver(stage); }}
+                                                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setKanbanDragOver(null); }}
+                                                onDrop={() => handleKanbanDrop(stage)}
+                                                style={{ width: '200px', flexShrink: 0, background: isDragOver ? '#eff6ff' : '#f8fafc', border: '1px solid ' + (isDragOver ? '#93c5fd' : '#e2e8f0'), borderRadius: '10px', overflow: 'hidden', transition: 'all 0.15s' }}>
+                                                <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid #e2e8f0', borderTop: '3px solid ' + color, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    <span style={{ fontSize: '0.6875rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{stage}</span>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', flexShrink: 0 }}>
+                                                        <span style={{ fontSize: '0.6rem', fontWeight: '700', background: '#e2e8f0', color: '#64748b', borderRadius: '10px', padding: '0.1rem 0.35rem' }}>{colOpps.length}</span>
+                                                        <span style={{ fontSize: '0.6rem', fontWeight: '700', color }}>${(colARR/1000).toFixed(0)}K</span>
+                                                    </div>
+                                                </div>
+                                                <div style={{ padding: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', minHeight: '80px' }}>
+                                                    {colOpps.map(opp => {
+                                                        const health = calculateDealHealth(opp);
+                                                        const healthColor = health.score >= 70 ? '#10b981' : health.score >= 40 ? '#f59e0b' : '#ef4444';
+                                                        return (
+                                                            <div key={opp.id}
+                                                                draggable
+                                                                onDragStart={() => setKanbanDragging({ oppId: opp.id, fromStage: stage })}
+                                                                onDragEnd={() => { setKanbanDragging(null); setKanbanDragOver(null); }}
+                                                                style={{ background: '#fff', borderRadius: '7px', border: '1px solid ' + (kanbanDragging?.oppId === opp.id ? '#93c5fd' : '#e2e8f0'), padding: '0.5rem 0.625rem', cursor: 'grab', opacity: kanbanDragging?.oppId === opp.id ? 0.5 : 1, boxShadow: '0 1px 2px rgba(0,0,0,0.04)', transition: 'border-color 0.1s' }}
+                                                                onMouseEnter={e => { if (kanbanDragging?.oppId !== opp.id) e.currentTarget.style.borderColor='#2563eb'; }}
+                                                                onMouseLeave={e => { e.currentTarget.style.borderColor = kanbanDragging?.oppId === opp.id ? '#93c5fd' : '#e2e8f0'; }}>
+                                                                <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#1e293b', marginBottom: '0.2rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.opportunityName || opp.account}</div>
+                                                                <div style={{ fontSize: '0.6375rem', color: '#64748b', marginBottom: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.account}</div>
+                                                                {opp.salesRep && <div style={{ fontSize: '0.6rem', color: '#94a3b8', marginBottom: '0.25rem' }}>👤 {opp.salesRep}</div>}
+                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                                    <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#2563eb' }}>${((opp.arr||0)/1000).toFixed(0)}K</span>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: healthColor, flexShrink: 0 }} title={'Health: ' + health.score} />
+                                                                        <span style={{ fontSize: '0.6rem', color: '#94a3b8' }}>{opp.forecastedCloseDate ? opp.forecastedCloseDate.slice(5) : '—'}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.375rem' }}>
+                                                                    <button className="action-btn" onClick={() => handleEdit(opp)} style={{ flex: 1, padding: '0.15rem 0', fontSize: '0.6rem', textAlign: 'center' }}>Edit</button>
+                                                                    <button className="action-btn delete" onClick={() => handleDelete(opp.id)} style={{ flex: 1, padding: '0.15rem 0', fontSize: '0.6rem', textAlign: 'center' }}>Del</button>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {colOpps.length === 0 && (
+                                                        <div style={{ fontSize: '0.6875rem', color: '#cbd5e1', textAlign: 'center', padding: '1rem 0', fontStyle: 'italic' }}>Drop here</div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+
                     {/* ════ FULL-WIDTH TABLE ════ */}
+                    {pipelineView === 'table' && (
                     <div className="table-container">
                         {/* ── Opportunities header: title + New button + count + CSV ── */}
                         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0', gap:'0.5rem' }}>
@@ -2988,6 +3144,7 @@ dbFetch('/.netlify/functions/activities', {
                                 })}
                                 </tbody>
                             </table>
+                    )}
                         </div>
                     </div>
                 </div>
