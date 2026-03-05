@@ -97,7 +97,6 @@ function App() {
                 notes:         { Admin: true, Manager: true, User: true,  ReadOnly: true  },
                 nextSteps:     { Admin: true, Manager: true, User: true,  ReadOnly: true  },
                 closeDate:     { Admin: true, Manager: true, User: true,  ReadOnly: true  },
-                probability:   { Admin: true, Manager: true, User: true,  ReadOnly: true  }
             },
             kpiConfig: [
                 { id: 'totalPipelineARR', name: 'Total Pipeline ARR', color: 'primary', tolerances: [{ label: 'On Track', min: 100000, color: '#16a34a' }, { label: 'Warning', min: 50000, color: '#f59e0b' }, { label: 'Critical', min: 0, color: '#ef4444' }] },
