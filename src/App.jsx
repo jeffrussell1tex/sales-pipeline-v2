@@ -926,7 +926,7 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
             return;
         }
 
-        if (editingOpp) {
+        if (editingOpp && editingOpp.id) {
             const updatedOpp = { ...enrichedData, id: editingOpp.id };
             setOpportunities(opportunities.map(opp =>
                 opp.id === editingOpp.id ? updatedOpp : opp
@@ -2570,7 +2570,7 @@ dbFetch('/.netlify/functions/activities', {
         () => { setOpportunities(snapshot); setUndoToast(null); }
     );
 });
-                                }} style={{ padding: '0.2rem 0.625rem', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                }} style={{ padding: '0.2rem 0.625rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     🗑 Delete
                                 </button>
                                 <button onClick={() => { setSelectedOpps([]); setBulkAction({ stage: '', rep: '' }); }}
@@ -3256,7 +3256,7 @@ dbFetch('/.netlify/functions/activities', {
         () => { setOpportunities(snapshot); setUndoToast(null); }
     );
 });
-                                }} style={{ padding:'0.2rem 0.625rem', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'6px', fontSize:'0.75rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>🗑 Delete</button>
+                                }} style={{ padding:'0.2rem 0.625rem', background:'#ef4444', color:'white', border:'none', borderRadius:'6px', fontSize:'0.75rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>🗑 Delete</button>
                                 <button onClick={() => { setSelectedOpps([]); setBulkAction({ stage:'', rep:'' }); }}
                                     style={{ marginLeft:'auto', background:'none', border:'none', color:'#64748b', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', fontWeight:'600' }}>Clear selection ✕</button>
                             </div>
@@ -4095,7 +4095,7 @@ dbFetch('/.netlify/functions/activities', {
                         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                             {canEdit && <button className="btn" onClick={handleAddAccount}>+ Add Account</button>}
                             {selectedAccounts.length > 0 && (
-    <button className="btn btn-secondary" onClick={() => {
+    <button className="btn" style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '0.5rem 1rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.8125rem', fontFamily: 'inherit' }} onClick={() => {
         showConfirm('Delete ' + selectedAccounts.length + ' selected account(s)? This cannot be undone.', () => {
             const accountIdsToDelete = [...selectedAccounts];
             const snapshot = [...accounts];
