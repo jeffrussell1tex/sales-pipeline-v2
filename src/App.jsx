@@ -3144,9 +3144,9 @@ dbFetch('/.netlify/functions/activities', {
                                 })}
                                 </tbody>
                             </table>
-                    )}
                         </div>
                     </div>
+                    )}
                 </div>
             )}
 
