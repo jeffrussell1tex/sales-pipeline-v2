@@ -2635,6 +2635,7 @@ dbFetch('/.netlify/functions/activities', {
                                     })}
                                 </div>
                             </div>
+                        </div>
                         );
                     })()}
 
