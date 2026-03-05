@@ -2606,16 +2606,16 @@ dbFetch('/.netlify/functions/activities', {
                                                                 draggable
                                                                 onDragStart={() => setKanbanDragging({ oppId: opp.id, fromStage: stage })}
                                                                 onDragEnd={() => { setKanbanDragging(null); setKanbanDragOver(null); }}
-                                                                style={{ background: '#fff', borderRadius: '7px', border: '1px solid ' + (kanbanDragging?.oppId === opp.id ? '#93c5fd' : '#e2e8f0'), padding: '0.5rem 0.625rem', cursor: 'grab', opacity: kanbanDragging?.oppId === opp.id ? 0.5 : 1, boxShadow: '0 1px 2px rgba(0,0,0,0.04)', transition: 'border-color 0.1s' }}
-                                                                onMouseEnter={e => { if (kanbanDragging?.oppId !== opp.id) e.currentTarget.style.borderColor='#2563eb'; }}
-                                                                onMouseLeave={e => { e.currentTarget.style.borderColor = kanbanDragging?.oppId === opp.id ? '#93c5fd' : '#e2e8f0'; }}>
+                                                                style={{ background: '#fff', borderRadius: '7px', border: '1px solid #e2e8f0', padding: '0.5rem 0.625rem', cursor: 'grab', opacity: (kanbanDragging && kanbanDragging.oppId === opp.id) ? 0.5 : 1, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
+                                                                onMouseEnter={e => { e.currentTarget.style.borderColor='#2563eb'; }}
+                                                                onMouseLeave={e => { e.currentTarget.style.borderColor='#e2e8f0'; }}>
                                                                 <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#1e293b', marginBottom: '0.2rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.opportunityName || opp.account}</div>
                                                                 <div style={{ fontSize: '0.6375rem', color: '#64748b', marginBottom: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.account}</div>
                                                                 {opp.salesRep && <div style={{ fontSize: '0.6rem', color: '#94a3b8', marginBottom: '0.25rem' }}>👤 {opp.salesRep}</div>}
                                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                                                     <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#2563eb' }}>${((opp.arr||0)/1000).toFixed(0)}K</span>
                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: healthColor, flexShrink: 0 }} title={'Health: ' + health.score} />
+                                                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: healthColor, flexShrink: 0 }} title="Health score"></div>
                                                                         <span style={{ fontSize: '0.6rem', color: '#94a3b8' }}>{opp.forecastedCloseDate ? opp.forecastedCloseDate.slice(5) : '—'}</span>
                                                                     </div>
                                                                 </div>
@@ -2635,7 +2635,6 @@ dbFetch('/.netlify/functions/activities', {
                                     })}
                                 </div>
                             </div>
-                        </div>
                         );
                     })()}
 
