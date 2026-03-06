@@ -193,3 +193,24 @@ export const auditLog = pgTable('audit_log', {
     userName:   varchar('user_name', { length: 255 }),
     timestamp:  timestamp('timestamp').notNull().defaultNow(),
 });
+
+// ── LEADS ─────────────────────────────────────────────────────────────────────
+// Inbound prospects before they become opportunities
+export const leads = pgTable('leads', {
+    id:           text('id').primaryKey(),
+    firstName:    varchar('first_name', { length: 255 }),
+    lastName:     varchar('last_name', { length: 255 }),
+    company:      varchar('company', { length: 255 }),
+    title:        varchar('title', { length: 255 }),
+    email:        varchar('email', { length: 255 }),
+    phone:        varchar('phone', { length: 50 }),
+    source:       varchar('source', { length: 100 }),           // Web Form | LinkedIn | Trade Show | etc.
+    status:       varchar('status', { length: 50 }).notNull().default('New'),  // New | Contacted | Qualified | Working | Converted | Dead
+    score:        integer('score').default(50),                 // 0–100
+    estimatedARR: decimal('estimated_arr', { precision: 12, scale: 2 }),
+    assignedTo:   varchar('assigned_to', { length: 255 }),      // rep name
+    notes:        text('notes'),
+    convertedAt:  varchar('converted_at', { length: 30 }),
+    createdAt:    timestamp('created_at').notNull().defaultNow(),
+    updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});
