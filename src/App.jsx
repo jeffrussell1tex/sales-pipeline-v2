@@ -3,6 +3,7 @@ import { useUser, useClerk, useAuth, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch } from './utils/storage';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import CsvImportModal from './components/modals/CsvImportModal';
+import LeadImportModal from './components/modals/LeadImportModal';
 import OutlookImportModal from './components/modals/OutlookImportModal';
 import PipelinesSettingsPanel from './components/modals/PipelinesSettingsPanel';
 import LostReasonModal from './components/modals/LostReasonModal';
@@ -79,7 +80,7 @@ function LeadForm({ lead, onSave, onClose, canSeeAll, allReps }) {
 }
 
 
-function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditingOpp, setShowModal }) {
+function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditingOpp, setShowModal, onImportClick }) {
     const stageColors = { 'New':'#94a3b8','Contacted':'#0ea5e9','Qualified':'#8b5cf6','Working':'#f59e0b','Converted':'#10b981','Dead':'#ef4444' };
     const scoreBg = s => s >= 70 ? '#fee2e2' : s >= 40 ? '#fef3c7' : '#dbeafe';
     const scoreColor = s => s >= 70 ? '#dc2626' : s >= 40 ? '#d97706' : '#2563eb';
@@ -209,6 +210,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                 </button>
                             ))}
                             <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
+                                <button onClick={onImportClick} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#10b981', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>
                                 <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
                             </div>
                         </div>
@@ -814,6 +816,7 @@ function App() {
     
     // CSV Import
     const [showCsvImportModal, setShowCsvImportModal] = useState(false);
+    const [showLeadImportModal, setShowLeadImportModal] = useState(false);
     const [csvImportType, setCsvImportType] = useState('contacts');
 
     // Quota & Commission
@@ -5460,6 +5463,7 @@ dbFetch('/.netlify/functions/activities', {
                     canSeeAll={canSeeAll}
                     setEditingOpp={setEditingOpp}
                     setShowModal={setShowModal}
+                    onImportClick={() => setShowLeadImportModal(true)}
                 />
             )}
 
@@ -9591,6 +9595,26 @@ ${bodyHtml}
                             id: String(startId + i).padStart(3, '0'),
                             createdAt: new Date().toISOString()
                         }));
+
+            {showLeadImportModal && (
+                <LeadImportModal
+                    existingLeads={leads}
+                    onClose={() => setShowLeadImportModal(false)}
+                    onImport={async (newLeads) => {
+                        // Bulk POST to API
+                        const resp = await dbFetch('/api/leads', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(newLeads),
+                        });
+                        if (!resp.ok) throw new Error('Import failed');
+                        const data = await resp.json();
+                        const imported = data.leads || [];
+                        setLeads(prev => [...prev, ...imported]);
+                        setShowLeadImportModal(false);
+                    }}
+                />
+            )}
                         setContacts([...contacts, ...contactsWithIds]);
                         // Save each imported contact to the database
                         contactsWithIds.forEach(contact => {

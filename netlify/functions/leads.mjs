@@ -35,6 +35,22 @@ export const handler = async (event) => {
 
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
+
+            // Bulk insert: array of leads
+            if (Array.isArray(data)) {
+                if (data.length === 0) {
+                    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Empty array' }) };
+                }
+                const rows = data.map(({ createdAt, updatedAt, ...d }) => ({
+                    ...d,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                }));
+                const inserted = await db.insert(leads).values(rows).returning();
+                return { statusCode: 201, headers, body: JSON.stringify({ leads: inserted }) };
+            }
+
+            // Single insert
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
