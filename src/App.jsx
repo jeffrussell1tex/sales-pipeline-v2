@@ -9596,25 +9596,6 @@ ${bodyHtml}
                             createdAt: new Date().toISOString()
                         }));
 
-            {showLeadImportModal && (
-                <LeadImportModal
-                    existingLeads={leads}
-                    onClose={() => setShowLeadImportModal(false)}
-                    onImport={async (newLeads) => {
-                        // Bulk POST to API
-                        const resp = await dbFetch('/api/leads', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(newLeads),
-                        });
-                        if (!resp.ok) throw new Error('Import failed');
-                        const data = await resp.json();
-                        const imported = data.leads || [];
-                        setLeads(prev => [...prev, ...imported]);
-                        setShowLeadImportModal(false);
-                    }}
-                />
-            )}
                         setContacts([...contacts, ...contactsWithIds]);
                         // Save each imported contact to the database
                         contactsWithIds.forEach(contact => {
@@ -9692,6 +9673,25 @@ ${bodyHtml}
                             }).catch(err => console.error('Failed to save imported activity:', err));
                         });
                         setShowOutlookImportModal(false);
+                    }}
+                />
+            )}
+
+            {showLeadImportModal && (
+                <LeadImportModal
+                    existingLeads={leads}
+                    onClose={() => setShowLeadImportModal(false)}
+                    onImport={async (newLeads) => {
+                        const resp = await dbFetch('/api/leads', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(newLeads),
+                        });
+                        if (!resp.ok) throw new Error('Import failed');
+                        const data = await resp.json();
+                        const imported = data.leads || [];
+                        setLeads(prev => [...prev, ...imported]);
+                        setShowLeadImportModal(false);
                     }}
                 />
             )}
