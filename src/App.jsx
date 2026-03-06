@@ -5818,6 +5818,7 @@ ${bodyHtml}
                                   {reportSubTab === 'pipeline' ? 'Pipeline health and stage analysis' :
                                    reportSubTab === 'performance' ? 'Quota, velocity and win/loss insights' :
                                    reportSubTab === 'revenue' ? 'Closed revenue and commission tracking' :
+                                   reportSubTab === 'leads' ? 'Lead funnel · sources · rep performance · trend' :
                                    'Team activity and task completion'}
                                   {(reportsRep || reportsTeam || reportsTerritory) ? ` · ${reportsRep || reportsTeam || reportsTerritory}` : ''}
                                 </p>
@@ -5844,6 +5845,7 @@ ${bodyHtml}
                               { key:'performance', icon:'🎯', label:'Performance', desc:'Quota · Velocity · Win/Loss' },
                               { key:'revenue',     icon:'💰', label:'Revenue',     desc:'Closed Won · Commissions · Forecast' },
                               { key:'activity',    icon:'📋', label:'Activity',    desc:'Tasks · Activities · Leaderboard' },
+                              { key:'leads',       icon:'🎯', label:'Leads',       desc:'Funnel · Sources · Rep · Trend' },
                             ].map(t => (
                               <button key={t.key} onClick={() => setReportSubTab(t.key)}
                                 style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.75rem 1.25rem', border:'none', borderBottom: reportSubTab === t.key ? '2px solid #2563eb' : '2px solid transparent', marginBottom:'-2px', background:'transparent', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>
@@ -6502,6 +6504,239 @@ ${bodyHtml}
 
                         </div>
                         )}
+
+                        {/* ════════════════════════════════════════════
+                             TAB: LEADS
+                            ════════════════════════════════════════════ */}
+                        {reportSubTab === 'leads' && (() => {
+                            const stageColors = { 'New':'#94a3b8','Contacted':'#0ea5e9','Qualified':'#8b5cf6','Working':'#f59e0b','Converted':'#10b981','Dead':'#ef4444' };
+                            const allLeads = leads || [];
+                            const openLeads = allLeads.filter(l => l.status !== 'Converted' && l.status !== 'Dead');
+                            const hotLeads = allLeads.filter(l => (l.score||0) >= 70);
+                            const convertedLeads = allLeads.filter(l => l.status === 'Converted');
+                            const deadLeads = allLeads.filter(l => l.status === 'Dead');
+                            const totalEstARR = openLeads.reduce((s,l) => s + (parseFloat(l.estimatedARR)||0), 0);
+                            const avgScore = allLeads.length > 0 ? Math.round(allLeads.reduce((s,l) => s + (l.score||50), 0) / allLeads.length) : 0;
+                            const convRate = allLeads.length > 0 ? (convertedLeads.length / allLeads.length * 100) : 0;
+
+                            // Source breakdown
+                            const sourceMap = {};
+                            allLeads.forEach(l => { const s = l.source || 'Unknown'; sourceMap[s] = (sourceMap[s]||0)+1; });
+                            const sourceData = Object.entries(sourceMap).sort((a,b)=>b[1]-a[1]);
+                            const maxSource = Math.max(...sourceData.map(([,c])=>c), 1);
+
+                            // Rep performance
+                            const repMap = {};
+                            allLeads.forEach(l => {
+                                const r = l.assignedTo || '__unassigned__';
+                                if (!repMap[r]) repMap[r] = { assigned:0, converted:0, estARR:0 };
+                                repMap[r].assigned++;
+                                if (l.status === 'Converted') repMap[r].converted++;
+                                repMap[r].estARR += parseFloat(l.estimatedARR)||0;
+                            });
+                            const repRows = Object.entries(repMap)
+                                .map(([rep, d]) => ({ rep: rep === '__unassigned__' ? 'Unassigned' : rep, ...d, rate: d.assigned > 0 ? (d.converted/d.assigned*100) : 0 }))
+                                .sort((a,b) => b.estARR - a.estARR);
+
+                            // Score distribution
+                            const scoreBuckets = [
+                                { label:'Cold (0-39)',  min:0,  max:39,  color:'#3b82f6' },
+                                { label:'Warm (40-69)', min:40, max:69,  color:'#f59e0b' },
+                                { label:'Hot (70-100)', min:70, max:100, color:'#ef4444' },
+                            ].map(b => ({ ...b, count: allLeads.filter(l => (l.score||0) >= b.min && (l.score||0) <= b.max).length }));
+
+                            // Monthly trend (last 6 months)
+                            const now = new Date();
+                            const monthlyTrend = Array.from({length:6}, (_,i) => {
+                                const d = new Date(now.getFullYear(), now.getMonth() - (5-i), 1);
+                                const next = new Date(d.getFullYear(), d.getMonth()+1, 1);
+                                const created = allLeads.filter(l => { const c = new Date(l.createdAt||0); return c >= d && c < next; }).length;
+                                const converted = convertedLeads.filter(l => { const c = new Date(l.convertedAt||l.createdAt||0); return c >= d && c < next; }).length;
+                                return { label: d.toLocaleString('default',{month:'short'}), created, converted };
+                            });
+                            const maxTrend = Math.max(...monthlyTrend.map(m=>m.created), 1);
+
+                            const cardStyle = { background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' };
+                            const labelStyle = { fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.25rem' };
+
+                            return (
+                            <div style={{ display:'flex', flexDirection:'column', gap:'1rem', padding:'1rem 1.25rem 1.5rem' }}>
+
+                                {/* KPI Strip */}
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'0.75rem' }}>
+                                    {[
+                                        { label:'Total Leads',    value: allLeads.length,                         sub: openLeads.length+' open',            accent:'#2563eb', vcolor:'#1e293b' },
+                                        { label:'🔥 Hot Leads',   value: hotLeads.length,                         sub: 'score ≥ 70',                         accent:'#dc2626', vcolor:'#dc2626' },
+                                        { label:'Converted',      value: convertedLeads.length,                   sub: convRate.toFixed(1)+'% rate',         accent:'#10b981', vcolor:'#10b981' },
+                                        { label:'Est. Pipeline',  value: '$'+(totalEstARR>=1000000?((totalEstARR/1000000).toFixed(1)+'M'):(totalEstARR>=1000?(Math.round(totalEstARR/1000)+'K'):totalEstARR)), sub:'from open leads', accent:'#7c3aed', vcolor:'#7c3aed' },
+                                        { label:'Avg Score',      value: avgScore,                                sub: hotLeads.length+' hot · '+allLeads.filter(l=>(l.score||0)>=40&&(l.score||0)<70).length+' warm', accent:'#f59e0b', vcolor:'#f59e0b' },
+                                    ].map(k => (
+                                        <div key={k.label} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'0.875rem 1rem', borderLeft:'3px solid '+k.accent }}>
+                                            <div style={labelStyle}>{k.label}</div>
+                                            <div style={{ fontSize:'1.625rem', fontWeight:'800', color:k.vcolor, lineHeight:1 }}>{k.value}</div>
+                                            <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.25rem' }}>{k.sub}</div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Row 2: Funnel + Source */}
+                                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem' }}>
+
+                                    {/* Lead Funnel */}
+                                    <div style={cardStyle}>
+                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
+                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.05em' }}>🔽 Lead Funnel</span>
+                                        </div>
+                                        <div style={{ padding:'1rem' }}>
+                                            {Object.entries(stageColors).map(([stage, color]) => {
+                                                const count = allLeads.filter(l => (l.status||'New') === stage).length;
+                                                const pct = allLeads.length > 0 ? Math.round(count/allLeads.length*100) : 0;
+                                                return (
+                                                    <div key={stage} style={{ display:'flex', alignItems:'center', gap:'0.625rem', marginBottom:'0.5rem' }}>
+                                                        <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#475569', width:'72px', flexShrink:0 }}>{stage}</span>
+                                                        <div style={{ flex:1, background:'#f8fafc', borderRadius:'5px', overflow:'hidden', height:'28px' }}>
+                                                            <div style={{ height:'100%', width:Math.max(pct,count>0?8:0)+'%', background:color, borderRadius:'5px', display:'flex', alignItems:'center', paddingLeft:'0.5rem', transition:'width 0.5s ease' }}>
+                                                                {count > 0 && <span style={{ fontSize:'0.625rem', fontWeight:'800', color:'#fff' }}>{count}</span>}
+                                                            </div>
+                                                        </div>
+                                                        <span style={{ fontSize:'0.6875rem', color:'#94a3b8', width:'28px', textAlign:'right', flexShrink:0 }}>{pct}%</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* Source Breakdown */}
+                                    <div style={cardStyle}>
+                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
+                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.05em' }}>📡 By Source</span>
+                                        </div>
+                                        <div style={{ padding:'1rem' }}>
+                                            {sourceData.length === 0
+                                                ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem', textAlign:'center', padding:'1rem' }}>No leads yet.</div>
+                                                : sourceData.map(([src, cnt], idx) => {
+                                                    const colors = ['#2563eb','#7c3aed','#0ea5e9','#10b981','#f59e0b','#ef4444','#ec4899'];
+                                                    return (
+                                                        <div key={src} style={{ display:'flex', alignItems:'center', gap:'0.625rem', marginBottom:'0.625rem' }}>
+                                                            <span style={{ fontSize:'0.75rem', color:'#475569', width:'90px', flexShrink:0, fontWeight:'600', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{src}</span>
+                                                            <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
+                                                                <div style={{ height:'100%', width:Math.round(cnt/maxSource*100)+'%', background:colors[idx%colors.length], borderRadius:'3px', transition:'width 0.5s ease' }}></div>
+                                                            </div>
+                                                            <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#1e293b', width:'20px', textAlign:'right', flexShrink:0 }}>{cnt}</span>
+                                                        </div>
+                                                    );
+                                                })
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Row 3: Rep Performance + Score Distribution */}
+                                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem' }}>
+
+                                    {/* Rep Performance */}
+                                    <div style={cardStyle}>
+                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
+                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.05em' }}>👤 Rep Lead Performance</span>
+                                        </div>
+                                        <div style={{ overflowX:'auto' }}>
+                                            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem' }}>
+                                                <thead><tr>
+                                                    {['Rep','Assigned','Converted','Rate','Est. ARR'].map(h => (
+                                                        <th key={h} style={{ padding:'0.5rem 0.75rem', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', textAlign:['Assigned','Converted','Rate','Est. ARR'].includes(h)?'right':'left', whiteSpace:'nowrap' }}>{h}</th>
+                                                    ))}
+                                                </tr></thead>
+                                                <tbody>
+                                                    {repRows.length === 0
+                                                        ? <tr><td colSpan={5} style={{ textAlign:'center', padding:'1rem', color:'#94a3b8', fontSize:'0.8125rem' }}>No leads yet.</td></tr>
+                                                        : repRows.map((r,i) => (
+                                                            <tr key={r.rep} style={{ background: i%2===0?'#fff':'#f8fafc' }}>
+                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f1f5f9', fontWeight:'600', color: r.rep==='Unassigned'?'#ef4444':'#1e293b' }}>{r.rep}</td>
+                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f1f5f9', textAlign:'right', color:'#475569' }}>{r.assigned}</td>
+                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f1f5f9', textAlign:'right', color:'#10b981', fontWeight:'700' }}>{r.converted}</td>
+                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f1f5f9', textAlign:'right', fontWeight:'700', color: r.rate>=25?'#10b981':r.rate>=15?'#f59e0b':'#ef4444' }}>{r.rep==='Unassigned'?'—':r.rate.toFixed(0)+'%'}</td>
+                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f1f5f9', textAlign:'right', fontWeight:'700', color:'#2563eb' }}>{r.estARR>0?'$'+(r.estARR>=1000000?((r.estARR/1000000).toFixed(1)+'M'):(r.estARR>=1000?(Math.round(r.estARR/1000)+'K'):r.estARR)):'—'}</td>
+                                                            </tr>
+                                                        ))
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    {/* Score Distribution */}
+                                    <div style={cardStyle}>
+                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
+                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.05em' }}>📊 Score Distribution</span>
+                                        </div>
+                                        <div style={{ padding:'1.25rem' }}>
+                                            {scoreBuckets.map(b => (
+                                                <div key={b.label} style={{ marginBottom:'0.875rem' }}>
+                                                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.3rem' }}>
+                                                        <span style={{ fontSize:'0.75rem', fontWeight:'600', color:'#475569' }}>{b.label}</span>
+                                                        <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#1e293b' }}>{b.count} leads</span>
+                                                    </div>
+                                                    <div style={{ height:'8px', background:'#f1f5f9', borderRadius:'4px', overflow:'hidden' }}>
+                                                        <div style={{ height:'100%', width: allLeads.length>0?Math.round(b.count/allLeads.length*100)+'%':'0%', background:b.color, borderRadius:'4px', transition:'width 0.5s ease' }}></div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <div style={{ marginTop:'1rem', padding:'0.75rem', background:'#f8fafc', borderRadius:'8px', border:'1px solid #e2e8f0', display:'flex', justifyContent:'space-around', textAlign:'center' }}>
+                                                <div>
+                                                    <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.2rem' }}>Avg Score</div>
+                                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color: avgScore>=70?'#dc2626':avgScore>=40?'#f59e0b':'#3b82f6' }}>{avgScore}</div>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.2rem' }}>Hot %</div>
+                                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color:'#dc2626' }}>{allLeads.length>0?Math.round(hotLeads.length/allLeads.length*100):0}%</div>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.2rem' }}>Unassigned</div>
+                                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color:'#ef4444' }}>{allLeads.filter(l=>!l.assignedTo).length}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Row 4: Monthly Trend */}
+                                <div style={cardStyle}>
+                                    <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
+                                        <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.05em' }}>📅 Lead Trend — Last 6 Months</span>
+                                    </div>
+                                    <div style={{ padding:'1.25rem' }}>
+                                        {allLeads.length === 0
+                                            ? <div style={{ textAlign:'center', color:'#94a3b8', fontSize:'0.8125rem', padding:'1rem' }}>No leads yet.</div>
+                                            : (
+                                            <div>
+                                                <div style={{ display:'flex', gap:'0.75rem', alignItems:'flex-end', height:'80px', marginBottom:'0.5rem' }}>
+                                                    {monthlyTrend.map((m,i) => (
+                                                        <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'3px', height:'100%', justifyContent:'flex-end' }}>
+                                                            {m.created > 0 && <div style={{ fontSize:'0.5625rem', fontWeight:'700', color:'#475569' }}>{m.created}</div>}
+                                                            <div style={{ width:'100%', display:'flex', alignItems:'flex-end', gap:'2px', height:Math.max(Math.round(m.created/maxTrend*70),2)+'px' }}>
+                                                                <div style={{ flex:1, height:'100%', background:'linear-gradient(to top,#2563eb,#7c3aed)', borderRadius:'3px 3px 0 0', opacity:0.85 }}></div>
+                                                                {m.converted > 0 && <div style={{ flex:1, height:Math.max(Math.round(m.converted/maxTrend*70),4)+'px', background:'#10b981', borderRadius:'3px 3px 0 0' }}></div>}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div style={{ display:'flex', gap:'0.75rem', borderTop:'1px solid #f1f5f9', paddingTop:'0.375rem' }}>
+                                                    {monthlyTrend.map((m,i) => (
+                                                        <div key={i} style={{ flex:1, textAlign:'center', fontSize:'0.6rem', color:'#94a3b8', fontWeight:'600' }}>{m.label}</div>
+                                                    ))}
+                                                </div>
+                                                <div style={{ display:'flex', gap:'1.25rem', justifyContent:'center', marginTop:'0.75rem' }}>
+                                                    <span style={{ fontSize:'0.6875rem', color:'#64748b', display:'flex', alignItems:'center', gap:'0.375rem' }}><span style={{ width:'10px', height:'10px', background:'linear-gradient(#2563eb,#7c3aed)', borderRadius:'2px', display:'inline-block' }}></span>Created</span>
+                                                    <span style={{ fontSize:'0.6875rem', color:'#64748b', display:'flex', alignItems:'center', gap:'0.375rem' }}><span style={{ width:'10px', height:'10px', background:'#10b981', borderRadius:'2px', display:'inline-block' }}></span>Converted</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                            </div>
+                            );
+                        })()}
 
                     </div>
                 );
