@@ -38,7 +38,12 @@ export const handler = async (event) => {
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
-            const [inserted] = await db.insert(leads).values(data).returning();
+            const { createdAt, updatedAt, ...insertData } = data;
+            const [inserted] = await db.insert(leads).values({
+                ...insertData,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            }).returning();
             return { statusCode: 201, headers, body: JSON.stringify({ lead: inserted }) };
         }
 
@@ -47,7 +52,7 @@ export const handler = async (event) => {
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
-            const { id, createdAt, ...updateData } = data;
+            const { id, createdAt, updatedAt, ...updateData } = data;
             const [updated] = await db.update(leads)
                 .set({ ...updateData, updatedAt: new Date() })
                 .where(eq(leads.id, id))
