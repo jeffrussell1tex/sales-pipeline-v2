@@ -17,6 +17,398 @@ import TimePicker from './components/ui/TimePicker';
 import ViewingBar, { SliceDropdown } from './components/ui/ViewingBar';
 import AnalyticsDashboard from './components/ui/AnalyticsDashboard';
 
+function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditingOpp, setShowModal }) {
+    const stageColors = { 'New':'#94a3b8','Contacted':'#0ea5e9','Qualified':'#8b5cf6','Working':'#f59e0b','Converted':'#10b981','Dead':'#ef4444' };
+    const scoreBg = s => s >= 70 ? '#fee2e2' : s >= 40 ? '#fef3c7' : '#dbeafe';
+    const scoreColor = s => s >= 70 ? '#dc2626' : s >= 40 ? '#d97706' : '#2563eb';
+    const statusStyle = { New:{bg:'#eff6ff',color:'#2563eb'}, Contacted:{bg:'#f0fdf4',color:'#16a34a'}, Qualified:{bg:'#fdf4ff',color:'#9333ea'}, Working:{bg:'#fff7ed',color:'#ea580c'}, Converted:{bg:'#d1fae5',color:'#047857'}, Dead:{bg:'#f1f5f9',color:'#94a3b8'} };
+
+    // Role-based filtering
+    const visibleLeads = canSeeAll
+        ? leads
+        : leads.filter(l => !l.assignedTo || l.assignedTo === currentUser);
+
+    const reps = (settings.users || []).filter(u => u.role === 'Rep' || u.role === 'User');
+    const allReps = canSeeAll ? (settings.users || []).filter(u => u.name) : [];
+
+    // Local state via ref trick — use window globals scoped to leads tab
+    const [leadFilter, setLeadFilter] = React.useState('all');
+    const [leadView, setLeadView] = React.useState('list');
+    const [selectedLeads, setSelectedLeads] = React.useState([]);
+    const [assignTarget, setAssignTarget] = React.useState('');
+    const [newLead, setNewLead] = React.useState(null);
+    const [editingLead, setEditingLead] = React.useState(null);
+
+    const filtered = visibleLeads.filter(l => {
+        if (leadFilter === 'all') return true;
+        if (leadFilter === 'hot') return (l.score || 0) >= 70;
+        if (leadFilter === 'unassigned') return !l.assignedTo;
+        return l.status === leadFilter;
+    });
+
+    const counts = {
+        all: visibleLeads.length,
+        hot: visibleLeads.filter(l => (l.score||0) >= 70).length,
+        New: visibleLeads.filter(l => l.status === 'New').length,
+        Working: visibleLeads.filter(l => l.status === 'Working').length,
+        unassigned: canSeeAll ? visibleLeads.filter(l => !l.assignedTo).length : 0,
+        Converted: visibleLeads.filter(l => l.status === 'Converted').length,
+    };
+
+    const totalARR = visibleLeads.reduce((s, l) => s + (l.estimatedARR || 0), 0);
+    const convRate = visibleLeads.length ? Math.round((counts.Converted / visibleLeads.length) * 100) : 0;
+
+    const saveLead = async (lead) => {
+        const isNew = !lead.id;
+        const saved = isNew
+            ? { ...lead, id: 'lead_' + Date.now(), createdAt: new Date().toISOString(), status: lead.status || 'New' }
+            : lead;
+        setLeads(prev => isNew ? [...prev, saved] : prev.map(l => l.id === saved.id ? saved : l));
+        await authFetch('/.netlify/functions/leads', { method: isNew ? 'POST' : 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(saved) }).catch(console.error);
+        setNewLead(null); setEditingLead(null);
+    };
+
+    const deleteLead = async (id) => {
+        setLeads(prev => prev.filter(l => l.id !== id));
+        await authFetch('/.netlify/functions/leads?id=' + id, { method: 'DELETE' }).catch(console.error);
+    };
+
+    const convertLead = (lead) => {
+        // Mark lead converted and open new opportunity modal pre-filled
+        const updated = { ...lead, status: 'Converted', convertedAt: new Date().toISOString() };
+        saveLead(updated);
+        const prefill = { account: lead.company, opportunityName: lead.company + ' — ' + (lead.source || 'Lead'), salesRep: lead.assignedTo || currentUser, notes: lead.notes || '' };
+        setEditingOpp(prefill);
+        setShowModal(true);
+    };
+
+    const bulkAssign = async () => {
+        if (!assignTarget || selectedLeads.length === 0) return;
+        const updated = leads.map(l => selectedLeads.includes(l.id) ? { ...l, assignedTo: assignTarget } : l);
+        setLeads(updated);
+        for (const l of updated.filter(l => selectedLeads.includes(l.id))) {
+            await authFetch('/.netlify/functions/leads', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(l) }).catch(console.error);
+        }
+        setSelectedLeads([]); setAssignTarget('');
+    };
+
+    const repLoad = allReps.map(rep => ({
+        ...rep,
+        count: visibleLeads.filter(l => l.assignedTo === rep.name && l.status !== 'Converted' && l.status !== 'Dead').length
+    })).sort((a, b) => a.count - b.count);
+    const maxLoad = Math.max(...repLoad.map(r => r.count), 1);
+
+    const repColors = ['#2563eb','#7c3aed','#10b981','#f59e0b','#ef4444','#0ea5e9','#ec4899'];
+
+    // Lead form modal
+    const LeadForm = ({ lead, onSave, onClose }) => {
+        const [form, setForm] = React.useState(lead || { firstName:'', lastName:'', company:'', title:'', email:'', phone:'', source:'', status:'New', score:50, estimatedARR:0, assignedTo:'', notes:'' });
+        const set = (k, v) => setForm(f => ({...f, [k]: v}));
+        return (
+            <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <div style={{ background:'#fff', borderRadius:'12px', padding:'1.5rem', width:'480px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.25rem' }}>
+                        <h3 style={{ fontSize:'1rem', fontWeight:'800', color:'#0f172a' }}>{lead && lead.id ? 'Edit Lead' : 'New Lead'}</h3>
+                        <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'1.25rem', color:'#94a3b8', cursor:'pointer' }}>✕</button>
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem' }}>
+                        {[['First Name','firstName'],['Last Name','lastName'],['Company','company'],['Title','title'],['Email','email'],['Phone','phone']].map(([label, key]) => (
+                            <div key={key}>
+                                <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>{label}</label>
+                                <input value={form[key]||''} onChange={e => set(key, e.target.value)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }} />
+                            </div>
+                        ))}
+                        <div>
+                            <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Source</label>
+                            <select value={form.source||''} onChange={e => set('source', e.target.value)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }}>
+                                <option value="">— select —</option>
+                                {['Web Form','LinkedIn','Trade Show','Referral','CSV Import','Cold List','Email','Other'].map(s => <option key={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Status</label>
+                            <select value={form.status||'New'} onChange={e => set('status', e.target.value)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }}>
+                                {['New','Contacted','Qualified','Working','Converted','Dead'].map(s => <option key={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Lead Score (0-100)</label>
+                            <input type="number" min="0" max="100" value={form.score||50} onChange={e => set('score', parseInt(e.target.value)||0)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }} />
+                        </div>
+                        <div>
+                            <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Est. ARR ($)</label>
+                            <input type="number" min="0" value={form.estimatedARR||0} onChange={e => set('estimatedARR', parseInt(e.target.value)||0)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }} />
+                        </div>
+                        {canSeeAll && (
+                            <div style={{ gridColumn:'span 2' }}>
+                                <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Assign To</label>
+                                <select value={form.assignedTo||''} onChange={e => set('assignedTo', e.target.value)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }}>
+                                    <option value="">— unassigned —</option>
+                                    {allReps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                                </select>
+                            </div>
+                        )}
+                        <div style={{ gridColumn:'span 2' }}>
+                            <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Notes</label>
+                            <textarea value={form.notes||''} onChange={e => set('notes', e.target.value)} rows={3} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', resize:'vertical' }} />
+                        </div>
+                    </div>
+                    <div style={{ display:'flex', gap:'0.5rem', marginTop:'1.25rem', justifyContent:'flex-end' }}>
+                        <button onClick={onClose} style={{ padding:'0.45rem 1rem', border:'1px solid #e2e8f0', borderRadius:'6px', background:'#f8fafc', fontSize:'0.8125rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', color:'#475569' }}>Cancel</button>
+                        <button onClick={() => onSave(form)} style={{ padding:'0.45rem 1.25rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.8125rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>Save Lead</button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="tab-page">
+            {(newLead !== null) && <LeadForm lead={newLead} onSave={saveLead} onClose={() => setNewLead(null)} />}
+            {editingLead && <LeadForm lead={editingLead} onSave={saveLead} onClose={() => setEditingLead(null)} />}
+
+            {/* KPI ROW */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'0.75rem', padding:'1rem 1.25rem 0' }}>
+                {[
+                    { label:'Total Leads', value: visibleLeads.length, sub: counts.New + ' new', accent:'#2563eb' },
+                    { label:'Hot Leads', value: counts.hot, sub:'Score 70+', accent:'#ef4444' },
+                    { label: canSeeAll ? 'Unassigned' : 'My Leads', value: canSeeAll ? counts.unassigned : visibleLeads.length, sub: canSeeAll ? 'Need distribution' : 'Assigned to you', accent:'#f59e0b' },
+                    { label:'Converted', value: counts.Converted, sub: convRate + '% rate', accent:'#10b981' },
+                    { label:'Est. Pipeline', value: '$' + (totalARR >= 1000000 ? (totalARR/1000000).toFixed(1)+'M' : Math.round(totalARR/1000)+'K'), sub:'from leads', accent:'#7c3aed' },
+                ].map(kpi => (
+                    <div key={kpi.label} style={{ background:'#fff', border:'1px solid #e2e8f0', borderLeft:'3px solid '+kpi.accent, borderRadius:'10px', padding:'0.875rem 1rem' }}>
+                        <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.3rem' }}>{kpi.label}</div>
+                        <div style={{ fontSize:'1.4rem', fontWeight:'800', color:'#1e293b', lineHeight:1 }}>{kpi.value}</div>
+                        <div style={{ fontSize:'0.6875rem', color:'#64748b', marginTop:'0.2rem' }}>{kpi.sub}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* MAIN LAYOUT */}
+            <div style={{ display:'grid', gridTemplateColumns: canSeeAll ? '1fr 300px' : '1fr', gap:'1rem', padding:'1rem 1.25rem' }}>
+
+                {/* LEFT: LEAD LIST */}
+                <div>
+                    <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
+                        {/* TOOLBAR */}
+                        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
+                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', marginRight:'0.25rem' }}>Leads</span>
+                            <div style={{ width:'1px', height:'16px', background:'#e2e8f0' }}></div>
+                            {[
+                                { key:'all', label:'All', count: counts.all },
+                                { key:'hot', label:'🔥 Hot', count: counts.hot },
+                                { key:'New', label:'New', count: counts.New },
+                                { key:'Working', label:'Working', count: counts.Working },
+                                ...(canSeeAll ? [{ key:'unassigned', label:'Unassigned', count: counts.unassigned }] : []),
+                            ].map(f => (
+                                <button key={f.key} onClick={() => setLeadFilter(f.key)} style={{ padding:'0.2rem 0.6rem', borderRadius:'999px', border:'1px solid '+(leadFilter===f.key?'#2563eb':'#e2e8f0'), background:leadFilter===f.key?'#2563eb':'#f8fafc', color:leadFilter===f.key?'#fff':'#64748b', fontSize:'0.6875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
+                                    {f.label} <span style={{ opacity:0.75 }}>{f.count}</span>
+                                </button>
+                            ))}
+                            <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
+                                <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'6px', overflow:'hidden' }}>
+                                    {[['list','☰'],['kanban','🗂']].map(([v,icon]) => (
+                                        <button key={v} onClick={() => setLeadView(v)} style={{ padding:'0.25rem 0.6rem', border:'none', background:leadView===v?'#2563eb':'#fff', color:leadView===v?'#fff':'#64748b', fontSize:'0.75rem', cursor:'pointer' }}>{icon}</button>
+                                    ))}
+                                </div>
+                                <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
+                            </div>
+                        </div>
+
+                        {/* LIST VIEW */}
+                        {leadView === 'list' && (
+                            <div style={{ overflowX:'auto' }}>
+                                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                                    <thead>
+                                        <tr>
+                                            {canSeeAll && <th style={{ padding:'0.5rem 0.75rem', textAlign:'left', fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', width:'36px' }}><input type="checkbox" style={{ width:'14px', height:'14px', accentColor:'#2563eb' }} onChange={e => setSelectedLeads(e.target.checked ? filtered.map(l=>l.id) : [])} /></th>}
+                                            {['Score','Name / Company','Source','Status', ...(canSeeAll?['Assigned To']:[]), 'Est. ARR','Actions'].map(h => (
+                                                <th key={h} style={{ padding:'0.5rem 0.75rem', textAlign:'left', fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', whiteSpace:'nowrap' }}>{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {filtered.length === 0 && (
+                                            <tr><td colSpan={99} style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.875rem' }}>No leads found</td></tr>
+                                        )}
+                                        {filtered.map(lead => {
+                                            const sc = lead.score || 0;
+                                            const st = lead.status || 'New';
+                                            const ss = statusStyle[st] || statusStyle.New;
+                                            const isUnassigned = !lead.assignedTo;
+                                            return (
+                                                <tr key={lead.id} style={{ background: isUnassigned && canSeeAll ? '#fffbeb' : 'transparent' }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = isUnassigned && canSeeAll ? '#fef9c3' : '#f8fafc'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = isUnassigned && canSeeAll ? '#fffbeb' : 'transparent'}>
+                                                    {canSeeAll && <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}><input type="checkbox" style={{ width:'14px', height:'14px', accentColor:'#2563eb' }} checked={selectedLeads.includes(lead.id)} onChange={e => setSelectedLeads(prev => e.target.checked ? [...prev, lead.id] : prev.filter(i=>i!==lead.id))} /></td>}
+                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
+                                                        <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:scoreBg(sc), color:scoreColor(sc), display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'800' }}>{sc}</div>
+                                                    </td>
+                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
+                                                        <div style={{ fontWeight:'600', color:'#1e293b', fontSize:'0.8125rem' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || '—'}</div>
+                                                        <div style={{ fontSize:'0.75rem', color:'#64748b' }}>{[lead.company, lead.title].filter(Boolean).join(' · ') || '—'}</div>
+                                                    </td>
+                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
+                                                        <span style={{ padding:'0.1rem 0.4rem', borderRadius:'4px', fontSize:'0.6rem', fontWeight:'700', background:'#f1f5f9', color:'#64748b' }}>{lead.source || '—'}</span>
+                                                    </td>
+                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
+                                                        <span style={{ padding:'0.15rem 0.5rem', borderRadius:'999px', fontSize:'0.625rem', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.05em', background:ss.bg, color:ss.color }}>{st}</span>
+                                                    </td>
+                                                    {canSeeAll && (
+                                                        <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
+                                                            {lead.assignedTo ? (
+                                                                <div style={{ display:'flex', alignItems:'center', gap:'0.375rem' }}>
+                                                                    <div style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#2563eb', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.55rem', fontWeight:'800', color:'#fff' }}>{lead.assignedTo.slice(0,2).toUpperCase()}</div>
+                                                                    <span style={{ fontSize:'0.75rem', color:'#475569' }}>{lead.assignedTo}</span>
+                                                                </div>
+                                                            ) : (
+                                                                <button onClick={() => setEditingLead(lead)} style={{ padding:'0.15rem 0.5rem', border:'1px solid #f59e0b', borderRadius:'4px', background:'none', color:'#d97706', fontSize:'0.625rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>⚡ Assign</button>
+                                                            )}
+                                                        </td>
+                                                    )}
+                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9', fontSize:'0.75rem', fontWeight:'700', color:'#2563eb' }}>
+                                                        {lead.estimatedARR ? '$' + (lead.estimatedARR >= 1000 ? Math.round(lead.estimatedARR/1000)+'K' : lead.estimatedARR) : '—'}
+                                                    </td>
+                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
+                                                        <div style={{ display:'flex', gap:'0.3rem' }}>
+                                                            <button onClick={() => setEditingLead(lead)} style={{ padding:'0.15rem 0.5rem', border:'1px solid #e2e8f0', borderRadius:'4px', background:'#fff', fontSize:'0.6rem', fontWeight:'700', cursor:'pointer', color:'#475569', fontFamily:'inherit' }}>Edit</button>
+                                                            {lead.status !== 'Converted' && (
+                                                                <button onClick={() => convertLead(lead)} style={{ padding:'0.15rem 0.5rem', border:'1px solid #10b981', borderRadius:'4px', background:'none', fontSize:'0.6rem', fontWeight:'700', cursor:'pointer', color:'#10b981', fontFamily:'inherit' }}>→ Opp</button>
+                                                            )}
+                                                            <button onClick={() => deleteLead(lead.id)} style={{ padding:'0.15rem 0.5rem', border:'1px solid #fecaca', borderRadius:'4px', background:'none', fontSize:'0.6rem', fontWeight:'700', cursor:'pointer', color:'#ef4444', fontFamily:'inherit' }}>Del</button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* KANBAN VIEW */}
+                        {leadView === 'kanban' && (
+                            <div style={{ overflowX:'auto', padding:'0.75rem' }}>
+                                <div style={{ display:'flex', gap:'0.625rem', minWidth:'max-content' }}>
+                                    {Object.entries(stageColors).map(([stage, color]) => {
+                                        const colLeads = filtered.filter(l => (l.status || 'New') === stage);
+                                        return (
+                                            <div key={stage} style={{ width:'190px', flexShrink:0, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+                                                <div style={{ padding:'0.5rem 0.75rem', borderTop:'3px solid '+color, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                                    <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.04em' }}>{stage}</span>
+                                                    <span style={{ fontSize:'0.6rem', fontWeight:'700', background:'#e2e8f0', color:'#64748b', borderRadius:'10px', padding:'0.1rem 0.35rem' }}>{colLeads.length}</span>
+                                                </div>
+                                                <div style={{ padding:'0.5rem', display:'flex', flexDirection:'column', gap:'0.375rem', minHeight:'60px' }}>
+                                                    {colLeads.map(lead => (
+                                                        <div key={lead.id} onClick={() => setEditingLead(lead)} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'0.5rem 0.625rem', cursor:'pointer', transition:'all 0.1s' }}
+                                                            onMouseEnter={e => { e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.boxShadow='0 2px 8px rgba(37,99,235,0.1)'; }}
+                                                            onMouseLeave={e => { e.currentTarget.style.borderColor='#e2e8f0'; e.currentTarget.style.boxShadow='none'; }}>
+                                                            <div style={{ fontSize:'0.75rem', fontWeight:'600', color:'#1e293b', marginBottom:'0.15rem' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || '—'}</div>
+                                                            <div style={{ fontSize:'0.625rem', color:'#64748b', marginBottom:'0.25rem' }}>{lead.company || '—'}</div>
+                                                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                                                <span style={{ fontSize:'0.6rem', background:'#f1f5f9', color:'#64748b', padding:'0.1rem 0.3rem', borderRadius:'3px', fontWeight:'600' }}>{lead.source || '—'}</span>
+                                                                <div style={{ width:'20px', height:'20px', borderRadius:'50%', background:scoreBg(lead.score||0), color:scoreColor(lead.score||0), display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.5rem', fontWeight:'800' }}>{lead.score||0}</div>
+                                                            </div>
+                                                            {canSeeAll && lead.assignedTo && <div style={{ fontSize:'0.6rem', color:'#94a3b8', marginTop:'0.2rem' }}>{lead.assignedTo}</div>}
+                                                        </div>
+                                                    ))}
+                                                    {colLeads.length === 0 && <div style={{ fontSize:'0.6875rem', color:'#cbd5e1', textAlign:'center', padding:'0.75rem 0', fontStyle:'italic' }}>Empty</div>}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* BULK ACTION BAR */}
+                        {canSeeAll && selectedLeads.length > 0 && (
+                            <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.625rem 1rem', background:'#eff6ff', borderTop:'1px solid #bfdbfe' }}>
+                                <span style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1d4ed8' }}>{selectedLeads.length} selected</span>
+                                <div style={{ width:'1px', height:'16px', background:'#bfdbfe' }}></div>
+                                <span style={{ fontSize:'0.75rem', color:'#64748b', fontWeight:'600' }}>Assign to:</span>
+                                <select value={assignTarget} onChange={e => setAssignTarget(e.target.value)} style={{ fontSize:'0.75rem', border:'1px solid #bfdbfe', borderRadius:'6px', padding:'0.2rem 0.5rem', background:'#fff', color:'#1e293b', fontFamily:'inherit' }}>
+                                    <option value="">— pick rep —</option>
+                                    {allReps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                                </select>
+                                <button onClick={bulkAssign} style={{ padding:'0.25rem 0.625rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>Assign</button>
+                                <button onClick={() => { setSelectedLeads([]); setAssignTarget(''); }} style={{ marginLeft:'auto', background:'none', border:'none', color:'#64748b', fontSize:'0.75rem', cursor:'pointer', fontWeight:'600', fontFamily:'inherit' }}>Clear ✕</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* RIGHT PANEL — managers/admins only */}
+                {canSeeAll && (
+                    <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem' }}>
+
+                        {/* DISTRIBUTE */}
+                        <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
+                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
+                                <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.06em' }}>⚡ Distribute Leads</span>
+                                {counts.unassigned > 0 && <span style={{ fontSize:'0.6875rem', color:'#ef4444', fontWeight:'700', background:'#fee2e2', padding:'0.1rem 0.4rem', borderRadius:'4px' }}>{counts.unassigned} unassigned</span>}
+                            </div>
+                            {repLoad.length === 0 && <div style={{ padding:'1rem', fontSize:'0.8125rem', color:'#94a3b8', textAlign:'center' }}>No reps configured</div>}
+                            {repLoad.map((rep, idx) => (
+                                <div key={rep.name} style={{ display:'flex', alignItems:'center', gap:'0.625rem', padding:'0.5rem 1rem', borderBottom:'1px solid #f1f5f9' }}>
+                                    <div style={{ width:'28px', height:'28px', borderRadius:'50%', background:repColors[idx % repColors.length], display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'800', color:'#fff', flexShrink:0 }}>{rep.name.slice(0,2).toUpperCase()}</div>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:'0.8125rem', fontWeight:'600', color:'#1e293b' }}>{rep.name}</div>
+                                        <div style={{ height:'4px', background:'#f1f5f9', borderRadius:'2px', marginTop:'0.25rem' }}>
+                                            <div style={{ height:'4px', borderRadius:'2px', background:'linear-gradient(to right,#2563eb,#7c3aed)', width: Math.round((rep.count / maxLoad) * 100) + '%', transition:'width 0.3s' }}></div>
+                                        </div>
+                                    </div>
+                                    <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#2563eb', background:'#eff6ff', padding:'0.1rem 0.4rem', borderRadius:'4px', flexShrink:0 }}>{rep.count}</span>
+                                </div>
+                            ))}
+                            <div style={{ padding:'0.75rem 1rem', borderTop:'1px solid #f1f5f9', display:'flex', gap:'0.5rem' }}>
+                                <button onClick={() => {
+                                    const unassigned = leads.filter(l => !l.assignedTo && l.status !== 'Converted' && l.status !== 'Dead');
+                                    if (unassigned.length === 0 || repLoad.length === 0) return;
+                                    const updated = [...leads];
+                                    unassigned.forEach((lead, i) => {
+                                        const rep = repLoad[i % repLoad.length];
+                                        const idx = updated.findIndex(l => l.id === lead.id);
+                                        if (idx >= 0) updated[idx] = { ...updated[idx], assignedTo: rep.name };
+                                    });
+                                    setLeads(updated);
+                                    updated.filter(l => !leads.find(ol => ol.id === l.id && ol.assignedTo === l.assignedTo)).forEach(l => authFetch('/.netlify/functions/leads', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(l) }).catch(console.error));
+                                }} style={{ flex:1, padding:'0.4rem 0', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>⚡ Auto-assign All</button>
+                            </div>
+                        </div>
+
+                        {/* SOURCE BREAKDOWN */}
+                        <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
+                            <div style={{ padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
+                                <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.06em' }}>Lead Sources</span>
+                            </div>
+                            {(() => {
+                                const sourceCounts = {};
+                                visibleLeads.forEach(l => { const s = l.source || 'Other'; sourceCounts[s] = (sourceCounts[s]||0) + 1; });
+                                const total = visibleLeads.length || 1;
+                                const srcColors = ['#2563eb','#7c3aed','#0ea5e9','#f59e0b','#10b981','#ef4444','#94a3b8'];
+                                return Object.entries(sourceCounts).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([src, cnt], i) => (
+                                    <div key={src} style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 1rem' }}>
+                                        <div style={{ width:'8px', height:'8px', borderRadius:'50%', background:srcColors[i%srcColors.length], flexShrink:0 }}></div>
+                                        <span style={{ fontSize:'0.75rem', color:'#475569', flex:1 }}>{src}</span>
+                                        <div style={{ flex:2, height:'4px', background:'#f1f5f9', borderRadius:'2px' }}>
+                                            <div style={{ height:'4px', borderRadius:'2px', background:srcColors[i%srcColors.length], width:Math.round((cnt/total)*100)+'%' }}></div>
+                                        </div>
+                                        <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#1e293b' }}>{Math.round((cnt/total)*100)}%</span>
+                                    </div>
+                                ));
+                            })()}
+                            {visibleLeads.length === 0 && <div style={{ padding:'1rem', fontSize:'0.8125rem', color:'#94a3b8', textAlign:'center' }}>No lead data yet</div>}
+                        </div>
+
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+
 function FunnelView({ stages, pipelineFilteredOpps, funnelExpandedStage, setFunnelExpandedStage, settings, handleEdit, handleDelete }) {
     const stageColors = ['#6366f1','#8b5cf6','#0ea5e9','#f59e0b','#f97316','#10b981','#16a34a','#ef4444'];
     return (
@@ -5057,396 +5449,18 @@ dbFetch('/.netlify/functions/activities', {
 
 
 
-            {activeTab === 'leads' && (() => {
-                const stageColors = { 'New':'#94a3b8','Contacted':'#0ea5e9','Qualified':'#8b5cf6','Working':'#f59e0b','Converted':'#10b981','Dead':'#ef4444' };
-                const scoreBg = s => s >= 70 ? '#fee2e2' : s >= 40 ? '#fef3c7' : '#dbeafe';
-                const scoreColor = s => s >= 70 ? '#dc2626' : s >= 40 ? '#d97706' : '#2563eb';
-                const statusStyle = { New:{bg:'#eff6ff',color:'#2563eb'}, Contacted:{bg:'#f0fdf4',color:'#16a34a'}, Qualified:{bg:'#fdf4ff',color:'#9333ea'}, Working:{bg:'#fff7ed',color:'#ea580c'}, Converted:{bg:'#d1fae5',color:'#047857'}, Dead:{bg:'#f1f5f9',color:'#94a3b8'} };
+            {activeTab === 'leads' && (
+                <LeadsTab
+                    leads={leads}
+                    setLeads={setLeads}
+                    settings={settings}
+                    currentUser={currentUser}
+                    canSeeAll={canSeeAll}
+                    setEditingOpp={setEditingOpp}
+                    setShowModal={setShowModal}
+                />
+            )}
 
-                // Role-based filtering
-                const visibleLeads = canSeeAll
-                    ? leads
-                    : leads.filter(l => !l.assignedTo || l.assignedTo === currentUser);
-
-                const reps = (settings.users || []).filter(u => u.role === 'Rep' || u.role === 'User');
-                const allReps = canSeeAll ? (settings.users || []).filter(u => u.name) : [];
-
-                // Local state via ref trick — use window globals scoped to leads tab
-                const [leadFilter, setLeadFilter] = React.useState('all');
-                const [leadView, setLeadView] = React.useState('list');
-                const [selectedLeads, setSelectedLeads] = React.useState([]);
-                const [assignTarget, setAssignTarget] = React.useState('');
-                const [newLead, setNewLead] = React.useState(null);
-                const [editingLead, setEditingLead] = React.useState(null);
-
-                const filtered = visibleLeads.filter(l => {
-                    if (leadFilter === 'all') return true;
-                    if (leadFilter === 'hot') return (l.score || 0) >= 70;
-                    if (leadFilter === 'unassigned') return !l.assignedTo;
-                    return l.status === leadFilter;
-                });
-
-                const counts = {
-                    all: visibleLeads.length,
-                    hot: visibleLeads.filter(l => (l.score||0) >= 70).length,
-                    New: visibleLeads.filter(l => l.status === 'New').length,
-                    Working: visibleLeads.filter(l => l.status === 'Working').length,
-                    unassigned: canSeeAll ? visibleLeads.filter(l => !l.assignedTo).length : 0,
-                    Converted: visibleLeads.filter(l => l.status === 'Converted').length,
-                };
-
-                const totalARR = visibleLeads.reduce((s, l) => s + (l.estimatedARR || 0), 0);
-                const convRate = visibleLeads.length ? Math.round((counts.Converted / visibleLeads.length) * 100) : 0;
-
-                const saveLead = async (lead) => {
-                    const isNew = !lead.id;
-                    const saved = isNew
-                        ? { ...lead, id: 'lead_' + Date.now(), createdAt: new Date().toISOString(), status: lead.status || 'New' }
-                        : lead;
-                    setLeads(prev => isNew ? [...prev, saved] : prev.map(l => l.id === saved.id ? saved : l));
-                    await authFetch('/.netlify/functions/leads', { method: isNew ? 'POST' : 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(saved) }).catch(console.error);
-                    setNewLead(null); setEditingLead(null);
-                };
-
-                const deleteLead = async (id) => {
-                    setLeads(prev => prev.filter(l => l.id !== id));
-                    await authFetch('/.netlify/functions/leads?id=' + id, { method: 'DELETE' }).catch(console.error);
-                };
-
-                const convertLead = (lead) => {
-                    // Mark lead converted and open new opportunity modal pre-filled
-                    const updated = { ...lead, status: 'Converted', convertedAt: new Date().toISOString() };
-                    saveLead(updated);
-                    const prefill = { account: lead.company, opportunityName: lead.company + ' — ' + (lead.source || 'Lead'), salesRep: lead.assignedTo || currentUser, notes: lead.notes || '' };
-                    setEditingOpp(prefill);
-                    setShowOppModal(true);
-                };
-
-                const bulkAssign = async () => {
-                    if (!assignTarget || selectedLeads.length === 0) return;
-                    const updated = leads.map(l => selectedLeads.includes(l.id) ? { ...l, assignedTo: assignTarget } : l);
-                    setLeads(updated);
-                    for (const l of updated.filter(l => selectedLeads.includes(l.id))) {
-                        await authFetch('/.netlify/functions/leads', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(l) }).catch(console.error);
-                    }
-                    setSelectedLeads([]); setAssignTarget('');
-                };
-
-                const repLoad = allReps.map(rep => ({
-                    ...rep,
-                    count: visibleLeads.filter(l => l.assignedTo === rep.name && l.status !== 'Converted' && l.status !== 'Dead').length
-                })).sort((a, b) => a.count - b.count);
-                const maxLoad = Math.max(...repLoad.map(r => r.count), 1);
-
-                const repColors = ['#2563eb','#7c3aed','#10b981','#f59e0b','#ef4444','#0ea5e9','#ec4899'];
-
-                // Lead form modal
-                const LeadForm = ({ lead, onSave, onClose }) => {
-                    const [form, setForm] = React.useState(lead || { firstName:'', lastName:'', company:'', title:'', email:'', phone:'', source:'', status:'New', score:50, estimatedARR:0, assignedTo:'', notes:'' });
-                    const set = (k, v) => setForm(f => ({...f, [k]: v}));
-                    return (
-                        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                            <div style={{ background:'#fff', borderRadius:'12px', padding:'1.5rem', width:'480px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
-                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.25rem' }}>
-                                    <h3 style={{ fontSize:'1rem', fontWeight:'800', color:'#0f172a' }}>{lead && lead.id ? 'Edit Lead' : 'New Lead'}</h3>
-                                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'1.25rem', color:'#94a3b8', cursor:'pointer' }}>✕</button>
-                                </div>
-                                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.75rem' }}>
-                                    {[['First Name','firstName'],['Last Name','lastName'],['Company','company'],['Title','title'],['Email','email'],['Phone','phone']].map(([label, key]) => (
-                                        <div key={key}>
-                                            <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>{label}</label>
-                                            <input value={form[key]||''} onChange={e => set(key, e.target.value)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }} />
-                                        </div>
-                                    ))}
-                                    <div>
-                                        <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Source</label>
-                                        <select value={form.source||''} onChange={e => set('source', e.target.value)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }}>
-                                            <option value="">— select —</option>
-                                            {['Web Form','LinkedIn','Trade Show','Referral','CSV Import','Cold List','Email','Other'].map(s => <option key={s}>{s}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Status</label>
-                                        <select value={form.status||'New'} onChange={e => set('status', e.target.value)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }}>
-                                            {['New','Contacted','Qualified','Working','Converted','Dead'].map(s => <option key={s}>{s}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Lead Score (0-100)</label>
-                                        <input type="number" min="0" max="100" value={form.score||50} onChange={e => set('score', parseInt(e.target.value)||0)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }} />
-                                    </div>
-                                    <div>
-                                        <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Est. ARR ($)</label>
-                                        <input type="number" min="0" value={form.estimatedARR||0} onChange={e => set('estimatedARR', parseInt(e.target.value)||0)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }} />
-                                    </div>
-                                    {canSeeAll && (
-                                        <div style={{ gridColumn:'span 2' }}>
-                                            <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Assign To</label>
-                                            <select value={form.assignedTo||''} onChange={e => set('assignedTo', e.target.value)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }}>
-                                                <option value="">— unassigned —</option>
-                                                {allReps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
-                                            </select>
-                                        </div>
-                                    )}
-                                    <div style={{ gridColumn:'span 2' }}>
-                                        <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Notes</label>
-                                        <textarea value={form.notes||''} onChange={e => set('notes', e.target.value)} rows={3} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', resize:'vertical' }} />
-                                    </div>
-                                </div>
-                                <div style={{ display:'flex', gap:'0.5rem', marginTop:'1.25rem', justifyContent:'flex-end' }}>
-                                    <button onClick={onClose} style={{ padding:'0.45rem 1rem', border:'1px solid #e2e8f0', borderRadius:'6px', background:'#f8fafc', fontSize:'0.8125rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', color:'#475569' }}>Cancel</button>
-                                    <button onClick={() => onSave(form)} style={{ padding:'0.45rem 1.25rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.8125rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>Save Lead</button>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                };
-
-                return (
-                    <div className="tab-page">
-                        {(newLead !== null) && <LeadForm lead={newLead} onSave={saveLead} onClose={() => setNewLead(null)} />}
-                        {editingLead && <LeadForm lead={editingLead} onSave={saveLead} onClose={() => setEditingLead(null)} />}
-
-                        {/* KPI ROW */}
-                        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'0.75rem', padding:'1rem 1.25rem 0' }}>
-                            {[
-                                { label:'Total Leads', value: visibleLeads.length, sub: counts.New + ' new', accent:'#2563eb' },
-                                { label:'Hot Leads', value: counts.hot, sub:'Score 70+', accent:'#ef4444' },
-                                { label: canSeeAll ? 'Unassigned' : 'My Leads', value: canSeeAll ? counts.unassigned : visibleLeads.length, sub: canSeeAll ? 'Need distribution' : 'Assigned to you', accent:'#f59e0b' },
-                                { label:'Converted', value: counts.Converted, sub: convRate + '% rate', accent:'#10b981' },
-                                { label:'Est. Pipeline', value: '$' + (totalARR >= 1000000 ? (totalARR/1000000).toFixed(1)+'M' : Math.round(totalARR/1000)+'K'), sub:'from leads', accent:'#7c3aed' },
-                            ].map(kpi => (
-                                <div key={kpi.label} style={{ background:'#fff', border:'1px solid #e2e8f0', borderLeft:'3px solid '+kpi.accent, borderRadius:'10px', padding:'0.875rem 1rem' }}>
-                                    <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.3rem' }}>{kpi.label}</div>
-                                    <div style={{ fontSize:'1.4rem', fontWeight:'800', color:'#1e293b', lineHeight:1 }}>{kpi.value}</div>
-                                    <div style={{ fontSize:'0.6875rem', color:'#64748b', marginTop:'0.2rem' }}>{kpi.sub}</div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* MAIN LAYOUT */}
-                        <div style={{ display:'grid', gridTemplateColumns: canSeeAll ? '1fr 300px' : '1fr', gap:'1rem', padding:'1rem 1.25rem' }}>
-
-                            {/* LEFT: LEAD LIST */}
-                            <div>
-                                <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
-                                    {/* TOOLBAR */}
-                                    <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
-                                        <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', marginRight:'0.25rem' }}>Leads</span>
-                                        <div style={{ width:'1px', height:'16px', background:'#e2e8f0' }}></div>
-                                        {[
-                                            { key:'all', label:'All', count: counts.all },
-                                            { key:'hot', label:'🔥 Hot', count: counts.hot },
-                                            { key:'New', label:'New', count: counts.New },
-                                            { key:'Working', label:'Working', count: counts.Working },
-                                            ...(canSeeAll ? [{ key:'unassigned', label:'Unassigned', count: counts.unassigned }] : []),
-                                        ].map(f => (
-                                            <button key={f.key} onClick={() => setLeadFilter(f.key)} style={{ padding:'0.2rem 0.6rem', borderRadius:'999px', border:'1px solid '+(leadFilter===f.key?'#2563eb':'#e2e8f0'), background:leadFilter===f.key?'#2563eb':'#f8fafc', color:leadFilter===f.key?'#fff':'#64748b', fontSize:'0.6875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
-                                                {f.label} <span style={{ opacity:0.75 }}>{f.count}</span>
-                                            </button>
-                                        ))}
-                                        <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
-                                            <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'6px', overflow:'hidden' }}>
-                                                {[['list','☰'],['kanban','🗂']].map(([v,icon]) => (
-                                                    <button key={v} onClick={() => setLeadView(v)} style={{ padding:'0.25rem 0.6rem', border:'none', background:leadView===v?'#2563eb':'#fff', color:leadView===v?'#fff':'#64748b', fontSize:'0.75rem', cursor:'pointer' }}>{icon}</button>
-                                                ))}
-                                            </div>
-                                            <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
-                                        </div>
-                                    </div>
-
-                                    {/* LIST VIEW */}
-                                    {leadView === 'list' && (
-                                        <div style={{ overflowX:'auto' }}>
-                                            <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                                                <thead>
-                                                    <tr>
-                                                        {canSeeAll && <th style={{ padding:'0.5rem 0.75rem', textAlign:'left', fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', width:'36px' }}><input type="checkbox" style={{ width:'14px', height:'14px', accentColor:'#2563eb' }} onChange={e => setSelectedLeads(e.target.checked ? filtered.map(l=>l.id) : [])} /></th>}
-                                                        {['Score','Name / Company','Source','Status', ...(canSeeAll?['Assigned To']:[]), 'Est. ARR','Actions'].map(h => (
-                                                            <th key={h} style={{ padding:'0.5rem 0.75rem', textAlign:'left', fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', whiteSpace:'nowrap' }}>{h}</th>
-                                                        ))}
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {filtered.length === 0 && (
-                                                        <tr><td colSpan={99} style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.875rem' }}>No leads found</td></tr>
-                                                    )}
-                                                    {filtered.map(lead => {
-                                                        const sc = lead.score || 0;
-                                                        const st = lead.status || 'New';
-                                                        const ss = statusStyle[st] || statusStyle.New;
-                                                        const isUnassigned = !lead.assignedTo;
-                                                        return (
-                                                            <tr key={lead.id} style={{ background: isUnassigned && canSeeAll ? '#fffbeb' : 'transparent' }}
-                                                                onMouseEnter={e => e.currentTarget.style.background = isUnassigned && canSeeAll ? '#fef9c3' : '#f8fafc'}
-                                                                onMouseLeave={e => e.currentTarget.style.background = isUnassigned && canSeeAll ? '#fffbeb' : 'transparent'}>
-                                                                {canSeeAll && <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}><input type="checkbox" style={{ width:'14px', height:'14px', accentColor:'#2563eb' }} checked={selectedLeads.includes(lead.id)} onChange={e => setSelectedLeads(prev => e.target.checked ? [...prev, lead.id] : prev.filter(i=>i!==lead.id))} /></td>}
-                                                                <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
-                                                                    <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:scoreBg(sc), color:scoreColor(sc), display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'800' }}>{sc}</div>
-                                                                </td>
-                                                                <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
-                                                                    <div style={{ fontWeight:'600', color:'#1e293b', fontSize:'0.8125rem' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || '—'}</div>
-                                                                    <div style={{ fontSize:'0.75rem', color:'#64748b' }}>{[lead.company, lead.title].filter(Boolean).join(' · ') || '—'}</div>
-                                                                </td>
-                                                                <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
-                                                                    <span style={{ padding:'0.1rem 0.4rem', borderRadius:'4px', fontSize:'0.6rem', fontWeight:'700', background:'#f1f5f9', color:'#64748b' }}>{lead.source || '—'}</span>
-                                                                </td>
-                                                                <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
-                                                                    <span style={{ padding:'0.15rem 0.5rem', borderRadius:'999px', fontSize:'0.625rem', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.05em', background:ss.bg, color:ss.color }}>{st}</span>
-                                                                </td>
-                                                                {canSeeAll && (
-                                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
-                                                                        {lead.assignedTo ? (
-                                                                            <div style={{ display:'flex', alignItems:'center', gap:'0.375rem' }}>
-                                                                                <div style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#2563eb', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.55rem', fontWeight:'800', color:'#fff' }}>{lead.assignedTo.slice(0,2).toUpperCase()}</div>
-                                                                                <span style={{ fontSize:'0.75rem', color:'#475569' }}>{lead.assignedTo}</span>
-                                                                            </div>
-                                                                        ) : (
-                                                                            <button onClick={() => setEditingLead(lead)} style={{ padding:'0.15rem 0.5rem', border:'1px solid #f59e0b', borderRadius:'4px', background:'none', color:'#d97706', fontSize:'0.625rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>⚡ Assign</button>
-                                                                        )}
-                                                                    </td>
-                                                                )}
-                                                                <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9', fontSize:'0.75rem', fontWeight:'700', color:'#2563eb' }}>
-                                                                    {lead.estimatedARR ? '$' + (lead.estimatedARR >= 1000 ? Math.round(lead.estimatedARR/1000)+'K' : lead.estimatedARR) : '—'}
-                                                                </td>
-                                                                <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
-                                                                    <div style={{ display:'flex', gap:'0.3rem' }}>
-                                                                        <button onClick={() => setEditingLead(lead)} style={{ padding:'0.15rem 0.5rem', border:'1px solid #e2e8f0', borderRadius:'4px', background:'#fff', fontSize:'0.6rem', fontWeight:'700', cursor:'pointer', color:'#475569', fontFamily:'inherit' }}>Edit</button>
-                                                                        {lead.status !== 'Converted' && (
-                                                                            <button onClick={() => convertLead(lead)} style={{ padding:'0.15rem 0.5rem', border:'1px solid #10b981', borderRadius:'4px', background:'none', fontSize:'0.6rem', fontWeight:'700', cursor:'pointer', color:'#10b981', fontFamily:'inherit' }}>→ Opp</button>
-                                                                        )}
-                                                                        <button onClick={() => deleteLead(lead.id)} style={{ padding:'0.15rem 0.5rem', border:'1px solid #fecaca', borderRadius:'4px', background:'none', fontSize:'0.6rem', fontWeight:'700', cursor:'pointer', color:'#ef4444', fontFamily:'inherit' }}>Del</button>
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
-
-                                    {/* KANBAN VIEW */}
-                                    {leadView === 'kanban' && (
-                                        <div style={{ overflowX:'auto', padding:'0.75rem' }}>
-                                            <div style={{ display:'flex', gap:'0.625rem', minWidth:'max-content' }}>
-                                                {Object.entries(stageColors).map(([stage, color]) => {
-                                                    const colLeads = filtered.filter(l => (l.status || 'New') === stage);
-                                                    return (
-                                                        <div key={stage} style={{ width:'190px', flexShrink:0, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-                                                            <div style={{ padding:'0.5rem 0.75rem', borderTop:'3px solid '+color, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                                                                <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.04em' }}>{stage}</span>
-                                                                <span style={{ fontSize:'0.6rem', fontWeight:'700', background:'#e2e8f0', color:'#64748b', borderRadius:'10px', padding:'0.1rem 0.35rem' }}>{colLeads.length}</span>
-                                                            </div>
-                                                            <div style={{ padding:'0.5rem', display:'flex', flexDirection:'column', gap:'0.375rem', minHeight:'60px' }}>
-                                                                {colLeads.map(lead => (
-                                                                    <div key={lead.id} onClick={() => setEditingLead(lead)} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'0.5rem 0.625rem', cursor:'pointer', transition:'all 0.1s' }}
-                                                                        onMouseEnter={e => { e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.boxShadow='0 2px 8px rgba(37,99,235,0.1)'; }}
-                                                                        onMouseLeave={e => { e.currentTarget.style.borderColor='#e2e8f0'; e.currentTarget.style.boxShadow='none'; }}>
-                                                                        <div style={{ fontSize:'0.75rem', fontWeight:'600', color:'#1e293b', marginBottom:'0.15rem' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || '—'}</div>
-                                                                        <div style={{ fontSize:'0.625rem', color:'#64748b', marginBottom:'0.25rem' }}>{lead.company || '—'}</div>
-                                                                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                                                                            <span style={{ fontSize:'0.6rem', background:'#f1f5f9', color:'#64748b', padding:'0.1rem 0.3rem', borderRadius:'3px', fontWeight:'600' }}>{lead.source || '—'}</span>
-                                                                            <div style={{ width:'20px', height:'20px', borderRadius:'50%', background:scoreBg(lead.score||0), color:scoreColor(lead.score||0), display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.5rem', fontWeight:'800' }}>{lead.score||0}</div>
-                                                                        </div>
-                                                                        {canSeeAll && lead.assignedTo && <div style={{ fontSize:'0.6rem', color:'#94a3b8', marginTop:'0.2rem' }}>{lead.assignedTo}</div>}
-                                                                    </div>
-                                                                ))}
-                                                                {colLeads.length === 0 && <div style={{ fontSize:'0.6875rem', color:'#cbd5e1', textAlign:'center', padding:'0.75rem 0', fontStyle:'italic' }}>Empty</div>}
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* BULK ACTION BAR */}
-                                    {canSeeAll && selectedLeads.length > 0 && (
-                                        <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.625rem 1rem', background:'#eff6ff', borderTop:'1px solid #bfdbfe' }}>
-                                            <span style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1d4ed8' }}>{selectedLeads.length} selected</span>
-                                            <div style={{ width:'1px', height:'16px', background:'#bfdbfe' }}></div>
-                                            <span style={{ fontSize:'0.75rem', color:'#64748b', fontWeight:'600' }}>Assign to:</span>
-                                            <select value={assignTarget} onChange={e => setAssignTarget(e.target.value)} style={{ fontSize:'0.75rem', border:'1px solid #bfdbfe', borderRadius:'6px', padding:'0.2rem 0.5rem', background:'#fff', color:'#1e293b', fontFamily:'inherit' }}>
-                                                <option value="">— pick rep —</option>
-                                                {allReps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
-                                            </select>
-                                            <button onClick={bulkAssign} style={{ padding:'0.25rem 0.625rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>Assign</button>
-                                            <button onClick={() => { setSelectedLeads([]); setAssignTarget(''); }} style={{ marginLeft:'auto', background:'none', border:'none', color:'#64748b', fontSize:'0.75rem', cursor:'pointer', fontWeight:'600', fontFamily:'inherit' }}>Clear ✕</button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* RIGHT PANEL — managers/admins only */}
-                            {canSeeAll && (
-                                <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem' }}>
-
-                                    {/* DISTRIBUTE */}
-                                    <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
-                                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
-                                            <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.06em' }}>⚡ Distribute Leads</span>
-                                            {counts.unassigned > 0 && <span style={{ fontSize:'0.6875rem', color:'#ef4444', fontWeight:'700', background:'#fee2e2', padding:'0.1rem 0.4rem', borderRadius:'4px' }}>{counts.unassigned} unassigned</span>}
-                                        </div>
-                                        {repLoad.length === 0 && <div style={{ padding:'1rem', fontSize:'0.8125rem', color:'#94a3b8', textAlign:'center' }}>No reps configured</div>}
-                                        {repLoad.map((rep, idx) => (
-                                            <div key={rep.name} style={{ display:'flex', alignItems:'center', gap:'0.625rem', padding:'0.5rem 1rem', borderBottom:'1px solid #f1f5f9' }}>
-                                                <div style={{ width:'28px', height:'28px', borderRadius:'50%', background:repColors[idx % repColors.length], display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'800', color:'#fff', flexShrink:0 }}>{rep.name.slice(0,2).toUpperCase()}</div>
-                                                <div style={{ flex:1, minWidth:0 }}>
-                                                    <div style={{ fontSize:'0.8125rem', fontWeight:'600', color:'#1e293b' }}>{rep.name}</div>
-                                                    <div style={{ height:'4px', background:'#f1f5f9', borderRadius:'2px', marginTop:'0.25rem' }}>
-                                                        <div style={{ height:'4px', borderRadius:'2px', background:'linear-gradient(to right,#2563eb,#7c3aed)', width: Math.round((rep.count / maxLoad) * 100) + '%', transition:'width 0.3s' }}></div>
-                                                    </div>
-                                                </div>
-                                                <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#2563eb', background:'#eff6ff', padding:'0.1rem 0.4rem', borderRadius:'4px', flexShrink:0 }}>{rep.count}</span>
-                                            </div>
-                                        ))}
-                                        <div style={{ padding:'0.75rem 1rem', borderTop:'1px solid #f1f5f9', display:'flex', gap:'0.5rem' }}>
-                                            <button onClick={() => {
-                                                const unassigned = leads.filter(l => !l.assignedTo && l.status !== 'Converted' && l.status !== 'Dead');
-                                                if (unassigned.length === 0 || repLoad.length === 0) return;
-                                                const updated = [...leads];
-                                                unassigned.forEach((lead, i) => {
-                                                    const rep = repLoad[i % repLoad.length];
-                                                    const idx = updated.findIndex(l => l.id === lead.id);
-                                                    if (idx >= 0) updated[idx] = { ...updated[idx], assignedTo: rep.name };
-                                                });
-                                                setLeads(updated);
-                                                updated.filter(l => !leads.find(ol => ol.id === l.id && ol.assignedTo === l.assignedTo)).forEach(l => authFetch('/.netlify/functions/leads', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(l) }).catch(console.error));
-                                            }} style={{ flex:1, padding:'0.4rem 0', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>⚡ Auto-assign All</button>
-                                        </div>
-                                    </div>
-
-                                    {/* SOURCE BREAKDOWN */}
-                                    <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
-                                        <div style={{ padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
-                                            <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.06em' }}>Lead Sources</span>
-                                        </div>
-                                        {(() => {
-                                            const sourceCounts = {};
-                                            visibleLeads.forEach(l => { const s = l.source || 'Other'; sourceCounts[s] = (sourceCounts[s]||0) + 1; });
-                                            const total = visibleLeads.length || 1;
-                                            const srcColors = ['#2563eb','#7c3aed','#0ea5e9','#f59e0b','#10b981','#ef4444','#94a3b8'];
-                                            return Object.entries(sourceCounts).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([src, cnt], i) => (
-                                                <div key={src} style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 1rem' }}>
-                                                    <div style={{ width:'8px', height:'8px', borderRadius:'50%', background:srcColors[i%srcColors.length], flexShrink:0 }}></div>
-                                                    <span style={{ fontSize:'0.75rem', color:'#475569', flex:1 }}>{src}</span>
-                                                    <div style={{ flex:2, height:'4px', background:'#f1f5f9', borderRadius:'2px' }}>
-                                                        <div style={{ height:'4px', borderRadius:'2px', background:srcColors[i%srcColors.length], width:Math.round((cnt/total)*100)+'%' }}></div>
-                                                    </div>
-                                                    <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#1e293b' }}>{Math.round((cnt/total)*100)}%</span>
-                                                </div>
-                                            ));
-                                        })()}
-                                        {visibleLeads.length === 0 && <div style={{ padding:'1rem', fontSize:'0.8125rem', color:'#94a3b8', textAlign:'center' }}>No lead data yet</div>}
-                                    </div>
-
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                );
-            })()}
 
             {activeTab === 'reports' && (() => {
                 const currentYear = new Date().getFullYear();
