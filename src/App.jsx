@@ -49,11 +49,11 @@ function LeadForm({ lead, onSave, onClose, canSeeAll, allReps }) {
                     </div>
                     <div>
                         <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Lead Score (0-100)</label>
-                        <input type="number" min="0" max="100" value={form.score||50} onChange={e => set('score', parseInt(e.target.value)||0)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }} />
+                        <input type="number" min="0" max="100" value={form.score ?? ''} onChange={e => set('score', e.target.value === '' ? '' : e.target.value)} onBlur={e => set('score', Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }} />
                     </div>
                     <div>
                         <label style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', display:'block', marginBottom:'0.25rem' }}>Est. ARR ($)</label>
-                        <input type="number" min="0" value={form.estimatedARR||0} onChange={e => set('estimatedARR', parseInt(e.target.value)||0)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }} />
+                        <input type="number" min="0" value={form.estimatedARR ?? ''} onChange={e => set('estimatedARR', e.target.value === '' ? '' : e.target.value)} onBlur={e => set('estimatedARR', parseInt(e.target.value) || 0)} style={{ width:'100%', padding:'0.4rem 0.625rem', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit' }} />
                     </div>
                     {canSeeAll && (
                         <div style={{ gridColumn:'span 2' }}>
