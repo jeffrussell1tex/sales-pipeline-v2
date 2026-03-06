@@ -110,8 +110,8 @@ export default function AnalyticsDashboard({ opportunities, settings, quotaData,
 
     const productData = ['Shiftboard', 'AutoCall', 'Timesheets'].map(product => ({
         product: product,
-        count: slicedOpportunities.filter(opp => opp.products.includes(product)).length,
-        arr: slicedOpportunities.filter(opp => opp.products.includes(product))
+        count: slicedOpportunities.filter(opp => (opp.products || []).includes(product)).length,
+        arr: slicedOpportunities.filter(opp => (opp.products || []).includes(product))
             .reduce((sum, opp) => sum + opp.arr, 0)
     }));
 
