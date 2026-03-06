@@ -96,6 +96,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
     // Local state via ref trick — use window globals scoped to leads tab
     const [leadFilter, setLeadFilter] = React.useState('all');
     const [leadView, setLeadView] = React.useState('list');
+    const [leadKanbanOpen, setLeadKanbanOpen] = React.useState(true);
     const [selectedLeads, setSelectedLeads] = React.useState([]);
     const [assignTarget, setAssignTarget] = React.useState('');
     const [newLead, setNewLead] = React.useState(null);
@@ -208,18 +209,12 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                 </button>
                             ))}
                             <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
-                                <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'6px', overflow:'hidden' }}>
-                                    {[['list','☰'],['kanban','🗂']].map(([v,icon]) => (
-                                        <button key={v} onClick={() => setLeadView(v)} style={{ padding:'0.25rem 0.6rem', border:'none', background:leadView===v?'#2563eb':'#fff', color:leadView===v?'#fff':'#64748b', fontSize:'0.75rem', cursor:'pointer' }}>{icon}</button>
-                                    ))}
-                                </div>
                                 <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
                             </div>
                         </div>
 
                         {/* LIST VIEW */}
-                        {leadView === 'list' && (
-                            <div style={{ overflowX:'auto' }}>
+                        <div style={{ overflowX:'auto' }}>
                                 <table style={{ width:'100%', borderCollapse:'collapse' }}>
                                     <thead>
                                         <tr>
@@ -285,11 +280,15 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                         })}
                                     </tbody>
                                 </table>
-                            </div>
-                        )}
+                        </div>
 
-                        {/* KANBAN VIEW */}
-                        {leadView === 'kanban' && (
+                        {/* KANBAN VIEW - always visible below list */}
+                        <div style={{ borderTop:'1px solid #e2e8f0' }}>
+                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.625rem 1rem', background:'#f8fafc', cursor:'pointer' }} onClick={() => setLeadKanbanOpen(o => !o)}>
+                                <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>🗂 Kanban View</span>
+                                <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>{leadKanbanOpen ? '▲' : '▼'}</span>
+                            </div>
+                            {leadKanbanOpen && (
                             <div style={{ overflowX:'auto', padding:'0.75rem' }}>
                                 <div style={{ display:'flex', gap:'0.625rem', minWidth:'max-content' }}>
                                     {Object.entries(stageColors).map(([stage, color]) => {
@@ -321,7 +320,8 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                     })}
                                 </div>
                             </div>
-                        )}
+                            )}
+                        </div>
 
                         {/* BULK ACTION BAR */}
                         {canSeeAll && selectedLeads.length > 0 && (
