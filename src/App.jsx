@@ -126,13 +126,13 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
             ? { ...lead, id: 'lead_' + Date.now(), createdAt: new Date().toISOString(), status: lead.status || 'New' }
             : lead;
         setLeads(prev => isNew ? [...prev, saved] : prev.map(l => l.id === saved.id ? saved : l));
-        await authFetch('/.netlify/functions/leads', { method: isNew ? 'POST' : 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(saved) }).catch(console.error);
+        await dbFetch('/.netlify/functions/leads', { method: isNew ? 'POST' : 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(saved) }).catch(console.error);
         setNewLead(null); setEditingLead(null);
     };
 
     const deleteLead = async (id) => {
         setLeads(prev => prev.filter(l => l.id !== id));
-        await authFetch('/.netlify/functions/leads?id=' + id, { method: 'DELETE' }).catch(console.error);
+        await dbFetch('/.netlify/functions/leads?id=' + id, { method: 'DELETE' }).catch(console.error);
     };
 
     const convertLead = (lead) => {
@@ -149,7 +149,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
         const updated = leads.map(l => selectedLeads.includes(l.id) ? { ...l, assignedTo: assignTarget } : l);
         setLeads(updated);
         for (const l of updated.filter(l => selectedLeads.includes(l.id))) {
-            await authFetch('/.netlify/functions/leads', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(l) }).catch(console.error);
+            await dbFetch('/.netlify/functions/leads', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(l) }).catch(console.error);
         }
         setSelectedLeads([]); setAssignTarget('');
     };
@@ -374,7 +374,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                         if (idx >= 0) updated[idx] = { ...updated[idx], assignedTo: rep.name };
                                     });
                                     setLeads(updated);
-                                    updated.filter(l => !leads.find(ol => ol.id === l.id && ol.assignedTo === l.assignedTo)).forEach(l => authFetch('/.netlify/functions/leads', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(l) }).catch(console.error));
+                                    updated.filter(l => !leads.find(ol => ol.id === l.id && ol.assignedTo === l.assignedTo)).forEach(l => dbFetch('/.netlify/functions/leads', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(l) }).catch(console.error));
                                 }} style={{ flex:1, padding:'0.4rem 0', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>⚡ Auto-assign All</button>
                             </div>
                         </div>
