@@ -2024,12 +2024,12 @@ dbFetch('/.netlify/functions/activities', {
                     CONTACTS
                 </button>
                 <button 
-                <button 
                     className={`nav-tab ${activeTab === 'leads' ? 'active' : ''}`}
                     onClick={() => setActiveTab('leads')}
                 >
                     LEADS
                 </button>
+                <button 
                     className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
                     onClick={() => setActiveTab('reports')}
                 >
