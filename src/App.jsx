@@ -2086,7 +2086,7 @@ dbFetch('/.netlify/functions/activities', {
     allFeedItems.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     const feedFiltered = allFeedItems.filter(item => {
         if (feedFilter === 'all') return true;
-        if (feedFilter === 'mentions') return item.mentions.includes(currentUser);
+        if (feedFilter === 'mentions') return (item.mentions || []).includes(currentUser);
         if (feedFilter === 'activities') return item.type === 'activity';
         if (feedFilter === 'comments') return item.type === 'comment';
         if (feedFilter === 'stages') return item.type === 'stage' || item.type === 'created';
@@ -4639,7 +4639,7 @@ dbFetch('/.netlify/functions/activities', {
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                 {feedFiltered.map((item, idx) => {
                                     const isNew = item.timestamp > feedLastRead && item.actor !== currentUser;
-                                    const isMentioned = item.mentions.includes(currentUser);
+                                    const isMentioned = (item.mentions || []).includes(currentUser);
                                     const hasBorder = idx < feedFiltered.length - 1;
                                     return (
                                         <div key={item.id} style={{ display: 'flex', gap: '0.75rem', padding: '0.75rem 0', borderBottom: hasBorder ? '1px solid #f1f5f9' : 'none', alignItems: 'flex-start' }}>
