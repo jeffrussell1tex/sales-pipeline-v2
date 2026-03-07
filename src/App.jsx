@@ -216,6 +216,42 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                         </div>
 
                         {/* LIST VIEW */}
+                        {/* Mobile cards — Leads */}
+                        <div className="leads-mobile-cards" style={{ padding:'0.75rem', display:'none' }}>
+                            {filtered.length === 0 ? (
+                                <div style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.875rem' }}>No leads found</div>
+                            ) : filtered.map(lead => {
+                                const sc = lead.score || 0;
+                                const st = lead.status || 'New';
+                                const ss = statusStyle[st] || statusStyle.New;
+                                return (
+                                    <div key={lead.id} className="mobile-record-card" onClick={() => setEditingLead(lead)}>
+                                        <div className="mobile-card-top">
+                                            <div style={{ flex:1, minWidth:0 }}>
+                                                <div className="mobile-card-title">{lead.firstName} {lead.lastName}</div>
+                                                <div className="mobile-card-sub">{[lead.title, lead.company].filter(Boolean).join(' · ')}</div>
+                                            </div>
+                                            <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'0.25rem', flexShrink:0 }}>
+                                                <span style={{ background: scoreBg(sc), color: scoreColor(sc), fontWeight:'800', fontSize:'0.6875rem', padding:'0.125rem 0.5rem', borderRadius:'999px' }}>{sc}</span>
+                                                <span style={{ background:ss.bg, color:ss.color, fontWeight:'700', fontSize:'0.625rem', padding:'0.1rem 0.4rem', borderRadius:'999px' }}>{st}</span>
+                                            </div>
+                                        </div>
+                                        <div className="mobile-card-meta">
+                                            {lead.source && <span className="mobile-card-meta-item">📌 {lead.source}</span>}
+                                            {lead.assignedTo && <span className="mobile-card-meta-item">👤 {lead.assignedTo}</span>}
+                                            {lead.estimatedARR > 0 && <span className="mobile-card-meta-item" style={{ fontWeight:'700', color:'#2563eb' }}>${(lead.estimatedARR||0).toLocaleString()}</span>}
+                                        </div>
+                                        <div className="mobile-card-actions" onClick={e => e.stopPropagation()}>
+                                            <button className="primary" onClick={() => setEditingLead(lead)}>✏️ Edit</button>
+                                            {lead.status !== 'Converted' && <button onClick={() => { handleConvert(lead); }} style={{ color:'#10b981', borderColor:'#a7f3d0' }}>✓ Convert</button>}
+                                            <button onClick={() => { showConfirm('Delete this lead?', () => { setLeads(prev => prev.filter(l => l.id !== lead.id)); dbFetch(`/.netlify/functions/leads?id=${lead.id}`, { method:'DELETE' }).catch(console.error); }); }} style={{ color:'#ef4444', borderColor:'#fecaca' }}>🗑</button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {/* Desktop table */}
+                        <div className="leads-desktop-table">
                         <div style={{ overflowX:'auto' }}>
                                 <table style={{ width:'100%', borderCollapse:'collapse' }}>
                                     <thead>
@@ -283,6 +319,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                     </tbody>
                                 </table>
                         </div>
+                        </div>{/* end leads-desktop-table */}
 
                         {/* KANBAN VIEW - always visible below list */}
                         <div style={{ borderTop:'1px solid #e2e8f0' }}>
@@ -3185,6 +3222,38 @@ dbFetch('/.netlify/functions/activities', {
                         )}
 
                         <div className="table-wrapper">
+                            {/* Mobile cards — Opportunities (pipeline tab) */}
+                            <div className="opp-mobile-cards" style={{ padding: '0.75rem' }}>
+                                {pipelineFilteredOpps.length === 0 ? (
+                                    <div style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.875rem' }}>No opportunities found</div>
+                                ) : pipelineFilteredOpps.map(opp => {
+                                    const health = calculateDealHealth(opp);
+                                    return (
+                                        <div key={opp.id} className="mobile-record-card" onClick={() => { setEditingOpp(opp); setShowModal(true); }}>
+                                            <div className="mobile-card-top">
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div className="mobile-card-title" style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{opp.opportunityName || opp.account}</div>
+                                                    <div className="mobile-card-sub">{opp.account}{opp.salesRep ? ` · ${opp.salesRep}` : ''}</div>
+                                                </div>
+                                                {canViewField('arr') && <div className="mobile-card-arr">${(opp.arr||0).toLocaleString()}</div>}
+                                            </div>
+                                            <div className="mobile-card-meta">
+                                                <span style={{ background: getStageColor(opp.stage).text+'22', color: getStageColor(opp.stage).text, padding:'0.125rem 0.5rem', borderRadius:'999px', fontSize:'0.6875rem', fontWeight:'700' }}>{opp.stage}</span>
+                                                <span style={{ width:'8px', height:'8px', borderRadius:'50%', background: health.color, display:'inline-block' }} />
+                                                <span className="mobile-card-meta-item" style={{ color: health.color, fontWeight:'600' }}>{health.status}</span>
+                                                {opp.forecastedCloseDate && <span className="mobile-card-meta-item">📅 {new Date(opp.forecastedCloseDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
+                                            </div>
+                                            <div className="mobile-card-actions" onClick={e => e.stopPropagation()}>
+                                                <button className="primary" onClick={() => { setEditingOpp(opp); setShowModal(true); }}>✏️ Edit</button>
+                                                <button onClick={() => { const s = document.createElement('select'); stages.forEach(st => { const o = document.createElement('option'); o.value=st; o.text=st; if(st===opp.stage) o.selected=true; s.appendChild(o); }); }}>Stage ▾</button>
+                                                {canEdit && <button onClick={() => { showConfirm('Delete this opportunity?', () => handleDeleteOpp(opp.id)); }} style={{ color:'#ef4444', borderColor:'#fecaca' }}>🗑</button>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            {/* Desktop table — hidden on mobile */}
+                            <div className="opp-desktop-table">
                             {/* Stale deals warning banner */}
                             {(() => {
                                 const staleDeals = pipelineFilteredOpps.filter(opp => {
@@ -3593,6 +3662,7 @@ dbFetch('/.netlify/functions/activities', {
                                 })}
                                 </tbody>
                             </table>
+                            </div>{/* end opp-desktop-table */}
                         </div>
                     </div>
                     )}
@@ -3868,6 +3938,37 @@ dbFetch('/.netlify/functions/activities', {
                         )}
 
                         <div className="table-wrapper">
+                            {/* Mobile cards — Opportunities tab */}
+                            <div className="opp-mobile-cards" style={{ padding: '0.75rem' }}>
+                                {oppFilteredOpps.length === 0 ? (
+                                    <div style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.875rem' }}>No opportunities found</div>
+                                ) : oppFilteredOpps.map(opp => {
+                                    const health = calculateDealHealth(opp);
+                                    return (
+                                        <div key={opp.id} className="mobile-record-card" onClick={() => { setEditingOpp(opp); setShowModal(true); }}>
+                                            <div className="mobile-card-top">
+                                                <div style={{ flex:1, minWidth:0 }}>
+                                                    <div className="mobile-card-title" style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{opp.opportunityName || opp.account}</div>
+                                                    <div className="mobile-card-sub">{opp.account}{opp.salesRep ? ` · ${opp.salesRep}` : ''}</div>
+                                                </div>
+                                                {canViewField('arr') && <div className="mobile-card-arr">${(opp.arr||0).toLocaleString()}</div>}
+                                            </div>
+                                            <div className="mobile-card-meta">
+                                                <span style={{ background: getStageColor(opp.stage).text+'22', color: getStageColor(opp.stage).text, padding:'0.125rem 0.5rem', borderRadius:'999px', fontSize:'0.6875rem', fontWeight:'700' }}>{opp.stage}</span>
+                                                <span style={{ width:'8px', height:'8px', borderRadius:'50%', background:health.color, display:'inline-block' }} />
+                                                <span className="mobile-card-meta-item" style={{ color:health.color, fontWeight:'600' }}>{health.status}</span>
+                                                {opp.forecastedCloseDate && <span className="mobile-card-meta-item">📅 {new Date(opp.forecastedCloseDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
+                                            </div>
+                                            <div className="mobile-card-actions" onClick={e => e.stopPropagation()}>
+                                                <button className="primary" onClick={() => { setEditingOpp(opp); setShowModal(true); }}>✏️ Edit</button>
+                                                {canEdit && <button onClick={() => { showConfirm('Delete this opportunity?', () => handleDeleteOpp(opp.id)); }} style={{ color:'#ef4444', borderColor:'#fecaca' }}>🗑 Delete</button>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            {/* Desktop table */}
+                            <div className="opp-desktop-table">
                             {/* Stale deals warning banner */}
                             {(() => {
                                 const staleDeals = oppFilteredOpps.filter(opp => {
@@ -4201,6 +4302,7 @@ dbFetch('/.netlify/functions/activities', {
                                     </div>
                                 </div>
                             )}
+                            </div>{/* end opp-desktop-table */}
                         </div>
                     </div>
                 </div>
@@ -5237,6 +5339,35 @@ dbFetch('/.netlify/functions/activities', {
                             </div>
                         ) : (
                             <>
+                            {/* Mobile cards — Contacts */}
+                            <div className="contacts-mobile-cards">
+                                {visibleContacts.sort((a,b) => {
+                                    if (contactsSortBy === 'lastName') return (a.lastName||'').localeCompare(b.lastName||'');
+                                    if (contactsSortBy === 'firstName') return (a.firstName||'').localeCompare(b.firstName||'');
+                                    const cmp = (a.company||'').localeCompare(b.company||'');
+                                    return cmp !== 0 ? cmp : (a.lastName||'').localeCompare(b.lastName||'');
+                                }).map(contact => (
+                                    <div key={contact.id} className="mobile-record-card" onClick={() => setViewingContact(contact)}>
+                                        <div className="mobile-card-top">
+                                            <div style={{ flex:1, minWidth:0 }}>
+                                                <div className="mobile-card-title">{contact.firstName} {contact.lastName}</div>
+                                                <div className="mobile-card-sub">{[contact.title, contact.company].filter(Boolean).join(' · ')}</div>
+                                            </div>
+                                        </div>
+                                        <div className="mobile-card-meta">
+                                            {contact.email && <span className="mobile-card-meta-item">✉️ {contact.email}</span>}
+                                            {(contact.phone || contact.mobile) && <span className="mobile-card-meta-item">📞 {contact.phone || contact.mobile}</span>}
+                                        </div>
+                                        <div className="mobile-card-actions" onClick={e => e.stopPropagation()}>
+                                            <button className="primary" onClick={() => setViewingContact(contact)}>View</button>
+                                            {canEdit && <button onClick={() => { setEditingContact(contact); setShowContactModal(true); }}>✏️ Edit</button>}
+                                            {contact.email && <button onClick={() => window.location.href='mailto:'+contact.email}>📧 Email</button>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            {/* Desktop view */}
+                            <div className="contacts-desktop-table">
                             {/* Select all */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', paddingLeft: '0.25rem' }}>
                                 <input type="checkbox"
@@ -5443,7 +5574,7 @@ dbFetch('/.netlify/functions/activities', {
                                     return results;
                                 })()}
                             </div>
-                            </div>
+                            </div>{/* end contacts-desktop-table */}
                             </>
                         )}
                     </div>
