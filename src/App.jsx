@@ -319,7 +319,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                     </tbody>
                                 </table>
                         </div>
-                        </div>{/* end leads-desktop-table */}
+                        </div>
 
                         {/* KANBAN VIEW - always visible below list */}
                         <div style={{ borderTop:'1px solid #e2e8f0' }}>
@@ -3662,7 +3662,7 @@ dbFetch('/.netlify/functions/activities', {
                                 })}
                                 </tbody>
                             </table>
-                            </div>{/* end opp-desktop-table */}
+                            </div>
                         </div>
                     </div>
                     )}
@@ -4302,7 +4302,7 @@ dbFetch('/.netlify/functions/activities', {
                                     </div>
                                 </div>
                             )}
-                            </div>{/* end opp-desktop-table */}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -5574,9 +5574,9 @@ dbFetch('/.netlify/functions/activities', {
                                     return results;
                                 })()}
                             </div>
-                            </div>{/* end position:relative */}
-                            </div>{/* end contacts-desktop-table */}
-                            </div>{/* end contents wrapper */}
+                            </div>
+                            </div>
+                            </div>
                         )}
                     </div>
                 </div>
