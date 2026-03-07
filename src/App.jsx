@@ -5574,6 +5574,7 @@ dbFetch('/.netlify/functions/activities', {
                                     return results;
                                 })()}
                             </div>
+                            </div>{/* end position:relative */}
                             </div>{/* end contacts-desktop-table */}
                             </>
                         )}
