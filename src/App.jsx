@@ -5338,7 +5338,7 @@ dbFetch('/.netlify/functions/activities', {
                                 </div>
                             </div>
                         ) : (
-                            <>
+                            <div style={{ display: 'contents' }}>
                             {/* Mobile cards — Contacts */}
                             <div className="contacts-mobile-cards">
                                 {visibleContacts.sort((a,b) => {
@@ -5576,7 +5576,7 @@ dbFetch('/.netlify/functions/activities', {
                             </div>
                             </div>{/* end position:relative */}
                             </div>{/* end contacts-desktop-table */}
-                            </>
+                            </div>{/* end contents wrapper */}
                         )}
                     </div>
                 </div>
