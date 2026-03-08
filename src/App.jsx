@@ -9704,11 +9704,12 @@ ${bodyHtml}
                         setContacts([...contacts, ...contactsWithIds]);
                         // Save each imported contact to the database
                         contactsWithIds.forEach(contact => {
-                            dbFetch('/.netlify/functions/contacts', {
+                            fetch('/.netlify/functions/contacts', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: { 'Content-Type': 'application/json', ...authHeaders },
                                 body: JSON.stringify(contact)
-                            }).catch(err => console.error('Failed to save imported contact:', err));
+                            }).then(r => { if (!r.ok) r.text().then(t => console.error('Contact save failed:', r.status, t)); })
+                              .catch(err => console.error('Failed to save imported contact:', err));
                         });
                         // Auto-add companies to accounts (Item 2)
                         const existingNames = accounts.map(a => a.name.toLowerCase());
@@ -9725,29 +9726,30 @@ ${bodyHtml}
                             setAccounts(prev => [...prev, ...newAccounts]);
                             // Save auto-created accounts to the database
                             newAccounts.forEach(account => {
-                                dbFetch('/.netlify/functions/accounts', {
+                                fetch('/.netlify/functions/accounts', {
                                     method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
+                                    headers: { 'Content-Type': 'application/json', ...authHeaders },
                                     body: JSON.stringify(account)
-                                }).catch(err => console.error('Failed to save auto-created account:', err));
+                                }).then(r => { if (!r.ok) r.text().then(t => console.error('Account save failed:', r.status, t)); })
+                                  .catch(err => console.error('Failed to save auto-created account:', err));
                             });
                         }
                         setShowCsvImportModal(false);
                     }}
                     onImportAccounts={(newAccounts) => {
-                        const startId = Math.max(...(accounts.map(a => parseInt(a.id)) || [0]), 0) + 1;
-                        const accountsWithIds = newAccounts.map((a, i) => ({
+                        const accountsWithIds = newAccounts.map((a) => ({
                             ...a,
-                            id: String(startId + i).padStart(3, '0')
+                            id: crypto.randomUUID()
                         }));
                         setAccounts([...accounts, ...accountsWithIds]);
                         // Save each imported account to the database
                         accountsWithIds.forEach(account => {
-                            dbFetch('/.netlify/functions/accounts', {
+                            fetch('/.netlify/functions/accounts', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: { 'Content-Type': 'application/json', ...authHeaders },
                                 body: JSON.stringify(account)
-                            }).catch(err => console.error('Failed to save imported account:', err));
+                            }).then(r => { if (!r.ok) r.text().then(t => console.error('Account import save failed:', r.status, t)); })
+                              .catch(err => console.error('Failed to save imported account:', err));
                         });
                         setShowCsvImportModal(false);
                     }}
