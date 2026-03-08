@@ -129,6 +129,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
         }
         setImportStats({ total: data.length });
         setStep('results');
+        setTimeout(() => onClose(), 2000);
     };
 
     const previewData = step === 'preview' ? getMappedData() : [];
