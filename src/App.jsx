@@ -456,7 +456,7 @@ function FunnelView({ stages, pipelineFilteredOpps, funnelExpandedStage, setFunn
         <div style={{ padding: '1.25rem 1.5rem' }}>
             {stages.map((stage, idx) => {
                 const stageOpps = pipelineFilteredOpps.filter(o => o.stage === stage);
-                const stageARR = stageOpps.reduce((s, o) => s + (o.arr || 0), 0);
+                const stageARR = stageOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
                 const maxCount = Math.max(...stages.map(s2 => pipelineFilteredOpps.filter(o => o.stage === s2).length), 1);
                 const barPct = stageOpps.length === 0 ? 4 : Math.max(8, Math.round((stageOpps.length / maxCount) * 100));
                 const color = stageColors[idx % stageColors.length];
@@ -495,7 +495,7 @@ function FunnelView({ stages, pipelineFilteredOpps, funnelExpandedStage, setFunn
                                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                                         <span style={{ fontWeight: '600', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.opportunityName || opp.account}</span>
                                         <span style={{ color: '#64748b', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.account}</span>
-                                        <span style={{ fontWeight: '700', color: '#2563eb', fontSize: '0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>{Math.round((opp.arr||0)/1000)}K</span>
+                                        <span style={{ fontWeight: '700', color: '#2563eb', fontSize: '0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>{Math.round((parseFloat(opp.arr)||0)/1000)}K</span>
                                         <span style={{ color: '#94a3b8', fontSize: '0.6875rem', whiteSpace: 'nowrap' }}>{opp.forecastedCloseDate || '-'}</span>
                                         <div style={{ display: 'flex', gap: '0.375rem' }}>
                                             <button className="action-btn" onClick={e => { e.stopPropagation(); handleEdit(opp); }} style={{ padding: '0.15rem 0.5rem', fontSize: '0.6875rem' }}>Edit</button>
@@ -540,7 +540,7 @@ function KanbanView({ stages, pipelineFilteredOpps, kanbanDragging, kanbanDragOv
                 {stages.filter(s => s !== 'Closed Lost').map((stage, idx) => {
                     const color = stageColors[idx % stageColors.length];
                     const colOpps = pipelineFilteredOpps.filter(o => o.stage === stage);
-                    const colARR = colOpps.reduce((s, o) => s + (o.arr||0), 0);
+                    const colARR = colOpps.reduce((s, o) => s + (parseFloat(o.arr)||0), 0);
                     const isDragOver = kanbanDragOver === stage;
                     return (
                         <div key={stage}
@@ -572,7 +572,7 @@ function KanbanView({ stages, pipelineFilteredOpps, kanbanDragging, kanbanDragOv
                                             <div style={{ fontSize: '0.6375rem', color: '#64748b', marginBottom: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.account}</div>
                                             {opp.salesRep && <div style={{ fontSize: '0.6rem', color: '#94a3b8', marginBottom: '0.25rem' }}>{'\u{1F464} ' + opp.salesRep}</div>}
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#2563eb' }}>{Math.round((opp.arr||0)/1000)}K</span>
+                                                <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#2563eb' }}>{Math.round((parseFloat(opp.arr)||0)/1000)}K</span>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                                                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: healthColor, flexShrink: 0 }}></div>
                                                     <span style={{ fontSize: '0.6rem', color: '#94a3b8' }}>{opp.forecastedCloseDate ? opp.forecastedCloseDate.slice(5) : '-'}</span>
@@ -1758,8 +1758,8 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
         const allOpps = opportunities.filter(o => o.account && names.includes(o.account.toLowerCase()));
         const openOpps = allOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
         const wonOpps = allOpps.filter(o => o.stage === 'Closed Won');
-        const pipeline = openOpps.reduce((s, o) => s + (o.arr || 0), 0);
-        const wonArr = wonOpps.reduce((s, o) => s + (o.arr || 0) + (o.implementationCost || 0), 0);
+        const pipeline = openOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
+        const wonArr = wonOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0) + (o.implementationCost || 0), 0);
         const allContacts = contacts.filter(c => c.company && names.includes(c.company.toLowerCase()));
         const hasSubs = subs.length > 0;
         return { allOpps, openOpps, wonOpps, pipeline, wonArr, allContacts, hasSubs, subCount: subs.length };
@@ -2737,8 +2737,8 @@ dbFetch('/.netlify/functions/activities', {
                             const repOpps = visibleOpportunities.filter(o => (o.salesRep || o.assignedTo) === rep);
                             const won = repOpps.filter(o => o.stage === 'Closed Won');
                             const open = repOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
-                            const wonRev = won.reduce((s, o) => s + (o.arr||0) + (o.implementationCost||0), 0);
-                            const pipeline = open.reduce((s, o) => s + (o.arr||0) + (o.implementationCost||0), 0);
+                            const wonRev = won.reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
+                            const pipeline = open.reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
                             const total = repOpps.filter(o => o.stage === 'Closed Won' || o.stage === 'Closed Lost').length;
                             const winRate = total > 0 ? Math.round(won.length / total * 100) : null;
                             return { rep, wonRev, pipeline, wonDeals: won.length, openDeals: open.length, winRate };
@@ -5120,7 +5120,7 @@ dbFetch('/.netlify/functions/activities', {
                                                 const subOpps = opportunities.filter(o => o.account && o.account.toLowerCase() === subName);
                                                 const subOpen = subOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
                                                 const subWon = subOpps.filter(o => o.stage === 'Closed Won');
-                                                const subPipeline = subOpen.reduce((s, o) => s + (o.arr || 0), 0);
+                                                const subPipeline = subOpen.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
                                                 return (
                                                 <div key={subAccount.id} style={{ 
                                                     marginBottom: '0.625rem', padding: '0.75rem 1rem',
@@ -5634,8 +5634,8 @@ dbFetch('/.netlify/functions/activities', {
                 const lostOpps = reportsOpps.filter(o => o.stage === 'Closed Lost');
                 const openOpps = reportsOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
 
-                const totalWonRevenue = wonOpps.reduce((s, o) => s + (o.arr||0) + (o.implementationCost||0), 0);
-                const totalPipelineValue = openOpps.reduce((s, o) => s + (o.arr||0) + (o.implementationCost||0), 0);
+                const totalWonRevenue = wonOpps.reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
+                const totalPipelineValue = openOpps.reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
                 const avgDealSize = wonOpps.length > 0 ? totalWonRevenue / wonOpps.length : 0;
                 const winRate = (wonOpps.length + lostOpps.length) > 0 ? (wonOpps.length / (wonOpps.length + lostOpps.length) * 100) : 0;
 
@@ -5647,7 +5647,7 @@ dbFetch('/.netlify/functions/activities', {
                         if (!dateStr) return false;
                         const d = new Date(dateStr);
                         return d.getFullYear() === currentYear && months.includes(d.getMonth());
-                    }).reduce((s, o) => s + (o.arr||0) + (o.implementationCost||0), 0);
+                    }).reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
                     return { q, rev };
                 });
                 const maxQRev = Math.max(...revenueByQuarter.map(r => r.rev), 1);
@@ -5656,7 +5656,7 @@ dbFetch('/.netlify/functions/activities', {
                 const byStage = stages.map(st => ({
                     stage: st,
                     count: reportsOpps.filter(o => o.stage === st).length,
-                    value: reportsOpps.filter(o => o.stage === st).reduce((s, o) => s + (o.arr||0) + (o.implementationCost||0), 0)
+                    value: reportsOpps.filter(o => o.stage === st).reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0)
                 })).filter(s => s.count > 0);
                 const maxStageVal = Math.max(...byStage.map(s => s.value), 1);
 
@@ -5680,7 +5680,7 @@ dbFetch('/.netlify/functions/activities', {
                     });
                     return {
                         label: d.toLocaleString('default', { month: 'short' }),
-                        rev: monthOpps.reduce((s, o) => s + (o.arr||0) + (o.implementationCost||0), 0),
+                        rev: monthOpps.reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0),
                         count: monthOpps.length
                     };
                 });
@@ -9027,8 +9027,8 @@ ${bodyHtml}
                     const subOpps = opportunities.filter(o => o.account && o.account.toLowerCase() === sn);
                     const subOpen = subOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
                     const subWon = subOpps.filter(o => o.stage === 'Closed Won');
-                    const subPipeline = subOpen.reduce((s, o) => s + (o.arr || 0), 0);
-                    const subWonValue = subWon.reduce((s, o) => s + (o.arr || 0) + (o.implementationCost || 0), 0);
+                    const subPipeline = subOpen.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
+                    const subWonValue = subWon.reduce((s, o) => s + (parseFloat(o.arr) || 0) + (o.implementationCost || 0), 0);
                     const subContacts = contacts.filter(c => c.company && c.company.toLowerCase() === sn);
                     return { sub, subOpps, subOpen, subWon, subPipeline, subWonValue, subContacts };
                 });
@@ -9357,7 +9357,7 @@ ${bodyHtml}
                                     <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Won</div>
                                 </div>
                                 <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.25rem', textAlign: 'center', borderLeft: '4px solid #f59e0b', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                                    <div style={{ fontSize: '2rem', fontWeight: '800', color: '#92400e' }}>${(() => { const v = activeDeals.reduce((s, o) => s + (o.arr || 0), 0); return v >= 1000 ? Math.round(v / 1000) + 'K' : v.toLocaleString(); })()}</div>
+                                    <div style={{ fontSize: '2rem', fontWeight: '800', color: '#92400e' }}>${(() => { const v = activeDeals.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0); return v >= 1000 ? Math.round(v / 1000) + 'K' : v.toLocaleString(); })()}</div>
                                     <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active Pipeline</div>
                                 </div>
                                 <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.25rem', textAlign: 'center', borderLeft: '4px solid #8b5cf6', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
