@@ -485,19 +485,23 @@ function FunnelView({ stages, pipelineFilteredOpps, funnelExpandedStage, setFunn
                         </div>
                         {isExpanded && stageOpps.length > 0 && (
                             <div style={{ marginLeft: '170px', marginBottom: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto auto', padding: '0.375rem 0.75rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', gap: '0.5rem' }}>
-                                    <span>Opportunity</span><span>Account</span><span style={{ textAlign: 'right' }}>ARR</span><span>Close</span><span>Actions</span>
+                                <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 90px 110px 110px', padding: '0.375rem 0.75rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', gap: '0.75rem' }}>
+                                    <span>Opportunity</span>
+                                    <span>Account</span>
+                                    <span style={{ textAlign: 'right' }}>ARR</span>
+                                    <span style={{ textAlign: 'center' }}>Close Date</span>
+                                    <span style={{ textAlign: 'center' }}>Actions</span>
                                 </div>
                                 {stageOpps.map(opp => (
                                     <div key={opp.id}
-                                        style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto auto', padding: '0.5rem 0.75rem', borderBottom: '1px solid #f1f5f9', fontSize: '0.8125rem', alignItems: 'center', gap: '0.5rem' }}
+                                        style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 90px 110px 110px', padding: '0.5rem 0.75rem', borderBottom: '1px solid #f1f5f9', fontSize: '0.8125rem', alignItems: 'center', gap: '0.75rem' }}
                                         onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; }}
                                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                                        <span style={{ fontWeight: '600', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.opportunityName || opp.account}</span>
-                                        <span style={{ color: '#64748b', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.account}</span>
-                                        <span style={{ fontWeight: '700', color: '#2563eb', fontSize: '0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>{Math.round((parseFloat(opp.arr)||0)/1000)}K</span>
-                                        <span style={{ color: '#94a3b8', fontSize: '0.6875rem', whiteSpace: 'nowrap' }}>{opp.forecastedCloseDate || '-'}</span>
-                                        <div style={{ display: 'flex', gap: '0.375rem' }}>
+                                        <span style={{ fontWeight: '600', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp.opportunityName || opp.account}</span>
+                                        <span style={{ color: '#64748b', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp.account}</span>
+                                        <span style={{ fontWeight: '700', color: '#2563eb', fontSize: '0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>${(parseFloat(opp.arr)||0).toLocaleString()}</span>
+                                        <span style={{ color: '#94a3b8', fontSize: '0.6875rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}) : '—'}</span>
+                                        <div style={{ display: 'flex', gap: '0.375rem', justifyContent: 'center' }}>
                                             <button className="action-btn" onClick={e => { e.stopPropagation(); handleEdit(opp); }} style={{ padding: '0.15rem 0.5rem', fontSize: '0.6875rem' }}>Edit</button>
                                             <button className="action-btn delete" onClick={e => { e.stopPropagation(); handleDelete(opp.id); }} style={{ padding: '0.15rem 0.5rem', fontSize: '0.6875rem' }}>Del</button>
                                         </div>
