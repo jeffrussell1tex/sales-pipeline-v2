@@ -130,9 +130,12 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
             } else {
                 await onImportAccounts(data);
             }
-            setImportStats({ total: data.length, error: null });
+            setImportStats({ total: data.length, error: null, partial: false });
         } catch (err) {
-            setImportStats({ total: 0, error: err.message || 'Import failed. Please try again.' });
+            const msg = err.message || '';
+            // Partial success: some saved, some failed
+            const isPartial = msg.includes('of') && msg.includes('failed to save');
+            setImportStats({ total: data.length, error: msg || 'Import failed. Please try again.', partial: isPartial });
         }
         setImporting(false);
         setStep('results');
@@ -288,14 +291,14 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
                     <div style={{ textAlign: 'center', padding: '2rem 0' }}>
                         {importStats?.error ? (
                             <>
-                                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>❌</div>
-                                <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem', color: '#ef4444' }}>
-                                    Import Failed
+                                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>{importStats.partial ? '⚠️' : '❌'}</div>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem', color: importStats.partial ? '#d97706' : '#ef4444' }}>
+                                    {importStats.partial ? 'Partially Imported' : 'Import Failed'}
                                 </h3>
                                 <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>{importStats.error}</p>
                                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-                                    <button className="btn btn-secondary" onClick={() => setStep('preview')}>← Back</button>
-                                    <button className="btn" onClick={onClose}>Close</button>
+                                    {!importStats.partial && <button className="btn btn-secondary" onClick={() => setStep('preview')}>← Back</button>}
+                                    <button className="btn" onClick={onClose}>{importStats.partial ? 'Done' : 'Close'}</button>
                                 </div>
                             </>
                         ) : (

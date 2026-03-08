@@ -9754,28 +9754,26 @@ ${bodyHtml}
                                 zip: '', country: '', website: '', phone: '', accountOwner: '',
                             }));
                             setAccounts(prev => [...prev, ...newAccts]);
-                            await Promise.all(newAccts.map(async (account) => {
+                            await Promise.allSettled(newAccts.map(async (account) => {
                                 const r = await dbFetch('/.netlify/functions/accounts', {
                                     method: 'POST', body: JSON.stringify(account)
                                 });
-                                if (!r || !r.ok) {
-                                    const t = r ? await r.text().catch(() => '') : 'No response';
-                                    throw new Error(`Account save failed (${r?.status}): ${t}`);
-                                }
+                                if (!r || !r.ok) console.warn(`Account save failed (${r?.status}):`, account.name);
                             }));
                         }
 
                         // Step 2: Save all contacts in parallel — only after accounts confirmed saved
                         setContacts(prev => [...prev, ...contactsWithIds]);
-                        await Promise.all(contactsWithIds.map(async (contact) => {
+                        const contactResults = await Promise.allSettled(contactsWithIds.map(async (contact) => {
                             const r = await dbFetch('/.netlify/functions/contacts', {
                                 method: 'POST', body: JSON.stringify(contact)
                             });
-                            if (!r || !r.ok) {
-                                const t = r ? await r.text().catch(() => '') : 'No response';
-                                throw new Error(`Contact save failed (${r?.status}): ${t}`);
-                            }
+                            if (!r || !r.ok) throw new Error(`failed`);
                         }));
+                        const contactsFailed = contactResults.filter(r => r.status === 'rejected').length;
+                        if (contactsFailed > 0) {
+                            throw new Error(`${contactsFailed} of ${contactsWithIds.length} contacts failed to save. The rest imported successfully — try re-importing the failed records.`);
+                        }
                         // Modal handles its own close via Done button
                     }}
                     onImportAccounts={async (newAccounts) => {
@@ -9783,15 +9781,16 @@ ${bodyHtml}
                             ...a, id: crypto.randomUUID()
                         }));
                         setAccounts(prev => [...prev, ...accountsWithIds]);
-                        await Promise.all(accountsWithIds.map(async (account) => {
+                        const accountResults = await Promise.allSettled(accountsWithIds.map(async (account) => {
                             const r = await dbFetch('/.netlify/functions/accounts', {
                                 method: 'POST', body: JSON.stringify(account)
                             });
-                            if (!r || !r.ok) {
-                                const t = r ? await r.text().catch(() => '') : 'No response';
-                                throw new Error(`Account save failed (${r?.status}): ${t}`);
-                            }
+                            if (!r || !r.ok) throw new Error('failed');
                         }));
+                        const accountsFailed = accountResults.filter(r => r.status === 'rejected').length;
+                        if (accountsFailed > 0) {
+                            throw new Error(`${accountsFailed} of ${accountsWithIds.length} accounts failed to save. The rest imported successfully — try re-importing the failed records.`);
+                        }
                         // Modal handles its own close via Done button
                     }}
                 />
