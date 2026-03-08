@@ -9721,10 +9721,9 @@ ${bodyHtml}
                     accounts={accounts}
                     onClose={() => setShowCsvImportModal(false)}
                     onImportContacts={(newContacts) => {
-                        const startId = Math.max(...(contacts.map(c => parseInt(c.id)) || [0]), 0) + 1;
-                        const contactsWithIds = newContacts.map((c, i) => ({
+                        const contactsWithIds = newContacts.map((c) => ({
                             ...c,
-                            id: String(startId + i).padStart(3, '0'),
+                            id: crypto.randomUUID(),
                             createdAt: new Date().toISOString()
                         }));
 
@@ -9743,14 +9742,13 @@ ${bodyHtml}
                             newContacts.map(c => c.company).filter(c => c && !existingNames.includes(c.toLowerCase()))
                         )];
                         if (newCompanies.length > 0) {
-                            const accStartId = Math.max(...(accounts.map(a => parseInt(a.id)) || [0]), 0) + 1;
-                            const newAccounts = newCompanies.map((name, i) => ({
-                                id: String(accStartId + i).padStart(3, '0'),
+                            const newAccounts = newCompanies.map((name) => ({
+                                id: crypto.randomUUID(),
                                 name,
                                 verticalMarket: '', address: '', city: '', state: '', zip: '',
                                 country: '', website: '', phone: '', accountOwner: '',
                             }));
-                            setAccounts([...accounts, ...newAccounts]);
+                            setAccounts(prev => [...prev, ...newAccounts]);
                             // Save auto-created accounts to the database
                             newAccounts.forEach(account => {
                                 dbFetch('/.netlify/functions/accounts', {
