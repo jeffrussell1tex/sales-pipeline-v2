@@ -8,6 +8,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
     const [parseError, setParseError] = useState('');
     const [importStats, setImportStats] = useState(null);
     const [importing, setImporting] = useState(false);
+    const [importProgress, setImportProgress] = useState(0);
 
     const contactFields = [
         { key: 'firstName', label: 'First Name', required: true },
@@ -124,6 +125,9 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
     const handleImport = async () => {
         const data = getMappedData();
         setImporting(true);
+        setImportProgress(0);
+        // Expose progress callback so App.jsx batch loop can update it
+        window.__importProgressCb = (done, total) => setImportProgress(Math.round((done / total) * 100));
         try {
             if (importType === 'contacts') {
                 await onImportContacts(data);
@@ -133,11 +137,12 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
             setImportStats({ total: data.length, error: null, partial: false });
         } catch (err) {
             const msg = err.message || '';
-            // Partial success: some saved, some failed
             const isPartial = msg.includes('of') && msg.includes('failed to save');
             setImportStats({ total: data.length, error: msg || 'Import failed. Please try again.', partial: isPartial });
         }
+        window.__importProgressCb = null;
         setImporting(false);
+        setImportProgress(0);
         setStep('results');
     };
 
@@ -277,7 +282,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
                                             borderTopColor: 'white', borderRadius: '50%',
                                             animation: 'spin 0.7s linear infinite', display: 'inline-block', flexShrink: 0
                                         }} />
-                                        Saving…
+                                        {importProgress > 0 ? `Saving… ${importProgress}%` : 'Saving…'}
                                     </>
                                 ) : (
                                     <>Import {previewData.length} {importType === 'contacts' ? 'Contacts' : 'Accounts'}</>

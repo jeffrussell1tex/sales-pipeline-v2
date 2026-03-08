@@ -9736,13 +9736,33 @@ ${bodyHtml}
                     accounts={accounts}
                     onClose={() => setShowCsvImportModal(false)}
                     onImportContacts={async (newContacts) => {
+                        // Save records in batches to avoid overwhelming Netlify concurrency limits
+                        const saveBatch = async (url, items, progressOffset = 0, progressTotal = items.length) => {
+                            const BATCH_SIZE = 20;
+                            let failed = 0;
+                            let done = 0;
+                            for (let i = 0; i < items.length; i += BATCH_SIZE) {
+                                const batch = items.slice(i, i + BATCH_SIZE);
+                                const results = await Promise.allSettled(batch.map(async (item) => {
+                                    const r = await dbFetch(url, { method: 'POST', body: JSON.stringify(item) });
+                                    if (!r || !r.ok) throw new Error('failed');
+                                }));
+                                failed += results.filter(r => r.status === 'rejected').length;
+                                done += batch.length;
+                                if (typeof window.__importProgressCb === 'function') {
+                                    window.__importProgressCb(progressOffset + done, progressTotal);
+                                }
+                            }
+                            return failed;
+                        };
+
                         const contactsWithIds = newContacts.map((c) => ({
                             ...c,
                             id: crypto.randomUUID(),
                             createdAt: new Date().toISOString()
                         }));
 
-                        // Step 1: Auto-add new companies to accounts FIRST — all in parallel
+                        // Step 1: Auto-add new companies to accounts FIRST in batches
                         const existingNames = accounts.map(a => a.name.toLowerCase());
                         const newCompanies = [...new Set(
                             newContacts.map(c => c.company).filter(c => c && !existingNames.includes(c.toLowerCase()))
@@ -9754,40 +9774,32 @@ ${bodyHtml}
                                 zip: '', country: '', website: '', phone: '', accountOwner: '',
                             }));
                             setAccounts(prev => [...prev, ...newAccts]);
-                            await Promise.allSettled(newAccts.map(async (account) => {
-                                const r = await dbFetch('/.netlify/functions/accounts', {
-                                    method: 'POST', body: JSON.stringify(account)
-                                });
-                                if (!r || !r.ok) console.warn(`Account save failed (${r?.status}):`, account.name);
-                            }));
+                            await saveBatch('/.netlify/functions/accounts', newAccts);
                         }
 
-                        // Step 2: Save all contacts in parallel — only after accounts confirmed saved
+                        // Step 2: Save contacts in batches — only after accounts confirmed saved
                         setContacts(prev => [...prev, ...contactsWithIds]);
-                        const contactResults = await Promise.allSettled(contactsWithIds.map(async (contact) => {
-                            const r = await dbFetch('/.netlify/functions/contacts', {
-                                method: 'POST', body: JSON.stringify(contact)
-                            });
-                            if (!r || !r.ok) throw new Error(`failed`);
-                        }));
-                        const contactsFailed = contactResults.filter(r => r.status === 'rejected').length;
+                        const contactsFailed = await saveBatch('/.netlify/functions/contacts', contactsWithIds, 0, contactsWithIds.length);
                         if (contactsFailed > 0) {
                             throw new Error(`${contactsFailed} of ${contactsWithIds.length} contacts failed to save. The rest imported successfully — try re-importing the failed records.`);
                         }
                         // Modal handles its own close via Done button
                     }}
                     onImportAccounts={async (newAccounts) => {
-                        const accountsWithIds = newAccounts.map((a) => ({
-                            ...a, id: crypto.randomUUID()
-                        }));
+                        const BATCH_SIZE = 20;
+                        const accountsWithIds = newAccounts.map((a) => ({ ...a, id: crypto.randomUUID() }));
                         setAccounts(prev => [...prev, ...accountsWithIds]);
-                        const accountResults = await Promise.allSettled(accountsWithIds.map(async (account) => {
-                            const r = await dbFetch('/.netlify/functions/accounts', {
-                                method: 'POST', body: JSON.stringify(account)
-                            });
-                            if (!r || !r.ok) throw new Error('failed');
-                        }));
-                        const accountsFailed = accountResults.filter(r => r.status === 'rejected').length;
+                        let accountsFailed = 0;
+                        for (let i = 0; i < accountsWithIds.length; i += BATCH_SIZE) {
+                            const batch = accountsWithIds.slice(i, i + BATCH_SIZE);
+                            const results = await Promise.allSettled(batch.map(async (account) => {
+                                const r = await dbFetch('/.netlify/functions/accounts', {
+                                    method: 'POST', body: JSON.stringify(account)
+                                });
+                                if (!r || !r.ok) throw new Error('failed');
+                            }));
+                            accountsFailed += results.filter(r => r.status === 'rejected').length;
+                        }
                         if (accountsFailed > 0) {
                             throw new Error(`${accountsFailed} of ${accountsWithIds.length} accounts failed to save. The rest imported successfully — try re-importing the failed records.`);
                         }
