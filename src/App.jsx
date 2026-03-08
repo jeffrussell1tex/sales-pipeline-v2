@@ -9744,13 +9744,17 @@ ${bodyHtml}
                             }
                         }
 
-                        // Save contacts (fire and forget - don't block close)
+                        // Save contacts
                         setContacts(prev => [...prev, ...contactsWithIds]);
-                        contactsWithIds.forEach(contact =>
-                            dbFetch('/.netlify/functions/contacts', {
+                        for (const contact of contactsWithIds) {
+                            const r = await dbFetch('/.netlify/functions/contacts', {
                                 method: 'POST', body: JSON.stringify(contact)
-                            }).catch(console.error)
-                        );
+                            });
+                            if (r && !r.ok) {
+                                const t = await r.text().catch(() => '');
+                                console.error('Contact save failed:', r.status, t, contact);
+                            }
+                        }
 
                         setShowCsvImportModal(false);
                     }}
