@@ -3235,7 +3235,7 @@ dbFetch('/.netlify/functions/activities', {
                                                     <div className="mobile-card-title" style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{opp.opportunityName || opp.account}</div>
                                                     <div className="mobile-card-sub">{opp.account}{opp.salesRep ? ` · ${opp.salesRep}` : ''}</div>
                                                 </div>
-                                                {canViewField('arr') && <div className="mobile-card-arr">${(opp.arr||0).toLocaleString()}</div>}
+                                                {canViewField('arr') && <div className="mobile-card-arr">${(parseFloat(opp.arr)||0).toLocaleString()}</div>}
                                             </div>
                                             <div className="mobile-card-meta">
                                                 <span style={{ background: getStageColor(opp.stage).text+'22', color: getStageColor(opp.stage).text, padding:'0.125rem 0.5rem', borderRadius:'999px', fontSize:'0.6875rem', fontWeight:'700' }}>{opp.stage}</span>
@@ -3951,7 +3951,7 @@ dbFetch('/.netlify/functions/activities', {
                                                     <div className="mobile-card-title" style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{opp.opportunityName || opp.account}</div>
                                                     <div className="mobile-card-sub">{opp.account}{opp.salesRep ? ` · ${opp.salesRep}` : ''}</div>
                                                 </div>
-                                                {canViewField('arr') && <div className="mobile-card-arr">${(opp.arr||0).toLocaleString()}</div>}
+                                                {canViewField('arr') && <div className="mobile-card-arr">${(parseFloat(opp.arr)||0).toLocaleString()}</div>}
                                             </div>
                                             <div className="mobile-card-meta">
                                                 <span style={{ background: getStageColor(opp.stage).text+'22', color: getStageColor(opp.stage).text, padding:'0.125rem 0.5rem', borderRadius:'999px', fontSize:'0.6875rem', fontWeight:'700' }}>{opp.stage}</span>
@@ -4142,7 +4142,7 @@ dbFetch('/.netlify/functions/activities', {
                                                 ) : (
                                                     <span title="Click to edit ARR" onClick={() => setInlineEdit({ oppId: opp.id, field:'arr', value: opp.arr||0 })}
                                                         style={{ cursor:'pointer' }} onMouseEnter={e => e.currentTarget.style.textDecoration='underline'} onMouseLeave={e => e.currentTarget.style.textDecoration='none'}>
-                                                        ${(opp.arr||0).toLocaleString()}
+                                                        ${(parseFloat(opp.arr)||0).toLocaleString()}
                                                     </span>
                                                 )}
                                             </td>}
