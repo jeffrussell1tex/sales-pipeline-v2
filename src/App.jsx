@@ -243,7 +243,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                         </div>
                                         <div className="mobile-card-actions" onClick={e => e.stopPropagation()}>
                                             <button className="primary" onClick={() => setEditingLead(lead)}>✏️ Edit</button>
-                                            {lead.status !== 'Converted' && <button onClick={() => { handleConvert(lead); }} style={{ color:'#10b981', borderColor:'#a7f3d0' }}>✓ Convert</button>}
+                                            {lead.status !== 'Converted' && <button onClick={() => { convertLead(lead); }} style={{ color:'#10b981', borderColor:'#a7f3d0' }}>✓ Convert</button>}
                                             <button onClick={() => { showConfirm('Delete this lead?', () => { setLeads(prev => prev.filter(l => l.id !== lead.id)); dbFetch(`/.netlify/functions/leads?id=${lead.id}`, { method:'DELETE' }).catch(console.error); }); }} style={{ color:'#ef4444', borderColor:'#fecaca' }}>🗑</button>
                                         </div>
                                     </div>
@@ -5432,7 +5432,26 @@ dbFetch('/.netlify/functions/activities', {
                                     onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
                                     >
                                     <>
-                                    <div style={{ display: 'flex', alignItems: 'center', padding: '0.25rem 0.625rem', gap: '0.375rem' }}>
+                                    {/* Mobile card - hidden on desktop */}
+                                    <div className="mobile-record-card" onClick={() => setViewingContact(contact)}>
+                                        <div className="mobile-card-top">
+                                            <div>
+                                                <div className="mobile-card-title">{contact.firstName} {contact.lastName}</div>
+                                                {contact.title && <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.1rem' }}>{contact.title}</div>}
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
+                                                <button className="action-btn" onClick={e => { e.stopPropagation(); handleEditContact(contact); }} style={{ padding: '0.2rem 0.5rem', fontSize: '0.6875rem' }}>Edit</button>
+                                                <button className="action-btn delete" onClick={e => { e.stopPropagation(); handleDeleteContact(contact.id); }} style={{ padding: '0.2rem 0.5rem', fontSize: '0.6875rem' }}>Del</button>
+                                            </div>
+                                        </div>
+                                        <div className="mobile-card-meta">
+                                            {contact.company && <span className="mobile-card-meta-item">🏢 {contact.company}</span>}
+                                            {contact.phone && <span className="mobile-card-meta-item">📞 {contact.phone}</span>}
+                                            {contact.email && <span className="mobile-card-meta-item">✉️ {contact.email}</span>}
+                                        </div>
+                                    </div>
+                                    {/* Desktop row - hidden on mobile */}
+                                    <div className="contacts-desktop-row" style={{ display: 'flex', alignItems: 'center', padding: '0.25rem 0.625rem', gap: '0.375rem' }}>
                                         <input type="checkbox"
                                             checked={selectedContacts.includes(contact.id)}
                                             onChange={e => {
@@ -5495,6 +5514,7 @@ dbFetch('/.netlify/functions/activities', {
                                             <button className="action-btn delete" onClick={() => handleDeleteContact(contact.id)}>Delete</button>
                                         </div>
                                     </div>
+                                    {/* end contacts-desktop-row */}
                                     {selectedContacts.includes(contact.id) && (() => {
                                         const contactActivities = activities.filter(a => a.contactId === contact.id);
                                         const contactOpps = opportunities.filter(o => o.account && contact.company && o.account.toLowerCase() === contact.company.toLowerCase());

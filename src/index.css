@@ -823,7 +823,11 @@
             /* Opportunities & Contacts & Leads — hide table on mobile */
             .opp-desktop-table,
             .contacts-desktop-table,
+            .contacts-desktop-row,
             .leads-desktop-table { display: none !important; }
+
+            /* Show contact mobile cards */
+            .mobile-record-card { display: block !important; }
 
             /* Show mobile card list */
             .opp-mobile-cards,
