@@ -7,6 +7,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
     const [fieldMapping, setFieldMapping] = useState({});
     const [parseError, setParseError] = useState('');
     const [importStats, setImportStats] = useState(null);
+    const [importing, setImporting] = useState(false);
 
     const contactFields = [
         { key: 'firstName', label: 'First Name', required: true },
@@ -122,6 +123,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
 
     const handleImport = async () => {
         const data = getMappedData();
+        setImporting(true);
         try {
             if (importType === 'contacts') {
                 await onImportContacts(data);
@@ -132,6 +134,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
         } catch (err) {
             setImportStats({ total: 0, error: err.message || 'Import failed. Please try again.' });
         }
+        setImporting(false);
         setStep('results');
     };
 
@@ -139,6 +142,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
 
     return (
         <div className="modal-overlay">
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '85vh', overflow: 'auto' }}>
                 <h2>Import {importType === 'contacts' ? 'Contacts' : 'Accounts'} from CSV</h2>
 
@@ -261,8 +265,20 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
                         )}
                         <div className="modal-actions">
                             <button type="button" className="btn btn-secondary" onClick={() => setStep('mapping')}>← Back</button>
-                            <button type="button" className="btn" onClick={handleImport}>
-                                Import {previewData.length} {importType === 'contacts' ? 'Contacts' : 'Accounts'}
+                            <button type="button" className="btn" onClick={handleImport} disabled={importing}
+                                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', opacity: importing ? 0.8 : 1 }}>
+                                {importing ? (
+                                    <>
+                                        <span style={{
+                                            width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)',
+                                            borderTopColor: 'white', borderRadius: '50%',
+                                            animation: 'spin 0.7s linear infinite', display: 'inline-block', flexShrink: 0
+                                        }} />
+                                        Saving…
+                                    </>
+                                ) : (
+                                    <>Import {previewData.length} {importType === 'contacts' ? 'Contacts' : 'Accounts'}</>
+                                )}
                             </button>
                         </div>
                     </div>

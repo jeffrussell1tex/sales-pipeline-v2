@@ -860,6 +860,11 @@ function App() {
     const [showLeadImportModal, setShowLeadImportModal] = useState(false);
     const [csvImportType, setCsvImportType] = useState('contacts');
 
+    // Loading states for import/export operations
+    const [exportingCSV, setExportingCSV] = useState(null); // tracks which CSV is exporting by key
+    const [exportingBackup, setExportingBackup] = useState(false);
+    const [restoringBackup, setRestoringBackup] = useState(false);
+
     // Quota & Commission
 
       useEffect(() => {
@@ -1717,23 +1722,28 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
     };
 
     // ── CSV Export utility ──────────────────────────────────────────────
-    const exportToCSV = (filename, headers, rows) => {
-        const escape = (v) => {
-            if (v === null || v === undefined) return '';
-            const s = String(v).replace(/"/g, '""');
-            return /[",\n\r]/.test(s) ? `"${s}"` : s;
-        };
-        const lines = [
-            headers.map(escape).join(','),
-            ...rows.map(row => row.map(escape).join(','))
-        ];
-        const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
+    const exportToCSV = (filename, headers, rows, exportKey = 'default') => {
+        setExportingCSV(exportKey);
+        try {
+            const escape = (v) => {
+                if (v === null || v === undefined) return '';
+                const s = String(v).replace(/"/g, '""');
+                return /[",\n\r]/.test(s) ? `"${s}"` : s;
+            };
+            const lines = [
+                headers.map(escape).join(','),
+                ...rows.map(row => row.map(escape).join(','))
+            ];
+            const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+        } finally {
+            setTimeout(() => setExportingCSV(null), 1000);
+        }
     };
 
     const getStageClass = (stage) => {
@@ -3137,7 +3147,7 @@ dbFetch('/.netlify/functions/activities', {
                             <h2 style={{ margin:0, fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.05em' }}>Opportunities</h2>
                             <div style={{ display:'flex', gap:'0.5rem', alignItems:'center' }}>
                                 <span style={{ fontSize:'0.6875rem', color:'#94a3b8', fontWeight:'600' }}>{pipelineFilteredOpps.length} deals</span>
-                                <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} onClick={() => {
+                                <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} disabled={exportingCSV === 'pipeline'} onClick={() => {
                                     exportToCSV(
                                         `pipeline-${new Date().toISOString().slice(0,10)}.csv`,
                                         ['Account','Site','Stage','ARR','Impl Cost','Total Value','Close Date','Quarter','Rep','Team','Territory','Probability','Deal Health','Notes','Next Steps'],
@@ -3150,8 +3160,8 @@ dbFetch('/.netlify/functions/activities', {
                                             o.probability||'', calculateDealHealth(o).score,
                                             o.notes||'', o.nextSteps||''
                                         ])
-                                    );
-                                }}>📤 Export</button>
+                                    , 'pipeline');
+                                }}>{exportingCSV === 'pipeline' ? '⏳ Exporting…' : '📤 Export'}</button>
                                 <button className="btn" onClick={handleAddNew} style={{ padding:'0.3rem 0.75rem', fontSize:'0.6875rem', fontWeight:'700' }}>+ New</button>
                             </div>
                         </div>
@@ -3861,7 +3871,7 @@ dbFetch('/.netlify/functions/activities', {
                             {/* Right side: count + CSV + New */}
                             <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginLeft:'auto', flexShrink:0 }}>
                                 <span style={{ fontSize:'0.6875rem', color:'#94a3b8', fontWeight:'600' }}>{oppFilteredOpps.length} deals</span>
-                                <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} onClick={() => {
+                                <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} disabled={exportingCSV === 'opps'} onClick={() => {
                                     exportToCSV(
                                         `opportunities-${new Date().toISOString().slice(0,10)}.csv`,
                                         ['Account','Site','Stage','ARR','Impl Cost','Total Value','Close Date','Quarter','Rep','Team','Territory','Probability','Deal Health','Notes','Next Steps'],
@@ -3874,8 +3884,8 @@ dbFetch('/.netlify/functions/activities', {
                                             o.probability||'', calculateDealHealth(o).score,
                                             o.notes||'', o.nextSteps||''
                                         ])
-                                    );
-                                }}>📤 Export</button>
+                                    , 'opps');
+                                }}>{exportingCSV === 'opps' ? '⏳ Exporting…' : '📤 Export'}</button>
                                 <button className="btn" onClick={handleAddNew} style={{ padding:'0.3rem 0.75rem', fontSize:'0.6875rem', fontWeight:'700' }}>+ New</button>
                             </div>
                         </div>
@@ -4462,7 +4472,7 @@ dbFetch('/.netlify/functions/activities', {
                         {/* ── Row 3: right-side action buttons (CSV + Import) ── */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem', padding: '0.5rem 1rem', borderBottom: '1px solid #e2e8f0' }}>
                             {tasksSubView === 'tasks' && (
-                                <button className="btn btn-secondary" style={{ padding: '0.3rem 0.625rem', fontSize: '0.6875rem' }} onClick={() => {
+                                <button className="btn btn-secondary" style={{ padding: '0.3rem 0.625rem', fontSize: '0.6875rem' }} disabled={exportingCSV === 'tasks'} onClick={() => {
                                     const today = new Date(); today.setHours(0,0,0,0);
                                     const getStatus = (t) => t.status || (t.completed ? 'Completed' : 'Open');
                                     const isOverdue = (t) => { const s = getStatus(t); return (s === 'Open' || s === 'In-Process') && t.dueDate && new Date(t.dueDate) < today; };
@@ -4486,19 +4496,19 @@ dbFetch('/.netlify/functions/activities', {
                                             const related = ro ? (ro.opportunityName||ro.account) : rc ? (rc.firstName+' '+rc.lastName) : ra ? ra.name : t.relatedTo||'';
                                             return [t.title||'', t.type||'', getStatus(t), t.dueDate||'', t.priority||'', t.assignedTo||'', t.account||'', related, t.notes||''];
                                         })
-                                    );
-                                }}>📤 Export</button>
+                                    , 'tasks');
+                                }}>{exportingCSV === 'tasks' ? '⏳ Exporting…' : '📤 Export'}</button>
                             )}
                             {tasksSubView === 'activities' && (
-                                <button className="btn btn-secondary" style={{ padding: '0.3rem 0.625rem', fontSize: '0.6875rem' }} onClick={() => {
+                                <button className="btn btn-secondary" style={{ padding: '0.3rem 0.625rem', fontSize: '0.6875rem' }} disabled={exportingCSV === 'activities'} onClick={() => {
                                     const rows = [...(activities||[])]
                                         .sort((a,b) => new Date(b.date||'0') - new Date(a.date||'0'));
                                     exportToCSV(
                                         `activities-${new Date().toISOString().slice(0,10)}.csv`,
                                         ['Date','Type','Subject','Account','Rep','Duration (min)','Notes'],
                                         rows.map(a => [a.date||'', a.type||'', a.subject||'', a.account||'', a.rep||a.salesRep||'', a.duration||'', a.notes||''])
-                                    );
-                                }}>📤 Export</button>
+                                    , 'activities');
+                                }}>{exportingCSV === 'activities' ? '⏳ Exporting…' : '📤 Export'}</button>
                             )}
                             <button className="btn" style={{ background: '#10b981', color: '#fff', padding: '0.3rem 0.625rem', fontSize: '0.6875rem', fontWeight: '700' }} onClick={() => setShowOutlookImportModal(true)}>📥 Import</button>
                         </div>
@@ -4824,13 +4834,13 @@ dbFetch('/.netlify/functions/activities', {
         });
     }}>Delete ({selectedAccounts.length})</button>
 )}
-                            <button className="btn" style={{ background: '#0ea5e9', color: '#fff', padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} onClick={() => exportToCSV(
+                            <button className="btn" style={{ background: exportingCSV === 'accounts' ? '#7dd3fc' : '#0ea5e9', color: '#fff', padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} disabled={exportingCSV === 'accounts'} onClick={() => exportToCSV(
                                 'accounts-' + new Date().toISOString().slice(0,10) + '.csv',
                                 ['Name','Industry','Phone','Website','Account Owner','Parent Account','Billing Address','Annual Revenue','Employees','Notes'],
                                 visibleAccounts.map(a => [a.name||'',a.industry||'',a.phone||'',a.website||'',a.accountOwner||'',
                                     a.parentAccountId ? (accounts.find(p => p.id === a.parentAccountId) || {}).name || '' : '',
                                     a.billingAddress||'', a.annualRevenue||'', a.employees||'', a.notes||''])
-                            )}>📤 Export</button>
+                            , 'accounts')}>{exportingCSV === 'accounts' ? '⏳ Exporting…' : '📤 Export'}</button>
                             {canEdit && (
                                 <button className="btn" style={{ background:'#10b981', padding:'0.3rem 0.625rem', fontSize:'0.6875rem', fontWeight:'700' }} onClick={() => { setCsvImportType('accounts'); setShowCsvImportModal(true); }}>📥 Import</button>
                             )}
@@ -5270,7 +5280,7 @@ dbFetch('/.netlify/functions/activities', {
                                     <option value="company">Company</option>
                                 </select>
                             </div>
-                            <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} onClick={() => {
+                            <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} disabled={exportingCSV === 'contacts'} onClick={() => {
                                 const sorted = [...visibleContacts].sort((a, b) => {
                                     if (contactsSortBy === 'lastName') return (a.lastName||'').localeCompare(b.lastName||'');
                                     if (contactsSortBy === 'firstName') return (a.firstName||'').localeCompare(b.firstName||'');
@@ -5285,8 +5295,8 @@ dbFetch('/.netlify/functions/activities', {
                                         c.email||'', c.phone||'', c.mobile||'',
                                         c.linkedin||'', c.territory||'', c.notes||''
                                     ])
-                                );
-                            }}>📤 Export</button>
+                                , 'contacts');
+                            }}>{exportingCSV === 'contacts' ? '⏳ Exporting…' : '📤 Export'}</button>
                             <button className="btn" style={{ background:'#10b981', padding:'0.3rem 0.625rem', fontSize:'0.6875rem', fontWeight:'700' }} onClick={() => { setCsvImportType('contacts'); setShowCsvImportModal(true); }}>📥 Import</button>
                         </div>
                     </div>
@@ -7498,12 +7508,12 @@ ${bodyHtml}
                                             <option value="delete">Deleted</option>
                                         </select>
                                         {auditLog.length > 0 && (
-                                            <button className="btn btn-secondary" onClick={() => {
+                                            <button className="btn btn-secondary" disabled={exportingCSV === 'audit'} onClick={() => {
                                                 const rows = [['Time','User','Action','Type','Record','Detail']];
                                                 auditLog.forEach(e => rows.push([new Date(e.ts).toLocaleString(), e.user, e.action, e.entity, e.label, e.detail]));
                                                 exportToCSV('audit-log-' + new Date().toISOString().slice(0,10) + '.csv',
-                                                    rows[0], rows.slice(1));
-                                            }}>📤 Export</button>
+                                                    rows[0], rows.slice(1), 'audit');
+                                            }}>{exportingCSV === 'audit' ? '⏳ Exporting…' : '📤 Export'}</button>
                                         )}
                                     </div>
                                 </div>
@@ -8498,34 +8508,40 @@ ${bodyHtml}
                                     </p>
                                     <button
                                         className="btn"
+                                        disabled={exportingBackup}
                                         onClick={() => {
-                                            const exportData = {
-                                                exportVersion: '1.0',
-                                                exportDate: new Date().toISOString(),
-                                                appName: 'Sales Pipeline Tracker',
-                                                data: {
-                                                    opportunities,
-                                                    accounts,
-                                                    contacts,
-                                                    tasks,
-                                                                                                                activities,
-                                                    settings
-                                                }
-                                            };
-                                            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-                                            const url = URL.createObjectURL(blob);
-                                            const a = document.createElement('a');
-                                            a.href = url;
-                                            const dateStr = new Date().toISOString().split('T')[0];
-                                            a.download = `sales-pipeline-backup-${dateStr}.json`;
-                                            document.body.appendChild(a);
-                                            a.click();
-                                            document.body.removeChild(a);
-                                            URL.revokeObjectURL(url);
+                                            setExportingBackup(true);
+                                            try {
+                                                const exportData = {
+                                                    exportVersion: '1.0',
+                                                    exportDate: new Date().toISOString(),
+                                                    appName: 'Sales Pipeline Tracker',
+                                                    data: {
+                                                        opportunities,
+                                                        accounts,
+                                                        contacts,
+                                                        tasks,
+                                                        activities,
+                                                        settings
+                                                    }
+                                                };
+                                                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                                                const url = URL.createObjectURL(blob);
+                                                const a = document.createElement('a');
+                                                a.href = url;
+                                                const dateStr = new Date().toISOString().split('T')[0];
+                                                a.download = `sales-pipeline-backup-${dateStr}.json`;
+                                                document.body.appendChild(a);
+                                                a.click();
+                                                document.body.removeChild(a);
+                                                URL.revokeObjectURL(url);
+                                            } finally {
+                                                setTimeout(() => setExportingBackup(false), 1500);
+                                            }
                                         }}
-                                        style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem' }}
+                                        style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem', opacity: exportingBackup ? 0.7 : 1 }}
                                     >
-                                        💾 Download Full Backup
+                                        {exportingBackup ? '⏳ Preparing Backup…' : '💾 Download Full Backup'}
                                     </button>
                                 </div>
 
@@ -8595,9 +8611,10 @@ ${bodyHtml}
                                                         if (d.taskTypes) setSettings(prev => ({ ...prev, taskTypes: d.taskTypes }));
                                                         if (d.activities) setActivities(d.activities);
                                                         if (d.settings) setSettings(d.settings);
-                                                        
-                                                        // Sync restored data to the database
+
+                                                        // Sync restored data to the database in parallel
                                                         const syncToDb = async () => {
+                                                            setRestoringBackup(true);
                                                             try {
                                                                 const endpoints = [
                                                                     { key: 'opportunities', url: '/.netlify/functions/opportunities' },
@@ -8606,17 +8623,16 @@ ${bodyHtml}
                                                                     { key: 'tasks', url: '/.netlify/functions/tasks' },
                                                                     { key: 'activities', url: '/.netlify/functions/activities' },
                                                                 ];
-                                                                for (const { key, url } of endpoints) {
-                                                                    if (d[key]) {
-                                                                        for (const record of d[key]) {
-                                                                            await fetch(url, {
-                                                                                method: 'POST',
-                                                                                headers: { 'Content-Type': 'application/json' },
-                                                                                body: JSON.stringify(record)
-                                                                            }).catch(() => {});
-                                                                        }
-                                                                    }
-                                                                }
+                                                                await Promise.all(endpoints.map(({ key, url }) => {
+                                                                    if (!d[key]) return Promise.resolve();
+                                                                    return Promise.all(d[key].map(record =>
+                                                                        fetch(url, {
+                                                                            method: 'POST',
+                                                                            headers: { 'Content-Type': 'application/json' },
+                                                                            body: JSON.stringify(record)
+                                                                        }).catch(() => {})
+                                                                    ));
+                                                                }));
                                                                 if (d.settings) {
                                                                     await fetch('/.netlify/functions/settings', {
                                                                         method: 'PUT',
@@ -8625,10 +8641,9 @@ ${bodyHtml}
                                                                     }).catch(() => {});
                                                                 }
                                                             } catch(e) { console.error('DB sync after restore failed:', e); }
+                                                            finally { setRestoringBackup(false); }
                                                         };
-                                                        syncToDb();
-                                                        
-                                                        alert('Data restored successfully!');
+                                                        syncToDb().then(() => alert('Data restored successfully!'));
                                                     }, false);
                                                 } catch (err) {
                                                     alert('Error reading backup file. The file may be corrupted or in an incorrect format.\n\nDetails: ' + err.message);
@@ -8641,10 +8656,16 @@ ${bodyHtml}
                                     />
                                     <button
                                         className="btn btn-secondary"
-                                        onClick={() => document.getElementById('backup-file-input').click()}
-                                        style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem' }}
+                                        disabled={restoringBackup}
+                                        onClick={() => !restoringBackup && document.getElementById('backup-file-input').click()}
+                                        style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem', opacity: restoringBackup ? 0.7 : 1 }}
                                     >
-                                        📂 Select Backup File to Restore
+                                        {restoringBackup ? (
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <span style={{ width: '14px', height: '14px', border: '2px solid #94a3b8', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                                                Restoring Data…
+                                            </span>
+                                        ) : '📂 Select Backup File to Restore'}
                                     </button>
                                 </div>
 
@@ -9721,7 +9742,7 @@ ${bodyHtml}
                             createdAt: new Date().toISOString()
                         }));
 
-                        // Step 1: Auto-add new companies to accounts FIRST — fully awaited before contacts save
+                        // Step 1: Auto-add new companies to accounts FIRST — all in parallel
                         const existingNames = accounts.map(a => a.name.toLowerCase());
                         const newCompanies = [...new Set(
                             newContacts.map(c => c.company).filter(c => c && !existingNames.includes(c.toLowerCase()))
@@ -9733,7 +9754,7 @@ ${bodyHtml}
                                 zip: '', country: '', website: '', phone: '', accountOwner: '',
                             }));
                             setAccounts(prev => [...prev, ...newAccts]);
-                            for (const account of newAccts) {
+                            await Promise.all(newAccts.map(async (account) => {
                                 const r = await dbFetch('/.netlify/functions/accounts', {
                                     method: 'POST', body: JSON.stringify(account)
                                 });
@@ -9741,12 +9762,12 @@ ${bodyHtml}
                                     const t = r ? await r.text().catch(() => '') : 'No response';
                                     throw new Error(`Account save failed (${r?.status}): ${t}`);
                                 }
-                            }
+                            }));
                         }
 
-                        // Step 2: Save contacts — only runs after all accounts are confirmed saved
+                        // Step 2: Save all contacts in parallel — only after accounts confirmed saved
                         setContacts(prev => [...prev, ...contactsWithIds]);
-                        for (const contact of contactsWithIds) {
+                        await Promise.all(contactsWithIds.map(async (contact) => {
                             const r = await dbFetch('/.netlify/functions/contacts', {
                                 method: 'POST', body: JSON.stringify(contact)
                             });
@@ -9754,7 +9775,7 @@ ${bodyHtml}
                                 const t = r ? await r.text().catch(() => '') : 'No response';
                                 throw new Error(`Contact save failed (${r?.status}): ${t}`);
                             }
-                        }
+                        }));
                         // Modal handles its own close via Done button
                     }}
                     onImportAccounts={async (newAccounts) => {
@@ -9762,7 +9783,7 @@ ${bodyHtml}
                             ...a, id: crypto.randomUUID()
                         }));
                         setAccounts(prev => [...prev, ...accountsWithIds]);
-                        for (const account of accountsWithIds) {
+                        await Promise.all(accountsWithIds.map(async (account) => {
                             const r = await dbFetch('/.netlify/functions/accounts', {
                                 method: 'POST', body: JSON.stringify(account)
                             });
@@ -9770,7 +9791,7 @@ ${bodyHtml}
                                 const t = r ? await r.text().catch(() => '') : 'No response';
                                 throw new Error(`Account save failed (${r?.status}): ${t}`);
                             }
-                        }
+                        }));
                         // Modal handles its own close via Done button
                     }}
                 />
@@ -9817,7 +9838,7 @@ ${bodyHtml}
                         const data = await resp.json();
                         const imported = data.leads || [];
                         setLeads(prev => [...prev, ...imported]);
-                        setShowLeadImportModal(false);
+                        // Modal handles its own close via Done button
                     }}
                 />
             )}
