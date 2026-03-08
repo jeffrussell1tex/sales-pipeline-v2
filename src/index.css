@@ -733,6 +733,9 @@
             .login-card { padding: 2rem 1.5rem; }
         }
     
+        /* Mobile cards hidden by default (desktop), shown inside media query */
+        .mobile-record-card { display: none; }
+
         /* ═══════════════════════════════════════════════════════
            MOBILE RESPONSIVE — Opportunities, Leads, Contacts
            Breakpoint: 640px and below
