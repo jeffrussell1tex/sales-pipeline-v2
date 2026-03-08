@@ -119,7 +119,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
         Converted: visibleLeads.filter(l => l.status === 'Converted').length,
     };
 
-    const totalARR = visibleLeads.reduce((s, l) => s + (l.estimatedARR || 0), 0);
+    const totalARR = visibleLeads.reduce((s, l) => s + (parseFloat(l.estimatedARR) || 0), 0);
     const convRate = visibleLeads.length ? Math.round((counts.Converted / visibleLeads.length) * 100) : 0;
 
     const saveLead = async (lead) => {
@@ -302,7 +302,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                                         </td>
                                                     )}
                                                     <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9', fontSize:'0.75rem', fontWeight:'700', color:'#2563eb' }}>
-                                                        {lead.estimatedARR ? '$' + (lead.estimatedARR >= 1000 ? Math.round(lead.estimatedARR/1000)+'K' : lead.estimatedARR) : '—'}
+                                                        {lead.estimatedARR ? '$' + (parseFloat(lead.estimatedARR) >= 1000 ? Math.round(parseFloat(lead.estimatedARR)/1000)+'K' : parseFloat(lead.estimatedARR)) : '—'}
                                                     </td>
                                                     <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
                                                         <div style={{ display:'flex', gap:'0.3rem' }}>
@@ -328,12 +328,12 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                 <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>{leadKanbanOpen ? '▲' : '▼'}</span>
                             </div>
                             {leadKanbanOpen && (
-                            <div style={{ overflowX:'auto', padding:'0.75rem' }}>
-                                <div style={{ display:'flex', gap:'0.625rem', minWidth:'max-content' }}>
+                            <div style={{ padding:'0.75rem' }}>
+                                <div style={{ display:'flex', flexWrap:'wrap', gap:'0.625rem' }}>
                                     {Object.entries(stageColors).map(([stage, color]) => {
                                         const colLeads = filtered.filter(l => (l.status || 'New') === stage);
                                         return (
-                                            <div key={stage} style={{ width:'190px', flexShrink:0, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+                                            <div key={stage} style={{ width:'190px', flexShrink:0, flexGrow:1, minWidth:'160px', maxWidth:'220px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
                                                 <div style={{ padding:'0.5rem 0.75rem', borderTop:'3px solid '+color, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                                                     <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.04em' }}>{stage}</span>
                                                     <span style={{ fontSize:'0.6rem', fontWeight:'700', background:'#e2e8f0', color:'#64748b', borderRadius:'10px', padding:'0.1rem 0.35rem' }}>{colLeads.length}</span>
@@ -535,8 +535,8 @@ function KanbanView({ stages, pipelineFilteredOpps, kanbanDragging, kanbanDragOv
     };
 
     return (
-        <div style={{ overflowX: 'auto', padding: '1rem 1.25rem 1.5rem' }}>
-            <div style={{ display: 'flex', gap: '0.75rem', minWidth: 'max-content' }}>
+        <div style={{ padding: '1rem 1.25rem 1.5rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
                 {stages.filter(s => s !== 'Closed Lost').map((stage, idx) => {
                     const color = stageColors[idx % stageColors.length];
                     const colOpps = pipelineFilteredOpps.filter(o => o.stage === stage);
@@ -547,7 +547,7 @@ function KanbanView({ stages, pipelineFilteredOpps, kanbanDragging, kanbanDragOv
                             onDragOver={e => { e.preventDefault(); setKanbanDragOver(stage); }}
                             onDragLeave={e => { setKanbanDragOver(null); }}
                             onDrop={() => handleKanbanDrop(stage)}
-                            style={{ width: '200px', flexShrink: 0, background: isDragOver ? '#eff6ff' : '#f8fafc', border: isDragOver ? '1px solid #93c5fd' : '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', transition: 'all 0.15s' }}>
+                            style={{ width: '200px', flexShrink: 0, flexGrow: 1, minWidth: '160px', maxWidth: '240px', background: isDragOver ? '#eff6ff' : '#f8fafc', border: isDragOver ? '1px solid #93c5fd' : '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', transition: 'all 0.15s' }}>
                             <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid #e2e8f0', borderTop: '3px solid ' + color, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <span style={{ fontSize: '0.6875rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{stage}</span>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', flexShrink: 0 }}>
@@ -1116,7 +1116,7 @@ body: JSON.stringify(settings)
         return !opp || isRepVisible(opp.salesRep);
     });
 
-    const totalARR = visibleOpportunities.reduce((sum, opp) => sum + (opp.arr || 0), 0);
+    const totalARR = visibleOpportunities.reduce((sum, opp) => sum + (parseFloat(opp.arr) || 0), 0);
     const activeOpps = visibleOpportunities.length;
     const avgARR = activeOpps > 0 ? totalARR / activeOpps : 0;
     
@@ -1232,7 +1232,7 @@ body: JSON.stringify(settings)
                 return u && pipelineTerritoryFilter.includes(u.territory);
             });
     })();
-    const pipelineTotalARR = pipelineFilteredOpps.reduce((sum, o) => sum + (o.arr || 0), 0);
+    const pipelineTotalARR = pipelineFilteredOpps.reduce((sum, o) => sum + (parseFloat(o.arr) || 0), 0);
     const pipelineActiveOpps = pipelineFilteredOpps.length;
     const pipelineAvgARR = pipelineActiveOpps > 0 ? pipelineTotalARR / pipelineActiveOpps : 0;
     const pipelineNextQtr = (() => {
@@ -1240,7 +1240,7 @@ body: JSON.stringify(settings)
         pipelineFilteredOpps.forEach(opp => {
             if (opp.forecastedCloseDate) {
                 const ql = getQuarterLabel(getQuarter(opp.forecastedCloseDate), opp.forecastedCloseDate);
-                qData[ql] = (qData[ql] || 0) + (opp.arr || 0);
+                qData[ql] = (qData[ql] || 0) + (parseFloat(opp.arr) || 0);
             }
         });
         const sorted = Object.entries(qData).sort((a, b) => {
@@ -1759,7 +1759,7 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
         const openOpps = allOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
         const wonOpps = allOpps.filter(o => o.stage === 'Closed Won');
         const pipeline = openOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
-        const wonArr = wonOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0) + (o.implementationCost || 0), 0);
+        const wonArr = wonOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0) + (parseFloat(o.implementationCost) || 0), 0);
         const allContacts = contacts.filter(c => c.company && names.includes(c.company.toLowerCase()));
         const hasSubs = subs.length > 0;
         return { allOpps, openOpps, wonOpps, pipeline, wonArr, allContacts, hasSubs, subCount: subs.length };
@@ -2120,7 +2120,7 @@ dbFetch('/.netlify/functions/activities', {
             allFeedItems.push({ id: 'stage_' + opp.id + '_' + sh.timestamp, type: 'stage', icon: stageIcon, actor: sh.author || '', label: 'moved to ' + sh.stage, detail: '', opp, timestamp: sh.timestamp || sh.date || '', mentions: [] });
         });
         if (opp.createdDate) {
-            allFeedItems.push({ id: 'created_' + opp.id, type: 'created', icon: '✨', actor: opp.createdBy || opp.salesRep || '', label: 'created deal', detail: '$' + (opp.arr||0).toLocaleString() + ' ARR', opp, timestamp: opp.createdDate || '', mentions: [] });
+            allFeedItems.push({ id: 'created_' + opp.id, type: 'created', icon: '✨', actor: opp.createdBy || opp.salesRep || '', label: 'created deal', detail: '$' + (parseFloat(opp.arr)||0).toLocaleString() + ' ARR', opp, timestamp: opp.createdDate || '', mentions: [] });
         }
     });
     allFeedItems.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -3046,7 +3046,7 @@ dbFetch('/.netlify/functions/activities', {
                                     .map(s => ({
                                         stage: s,
                                         count: openOpps.filter(o => o.stage === s).length,
-                                        arr: openOpps.filter(o => o.stage === s).reduce((sum, o) => sum + (o.arr || 0), 0)
+                                        arr: openOpps.filter(o => o.stage === s).reduce((sum, o) => sum + (parseFloat(o.arr) || 0), 0)
                                     }))
                                     .filter(g => g.count > 0);
                                 const maxArr = stageGroups.reduce((m, g) => Math.max(m, g.arr), 1);
@@ -3540,7 +3540,7 @@ dbFetch('/.netlify/functions/activities', {
                                                     const stageDefault = (settings.funnelStages || []).find(s => s.name === opp.stage);
                                                     const defaultProb = stageDefault ? stageDefault.weight / 100 : 0.3;
                                                     const prob = (opp.probability !== null && opp.probability !== undefined) ? opp.probability / 100 : defaultProb;
-                                                    const total = (opp.arr || 0) + (opp.implementationCost || 0);
+                                                    const total = (parseFloat(opp.arr) || 0) + (opp.implementationCost || 0);
                                                     return '$' + Math.round(total * prob).toLocaleString();
                                                 })()}
                                             </td>
@@ -4146,9 +4146,9 @@ dbFetch('/.netlify/functions/activities', {
                                                     </span>
                                                 )}
                                             </td>}
-                                            {canViewField('implCost') && <td style={{ textAlign:'right', color:'#64748b' }}>${(opp.implementationCost||0).toLocaleString()}</td>}
+                                            {canViewField('implCost') && <td style={{ textAlign:'right', color:'#64748b' }}>${(parseFloat(opp.implementationCost)||0).toLocaleString()}</td>}
                                             {canViewField('probability') && <td style={{ textAlign:'center', color:'#64748b' }}>{opp.probability ? opp.probability+'%' : '-'}</td>}
-                                            {canViewField('weightedValue') && <td style={{ textAlign:'right' }}>{opp.probability ? '$'+Math.round((opp.arr||0)*((opp.probability||0)/100)).toLocaleString() : '-'}</td>}
+                                            {canViewField('weightedValue') && <td style={{ textAlign:'right' }}>{opp.probability ? '$'+Math.round((parseFloat(opp.arr)||0)*((opp.probability||0)/100)).toLocaleString() : '-'}</td>}
                                             {canViewField('dealAge') && <td style={{ textAlign:'center', color:'#64748b', fontSize:'0.8125rem' }}>{opp.createdDate ? Math.floor((new Date()-new Date(opp.createdDate))/86400000)+'d' : '-'}</td>}
                                             {canViewField('timeInStage') && <td style={{ textAlign:'center', color:'#64748b', fontSize:'0.8125rem' }}>{opp.stageChangedDate ? Math.floor((new Date()-new Date(opp.stageChangedDate))/86400000)+'d' : '-'}</td>}
                                             {canViewField('activities') && <td style={{ textAlign:'center' }}>
@@ -4976,7 +4976,7 @@ dbFetch('/.netlify/functions/activities', {
                                 return sorted.map((account, idx) => {
                                 const accountName = account.name.toLowerCase();
                                 const accountOpps = opportunities.filter(o => o.account && o.account.toLowerCase() === accountName);
-                                const pipelineValue = accountOpps.reduce((sum, o) => sum + (o.arr || 0), 0);
+                                const pipelineValue = accountOpps.reduce((sum, o) => sum + (parseFloat(o.arr) || 0), 0);
                                 const activeOppCount = accountOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length;
                                 const wonCount = accountOpps.filter(o => o.stage === 'Closed Won').length;
                                 const contactCount = contacts.filter(c => c.company && c.company.toLowerCase() === accountName).length;
@@ -5338,36 +5338,7 @@ dbFetch('/.netlify/functions/activities', {
                                 </div>
                             </div>
                         ) : (
-                            <div style={{ display: 'contents' }}>
-                            {/* Mobile cards — Contacts */}
-                            <div className="contacts-mobile-cards">
-                                {visibleContacts.sort((a,b) => {
-                                    if (contactsSortBy === 'lastName') return (a.lastName||'').localeCompare(b.lastName||'');
-                                    if (contactsSortBy === 'firstName') return (a.firstName||'').localeCompare(b.firstName||'');
-                                    const cmp = (a.company||'').localeCompare(b.company||'');
-                                    return cmp !== 0 ? cmp : (a.lastName||'').localeCompare(b.lastName||'');
-                                }).map(contact => (
-                                    <div key={contact.id} className="mobile-record-card" onClick={() => setViewingContact(contact)}>
-                                        <div className="mobile-card-top">
-                                            <div style={{ flex:1, minWidth:0 }}>
-                                                <div className="mobile-card-title">{contact.firstName} {contact.lastName}</div>
-                                                <div className="mobile-card-sub">{[contact.title, contact.company].filter(Boolean).join(' · ')}</div>
-                                            </div>
-                                        </div>
-                                        <div className="mobile-card-meta">
-                                            {contact.email && <span className="mobile-card-meta-item">✉️ {contact.email}</span>}
-                                            {(contact.phone || contact.mobile) && <span className="mobile-card-meta-item">📞 {contact.phone || contact.mobile}</span>}
-                                        </div>
-                                        <div className="mobile-card-actions" onClick={e => e.stopPropagation()}>
-                                            <button className="primary" onClick={() => setViewingContact(contact)}>View</button>
-                                            {canEdit && <button onClick={() => { setEditingContact(contact); setShowContactModal(true); }}>✏️ Edit</button>}
-                                            {contact.email && <button onClick={() => window.location.href='mailto:'+contact.email}>📧 Email</button>}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                            {/* Desktop view */}
-                            <div className="contacts-desktop-table">
+                            <>
                             {/* Select all */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', paddingLeft: '0.25rem' }}>
                                 <input type="checkbox"
@@ -5575,8 +5546,7 @@ dbFetch('/.netlify/functions/activities', {
                                 })()}
                             </div>
                             </div>
-                            </div>
-                            </div>
+                            </>
                         )}
                     </div>
                 </div>
@@ -9010,11 +8980,11 @@ ${bodyHtml}
                 const accName = acc.name.toLowerCase();
                 const accOpps = opportunities.filter(o => o.account && o.account.toLowerCase() === accName);
                 const accContacts = contacts.filter(c => c.company && c.company.toLowerCase() === accName);
-                const pv = accOpps.reduce((sum, o) => sum + (o.arr || 0), 0);
+                const pv = accOpps.reduce((sum, o) => sum + (parseFloat(o.arr) || 0), 0);
                 const openOpps = accOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
                 const closedOpps = accOpps.filter(o => o.stage === 'Closed Won' || o.stage === 'Closed Lost');
                 const wonOpps = accOpps.filter(o => o.stage === 'Closed Won');
-                const wonValue = wonOpps.reduce((sum, o) => sum + (o.arr || 0) + (o.implementationCost || 0), 0);
+                const wonValue = wonOpps.reduce((sum, o) => sum + (parseFloat(o.arr) || 0) + (parseFloat(o.implementationCost) || 0), 0);
 
                 // Rollup across all sub-accounts
                 const subs = getSubAccounts(acc.id);
@@ -9028,7 +8998,7 @@ ${bodyHtml}
                     const subOpen = subOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
                     const subWon = subOpps.filter(o => o.stage === 'Closed Won');
                     const subPipeline = subOpen.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
-                    const subWonValue = subWon.reduce((s, o) => s + (parseFloat(o.arr) || 0) + (o.implementationCost || 0), 0);
+                    const subWonValue = subWon.reduce((s, o) => s + (parseFloat(o.arr) || 0) + (parseFloat(o.implementationCost) || 0), 0);
                     const subContacts = contacts.filter(c => c.company && c.company.toLowerCase() === sn);
                     return { sub, subOpps, subOpen, subWon, subPipeline, subWonValue, subContacts };
                 });
@@ -9191,7 +9161,7 @@ ${bodyHtml}
                                                 </div>
                                                 {hasSubs && <span style={{ fontSize: '0.6875rem', color: isSubOpp ? '#4338ca' : '#64748b', fontWeight: isSubOpp ? '700' : '400' }}>{isSubOpp ? '↳ ' : ''}{opp.account}</span>}
                                                 <span style={{ background: sc.bg, color: sc.text, padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700' }}>{opp.stage}</span>
-                                                <span style={{ textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>${(opp.arr || 0).toLocaleString()}</span>
+                                                <span style={{ textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>${(parseFloat(opp.arr) || 0).toLocaleString()}</span>
                                                 <span style={{ textAlign: 'center', color: '#64748b', fontSize: '0.8125rem' }}>{opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}</span>
                                             </div>
                                             );
@@ -9226,7 +9196,7 @@ ${bodyHtml}
                                                     <div style={{ fontSize: '0.75rem', color: isSubOpp ? '#4338ca' : '#94a3b8' }}>{isSubOpp ? `↳ ${opp.account}` : (opp.salesRep || '')}</div>
                                                 </div>
                                                 <span style={{ background: isWon ? '#dcfce7' : '#fef2f2', color: isWon ? '#166534' : '#991b1b', padding: '0.2rem 0.625rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700', marginRight: '1rem' }}>{opp.stage}</span>
-                                                <span style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.875rem', minWidth: '80px', textAlign: 'right' }}>${(opp.arr || 0).toLocaleString()}</span>
+                                                <span style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.875rem', minWidth: '80px', textAlign: 'right' }}>${(parseFloat(opp.arr) || 0).toLocaleString()}</span>
                                             </div>
                                             );
                                         })}
@@ -9391,7 +9361,7 @@ ${bodyHtml}
                                                     <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{opp.account}</div>
                                                 </div>
                                                 <span style={{ background: sc.bg, color: sc.text, padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700', textAlign: 'center' }}>{opp.stage}</span>
-                                                <span style={{ textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>${(opp.arr || 0).toLocaleString()}</span>
+                                                <span style={{ textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>${(parseFloat(opp.arr) || 0).toLocaleString()}</span>
                                                 <span style={{ textAlign: 'center', color: '#64748b', fontSize: '0.8125rem' }}>{opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}</span>
                                                 <span style={{ textAlign: 'center' }}>
                                                     <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: opp.health === 'green' ? '#16a34a' : opp.health === 'yellow' ? '#f59e0b' : opp.health === 'red' ? '#ef4444' : '#d1d5db' }} />
@@ -9429,7 +9399,7 @@ ${bodyHtml}
                                                 background: isWon ? '#dcfce7' : '#fef2f2', color: isWon ? '#166534' : '#991b1b',
                                                 padding: '0.2rem 0.625rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700', marginRight: '1rem'
                                             }}>{opp.stage}</span>
-                                            <span style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.875rem', minWidth: '80px', textAlign: 'right' }}>${(opp.arr || 0).toLocaleString()}</span>
+                                            <span style={{ fontWeight: '700', color: '#1e293b', fontSize: '0.875rem', minWidth: '80px', textAlign: 'right' }}>${(parseFloat(opp.arr) || 0).toLocaleString()}</span>
                                         </div>
                                         );
                                     })}
