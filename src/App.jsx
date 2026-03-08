@@ -9715,21 +9715,18 @@ ${bodyHtml}
                     accounts={accounts}
                     onClose={() => setShowCsvImportModal(false)}
                     onImportContacts={async (newContacts) => {
-                        const tok = await (window.__getClerkToken?.() || Promise.resolve(''));
-                        const hdrs = { 'Content-Type': 'application/json', ...(tok ? { Authorization: 'Bearer ' + tok } : {}) };
+                        // Save contacts
                         const contactsWithIds = newContacts.map((c) => ({
                             ...c,
                             id: crypto.randomUUID(),
                             createdAt: new Date().toISOString()
                         }));
                         setContacts(prev => [...prev, ...contactsWithIds]);
-                        // Save each imported contact to the database
-                        contactsWithIds.forEach(contact => {
-                            fetch('/.netlify/functions/contacts', {
-                                method: 'POST', headers: hdrs, body: JSON.stringify(contact)
-                            }).then(r => { if (!r.ok) r.text().then(t => console.error('Contact save failed:', r.status, t)); })
-                              .catch(err => console.error('Failed to save imported contact:', err));
-                        });
+                        for (const contact of contactsWithIds) {
+                            await dbFetch('/.netlify/functions/contacts', {
+                                method: 'POST', body: JSON.stringify(contact)
+                            });
+                        }
                         // Auto-add new companies to accounts
                         const existingNames = accounts.map(a => a.name.toLowerCase());
                         const newCompanies = [...new Set(
@@ -9742,28 +9739,24 @@ ${bodyHtml}
                                 zip: '', country: '', website: '', phone: '', accountOwner: '',
                             }));
                             setAccounts(prev => [...prev, ...newAccts]);
-                            newAccts.forEach(account => {
-                                fetch('/.netlify/functions/accounts', {
-                                    method: 'POST', headers: hdrs, body: JSON.stringify(account)
-                                }).then(r => { if (!r.ok) r.text().then(t => console.error('Account save failed:', r.status, t)); })
-                                  .catch(err => console.error('Failed to save auto-created account:', err));
-                            });
+                            for (const account of newAccts) {
+                                await dbFetch('/.netlify/functions/accounts', {
+                                    method: 'POST', body: JSON.stringify(account)
+                                });
+                            }
                         }
                         setShowCsvImportModal(false);
                     }}
                     onImportAccounts={async (newAccounts) => {
-                        const tok = await (window.__getClerkToken?.() || Promise.resolve(''));
-                        const hdrs = { 'Content-Type': 'application/json', ...(tok ? { Authorization: 'Bearer ' + tok } : {}) };
                         const accountsWithIds = newAccounts.map((a) => ({
                             ...a, id: crypto.randomUUID()
                         }));
                         setAccounts(prev => [...prev, ...accountsWithIds]);
-                        accountsWithIds.forEach(account => {
-                            fetch('/.netlify/functions/accounts', {
-                                method: 'POST', headers: hdrs, body: JSON.stringify(account)
-                            }).then(r => { if (!r.ok) r.text().then(t => console.error('Account import save failed:', r.status, t)); })
-                              .catch(err => console.error('Failed to save imported account:', err));
-                        });
+                        for (const account of accountsWithIds) {
+                            await dbFetch('/.netlify/functions/accounts', {
+                                method: 'POST', body: JSON.stringify(account)
+                            });
+                        }
                         setShowCsvImportModal(false);
                     }}
                 />
