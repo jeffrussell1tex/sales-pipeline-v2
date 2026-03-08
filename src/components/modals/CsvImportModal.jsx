@@ -120,16 +120,19 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
         });
     };
 
-    const handleImport = () => {
+    const handleImport = async () => {
         const data = getMappedData();
-        if (importType === 'contacts') {
-            onImportContacts(data);
-        } else {
-            onImportAccounts(data);
+        try {
+            if (importType === 'contacts') {
+                await onImportContacts(data);
+            } else {
+                await onImportAccounts(data);
+            }
+            setImportStats({ total: data.length, error: null });
+        } catch (err) {
+            setImportStats({ total: 0, error: err.message || 'Import failed. Please try again.' });
         }
-        setImportStats({ total: data.length });
         setStep('results');
-        setTimeout(() => onClose(), 2000);
     };
 
     const previewData = step === 'preview' ? getMappedData() : [];
@@ -267,15 +270,31 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
 
                 {step === 'results' && (
                     <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✅</div>
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem' }}>
-                            Import Complete!
-                        </h3>
-                        <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>
-                            Successfully imported <strong>{importStats?.total}</strong> {importType === 'contacts' ? 'contacts' : 'accounts'}.
-                            {importType === 'contacts' && ' New companies have been added to your Accounts list.'}
-                        </p>
-                        <button className="btn" onClick={onClose}>Done</button>
+                        {importStats?.error ? (
+                            <>
+                                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>❌</div>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem', color: '#ef4444' }}>
+                                    Import Failed
+                                </h3>
+                                <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>{importStats.error}</p>
+                                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                                    <button className="btn btn-secondary" onClick={() => setStep('preview')}>← Back</button>
+                                    <button className="btn" onClick={onClose}>Close</button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>✅</div>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem' }}>
+                                    Import Complete!
+                                </h3>
+                                <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>
+                                    Successfully imported <strong>{importStats?.total}</strong> {importType === 'contacts' ? 'contacts' : 'accounts'}.
+                                    {importType === 'contacts' && ' Any new companies have been added to your Accounts list.'}
+                                </p>
+                                <button className="btn" onClick={onClose}>Done</button>
+                            </>
+                        )}
                     </div>
                 )}
             </div>

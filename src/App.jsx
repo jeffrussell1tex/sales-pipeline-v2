@@ -9721,7 +9721,7 @@ ${bodyHtml}
                             createdAt: new Date().toISOString()
                         }));
 
-                        // Auto-add new companies to accounts FIRST
+                        // Step 1: Auto-add new companies to accounts FIRST — fully awaited before contacts save
                         const existingNames = accounts.map(a => a.name.toLowerCase());
                         const newCompanies = [...new Set(
                             newContacts.map(c => c.company).filter(c => c && !existingNames.includes(c.toLowerCase()))
@@ -9737,26 +9737,25 @@ ${bodyHtml}
                                 const r = await dbFetch('/.netlify/functions/accounts', {
                                     method: 'POST', body: JSON.stringify(account)
                                 });
-                                if (r && !r.ok) {
-                                    const t = await r.text().catch(() => '');
-                                    console.error('Account save failed:', r.status, t, account);
+                                if (!r || !r.ok) {
+                                    const t = r ? await r.text().catch(() => '') : 'No response';
+                                    throw new Error(`Account save failed (${r?.status}): ${t}`);
                                 }
                             }
                         }
 
-                        // Save contacts
+                        // Step 2: Save contacts — only runs after all accounts are confirmed saved
                         setContacts(prev => [...prev, ...contactsWithIds]);
                         for (const contact of contactsWithIds) {
                             const r = await dbFetch('/.netlify/functions/contacts', {
                                 method: 'POST', body: JSON.stringify(contact)
                             });
-                            if (r && !r.ok) {
-                                const t = await r.text().catch(() => '');
-                                console.error('Contact save failed:', r.status, t, contact);
+                            if (!r || !r.ok) {
+                                const t = r ? await r.text().catch(() => '') : 'No response';
+                                throw new Error(`Contact save failed (${r?.status}): ${t}`);
                             }
                         }
-
-                        setShowCsvImportModal(false);
+                        // Modal handles its own close via Done button
                     }}
                     onImportAccounts={async (newAccounts) => {
                         const accountsWithIds = newAccounts.map((a) => ({
@@ -9764,11 +9763,15 @@ ${bodyHtml}
                         }));
                         setAccounts(prev => [...prev, ...accountsWithIds]);
                         for (const account of accountsWithIds) {
-                            await dbFetch('/.netlify/functions/accounts', {
+                            const r = await dbFetch('/.netlify/functions/accounts', {
                                 method: 'POST', body: JSON.stringify(account)
                             });
+                            if (!r || !r.ok) {
+                                const t = r ? await r.text().catch(() => '') : 'No response';
+                                throw new Error(`Account save failed (${r?.status}): ${t}`);
+                            }
                         }
-                        setShowCsvImportModal(false);
+                        // Modal handles its own close via Done button
                     }}
                 />
             )}
