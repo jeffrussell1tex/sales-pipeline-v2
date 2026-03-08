@@ -27,5 +27,5 @@ export const dbFetch = async (url, options) => {
             if (!r.ok) console.error(`DB error ${r.status} ${r.statusText} [${options?.method || 'GET'} ${url}]`);
             return r;
         })
-        .catch(err => console.error(`Network error [${options?.method || 'GET'} ${url}]:`, err));
+        .catch(err => { console.error(`Network error [${options?.method || 'GET'} ${url}]:`, err); throw err; });
 };
