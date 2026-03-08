@@ -9715,19 +9715,13 @@ ${bodyHtml}
                     accounts={accounts}
                     onClose={() => setShowCsvImportModal(false)}
                     onImportContacts={async (newContacts) => {
-                        // Save contacts
                         const contactsWithIds = newContacts.map((c) => ({
                             ...c,
                             id: crypto.randomUUID(),
                             createdAt: new Date().toISOString()
                         }));
-                        setContacts(prev => [...prev, ...contactsWithIds]);
-                        for (const contact of contactsWithIds) {
-                            await dbFetch('/.netlify/functions/contacts', {
-                                method: 'POST', body: JSON.stringify(contact)
-                            });
-                        }
-                        // Auto-add new companies to accounts
+
+                        // Auto-add new companies to accounts FIRST
                         const existingNames = accounts.map(a => a.name.toLowerCase());
                         const newCompanies = [...new Set(
                             newContacts.map(c => c.company).filter(c => c && !existingNames.includes(c.toLowerCase()))
@@ -9740,11 +9734,24 @@ ${bodyHtml}
                             }));
                             setAccounts(prev => [...prev, ...newAccts]);
                             for (const account of newAccts) {
-                                await dbFetch('/.netlify/functions/accounts', {
+                                const r = await dbFetch('/.netlify/functions/accounts', {
                                     method: 'POST', body: JSON.stringify(account)
                                 });
+                                if (r && !r.ok) {
+                                    const t = await r.text().catch(() => '');
+                                    console.error('Account save failed:', r.status, t, account);
+                                }
                             }
                         }
+
+                        // Save contacts (fire and forget - don't block close)
+                        setContacts(prev => [...prev, ...contactsWithIds]);
+                        contactsWithIds.forEach(contact =>
+                            dbFetch('/.netlify/functions/contacts', {
+                                method: 'POST', body: JSON.stringify(contact)
+                            }).catch(console.error)
+                        );
+
                         setShowCsvImportModal(false);
                     }}
                     onImportAccounts={async (newAccounts) => {
