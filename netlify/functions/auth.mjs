@@ -1,4 +1,4 @@
-import { verifyToken, createClerkClient } from '@clerk/backend';
+import { createClerkClient } from '@clerk/backend';
 
 export async function verifyAuth(event) {
     const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
@@ -8,19 +8,31 @@ export async function verifyAuth(event) {
         return { error: 'Unauthorized: no token', status: 401 };
     }
 
+    const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+    if (!clerkSecretKey) {
+        console.error('CLERK_SECRET_KEY not set');
+        return { error: 'Server configuration error', status: 500 };
+    }
+
     try {
-        const clerkSecretKey = process.env.CLERK_SECRET_KEY;
-        if (!clerkSecretKey) {
-            console.error('CLERK_SECRET_KEY not set');
-            return { error: 'Server configuration error', status: 500 };
+        const clerk = createClerkClient({ secretKey: clerkSecretKey });
+
+        // Use authenticateRequest which handles all token verification correctly
+        const requestState = await clerk.authenticateRequest(
+            new Request('https://salespipelinetracker.com/', {
+                headers: { Authorization: 'Bearer ' + token }
+            }),
+            { secretKey: clerkSecretKey }
+        );
+
+        if (!requestState.isSignedIn) {
+            console.error('Clerk auth failed:', requestState.reason);
+            return { error: 'Unauthorized', status: 401 };
         }
 
-        // Verify the JWT
-        const payload = await verifyToken(token, { secretKey: clerkSecretKey });
-        const userId = payload.sub || '';
+        const userId = requestState.toAuth().userId;
 
-        // Fetch user from Clerk API to get public metadata
-        const clerk = createClerkClient({ secretKey: clerkSecretKey });
+        // Fetch user metadata
         const user = await clerk.users.getUser(userId);
         const meta = user.publicMetadata || {};
 

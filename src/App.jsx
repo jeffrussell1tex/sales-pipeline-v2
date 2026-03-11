@@ -8625,10 +8625,18 @@ ${bodyHtml}
                                                         if (d.settings) setSettings(d.settings);
 
                                                         // Sync restored data: clear each table first, then insert
-                                                        // This ensures deleted records don't come back on re-import.
+                                                        // Fetches token explicitly to avoid stale closure issues.
                                                         const syncToDb = async () => {
                                                             setRestoringBackup(true);
                                                             try {
+                                                                // Get fresh token explicitly
+                                                                const token = typeof window.__getClerkToken === 'function'
+                                                                    ? await window.__getClerkToken().catch(() => '')
+                                                                    : '';
+                                                                const authHeaders = token
+                                                                    ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+                                                                    : { 'Content-Type': 'application/json' };
+
                                                                 const endpoints = [
                                                                     { key: 'opportunities', url: '/.netlify/functions/opportunities' },
                                                                     { key: 'accounts', url: '/.netlify/functions/accounts' },
@@ -8637,25 +8645,29 @@ ${bodyHtml}
                                                                     { key: 'tasks', url: '/.netlify/functions/tasks' },
                                                                     { key: 'activities', url: '/.netlify/functions/activities' },
                                                                 ];
-                                                                // Step 1: Clear all tables in parallel
-                                                                await Promise.all(endpoints.map(({ url }) =>
-                                                                    fetch(`${url}?clear=true`, { method: 'DELETE' }).catch(() => {})
-                                                                ));
-                                                                // Step 2: Insert all records
-                                                                await Promise.all(endpoints.map(({ key, url }) => {
-                                                                    if (!d[key] || d[key].length === 0) return Promise.resolve();
-                                                                    return Promise.all(d[key].map(record =>
-                                                                        fetch(url, {
+                                                                // Step 1: Clear all tables
+                                                                for (const { url } of endpoints) {
+                                                                    await fetch(`${url}?clear=true`, { method: 'DELETE', headers: authHeaders }).catch(() => {});
+                                                                }
+                                                                // Step 2: Insert records sequentially per table
+                                                                let insertOk = 0, insertFail = 0;
+                                                                for (const { key, url } of endpoints) {
+                                                                    if (!d[key] || d[key].length === 0) continue;
+                                                                    for (const record of d[key]) {
+                                                                        const r = await fetch(url, {
                                                                             method: 'POST',
-                                                                            headers: { 'Content-Type': 'application/json' },
+                                                                            headers: authHeaders,
                                                                             body: JSON.stringify(record)
-                                                                        }).catch(() => {})
-                                                                    ));
-                                                                }));
+                                                                        }).catch(() => null);
+                                                                        if (r && r.ok) insertOk++;
+                                                                        else { insertFail++; console.error('Restore insert failed', key, r?.status, record.id); }
+                                                                    }
+                                                                }
+                                                                console.log(`Restore complete: ${insertOk} ok, ${insertFail} failed`);
                                                                 if (d.settings) {
                                                                     await fetch('/.netlify/functions/settings', {
                                                                         method: 'PUT',
-                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        headers: authHeaders,
                                                                         body: JSON.stringify(d.settings)
                                                                     }).catch(() => {});
                                                                 }
