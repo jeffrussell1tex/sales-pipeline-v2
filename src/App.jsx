@@ -607,6 +607,11 @@ function App() {
     const { signOut } = useClerk();
     const { getToken } = useAuth();
 
+    // Guard: prevents settings useEffect from writing to DB before DB data has loaded.
+    // Without this, the effect fires on mount with localStorage/default values and
+    // overwrites the DB — the #1 cause of data loss / "self-deleting" content.
+    const settingsReady = useRef(false);
+
     // Make getToken available to dbFetch utility
     useEffect(() => {
         window.__getClerkToken = getToken;
@@ -936,8 +941,15 @@ authFetch('/.netlify/functions/settings')
                 users: data.settings.users || prev.users || [],
             }));
         }
+        // Mark settings as loaded from DB — enables the save effect.
+        // setTimeout(0) ensures this runs after React batches the setSettings call above.
+        setTimeout(() => { settingsReady.current = true; }, 0);
     })
-    .catch(err => console.error('Failed to load settings:', err));
+    .catch(err => {
+        console.error('Failed to load settings:', err);
+        // Allow saves even on error so the app isn't permanently stuck
+        setTimeout(() => { settingsReady.current = true; }, 0);
+    });
     };
     loadData();
 }, [clerkUser]);
@@ -1028,12 +1040,16 @@ authFetch('/.netlify/functions/settings')
 
 
     useEffect(() => {
+    // Guard: do NOT write to DB until settings have been loaded FROM DB.
+    // Without this check, the effect fires on mount with defaults/localStorage
+    // and overwrites real data in the database.
+    if (!settingsReady.current) return;
     // Settings saved to DB (source of truth); localStorage copy kept for offline fallback
     try { safeStorage.setItem('salesSettings', JSON.stringify(settings)); } catch(e) {}
     dbFetch('/.netlify/functions/settings', {
-method: 'PUT',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify(settings)
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
     }).catch(err => console.error('Failed to save settings:', err));
 }, [settings]);
 
@@ -1304,28 +1320,28 @@ body: JSON.stringify(settings)
 
     const handleDeleteUser = (userId) => {
         showConfirm('Are you sure you want to delete this user?', () => {
-            setSettings({
-                ...settings,
-                users: settings.users.filter(u => u.id !== userId)
-            });
+            setSettings(prev => ({
+                ...prev,
+                users: (prev.users || []).filter(u => u.id !== userId)
+            }));
         });
     };
 
     const handleSaveUser = (userData) => {
         if (editingUser) {
-            setSettings({
-                ...settings,
-                users: settings.users.map(u => 
+            setSettings(prev => ({
+                ...prev,
+                users: (prev.users || []).map(u =>
                     u.id === editingUser.id ? { ...userData, id: editingUser.id } : u
                 )
-            });
+            }));
         } else {
-            const newId = String(Math.max(...(settings.users.length ? settings.users.map(u => parseInt(u.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+            const newId = 'usr_' + Date.now();
             const newUser = { ...userData, id: newId };
-            setSettings({
-                ...settings,
-                users: [...settings.users, newUser]
-            });
+            setSettings(prev => ({
+                ...prev,
+                users: [...(prev.users || []), newUser]
+            }));
             if (showModal) {
                 setLastCreatedRepName(newUser.name);
             }
@@ -1334,10 +1350,10 @@ body: JSON.stringify(settings)
     };
 
     const handleUpdateFiscalYearStart = (month) => {
-        setSettings({
-            ...settings,
+        setSettings(prev => ({
+            ...prev,
             fiscalYearStart: parseInt(month)
-        });
+        }));
     };
 
     const toggleAccountExpanded = (accountId) => {
@@ -1386,7 +1402,7 @@ dbFetch('/.netlify/functions/tasks', {
 }).catch(err => console.error('Failed to update task:', err));
             addAudit('update', 'task', editingTask.id, taskData.title || editingTask.id, taskData.type || '');
         } else {
-            const newId = String(Math.max(...(tasks.length ? tasks.map(t => parseInt(t.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
             const newTask = { ...taskData, id: newId };
 setTasks([...tasks, newTask]);
 dbFetch('/.netlify/functions/tasks', {
@@ -1456,7 +1472,7 @@ dbFetch('/.netlify/functions/contacts', {
 }).catch(err => console.error('Failed to update contact:', err));
             addAudit('update', 'contact', editingContact.id, ((contactData.firstName||'') + ' ' + (contactData.lastName||'')).trim() || editingContact.id, contactData.company || '');
         } else {
-            const newId = String(Math.max(...(contacts.length ? contacts.map(c => parseInt(c.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
             const newContact = { ...contactData, id: newId };
 setContacts([...contacts, newContact]);
 dbFetch('/.netlify/functions/contacts', {
@@ -1538,7 +1554,7 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
             }).catch(err => console.error('Failed to update opportunity:', err));
             addAudit('update', 'opportunity', editingOpp.id, enrichedData.opportunityName || enrichedData.account || editingOpp.id, enrichedData.account || '');
         } else {
-            const newId = String(Math.max(...(opportunities.length ? opportunities.map(o => parseInt(o.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
             const newOpp = { ...enrichedData, id: newId, pipelineId: activePipeline.id, createdBy: currentUser || '' };
             setOpportunities([...opportunities, newOpp]);
             dbFetch('/.netlify/functions/opportunities', {
@@ -1572,7 +1588,7 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
             }).catch(err => console.error('Failed to save lost opportunity:', err));
             addAudit('update', 'opportunity', editingOppRef.id, enriched.opportunityName || enriched.account || editingOppRef.id, `Closed Lost: ${lostCategory || lostReason || ''}`);
         } else {
-            const newId = String(Math.max(...(opportunities.length ? opportunities.map(o => parseInt(o.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
             const newOpp = { ...enriched, id: newId, pipelineId: activePipeline.id };
             setOpportunities([...opportunities, newOpp]);
             dbFetch('/.netlify/functions/opportunities', {
@@ -1668,7 +1684,7 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
             }).catch(err => console.error('Failed to update sub-account:', err));
             addAudit('update', 'account', editingSubAccount.id, formData.name || editingSubAccount.id, '');
         } else if (parentAccountForSub) {
-            const newId = String(Math.max(...(accounts.length ? accounts.map(a => parseInt(a.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
             const newSub = { ...formData, id: newId, parentId: parentAccountForSub.id };
             setAccounts([...accounts, newSub]);
             dbFetch('/.netlify/functions/accounts', {
@@ -1678,7 +1694,7 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
             }).catch(err => console.error('Failed to save sub-account:', err));
             addAudit('create', 'account', newId, formData.name || newId, 'Sub of ' + parentAccountForSub.name);
         } else {
-            const newId = String(Math.max(...(accounts.length ? accounts.map(a => parseInt(a.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
             const newAccount = { ...formData, id: newId };
             setAccounts([...accounts, newAccount]);
             dbFetch('/.netlify/functions/accounts', {
@@ -1809,7 +1825,7 @@ dbFetch('/.netlify/functions/activities', {
     body: JSON.stringify({ ...activityData, id: editingActivity.id })
 }).catch(err => console.error('Failed to update activity:', err));
         } else {
-    const newId = String(Math.max(...(activities.length ? activities.map(a => parseInt(a.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+    const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
     const newActivity = { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' };
     setActivities([...activities, newActivity]);
     dbFetch('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) }).catch(err => console.error('Failed to save activity:', err));
@@ -7661,8 +7677,8 @@ ${bodyHtml}
                                                 if (file) {
                                                     const reader = new FileReader();
                                                     reader.onloadend = () => {
-                                                        setSettings({
-                                                            ...settings,
+                                                        setSettings(prev => ({
+                                                            ...prev,
                                                             logoUrl: reader.result
                                                         });
                                                     };
@@ -7704,10 +7720,10 @@ ${bodyHtml}
                                                     Logo Preview:
                                                 </div>
                                                 <button
-                                                    onClick={() => setSettings({
-                                                        ...settings,
+                                                    onClick={() => setSettings(prev => ({
+                                                        ...prev,
                                                         logoUrl: ''
-                                                    })}
+                                                    }))}
                                                     style={{
                                                         background: '#ef4444',
                                                         color: 'white',
@@ -7895,8 +7911,8 @@ ${bodyHtml}
                                                 if (e.key === 'Enter') {
                                                     const value = newPainPointInput.trim();
                                                     if (value && !settings.painPoints.includes(value)) {
-                                                        setSettings({
-                                                            ...settings,
+                                                        setSettings(prev => ({
+                                                            ...prev,
                                                             painPoints: [...settings.painPoints, value]
                                                         });
                                                         setNewPainPointInput('');
@@ -7911,8 +7927,8 @@ ${bodyHtml}
                                                 if (value) {
                                                     const currentPainPoints = settings.painPoints || [];
                                                     if (!currentPainPoints.includes(value)) {
-                                                        setSettings({
-                                                            ...settings,
+                                                        setSettings(prev => ({
+                                                            ...prev,
                                                             painPoints: [...currentPainPoints, value]
                                                         });
                                                         setNewPainPointInput('');
@@ -7957,8 +7973,8 @@ ${bodyHtml}
                                                     <button
                                                         onClick={() => {
                                                             showConfirm(`Remove "${painPoint}" from pain points library?`, () => {
-                                                                setSettings({
-                                                                    ...settings,
+                                                                setSettings(prev => ({
+                                                                    ...prev,
                                                                     painPoints: settings.painPoints.filter((_, i) => i !== idx)
                                                                 });
                                                             });
@@ -8024,8 +8040,8 @@ ${bodyHtml}
                                                 if (e.key === 'Enter') {
                                                     const value = newVerticalMarketInput.trim();
                                                     if (value && !(settings.verticalMarkets || []).includes(value)) {
-                                                        setSettings({
-                                                            ...settings,
+                                                        setSettings(prev => ({
+                                                            ...prev,
                                                             verticalMarkets: [...(settings.verticalMarkets || []), value]
                                                         });
                                                         setNewVerticalMarketInput('');
@@ -8040,8 +8056,8 @@ ${bodyHtml}
                                                 if (value) {
                                                     const current = settings.verticalMarkets || [];
                                                     if (!current.includes(value)) {
-                                                        setSettings({
-                                                            ...settings,
+                                                        setSettings(prev => ({
+                                                            ...prev,
                                                             verticalMarkets: [...current, value]
                                                         });
                                                         setNewVerticalMarketInput('');
@@ -8085,8 +8101,8 @@ ${bodyHtml}
                                                     <button
                                                         onClick={() => {
                                                             showConfirm(`Remove "${market}" from vertical markets?`, () => {
-                                                                setSettings({
-                                                                    ...settings,
+                                                                setSettings(prev => ({
+                                                                    ...prev,
                                                                     verticalMarkets: settings.verticalMarkets.filter((_, i) => i !== idx)
                                                                 });
                                                             });
@@ -8141,7 +8157,7 @@ ${bodyHtml}
                                                     <input type="text" value={stage.name} onChange={e => {
                                                         const updated = [...(settings.funnelStages || [])];
                                                         updated[idx] = { ...updated[idx], name: e.target.value };
-                                                        setSettings({ ...settings, funnelStages: updated });
+                                                        setSettings(prev => ({ ...prev, funnelStages: updated }));
                                                     }} style={{ width: '100%', padding: '0.5rem 0.625rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.875rem', fontFamily: 'inherit' }} />
                                                 </td>
                                                 <td style={{ padding: '0.5rem', textAlign: 'center' }}>
@@ -8149,14 +8165,14 @@ ${bodyHtml}
                                                         <input type="number" min="0" max="100" value={stage.weight} onChange={e => {
                                                             const updated = [...(settings.funnelStages || [])];
                                                             updated[idx] = { ...updated[idx], weight: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) };
-                                                            setSettings({ ...settings, funnelStages: updated });
+                                                            setSettings(prev => ({ ...prev, funnelStages: updated }));
                                                         }} style={{ width: '65px', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.875rem', textAlign: 'center', fontFamily: 'inherit' }} />
                                                         <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>%</span>
                                                     </div>
                                                 </td>
                                                 <td style={{ padding: '0.5rem', textAlign: 'center' }}>
                                                     {(settings.funnelStages || []).length > 2 && (
-                                                        <button onClick={() => setSettings({ ...settings, funnelStages: (settings.funnelStages || []).filter((_, i) => i !== idx) })}
+                                                        <button onClick={() => setSettings(prev => ({ ...prev, funnelStages: (settings.funnelStages || []).filter((_, i) => i !== idx) }))}
                                                             style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.125rem', padding: '0 0.25rem' }}>×</button>
                                                     )}
                                                 </td>
@@ -8164,7 +8180,7 @@ ${bodyHtml}
                                         ))}
                                     </tbody>
                                 </table>
-                                <button onClick={() => setSettings({ ...settings, funnelStages: [...(settings.funnelStages || []), { name: '', weight: 0 }] })}
+                                <button onClick={() => setSettings(prev => ({ ...prev, funnelStages: [...(settings.funnelStages || []), { name: '', weight: 0 }] })}
                                     style={{ background: '#f1f3f5', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: '600', color: '#2563eb', fontFamily: 'inherit' }}>
                                     + Add Stage
                                 </button>
@@ -8230,7 +8246,7 @@ ${bodyHtml}
                                                         onChange={e => {
                                                             const updated = [...(settings.kpiConfig || [])];
                                                             updated[kIdx] = { ...updated[kIdx], name: e.target.value };
-                                                            setSettings({ ...settings, kpiConfig: updated });
+                                                            setSettings(prev => ({ ...prev, kpiConfig: updated }));
                                                         }}
                                                         style={{ fontWeight: '700', fontSize: '1rem', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.375rem 0.75rem', fontFamily: 'inherit', width: '280px' }}
                                                     />
@@ -8240,7 +8256,7 @@ ${bodyHtml}
                                                                 onClick={() => {
                                                                     const updated = [...(settings.kpiConfig || [])];
                                                                     updated[kIdx] = { ...updated[kIdx], color: co.value };
-                                                                    setSettings({ ...settings, kpiConfig: updated });
+                                                                    setSettings(prev => ({ ...prev, kpiConfig: updated }));
                                                                 }}
                                                                 title={co.label}
                                                                 style={{
@@ -8254,7 +8270,7 @@ ${bodyHtml}
                                                 </div>
                                                 <button onClick={() => {
                                                     const updated = (settings.kpiConfig || []).filter((_, i) => i !== kIdx);
-                                                    setSettings({ ...settings, kpiConfig: updated });
+                                                    setSettings(prev => ({ ...prev, kpiConfig: updated }));
                                                 }}
                                                     style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.375rem 0.75rem', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: '600', fontFamily: 'inherit' }}
                                                 >Delete</button>
@@ -8269,7 +8285,7 @@ ${bodyHtml}
                                                         const tols = [...(updated[kIdx].tolerances || [])];
                                                         tols.push({ label: 'New Level', min: 0, color: '#64748b' });
                                                         updated[kIdx] = { ...updated[kIdx], tolerances: tols };
-                                                        setSettings({ ...settings, kpiConfig: updated });
+                                                        setSettings(prev => ({ ...prev, kpiConfig: updated }));
                                                     }}
                                                         style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.625rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600', fontFamily: 'inherit' }}
                                                     >+ Add</button>
@@ -8286,7 +8302,7 @@ ${bodyHtml}
                                                                         const tols = [...(updated[kIdx].tolerances || [])];
                                                                         tols[tIdx] = { ...tols[tIdx], color: e.target.value };
                                                                         updated[kIdx] = { ...updated[kIdx], tolerances: tols };
-                                                                        setSettings({ ...settings, kpiConfig: updated });
+                                                                        setSettings(prev => ({ ...prev, kpiConfig: updated }));
                                                                     }}
                                                                     style={{ width: '32px', height: '28px', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: 0 }}
                                                                 />
@@ -8296,7 +8312,7 @@ ${bodyHtml}
                                                                         const tols = [...(updated[kIdx].tolerances || [])];
                                                                         tols[tIdx] = { ...tols[tIdx], label: e.target.value };
                                                                         updated[kIdx] = { ...updated[kIdx], tolerances: tols };
-                                                                        setSettings({ ...settings, kpiConfig: updated });
+                                                                        setSettings(prev => ({ ...prev, kpiConfig: updated }));
                                                                     }}
                                                                     style={{ flex: 1, border: '1px solid #e2e8f0', borderRadius: '4px', padding: '0.3rem 0.5rem', fontSize: '0.8125rem', fontFamily: 'inherit' }}
                                                                 />
@@ -8307,7 +8323,7 @@ ${bodyHtml}
                                                                         const tols = [...(updated[kIdx].tolerances || [])];
                                                                         tols[tIdx] = { ...tols[tIdx], min: parseFloat(e.target.value) || 0 };
                                                                         updated[kIdx] = { ...updated[kIdx], tolerances: tols };
-                                                                        setSettings({ ...settings, kpiConfig: updated });
+                                                                        setSettings(prev => ({ ...prev, kpiConfig: updated }));
                                                                     }}
                                                                     style={{ width: '100px', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '0.3rem 0.5rem', fontSize: '0.8125rem', fontFamily: 'inherit' }}
                                                                 />
@@ -8315,7 +8331,7 @@ ${bodyHtml}
                                                                     const updated = [...(settings.kpiConfig || [])];
                                                                     const tols = [...(updated[kIdx].tolerances || [])].filter((_, i) => i !== tIdx);
                                                                     updated[kIdx] = { ...updated[kIdx], tolerances: tols };
-                                                                    setSettings({ ...settings, kpiConfig: updated });
+                                                                    setSettings(prev => ({ ...prev, kpiConfig: updated }));
                                                                 }}
                                                                     style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', fontWeight: '700', padding: '0 0.25rem' }}
                                                                 >×</button>
@@ -8340,7 +8356,7 @@ ${bodyHtml}
                                             { label: 'Critical', min: 0, color: '#ef4444' }
                                         ]
                                     });
-                                    setSettings({ ...settings, kpiConfig });
+                                    setSettings(prev => ({ ...prev, kpiConfig }));
                                 }}
                                     style={{ width: '100%', padding: '1rem', border: '2px dashed #d1d5db', borderRadius: '8px', background: '#f8fafc', cursor: 'pointer', fontSize: '0.9375rem', fontWeight: '600', color: '#64748b', fontFamily: 'inherit', transition: 'all 0.2s' }}
                                     onMouseEnter={e => { e.target.style.borderColor = '#2563eb'; e.target.style.color = '#2563eb'; }}
@@ -8402,8 +8418,8 @@ ${bodyHtml}
                                         opacity: opt.status === 'Coming Soon' ? 0.6 : 1, transition: 'all 0.2s'
                                     }}
                                         onClick={() => {
-                                            if (opt.id === 'local') setSettings({ ...settings, dataStorage: 'local' });
-                                            if (opt.id === 'json-export') setSettings({ ...settings, dataStorage: 'json-export' });
+                                            if (opt.id === 'local') setSettings(prev => ({ ...prev, dataStorage: 'local' }));
+                                            if (opt.id === 'json-export') setSettings(prev => ({ ...prev, dataStorage: 'json-export' }));
                                         }}
                                     >
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -8423,13 +8439,13 @@ ${bodyHtml}
                                         <label style={{ fontWeight: '600', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>API Endpoint URL</label>
                                         <input type="url" placeholder="https://your-api.com/pipeline-data"
                                             value={settings.apiEndpoint || ''}
-                                            onChange={e => setSettings({ ...settings, apiEndpoint: e.target.value })}
+                                            onChange={e => setSettings(prev => ({ ...prev, apiEndpoint: e.target.value }))}
                                             style={{ width: '100%', padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px' }}
                                         />
                                         <label style={{ fontWeight: '600', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem', marginTop: '1rem' }}>API Key</label>
                                         <input type="password" placeholder="Your API key..."
                                             value={settings.apiKey || ''}
-                                            onChange={e => setSettings({ ...settings, apiKey: e.target.value })}
+                                            onChange={e => setSettings(prev => ({ ...prev, apiKey: e.target.value }))}
                                             style={{ width: '100%', padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px' }}
                                         />
                                     </div>
@@ -8764,7 +8780,7 @@ ${bodyHtml}
                     currentUser={currentUser}
                     activities={activities}
                     onSaveActivity={(activityData) => {
-                        const newId = String(Math.max(...(activities.length ? activities.map(a => parseInt(a.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
                         setActivities(prev => [...prev, { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' }]);
                     }}
                     onDeleteActivity={(activityId) => {
@@ -8805,7 +8821,7 @@ ${bodyHtml}
                     lastCreatedAccountName={lastCreatedAccountName}
                     lastCreatedRepName={lastCreatedRepName}
                     onSaveNewContact={(data) => {
-                        const newId = String(Math.max(...(contacts.length ? contacts.map(c => parseInt(c.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
                         const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
                         setContacts(prev => [...prev, nc]);
                         dbFetch('/.netlify/functions/contacts', {
@@ -8816,7 +8832,7 @@ ${bodyHtml}
                         return nc;
                     }}
                     onSaveNewAccount={(data) => {
-                        const newId = String(Math.max(...(accounts.length ? accounts.map(a => parseInt(a.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
                         const na = { ...data, id: newId };
                         setAccounts(prev => [...prev, na]);
                         dbFetch('/.netlify/functions/accounts', {
@@ -8869,7 +8885,7 @@ ${bodyHtml}
                     onSave={handleSaveTask}
                     onAddTaskType={handleAddTaskType}
                     onSaveNewContact={(data) => {
-                        const newId = String(Math.max(...(contacts.length ? contacts.map(c => parseInt(c.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
                         const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
                         setContacts(prev => [...prev, nc]);
                         dbFetch('/.netlify/functions/contacts', {
@@ -8880,7 +8896,7 @@ ${bodyHtml}
                         return nc;
                     }}
                     onSaveNewAccount={(data) => {
-                        const newId = String(Math.max(...(accounts.length ? accounts.map(a => parseInt(a.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
                         const na = { ...data, id: newId };
                         setAccounts(prev => [...prev, na]);
                         dbFetch('/.netlify/functions/accounts', {
@@ -9006,7 +9022,7 @@ ${bodyHtml}
                     onClose={() => setShowContactModal(false)}
                     onSave={handleSaveContact}
                     onSaveNewContact={(newContactData) => {
-                        const newId = String(Math.max(...(contacts.length ? contacts.map(c => parseInt(c.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
                         const newContact = { ...newContactData, id: newId };
                         setContacts([...contacts, newContact]);
                         return newContact;
@@ -9691,7 +9707,7 @@ ${bodyHtml}
                     onSave={handleSaveActivity}
                     initialContext={activityInitialContext}
                     onSaveNewContact={(data) => {
-                        const newId = String(Math.max(...(contacts.length ? contacts.map(c => parseInt(c.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
                         const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
                         setContacts(prev => [...prev, nc]);
                         dbFetch('/.netlify/functions/contacts', {
@@ -9702,7 +9718,7 @@ ${bodyHtml}
                         return nc;
                     }}
                     onSaveNewAccount={(data) => {
-                        const newId = String(Math.max(...(accounts.length ? accounts.map(a => parseInt(a.id) || 0) : [0]), 0) + 1).padStart(3, '0');
+                        const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
                         const na = { ...data, id: newId };
                         setAccounts(prev => [...prev, na]);
                         dbFetch('/.netlify/functions/accounts', {
@@ -9815,21 +9831,27 @@ ${bodyHtml}
                     activities={activities}
                     onClose={() => setShowOutlookImportModal(false)}
                     onImport={(newActivities) => {
-                        const startId = Math.max(...(activities.map(a => parseInt(a.id)) || [0]), 0) + 1;
+                        const startId = Date.now();
                         const activitiesWithIds = newActivities.map((a, i) => ({
                             ...a,
-                            id: String(startId + i).padStart(3, '0'),
+                            id: 'id_' + (startId + i) + '_' + Math.random().toString(36).slice(2, 7),
                             createdAt: new Date().toISOString()
                         }));
                         setActivities([...activities, ...activitiesWithIds]);
-                        // Save each imported activity to the database
-                        activitiesWithIds.forEach(activity => {
-                            dbFetch('/.netlify/functions/activities', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(activity)
-                            }).catch(err => console.error('Failed to save imported activity:', err));
-                        });
+                        // Save all imported activities — await all so we can catch partial failures
+                        const activitySaveResults = await Promise.allSettled(
+                            activitiesWithIds.map(activity =>
+                                dbFetch('/.netlify/functions/activities', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(activity)
+                                })
+                            )
+                        );
+                        const activityFailed = activitySaveResults.filter(r => r.status === 'rejected').length;
+                        if (activityFailed > 0) {
+                            console.error(`${activityFailed} of ${activitiesWithIds.length} activities failed to save. Try re-importing the failed records.`);
+                        }
                         setShowOutlookImportModal(false);
                     }}
                 />
