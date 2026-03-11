@@ -4043,7 +4043,6 @@ dbFetch('/.netlify/functions/activities', {
                                                 style={{ width:'15px', height:'15px', cursor:'pointer', accentColor:'#2563eb' }} />
                                         </th>
                                         <th>Health</th>
-                                        <th>Opp ID</th>
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='salesRep') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('salesRep'); setOppSortDir('asc'); } }}>Sales Rep {oppSortField==='salesRep' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='account') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('account'); setOppSortDir('asc'); } }}>Account {oppSortField==='account' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         <th>Opportunity Name</th>
@@ -4059,8 +4058,6 @@ dbFetch('/.netlify/functions/activities', {
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='closeQuarter') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('closeQuarter'); setOppSortDir('asc'); } }}>Close Quarter {oppSortField==='closeQuarter' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         <th>Products</th>
                                         <th>Site Unionized</th>
-                                        <th>Pain Points</th>
-                                        <th>Key Contacts</th>
                                         {canViewField('notes') && <th>Notes</th>}
                                         {canViewField('nextSteps') && <th>Next Steps</th>}
                                         <th>Actions</th>
@@ -4125,7 +4122,6 @@ dbFetch('/.netlify/functions/activities', {
                                                     </div>
                                                 )}
                                             </td>
-                                            <td>{opp.id}</td>
                                             <td style={{ whiteSpace:'nowrap' }}>{opp.salesRep || '-'}</td>
                                             <td>{opp.account}</td>
                                             <td><span style={{ cursor:'pointer', color:'#2563eb', fontWeight:'600' }} onClick={e => { e.stopPropagation(); setEditingOpp(opp); setShowModal(true); }}>{opp.opportunityName || '-'}</span></td>
@@ -4245,24 +4241,8 @@ dbFetch('/.netlify/functions/activities', {
                                                 ) : '-'; })()}
                                             </td>
                                             <td style={{ textAlign:'center', fontSize:'0.75rem' }}>{opp.unionized ? <span style={{ color:'#dc2626', fontWeight:'700' }}>Yes</span> : <span style={{ color:'#94a3b8' }}>No</span>}</td>
-                                            <td style={{ fontSize:'0.75rem', color:'#475569' }}>
-                                                {(() => { const pts = Array.isArray(opp.painPoints) ? opp.painPoints : (opp.painPoints ? [opp.painPoints] : []); return pts.length > 0 ? (
-                                                    <div style={{ display:'flex', flexWrap:'wrap', gap:'0.2rem' }}>
-                                                        {pts.slice(0,2).map((p,i) => <span key={i} style={{ background:'#fef3c7', color:'#92400e', padding:'0.1rem 0.4rem', borderRadius:'3px', fontSize:'0.625rem', fontWeight:'600' }}>{p}</span>)}
-                                                        {pts.length > 2 && <span style={{ fontSize:'0.625rem', color:'#94a3b8' }}>+{pts.length-2}</span>}
-                                                    </div>
-                                                ) : '-'; })()}
-                                            </td>
-                                            <td style={{ fontSize:'0.75rem', color:'#475569' }}>
-                                                {(() => {
-                                                    const linked = (contacts||[]).filter(c => (opp.keyContacts||[]).includes(c.id));
-                                                    if (linked.length === 0) return '-';
-                                                    return <div style={{ display:'flex', flexWrap:'wrap', gap:'0.2rem' }}>
-                                                        {linked.slice(0,2).map(c => <span key={c.id} style={{ background:'#f0fdf4', color:'#166534', padding:'0.1rem 0.4rem', borderRadius:'3px', fontSize:'0.625rem', fontWeight:'600' }}>{c.firstName} {c.lastName}</span>)}
-                                                        {linked.length > 2 && <span style={{ fontSize:'0.625rem', color:'#94a3b8' }}>+{linked.length-2}</span>}
-                                                    </div>;
-                                                })()}
-                                            </td>
+
+
                                             {canViewField('notes') && (
                                                 <td style={{ maxWidth:'200px' }}>
                                                     {opp.notes ? (

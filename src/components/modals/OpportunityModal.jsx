@@ -250,7 +250,14 @@ if (formData.account && formData.account.trim()) {
     return (
         <div className="modal-overlay">
             <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px' }}>
-                <h2>{opportunity ? 'Edit Opportunity' : 'New Opportunity'}</h2>
+                <h2 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <span>{opportunity ? 'Edit Opportunity' : 'New Opportunity'}</span>
+                    {opportunity && (
+                        <span style={{ fontSize: '0.6875rem', fontWeight: '600', color: '#94a3b8', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.2rem 0.625rem', fontFamily: 'monospace', letterSpacing: '0.03em' }}>
+                            ID: {opportunity.id}
+                        </span>
+                    )}
+                </h2>
 
                 {/* Deal age / time in stage info strip */}
                 {opportunity && dealAgeInfo && (dealAgeInfo.dealAge !== null || dealAgeInfo.timeInStage !== null) && (
