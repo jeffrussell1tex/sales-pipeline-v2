@@ -52,9 +52,14 @@ export const handler = async (event) => {
             return { statusCode: 200, headers, body: JSON.stringify({ opportunity: upserted }) };
         }
         if (event.httpMethod === 'DELETE') {
+            const clear = event.queryStringParameters?.clear;
+            if (clear === 'true') {
+                await db.delete(opportunities);
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
+            }
             const id = event.queryStringParameters?.id;
             if (!id) {
-                return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+                return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
             }
             await db.delete(opportunities).where(eq(opportunities.id, id));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };

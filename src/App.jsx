@@ -8624,8 +8624,8 @@ ${bodyHtml}
                                                         if (d.activities) setActivities(d.activities);
                                                         if (d.settings) setSettings(d.settings);
 
-                                                        // Sync restored data to the database using PUT (upsert) so
-                                                        // re-importing the same backup never creates duplicates.
+                                                        // Sync restored data: clear each table first, then insert
+                                                        // This ensures deleted records don't come back on re-import.
                                                         const syncToDb = async () => {
                                                             setRestoringBackup(true);
                                                             try {
@@ -8637,11 +8637,16 @@ ${bodyHtml}
                                                                     { key: 'tasks', url: '/.netlify/functions/tasks' },
                                                                     { key: 'activities', url: '/.netlify/functions/activities' },
                                                                 ];
+                                                                // Step 1: Clear all tables in parallel
+                                                                await Promise.all(endpoints.map(({ url }) =>
+                                                                    fetch(`${url}?clear=true`, { method: 'DELETE' }).catch(() => {})
+                                                                ));
+                                                                // Step 2: Insert all records
                                                                 await Promise.all(endpoints.map(({ key, url }) => {
-                                                                    if (!d[key]) return Promise.resolve();
+                                                                    if (!d[key] || d[key].length === 0) return Promise.resolve();
                                                                     return Promise.all(d[key].map(record =>
                                                                         fetch(url, {
-                                                                            method: 'PUT',
+                                                                            method: 'POST',
                                                                             headers: { 'Content-Type': 'application/json' },
                                                                             body: JSON.stringify(record)
                                                                         }).catch(() => {})
