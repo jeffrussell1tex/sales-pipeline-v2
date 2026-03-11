@@ -7680,7 +7680,7 @@ ${bodyHtml}
                                                         setSettings(prev => ({
                                                             ...prev,
                                                             logoUrl: reader.result
-                                                        });
+                                                        }));
                                                     };
                                                     reader.readAsDataURL(file);
                                                 }
@@ -7914,7 +7914,7 @@ ${bodyHtml}
                                                         setSettings(prev => ({
                                                             ...prev,
                                                             painPoints: [...settings.painPoints, value]
-                                                        });
+                                                        }));
                                                         setNewPainPointInput('');
                                                     }
                                                 }
@@ -7930,7 +7930,7 @@ ${bodyHtml}
                                                         setSettings(prev => ({
                                                             ...prev,
                                                             painPoints: [...currentPainPoints, value]
-                                                        });
+                                                        }));
                                                         setNewPainPointInput('');
                                                     }
                                                 }
@@ -7976,7 +7976,7 @@ ${bodyHtml}
                                                                 setSettings(prev => ({
                                                                     ...prev,
                                                                     painPoints: settings.painPoints.filter((_, i) => i !== idx)
-                                                                });
+                                                                }));
                                                             });
                                                         }}
                                                         style={{
@@ -8043,7 +8043,7 @@ ${bodyHtml}
                                                         setSettings(prev => ({
                                                             ...prev,
                                                             verticalMarkets: [...(settings.verticalMarkets || []), value]
-                                                        });
+                                                        }));
                                                         setNewVerticalMarketInput('');
                                                     }
                                                 }
@@ -8059,7 +8059,7 @@ ${bodyHtml}
                                                         setSettings(prev => ({
                                                             ...prev,
                                                             verticalMarkets: [...current, value]
-                                                        });
+                                                        }));
                                                         setNewVerticalMarketInput('');
                                                     }
                                                 }
@@ -8104,7 +8104,7 @@ ${bodyHtml}
                                                                 setSettings(prev => ({
                                                                     ...prev,
                                                                     verticalMarkets: settings.verticalMarkets.filter((_, i) => i !== idx)
-                                                                });
+                                                                }));
                                                             });
                                                         }}
                                                         style={{
