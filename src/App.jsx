@@ -4058,7 +4058,7 @@ dbFetch('/.netlify/functions/activities', {
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='closeDate') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('closeDate'); setOppSortDir('asc'); } }}>Close Date {oppSortField==='closeDate' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='closeQuarter') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('closeQuarter'); setOppSortDir('asc'); } }}>Close Quarter {oppSortField==='closeQuarter' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         <th>Products</th>
-                                        <th>Unionized</th>
+                                        <th>Site Unionized</th>
                                         <th>Pain Points</th>
                                         <th>Key Contacts</th>
                                         {canViewField('notes') && <th>Notes</th>}

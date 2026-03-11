@@ -603,7 +603,7 @@ if (formData.account && formData.account.trim()) {
                             />
                         </div>
                         <div className="form-group">
-                            <label>Unionized*</label>
+                            <label>Site Unionized*</label>
                             <select
                                 value={formData.unionized}
                                 onChange={e => handleChange('unionized', e.target.value)}
