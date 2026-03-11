@@ -937,7 +937,7 @@ authFetch('/.netlify/functions/settings')
                 ...data.settings,
                 taskTypes: data.settings.taskTypes || prev.taskTypes || ['Call', 'Meeting', 'Email'],
                 quotaData: data.settings.quotaData ? { ...prev.quotaData, ...data.settings.quotaData } : prev.quotaData,
-                funnelStages: data.settings.funnelStages || prev.funnelStages,
+                funnelStages: data.prev.funnelStages || prev.funnelStages,
                 users: data.settings.users || prev.users || [],
             }));
         }
@@ -7913,7 +7913,7 @@ ${bodyHtml}
                                                     if (value && !settings.painPoints.includes(value)) {
                                                         setSettings(prev => ({
                                                             ...prev,
-                                                            painPoints: [...settings.painPoints, value]
+                                                            painPoints: [...prev.painPoints, value]
                                                         }));
                                                         setNewPainPointInput('');
                                                     }
@@ -7975,7 +7975,7 @@ ${bodyHtml}
                                                             showConfirm(`Remove "${painPoint}" from pain points library?`, () => {
                                                                 setSettings(prev => ({
                                                                     ...prev,
-                                                                    painPoints: settings.painPoints.filter((_, i) => i !== idx)
+                                                                    painPoints: prev.painPoints.filter((_, i) => i !== idx)
                                                                 }));
                                                             });
                                                         }}
@@ -8042,7 +8042,7 @@ ${bodyHtml}
                                                     if (value && !(settings.verticalMarkets || []).includes(value)) {
                                                         setSettings(prev => ({
                                                             ...prev,
-                                                            verticalMarkets: [...(settings.verticalMarkets || []), value]
+                                                            verticalMarkets: [...(prev.verticalMarkets || []), value]
                                                         }));
                                                         setNewVerticalMarketInput('');
                                                     }
@@ -8103,7 +8103,7 @@ ${bodyHtml}
                                                             showConfirm(`Remove "${market}" from vertical markets?`, () => {
                                                                 setSettings(prev => ({
                                                                     ...prev,
-                                                                    verticalMarkets: settings.verticalMarkets.filter((_, i) => i !== idx)
+                                                                    verticalMarkets: prev.verticalMarkets.filter((_, i) => i !== idx)
                                                                 }));
                                                             });
                                                         }}
@@ -8172,7 +8172,7 @@ ${bodyHtml}
                                                 </td>
                                                 <td style={{ padding: '0.5rem', textAlign: 'center' }}>
                                                     {(settings.funnelStages || []).length > 2 && (
-                                                        <button onClick={() => setSettings(prev => ({ ...prev, funnelStages: (settings.funnelStages || []).filter((_, i) => i !== idx) }))}
+                                                        <button onClick={() => setSettings(prev => ({ ...prev, funnelStages: (prev.funnelStages || []).filter((_, i) => i !== idx) }))}
                                                             style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.125rem', padding: '0 0.25rem' }}>×</button>
                                                     )}
                                                 </td>
@@ -8180,7 +8180,7 @@ ${bodyHtml}
                                         ))}
                                     </tbody>
                                 </table>
-                                <button onClick={() => setSettings(prev => ({ ...prev, funnelStages: [...(settings.funnelStages || []), { name: '', weight: 0 }] })}
+                                <button onClick={() => setSettings(prev => ({ ...prev, funnelStages: [...(prev.funnelStages || []), { name: '', weight: 0 }] }))}
                                     style={{ background: '#f1f3f5', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: '600', color: '#2563eb', fontFamily: 'inherit' }}>
                                     + Add Stage
                                 </button>
@@ -9830,7 +9830,7 @@ ${bodyHtml}
                     opportunities={opportunities}
                     activities={activities}
                     onClose={() => setShowOutlookImportModal(false)}
-                    onImport={(newActivities) => {
+                    onImport={async (newActivities) => {
                         const startId = Date.now();
                         const activitiesWithIds = newActivities.map((a, i) => ({
                             ...a,
