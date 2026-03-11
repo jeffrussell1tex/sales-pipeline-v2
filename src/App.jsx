@@ -8531,6 +8531,7 @@ ${bodyHtml}
                                                         contacts,
                                                         tasks,
                                                         activities,
+                                                        leads,
                                                         settings
                                                     }
                                                 };
@@ -8604,6 +8605,7 @@ ${bodyHtml}
                                                         d.opportunities ? `${d.opportunities.length} opportunities` : null,
                                                         d.accounts ? `${d.accounts.length} accounts` : null,
                                                         d.contacts ? `${d.contacts.length} contacts` : null,
+                                                        d.leads ? `${d.leads.length} leads` : null,
                                                         d.tasks ? `${d.tasks.length} tasks` : null,
                                                         d.activities ? `${d.activities.length} activities` : null
                                                     ].filter(Boolean).join(', ');
@@ -8616,12 +8618,14 @@ ${bodyHtml}
                                                         if (d.opportunities) setOpportunities(d.opportunities);
                                                         if (d.accounts) setAccounts(d.accounts);
                                                         if (d.contacts) setContacts(d.contacts);
+                                                        if (d.leads) setLeads(d.leads);
                                                         if (d.tasks) setTasks(d.tasks);
                                                         if (d.taskTypes) setSettings(prev => ({ ...prev, taskTypes: d.taskTypes }));
                                                         if (d.activities) setActivities(d.activities);
                                                         if (d.settings) setSettings(d.settings);
 
-                                                        // Sync restored data to the database in parallel
+                                                        // Sync restored data to the database using PUT (upsert) so
+                                                        // re-importing the same backup never creates duplicates.
                                                         const syncToDb = async () => {
                                                             setRestoringBackup(true);
                                                             try {
@@ -8629,6 +8633,7 @@ ${bodyHtml}
                                                                     { key: 'opportunities', url: '/.netlify/functions/opportunities' },
                                                                     { key: 'accounts', url: '/.netlify/functions/accounts' },
                                                                     { key: 'contacts', url: '/.netlify/functions/contacts' },
+                                                                    { key: 'leads', url: '/.netlify/functions/leads' },
                                                                     { key: 'tasks', url: '/.netlify/functions/tasks' },
                                                                     { key: 'activities', url: '/.netlify/functions/activities' },
                                                                 ];
@@ -8636,7 +8641,7 @@ ${bodyHtml}
                                                                     if (!d[key]) return Promise.resolve();
                                                                     return Promise.all(d[key].map(record =>
                                                                         fetch(url, {
-                                                                            method: 'POST',
+                                                                            method: 'PUT',
                                                                             headers: { 'Content-Type': 'application/json' },
                                                                             body: JSON.stringify(record)
                                                                         }).catch(() => {})

@@ -9,11 +9,9 @@ export const handler = async (event) => {
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     };
-
     if (event.httpMethod === 'OPTIONS') {
         return { statusCode: 204, headers, body: '' };
     }
-
     const sanitize = (data) => {
         const allowed = [
             'id','type','date','subject','notes','outcome','duration',
@@ -21,13 +19,11 @@ export const handler = async (event) => {
         ];
         return Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
     };
-
     try {
         if (event.httpMethod === 'GET') {
             const results = await db.select().from(activities).orderBy(asc(activities.date));
             return { statusCode: 200, headers, body: JSON.stringify({ activities: results }) };
         }
-
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
             if (!data.id) {
@@ -36,20 +32,22 @@ export const handler = async (event) => {
             const [inserted] = await db.insert(activities).values(sanitize(data)).returning();
             return { statusCode: 201, headers, body: JSON.stringify({ activity: inserted }) };
         }
-
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
-            const { id, createdAt, ...updateData } = sanitize(data);
-            const [updated] = await db.update(activities)
-                .set({ ...updateData, updatedAt: new Date() })
-                .where(eq(activities.id, id))
+            const { createdAt, ...upsertData } = sanitize(data);
+            const { id, ...updateData } = upsertData;
+            const [upserted] = await db.insert(activities)
+                .values(upsertData)
+                .onConflictDoUpdate({
+                    target: activities.id,
+                    set: { ...updateData, updatedAt: new Date() }
+                })
                 .returning();
-            return { statusCode: 200, headers, body: JSON.stringify({ activity: updated }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ activity: upserted }) };
         }
-
         if (event.httpMethod === 'DELETE') {
             const id = event.queryStringParameters?.id;
             if (!id) {
@@ -58,9 +56,7 @@ export const handler = async (event) => {
             await db.delete(activities).where(eq(activities.id, id));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
-
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
-
     } catch (err) {
         console.error('Activities function error:', err.message);
         return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };

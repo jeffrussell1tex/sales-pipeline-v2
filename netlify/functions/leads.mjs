@@ -10,32 +10,24 @@ export const handler = async (event) => {
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     };
-
     if (event.httpMethod === 'OPTIONS') {
         return { statusCode: 204, headers, body: '' };
     }
-
     const auth = await verifyAuth(event);
     if (auth.error) {
         return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     }
     const { userId, userRole } = auth;
-
     try {
         if (event.httpMethod === 'GET') {
             let results = await db.select().from(leads).orderBy(asc(leads.createdAt));
-
-            // Role-based filtering: reps only see their own leads
             if (!canSeeAll(userRole)) {
                 results = results.filter(l => !l.assignedTo || l.assignedTo === userId);
             }
-
             return { statusCode: 200, headers, body: JSON.stringify({ leads: results }) };
         }
-
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
-
             // Bulk insert: array of leads
             if (Array.isArray(data)) {
                 if (data.length === 0) {
@@ -49,7 +41,6 @@ export const handler = async (event) => {
                 const inserted = await db.insert(leads).values(rows).returning();
                 return { statusCode: 201, headers, body: JSON.stringify({ leads: inserted }) };
             }
-
             // Single insert
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
@@ -62,20 +53,21 @@ export const handler = async (event) => {
             }).returning();
             return { statusCode: 201, headers, body: JSON.stringify({ lead: inserted }) };
         }
-
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
             const { id, createdAt, updatedAt, ...updateData } = data;
-            const [updated] = await db.update(leads)
-                .set({ ...updateData, updatedAt: new Date() })
-                .where(eq(leads.id, id))
+            const [upserted] = await db.insert(leads)
+                .values({ id, ...updateData, createdAt: new Date(), updatedAt: new Date() })
+                .onConflictDoUpdate({
+                    target: leads.id,
+                    set: { ...updateData, updatedAt: new Date() }
+                })
                 .returning();
-            return { statusCode: 200, headers, body: JSON.stringify({ lead: updated }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ lead: upserted }) };
         }
-
         if (event.httpMethod === 'DELETE') {
             const id = event.queryStringParameters?.id;
             if (!id) {
@@ -84,9 +76,7 @@ export const handler = async (event) => {
             await db.delete(leads).where(eq(leads.id, id));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
-
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
-
     } catch (err) {
         console.error('Leads function error:', err);
         return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
