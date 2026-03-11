@@ -28,7 +28,6 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
-            // Bulk insert: array of leads
             if (Array.isArray(data)) {
                 if (data.length === 0) {
                     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Empty array' }) };
@@ -41,7 +40,6 @@ export const handler = async (event) => {
                 const inserted = await db.insert(leads).values(rows).returning();
                 return { statusCode: 201, headers, body: JSON.stringify({ leads: inserted }) };
             }
-            // Single insert
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
@@ -78,9 +76,6 @@ export const handler = async (event) => {
             if (!id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
             }
-            await db.delete(leads).where(eq(leads.id, id));
-            return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
-        }
             await db.delete(leads).where(eq(leads.id, id));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
