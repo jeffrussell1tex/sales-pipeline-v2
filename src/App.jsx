@@ -7802,13 +7802,13 @@ ${bodyHtml}
                                 <button className="btn" onClick={handleAddUser}>+ ADD USER</button>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
-                                {settings.users.length === 0 ? (
+                                {(settings.users || []).length === 0 ? (
                                     <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
                                         No users yet. Click "+ ADD USER" to create one.
                                     </div>
                                 ) : (
                                     <div style={{ display: 'grid', gap: '1rem' }}>
-                                        {settings.users.map(user => (
+                                        {(settings.users || []).map(user => (
                                             <div key={user.id} style={{
                                                 display: 'flex',
                                                 justifyContent: 'space-between',
@@ -7923,7 +7923,7 @@ ${bodyHtml}
                                             onKeyPress={(e) => {
                                                 if (e.key === 'Enter') {
                                                     const value = newPainPointInput.trim();
-                                                    if (value && !settings.painPoints.includes(value)) {
+                                                    if (value && !(settings.painPoints || []).includes(value)) {
                                                         setSettings(prev => ({
                                                             ...prev,
                                                             painPoints: [...prev.painPoints, value]
@@ -7970,7 +7970,7 @@ ${bodyHtml}
                                         </div>
                                     ) : (
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-                                            {settings.painPoints.map((painPoint, idx) => (
+                                            {(settings.painPoints || []).map((painPoint, idx) => (
                                                 <span key={idx} style={{
                                                     background: '#ffffff',
                                                     padding: '0.75rem 1rem',
