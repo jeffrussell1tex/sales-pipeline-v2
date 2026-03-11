@@ -61,9 +61,6 @@ export const handler = async (event) => {
             await db.delete(activities).where(eq(activities.id, id));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
-            await db.delete(activities).where(eq(activities.id, id));
-            return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
-        }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
         console.error('Activities function error:', err.message);
