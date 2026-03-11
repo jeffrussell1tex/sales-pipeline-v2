@@ -937,7 +937,20 @@ authFetch('/.netlify/functions/settings')
                 ...data.settings,
                 taskTypes: data.settings.taskTypes || prev.taskTypes || ['Call', 'Meeting', 'Email'],
                 quotaData: data.settings.quotaData ? { ...prev.quotaData, ...data.settings.quotaData } : prev.quotaData,
-                funnelStages: data.prev.funnelStages || prev.funnelStages,
+                funnelStages: (data.settings.funnelStages && data.settings.funnelStages.length > 0)
+                    ? data.settings.funnelStages
+                    : (prev.funnelStages && prev.funnelStages.length > 0)
+                        ? prev.funnelStages
+                        : [
+                            { name: 'Qualification', weight: 10 },
+                            { name: 'Discovery', weight: 20 },
+                            { name: 'Evaluation (Demo)', weight: 40 },
+                            { name: 'Proposal', weight: 60 },
+                            { name: 'Negotiation/Review', weight: 75 },
+                            { name: 'Contracts', weight: 90 },
+                            { name: 'Closed Won', weight: 100 },
+                            { name: 'Closed Lost', weight: 0 }
+                        ],
                 users: data.settings.users || prev.users || [],
             }));
         }
