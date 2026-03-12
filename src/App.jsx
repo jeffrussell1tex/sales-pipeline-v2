@@ -3550,7 +3550,7 @@ dbFetch('/.netlify/functions/activities', {
                                             </td>
                                         </tr>
                                         {/* Activity log expand panel */}
-                                        {!selectedPipelineOpp && expandedOppActivities[opp.id] !== false && (() => {
+                                        {!selectedPipelineOpp && expandedOppActivities[opp.id] === true && (() => {
                                             const oppActs = activities.filter(a => a.opportunityId === opp.id)
                                                 .sort((a, b) => new Date(b.date) - new Date(a.date));
                                             if (oppActs.length === 0) return null;
@@ -4201,7 +4201,7 @@ dbFetch('/.netlify/functions/activities', {
                                                 </div>
                                             </td>
                                         </tr>
-                                        {!selectedOppTabOpp && expandedOppActivities[opp.id] !== false && (() => {
+                                        {!selectedOppTabOpp && expandedOppActivities[opp.id] === true && (() => {
                                             const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date)-new Date(a.date));
                                             if (oppActs.length === 0) return null;
                                             return (
