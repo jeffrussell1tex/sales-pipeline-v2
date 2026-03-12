@@ -3295,8 +3295,9 @@ dbFetch('/.netlify/functions/activities', {
                                 })}
                             </div>
                             {/* Desktop table — hidden on mobile */}
-                            <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                            <div className="opp-desktop-table" style={{ flex: 1, minWidth: 0, borderRight: selectedPipelineOpp ? '1px solid #e2e8f0' : 'none' }}>
+                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', padding: '0.3rem 1rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>👆 Click any row to view full details</div>
+                            <div style={{ display: 'flex', alignItems: 'stretch', height: '520px' }}>
+                            <div className="opp-desktop-table" style={{ flex: 1, minWidth: 0, overflowY: 'auto', borderRight: selectedPipelineOpp ? '1px solid #e2e8f0' : 'none' }}>
                             {/* Stale deals warning banner */}
                             {(() => {
                                 const staleDeals = pipelineFilteredOpps.filter(opp => {
@@ -3608,7 +3609,8 @@ dbFetch('/.netlify/functions/activities', {
                                     <div style={{
                                         width: '300px', flexShrink: 0, background: '#f8fafc',
                                         overflowY: 'auto', padding: '1rem',
-                                        display: 'flex', flexDirection: 'column', gap: '0.75rem'
+                                        display: 'flex', flexDirection: 'column', gap: '0.75rem',
+                                        height: '520px', position: 'sticky', top: 0, borderLeft: '1px solid #e2e8f0'
                                     }}>
                                         {/* Header */}
                                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
@@ -3967,8 +3969,9 @@ dbFetch('/.netlify/functions/activities', {
                                 })}
                             </div>
                             {/* Desktop table */}
-                            <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                            <div className="opp-desktop-table" style={{ flex: 1, minWidth: 0, borderRight: selectedOppTabOpp ? '1px solid #e2e8f0' : 'none' }}>
+                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', padding: '0.3rem 1rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>👆 Click any row to view full details</div>
+                            <div style={{ display: 'flex', alignItems: 'stretch', height: '520px' }}>
+                            <div className="opp-desktop-table" style={{ flex: 1, minWidth: 0, overflowY: 'auto', borderRight: selectedOppTabOpp ? '1px solid #e2e8f0' : 'none' }}>
                             {/* Stale deals warning banner */}
                             {(() => {
                                 const staleDeals = oppFilteredOpps.filter(opp => {
@@ -4233,7 +4236,7 @@ dbFetch('/.netlify/functions/activities', {
                                 const timeInStageDays = opp.stageChangedDate ? Math.floor((new Date() - new Date(opp.stageChangedDate)) / 86400000) : null;
                                 const prods = Array.isArray(opp.products) ? opp.products : (opp.products ? [opp.products] : []);
                                 return (
-                                    <div style={{ width: '300px', flexShrink: 0, background: '#f8fafc', overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    <div style={{ width: '300px', flexShrink: 0, background: '#f8fafc', overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '520px', position: 'sticky', top: 0, borderLeft: '1px solid #e2e8f0' }}>
                                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
                                             <div>
                                                 <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#0f172a', lineHeight: 1.3 }}>{opp.opportunityName || opp.account}</div>
