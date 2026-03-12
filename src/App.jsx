@@ -769,6 +769,7 @@ function App() {
     const [selectedContacts, setSelectedContacts] = useState([]);
     const [selectedAccounts, setSelectedAccounts] = useState([]);
     const [selectedOpps, setSelectedOpps] = useState([]);
+    const [selectedPipelineOpp, setSelectedPipelineOpp] = useState(null);
     const [bulkAction, setBulkAction] = useState({ stage: '', rep: '' });
     const [tasksSubView, setTasksSubView] = useState('tasks');
     const [completedDateFrom, setCompletedDateFrom] = useState('');
@@ -3293,7 +3294,8 @@ dbFetch('/.netlify/functions/activities', {
                                 })}
                             </div>
                             {/* Desktop table — hidden on mobile */}
-                            <div className="opp-desktop-table">
+                            <div style={{ display: 'flex', alignItems: 'stretch' }}>
+                            <div className="opp-desktop-table" style={{ flex: 1, minWidth: 0, borderRight: selectedPipelineOpp ? '1px solid #e2e8f0' : 'none' }}>
                             {/* Stale deals warning banner */}
                             {(() => {
                                 const staleDeals = pipelineFilteredOpps.filter(opp => {
@@ -3325,6 +3327,11 @@ dbFetch('/.netlify/functions/activities', {
                                     </div>
                                 );
                             })()}
+                            {!selectedPipelineOpp && (
+                                <div style={{ padding: '0.35rem 1rem', background: '#f1f5f9', borderBottom: '1px solid #e2e8f0', fontSize: '0.7rem', color: '#94a3b8' }}>
+                                    👆 Click any row to see full details
+                                </div>
+                            )}
                             <table>
                                 <thead>
                                     <tr>
@@ -3335,22 +3342,14 @@ dbFetch('/.netlify/functions/activities', {
                                                 style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: '#2563eb' }}
                                             />
                                         </th>
-                                        <th>Health</th>
+                                        <th style={{ width: '80px' }}>Health</th>
                                         <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'salesRep') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('salesRep'); setPipelineSortDir('asc'); } }}>Sales Rep {pipelineSortField === 'salesRep' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'account') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('account'); setPipelineSortDir('asc'); } }}>Account {pipelineSortField === 'account' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        <th>Opportunity Name</th>
+                                        <th>Opportunity</th>
                                         <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'stage') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('stage'); setPipelineSortDir('asc'); } }}>Stage {pipelineSortField === 'stage' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         {canViewField('arr') && <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'arr') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('arr'); setPipelineSortDir('desc'); } }}>ARR {pipelineSortField === 'arr' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>}
-                                        {canViewField('implCost') && <th>Impl. Cost</th>}
-                                        {canViewField('probability') && <th>Prob %</th>}
-                                        {canViewField('weightedValue') && <th>Weighted Value</th>}
-                                        {canViewField('dealAge') && <th>Deal Age</th>}
-                                        {canViewField('timeInStage') && <th>Time in Stage</th>}
-                                        {canViewField('activities') && <th>Activities</th>}
                                         <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'closeDate') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('closeDate'); setPipelineSortDir('asc'); } }}>Close Date {pipelineSortField === 'closeDate' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'closeQuarter') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('closeQuarter'); setPipelineSortDir('asc'); } }}>Close Quarter {pipelineSortField === 'closeQuarter' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        {canViewField('nextSteps') && <th>Next Steps</th>}
-                                        <th>Actions</th>
+                                        <th style={{ width: '80px' }}>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -3403,7 +3402,10 @@ dbFetch('/.netlify/functions/activities', {
                                             const health = calculateDealHealth(opp);
                                             return (
                                         <React.Fragment key={opp.id}>
-                                        <tr style={{ background: selectedOpps.includes(opp.id) ? '#eff6ff' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                                        <tr
+                                            style={{ background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : selectedOpps.includes(opp.id) ? '#dbeafe' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc', cursor: 'pointer', borderLeft: selectedPipelineOpp?.id === opp.id ? '3px solid #2563eb' : '3px solid transparent' }}
+                                            onClick={() => setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp)}
+                                        >
                                             <td onClick={e => e.stopPropagation()} style={{ width: '36px' }}>
                                                 <input type="checkbox"
                                                     checked={selectedOpps.includes(opp.id)}
@@ -3529,123 +3531,9 @@ dbFetch('/.netlify/functions/activities', {
                                                 )}
                                             </td>
 )}
-{canViewField('implCost') && (
-                                            <td onClick={e => e.stopPropagation()}>
-                                                {inlineEdit && inlineEdit.oppId === opp.id && inlineEdit.field === 'implementationCost' ? (
-                                                    <input autoFocus type="number" min="0"
-                                                        defaultValue={opp.implementationCost}
-                                                        onBlur={e => {
-                                                            const val = Math.max(0, parseInt(e.target.value) || 0);
-                                                            setOpportunities(prev => prev.map(o => o.id === opp.id ? { ...o, implementationCost: val } : o));
-                                                            setInlineEdit(null);
-                                                        }}
-                                                        onKeyDown={e => {
-                                                            if (e.key === 'Enter') e.target.blur();
-                                                            if (e.key === 'Escape') setInlineEdit(null);
-                                                        }}
-                                                        style={{ width: '90px', fontSize: '0.8125rem', fontWeight: '600', border: '1.5px solid #2563eb', borderRadius: '6px', padding: '0.1rem 0.35rem', outline: 'none', color: '#1e293b' }}
-                                                    />
-                                                ) : (
-                                                    <span title="Click to edit Impl. Cost"
-                                                        onClick={() => setInlineEdit({ oppId: opp.id, field: 'implementationCost', value: opp.implementationCost })}
-                                                        style={{ cursor: 'pointer', display: 'inline-block', transition: 'opacity 0.1s' }}
-                                                        onMouseEnter={e => e.currentTarget.style.opacity = '0.65'}
-                                                        onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-                                                        ${opp.implementationCost.toLocaleString()} ✎
-                                                    </span>
-                                                )}
-                                            </td>
-)}
-{canViewField('probability') && (
-                                            <td style={{ whiteSpace: 'nowrap' }}>
-                                                {(() => {
-                                                    const stageDefault = (settings.funnelStages || []).find(s => s.name === opp.stage);
-                                                    const defaultProb = stageDefault ? stageDefault.weight : null;
-                                                    const effectiveProb = (opp.probability !== null && opp.probability !== undefined) ? opp.probability : defaultProb;
-                                                    const isOverridden = opp.probability !== null && opp.probability !== undefined && opp.probability !== defaultProb;
-                                                    return (
-                                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                                                            <span style={{ fontWeight: '600', color: isOverridden ? '#f59e0b' : '#475569' }}>
-                                                                {effectiveProb !== null ? effectiveProb + '%' : '—'}
-                                                            </span>
-                                                            {isOverridden && <span title="Rep override" style={{ fontSize: '0.625rem', color: '#f59e0b' }}>✎</span>}
-                                                        </span>
-                                                    );
-                                                })()}
-                                            </td>
-)}
-{canViewField('weightedValue') && (
-                                            <td style={{ whiteSpace: 'nowrap' }}>
-                                                {(() => {
-                                                    const stageDefault = (settings.funnelStages || []).find(s => s.name === opp.stage);
-                                                    const defaultProb = stageDefault ? stageDefault.weight / 100 : 0.3;
-                                                    const prob = (opp.probability !== null && opp.probability !== undefined) ? opp.probability / 100 : defaultProb;
-                                                    const total = (parseFloat(opp.arr) || 0) + (opp.implementationCost || 0);
-                                                    return '$' + Math.round(total * prob).toLocaleString();
-                                                })()}
-                                            </td>
-)}
-{canViewField('dealAge') && (
-                                            <td style={{ whiteSpace: 'nowrap' }}>
-                                                {(() => {
-                                                    if (!opp.createdDate) return <span style={{ color: '#94a3b8' }}>—</span>;
-                                                    const days = Math.floor((new Date() - new Date(opp.createdDate)) / 86400000);
-                                                    const color = days > 90 ? '#ef4444' : days > 60 ? '#f59e0b' : '#475569';
-                                                    return <span style={{ color, fontWeight: days > 60 ? '700' : '500' }}>{days}d</span>;
-                                                })()}
-                                            </td>
-)}
-{canViewField('timeInStage') && (
-                                            <td style={{ whiteSpace: 'nowrap' }}>
-                                                {(() => {
-                                                    if (!opp.stageChangedDate) return <span style={{ color: '#94a3b8' }}>—</span>;
-                                                    const days = Math.floor((new Date() - new Date(opp.stageChangedDate)) / 86400000);
-                                                    const isOpen = opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost';
-                                                    const color = isOpen && days > 30 ? '#ef4444' : isOpen && days > 14 ? '#f59e0b' : '#475569';
-                                                    return <span style={{ color, fontWeight: (isOpen && days > 14) ? '700' : '500' }}>{days}d</span>;
-                                                })()}
-                                            </td>
-)}
-{canViewField('activities') && (
-                                            <td style={{ whiteSpace: 'nowrap' }}>
-                                                {(() => {
-                                                    const count = activities.filter(a => a.opportunityId === opp.id).length;
-                                                    const isOpen = opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost';
-                                                    if (count === 0 && isOpen) {
-                                                        return <span style={{ color: '#ef4444', fontWeight: '700', fontSize: '0.75rem' }}>⚠ None</span>;
-                                                    }
-                                                    if (count === 0) return <span style={{ color: '#94a3b8' }}>0</span>;
-                                                    const lastAct = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date) - new Date(a.date))[0];
-                                                    const daysSince = lastAct ? Math.floor((new Date() - new Date(lastAct.date)) / 86400000) : null;
-                                                    return (
-                                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-                                                            <span style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', padding: '0.1rem 0.45rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700' }}>{count}</span>
-                                                            {daysSince !== null && isOpen && (
-                                                                <span style={{ fontSize: '0.625rem', color: daysSince > 14 ? '#ef4444' : '#94a3b8' }}>{daysSince}d ago</span>
-                                                            )}
-                                                        </span>
-                                                    );
-                                                })()}
-                                            </td>
-)}
                                             <td style={{ whiteSpace: 'nowrap' }}>
                                                 {new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                             </td>
-                                            <td style={{ whiteSpace: 'nowrap' }}>
-                                                {opp.closeQuarter || '-'}
-                                            </td>
-{canViewField('nextSteps') && (
-                                            <td style={{ 
-                                                minWidth: '200px',
-                                                maxWidth: '300px',
-                                                whiteSpace: 'normal',
-                                                lineHeight: '1.4'
-                                            }}>
-                                                <div style={{ color: '#64748b', fontSize: '0.8125rem' }}>
-                                                    {opp.nextSteps || '-'}
-                                                </div>
-                                            </td>
-)}
                                             <td style={{ whiteSpace: 'nowrap' }}>
                                                 <div className="action-buttons">
                                                     <button className="action-btn" onClick={() => {
@@ -3703,6 +3591,80 @@ dbFetch('/.netlify/functions/activities', {
                                 </tbody>
                             </table>
                             </div>
+                            {/* ── Option 5 Detail Panel ── */}
+                            {selectedPipelineOpp && (() => {
+                                const opp = selectedPipelineOpp;
+                                const health = calculateDealHealth(opp);
+                                const stageDefault = (settings.funnelStages || []).find(s => s.name === opp.stage);
+                                const defaultProb = stageDefault ? stageDefault.weight : null;
+                                const effectiveProb = (opp.probability !== null && opp.probability !== undefined) ? opp.probability : defaultProb;
+                                const isOverridden = opp.probability !== null && opp.probability !== undefined && opp.probability !== defaultProb;
+                                const probNum = (opp.probability !== null && opp.probability !== undefined) ? opp.probability / 100 : (stageDefault ? stageDefault.weight / 100 : 0.3);
+                                const totalVal = (parseFloat(opp.arr) || 0) + (opp.implementationCost || 0);
+                                const weighted = Math.round(totalVal * probNum);
+                                const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+                                const lastAct = oppActs[0];
+                                const daysSinceAct = lastAct ? Math.floor((new Date() - new Date(lastAct.date)) / 86400000) : null;
+                                const dealAgeDays = opp.createdDate ? Math.floor((new Date() - new Date(opp.createdDate)) / 86400000) : null;
+                                const timeInStageDays = opp.stageChangedDate ? Math.floor((new Date() - new Date(opp.stageChangedDate)) / 86400000) : null;
+                                return (
+                                    <div style={{
+                                        width: '300px', flexShrink: 0, background: '#f8fafc',
+                                        overflowY: 'auto', padding: '1rem',
+                                        display: 'flex', flexDirection: 'column', gap: '0.75rem'
+                                    }}>
+                                        {/* Header */}
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
+                                            <div>
+                                                <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#0f172a', lineHeight: 1.3 }}>{opp.opportunityName || opp.account}</div>
+                                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>{opp.account}</div>
+                                            </div>
+                                            <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(null); }}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1.1rem', lineHeight: 1, padding: '0', flexShrink: 0 }}>×</button>
+                                        </div>
+                                        {/* Health */}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: health.color, flexShrink: 0 }} />
+                                            <span style={{ fontSize: '0.8rem', fontWeight: '600', color: health.color }}>{health.status}</span>
+                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: 'auto' }}>{health.score}/100</span>
+                                        </div>
+                                        {/* Stage */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                            {[
+                                                { label: 'Stage', value: <span style={{ background: getStageColor(opp.stage).text + '22', color: getStageColor(opp.stage).text, padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600' }}>{opp.stage}</span> },
+                                                canViewField('arr') && { label: 'ARR', value: '$' + (opp.arr || 0).toLocaleString() },
+                                                canViewField('implCost') && opp.implementationCost > 0 && { label: 'Impl. Cost', value: '$' + (opp.implementationCost || 0).toLocaleString() },
+                                                canViewField('probability') && { label: 'Probability', value: <span style={{ fontWeight: '600', color: isOverridden ? '#f59e0b' : '#475569' }}>{effectiveProb !== null ? effectiveProb + '%' : '—'}{isOverridden ? ' ✎' : ''}</span> },
+                                                canViewField('weightedValue') && { label: 'Weighted Value', value: '$' + weighted.toLocaleString() },
+                                                { label: 'Sales Rep', value: opp.salesRep || '—' },
+                                                { label: 'Close Date', value: opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
+                                                { label: 'Close Quarter', value: opp.closeQuarter || '—' },
+                                                canViewField('dealAge') && dealAgeDays !== null && { label: 'Deal Age', value: <span style={{ color: dealAgeDays > 90 ? '#ef4444' : dealAgeDays > 60 ? '#f59e0b' : '#475569', fontWeight: '600' }}>{dealAgeDays}d</span> },
+                                                canViewField('timeInStage') && timeInStageDays !== null && { label: 'Time in Stage', value: <span style={{ color: (opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost' && timeInStageDays > 30) ? '#ef4444' : '#475569', fontWeight: '600' }}>{timeInStageDays}d</span> },
+                                                canViewField('activities') && { label: 'Activities', value: <span>{oppActs.length}{daysSinceAct !== null ? <span style={{ fontSize: '0.7rem', color: daysSinceAct > 14 ? '#ef4444' : '#94a3b8', marginLeft: '0.35rem' }}>{daysSinceAct}d ago</span> : null}</span> },
+                                                canViewField('nextSteps') && opp.nextSteps && { label: 'Next Steps', value: opp.nextSteps },
+                                                opp.notes && { label: 'Notes', value: opp.notes },
+                                                (opp.stage === 'Closed Lost' && opp.lostCategory) && { label: 'Loss Reason', value: <span style={{ color: '#b91c1c', fontWeight: '600' }}>{opp.lostCategory}{opp.lostReason ? ' — ' + opp.lostReason : ''}</span> },
+                                            ].filter(Boolean).map((row, ri) => (
+                                                <div key={ri} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                                    <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', fontWeight: '600' }}>{row.label}</span>
+                                                    <span style={{ fontSize: '0.8rem', color: '#1e293b' }}>{row.value}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {/* Action buttons */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.25rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
+                                            <button className="btn" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
+                                                onClick={e => { e.stopPropagation(); handleEdit(opp); }}>✏️ Edit Opportunity</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
+                                                onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }}>+ Log Activity</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
+                                                onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Add Task</button>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                            </div>{/* end split layout */}
                         </div>
                     </div>
                     )}
