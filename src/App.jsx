@@ -3535,7 +3535,7 @@ dbFetch('/.netlify/functions/activities', {
                                             <td style={{ whiteSpace: 'nowrap' }}>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                                                     <div style={{ display: 'flex', gap: '3px' }}>
-                                                        <button className="action-btn" title="View details" onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ fontWeight: '700', color: selectedPipelineOpp?.id === opp.id ? '#2563eb' : undefined }}>›</button>
+                                                        <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedPipelineOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color: '#fff', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
                                                         <button className="action-btn" onClick={() => handleEdit(opp)}>Edit</button>
                                                     </div>
                                                     <div style={{ display: 'flex', gap: '3px' }}>
@@ -3579,15 +3579,6 @@ dbFetch('/.netlify/functions/activities', {
                                                 </tr>
                                             );
                                         })()}
-                                        {opp.stage === 'Closed Lost' && opp.lostCategory && (
-                                            <tr style={{ background: '#fff5f5' }}>
-                                                <td colSpan={99} style={{ padding: '0.375rem 1rem 0.375rem 2rem', borderBottom: '1px solid #fecaca' }}>
-                                                    <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.5rem' }}>Loss Reason:</span>
-                                                    <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#b91c1c', background: '#fee2e2', padding: '0.1rem 0.5rem', borderRadius: '4px', marginRight: '0.5rem' }}>{opp.lostCategory}</span>
-                                                    {opp.lostReason && <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{opp.lostReason}</span>}
-                                                </td>
-                                            </tr>
-                                        )}
                                         </React.Fragment>
                                     );
                                 })}
@@ -4195,7 +4186,7 @@ dbFetch('/.netlify/functions/activities', {
                                             <td style={{ whiteSpace:'nowrap' }}>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                                                     <div style={{ display: 'flex', gap: '3px' }}>
-                                                        <button className="action-btn" title="View details" onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp); }} style={{ fontWeight: '700', color: selectedOppTabOpp?.id === opp.id ? '#2563eb' : undefined }}>›</button>
+                                                        <button onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedOppTabOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color: '#fff', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
                                                         <button className="action-btn" onClick={() => handleEdit(opp)}>Edit</button>
                                                     </div>
                                                     <div style={{ display: 'flex', gap: '3px' }}>
@@ -4233,15 +4224,6 @@ dbFetch('/.netlify/functions/activities', {
                                                 </tr>
                                             );
                                         })()}
-                                        {opp.stage === 'Closed Lost' && opp.lostCategory && (
-                                            <tr style={{ background:'#fff5f5' }}>
-                                                <td colSpan={99} style={{ padding:'0.375rem 1rem 0.375rem 2rem', borderBottom:'1px solid #fecaca' }}>
-                                                    <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', marginRight:'0.5rem' }}>Loss Reason:</span>
-                                                    <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#b91c1c', background:'#fee2e2', padding:'0.1rem 0.5rem', borderRadius:'4px', marginRight:'0.5rem' }}>{opp.lostCategory}</span>
-                                                    {opp.lostReason && <span style={{ fontSize:'0.75rem', color:'#64748b' }}>{opp.lostReason}</span>}
-                                                </td>
-                                            </tr>
-                                        )}
                                         </React.Fragment>
                                             );
                                         })}
