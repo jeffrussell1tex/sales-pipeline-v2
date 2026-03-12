@@ -3549,7 +3549,7 @@ dbFetch('/.netlify/functions/activities', {
                                             </td>
                                         </tr>
                                         {/* Activity log expand panel */}
-                                        {expandedOppActivities[opp.id] !== false && (() => {
+                                        {!selectedPipelineOpp && expandedOppActivities[opp.id] !== false && (() => {
                                             const oppActs = activities.filter(a => a.opportunityId === opp.id)
                                                 .sort((a, b) => new Date(b.date) - new Date(a.date));
                                             if (oppActs.length === 0) return null;
@@ -3651,6 +3651,24 @@ dbFetch('/.netlify/functions/activities', {
                                                 </div>
                                             ))}
                                         </div>
+                                        {/* Activity log in panel */}
+                                        {oppActs.length > 0 && (
+                                            <div style={{ paddingTop: '0.5rem', borderTop: '1px solid #e2e8f0' }}>
+                                                <div style={{ fontSize: '0.65rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Activity Log <span style={{ background: '#dbeafe', color: '#1e40af', padding: '0.1rem 0.35rem', borderRadius: '999px', fontWeight: '700', marginLeft: '0.25rem' }}>{oppActs.length}</span></div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                                                    {oppActs.slice(0, 8).map(a => (
+                                                        <div key={a.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.35rem 0.625rem', fontSize: '0.75rem', color: '#475569' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: a.notes ? '0.2rem' : 0 }}>
+                                                                <span style={{ background: '#dbeafe', color: '#1e40af', padding: '0.05rem 0.35rem', borderRadius: '3px', fontSize: '0.625rem', fontWeight: '700', flexShrink: 0 }}>{a.type}</span>
+                                                                <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>{a.date ? new Date(a.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</span>
+                                                            </div>
+                                                            {a.notes && <div style={{ color: '#64748b', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.notes}</div>}
+                                                        </div>
+                                                    ))}
+                                                    {oppActs.length > 8 && <div style={{ fontSize: '0.7rem', color: '#94a3b8', textAlign: 'center' }}>+{oppActs.length - 8} more</div>}
+                                                </div>
+                                            </div>
+                                        )}
                                         {/* Action buttons */}
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.25rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
                                             <button className="btn" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
@@ -4180,7 +4198,7 @@ dbFetch('/.netlify/functions/activities', {
                                                 </div>
                                             </td>
                                         </tr>
-                                        {expandedOppActivities[opp.id] !== false && (() => {
+                                        {!selectedOppTabOpp && expandedOppActivities[opp.id] !== false && (() => {
                                             const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date)-new Date(a.date));
                                             if (oppActs.length === 0) return null;
                                             return (
