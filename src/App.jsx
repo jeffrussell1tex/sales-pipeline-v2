@@ -3347,7 +3347,7 @@ dbFetch('/.netlify/functions/activities', {
                                         <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'stage') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('stage'); setPipelineSortDir('asc'); } }}>Stage {pipelineSortField === 'stage' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         {canViewField('arr') && <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'arr') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('arr'); setPipelineSortDir('desc'); } }}>ARR {pipelineSortField === 'arr' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>}
                                         <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'closeDate') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('closeDate'); setPipelineSortDir('asc'); } }}>Close Date {pipelineSortField === 'closeDate' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        <th style={{ width: '80px' }}>Actions</th>
+                                        <th style={{ width: '130px' }}>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -3533,19 +3533,23 @@ dbFetch('/.netlify/functions/activities', {
                                                 {new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                             </td>
                                             <td style={{ whiteSpace: 'nowrap' }}>
-                                                <div className="action-buttons">
-                                                    <button className="action-btn" title="View details" onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ fontWeight: '700', color: selectedPipelineOpp?.id === opp.id ? '#2563eb' : undefined }}>›</button>
-                                                    <button className="action-btn" onClick={() => {
-                                                        setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account });
-                                                        setEditingActivity(null);
-                                                        setShowActivityModal(true);
-                                                    }}>+ Activity</button>
-                                                    <button className="action-btn" onClick={() => {
-                                                        setEditingTask({ relatedTo: opp.id, opportunityId: opp.id });
-                                                        setShowTaskModal(true);
-                                                    }}>+ Task</button>
-                                                    <button className="action-btn" onClick={() => handleEdit(opp)}>Edit</button>
-                                                    <button className="action-btn delete" onClick={() => handleDelete(opp.id)}>Delete</button>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                    <div style={{ display: 'flex', gap: '3px' }}>
+                                                        <button className="action-btn" title="View details" onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ fontWeight: '700', color: selectedPipelineOpp?.id === opp.id ? '#2563eb' : undefined }}>›</button>
+                                                        <button className="action-btn" onClick={() => handleEdit(opp)}>Edit</button>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '3px' }}>
+                                                        <button className="action-btn" onClick={() => {
+                                                            setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account });
+                                                            setEditingActivity(null);
+                                                            setShowActivityModal(true);
+                                                        }}>+ Activity</button>
+                                                        <button className="action-btn" onClick={() => {
+                                                            setEditingTask({ relatedTo: opp.id, opportunityId: opp.id });
+                                                            setShowTaskModal(true);
+                                                        }}>+ Task</button>
+                                                        <button className="action-btn delete" onClick={() => handleDelete(opp.id)}>Delete</button>
+                                                    </div>
                                                 </div>
                                             </td>
                                         </tr>
@@ -4030,7 +4034,7 @@ dbFetch('/.netlify/functions/activities', {
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='stage') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('stage'); setOppSortDir('asc'); } }}>Stage {oppSortField==='stage' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         {canViewField('arr') && <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='arr') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('arr'); setOppSortDir('desc'); } }}>ARR {oppSortField==='arr' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>}
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='closeDate') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('closeDate'); setOppSortDir('asc'); } }}>Close Date {oppSortField==='closeDate' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        <th style={{ width:'80px' }}>Actions</th>
+                                        <th style={{ width:'130px' }}>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -4189,15 +4193,19 @@ dbFetch('/.netlify/functions/activities', {
                                             </td>
 
                                             <td style={{ whiteSpace:'nowrap' }}>
-                                                <div className="action-buttons">
-                                                    <button className="action-btn" title="View details" onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp); }} style={{ fontWeight: '700', color: selectedOppTabOpp?.id === opp.id ? '#2563eb' : undefined }}>›</button>
-                                                    <button className="action-btn" onClick={() => {
-                                                        setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName||opp.account, companyName: opp.account });
-                                                        setEditingActivity(null); setShowActivityModal(true);
-                                                    }}>+ Activity</button>
-                                                    <button className="action-btn" onClick={() => { setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Task</button>
-                                                    <button className="action-btn" onClick={() => handleEdit(opp)}>Edit</button>
-                                                    <button className="action-btn delete" onClick={() => handleDelete(opp.id)}>Delete</button>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                    <div style={{ display: 'flex', gap: '3px' }}>
+                                                        <button className="action-btn" title="View details" onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp); }} style={{ fontWeight: '700', color: selectedOppTabOpp?.id === opp.id ? '#2563eb' : undefined }}>›</button>
+                                                        <button className="action-btn" onClick={() => handleEdit(opp)}>Edit</button>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '3px' }}>
+                                                        <button className="action-btn" onClick={() => {
+                                                            setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName||opp.account, companyName: opp.account });
+                                                            setEditingActivity(null); setShowActivityModal(true);
+                                                        }}>+ Activity</button>
+                                                        <button className="action-btn" onClick={() => { setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Task</button>
+                                                        <button className="action-btn delete" onClick={() => handleDelete(opp.id)}>Delete</button>
+                                                    </div>
                                                 </div>
                                             </td>
                                         </tr>
