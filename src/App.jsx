@@ -3970,7 +3970,8 @@ dbFetch('/.netlify/functions/activities', {
                                 })}
                             </div>
                             {/* Desktop table */}
-                            <div className="opp-desktop-table">
+                            <div style={{ display: 'flex', alignItems: 'stretch' }}>
+                            <div className="opp-desktop-table" style={{ flex: 1, minWidth: 0, borderRight: selectedPipelineOpp ? '1px solid #e2e8f0' : 'none' }}>
                             {/* Stale deals warning banner */}
                             {(() => {
                                 const staleDeals = oppFilteredOpps.filter(opp => {
@@ -3992,6 +3993,11 @@ dbFetch('/.netlify/functions/activities', {
                                     </div>
                                 );
                             })()}
+                            {!selectedPipelineOpp && (
+                                <div style={{ padding: '0.35rem 1rem', background: '#f1f5f9', borderBottom: '1px solid #e2e8f0', fontSize: '0.7rem', color: '#94a3b8' }}>
+                                    👆 Click any row to see full details
+                                </div>
+                            )}
                             <table>
                                 <thead>
                                     <tr>
@@ -4001,25 +4007,14 @@ dbFetch('/.netlify/functions/activities', {
                                                 onChange={e => setSelectedOpps(e.target.checked ? oppFilteredOpps.map(o => o.id) : [])}
                                                 style={{ width:'15px', height:'15px', cursor:'pointer', accentColor:'#2563eb' }} />
                                         </th>
-                                        <th>Health</th>
+                                        <th style={{ width:'80px' }}>Health</th>
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='salesRep') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('salesRep'); setOppSortDir('asc'); } }}>Sales Rep {oppSortField==='salesRep' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='account') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('account'); setOppSortDir('asc'); } }}>Account {oppSortField==='account' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        <th>Opportunity Name</th>
+                                        <th>Opportunity</th>
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='stage') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('stage'); setOppSortDir('asc'); } }}>Stage {oppSortField==='stage' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         {canViewField('arr') && <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='arr') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('arr'); setOppSortDir('desc'); } }}>ARR {oppSortField==='arr' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>}
-                                        {canViewField('implCost') && <th>Impl. Cost</th>}
-                                        {canViewField('probability') && <th>Prob %</th>}
-                                        {canViewField('weightedValue') && <th>Weighted Value</th>}
-                                        {canViewField('dealAge') && <th>Deal Age</th>}
-                                        {canViewField('timeInStage') && <th>Time in Stage</th>}
-                                        {canViewField('activities') && <th>Activities</th>}
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='closeDate') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('closeDate'); setOppSortDir('asc'); } }}>Close Date {oppSortField==='closeDate' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='closeQuarter') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('closeQuarter'); setOppSortDir('asc'); } }}>Close Quarter {oppSortField==='closeQuarter' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        <th>Products</th>
-                                        <th>Site Unionized</th>
-                                        {canViewField('notes') && <th>Notes</th>}
-                                        {canViewField('nextSteps') && <th>Next Steps</th>}
-                                        <th>Actions</th>
+                                        <th style={{ width:'80px' }}>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -4043,7 +4038,10 @@ dbFetch('/.netlify/functions/activities', {
                                             const health = calculateDealHealth(opp);
                                             return (
                                         <React.Fragment key={opp.id}>
-                                        <tr style={{ background: selectedOpps.includes(opp.id) ? '#eff6ff' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                                        <tr
+                                            style={{ background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : selectedOpps.includes(opp.id) ? '#dbeafe' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc', cursor: 'pointer', borderLeft: selectedPipelineOpp?.id === opp.id ? '3px solid #2563eb' : '3px solid transparent' }}
+                                            onClick={() => setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp)}
+                                        >
                                             <td onClick={e => e.stopPropagation()} style={{ width:'36px' }}>
                                                 <input type="checkbox"
                                                     checked={selectedOpps.includes(opp.id)}
@@ -4144,24 +4142,7 @@ dbFetch('/.netlify/functions/activities', {
                                                     </span>
                                                 )}
                                             </td>}
-                                            {canViewField('implCost') && <td style={{ textAlign:'right', color:'#64748b' }}>${(parseFloat(opp.implementationCost)||0).toLocaleString()}</td>}
-                                            {canViewField('probability') && <td style={{ textAlign:'center', color:'#64748b' }}>{opp.probability ? opp.probability+'%' : '-'}</td>}
-                                            {canViewField('weightedValue') && <td style={{ textAlign:'right' }}>{opp.probability ? '$'+Math.round((parseFloat(opp.arr)||0)*((opp.probability||0)/100)).toLocaleString() : '-'}</td>}
-                                            {canViewField('dealAge') && <td style={{ textAlign:'center', color:'#64748b', fontSize:'0.8125rem' }}>{opp.createdDate ? Math.floor((new Date()-new Date(opp.createdDate))/86400000)+'d' : '-'}</td>}
-                                            {canViewField('timeInStage') && <td style={{ textAlign:'center', color:'#64748b', fontSize:'0.8125rem' }}>{opp.stageChangedDate ? Math.floor((new Date()-new Date(opp.stageChangedDate))/86400000)+'d' : '-'}</td>}
-                                            {canViewField('activities') && <td style={{ textAlign:'center' }}>
-                                                <div style={{ display:'flex', alignItems:'center', gap:'0.375rem', justifyContent:'center' }}>
-                                                    <span style={{ fontSize:'0.75rem', color: activities.filter(a => a.opportunityId===opp.id).length > 0 ? '#2563eb' : '#cbd5e1', fontWeight:'600' }}>{activities.filter(a => a.opportunityId===opp.id).length}</span>
-                                                    {(opp.comments||[]).length > 0 && (
-                                                        <span title="Click to view team notes"
-                                                            onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setNotesPopover({ opp, type:'comments', rect: r }); e.stopPropagation(); }}
-                                                            style={{ display:'inline-flex', alignItems:'center', gap:'0.2rem', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'999px', padding:'0.1rem 0.4rem', fontSize:'0.6875rem', fontWeight:'700', color:'#166534', cursor:'pointer' }}
-                                                            onMouseEnter={e => e.currentTarget.style.background='#dcfce7'} onMouseLeave={e => e.currentTarget.style.background='#f0fdf4'}>
-                                                            💬 {opp.comments.length}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>}
+
                                             <td style={{ whiteSpace:'nowrap', color:'#64748b', fontSize:'0.8125rem' }}>
                                                 {inlineEdit && inlineEdit.oppId===opp.id && inlineEdit.field==='closeDate' ? (
                                                     <input autoFocus type="date" value={inlineEdit.value}
@@ -4190,33 +4171,7 @@ dbFetch('/.netlify/functions/activities', {
                                                     </span>
                                                 )}
                                             </td>
-                                            <td style={{ whiteSpace:'nowrap', color:'#64748b', fontSize:'0.8125rem' }}>{opp.closeQuarter || '-'}</td>
-                                            <td style={{ fontSize:'0.75rem', color:'#475569' }}>
-                                                {(() => { const prods = Array.isArray(opp.products) ? opp.products : (opp.products ? [opp.products] : []); return prods.length > 0 ? (
-                                                    <div style={{ display:'flex', flexWrap:'wrap', gap:'0.2rem' }}>
-                                                        {prods.slice(0,3).map((p,i) => <span key={i} style={{ background:'#dbeafe', color:'#1e40af', padding:'0.1rem 0.4rem', borderRadius:'3px', fontSize:'0.625rem', fontWeight:'600' }}>{p}</span>)}
-                                                        {prods.length > 3 && <span style={{ fontSize:'0.625rem', color:'#94a3b8' }}>+{prods.length-3}</span>}
-                                                    </div>
-                                                ) : '-'; })()}
-                                            </td>
-                                            <td style={{ textAlign:'center', fontSize:'0.75rem' }}>{opp.unionized ? <span style={{ color:'#dc2626', fontWeight:'700' }}>Yes</span> : <span style={{ color:'#94a3b8' }}>No</span>}</td>
 
-
-                                            {canViewField('notes') && (
-                                                <td style={{ maxWidth:'200px' }}>
-                                                    {opp.notes ? (
-                                                        <span style={{ fontSize:'0.75rem', color:'#64748b', cursor:'pointer', display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
-                                                            title={opp.notes} onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setNotesPopover({ opp, type:'notes', rect: r }); e.stopPropagation(); }}>
-                                                            {opp.notes}
-                                                        </span>
-                                                    ) : '-'}
-                                                </td>
-                                            )}
-                                            {canViewField('nextSteps') && (
-                                                <td style={{ minWidth:'200px', maxWidth:'300px', whiteSpace:'normal', lineHeight:'1.4' }}>
-                                                    <div style={{ color:'#64748b', fontSize:'0.8125rem' }}>{opp.nextSteps || '-'}</div>
-                                                </td>
-                                            )}
                                             <td style={{ whiteSpace:'nowrap' }}>
                                                 <div className="action-buttons">
                                                     <button className="action-btn" onClick={() => {
@@ -4267,6 +4222,74 @@ dbFetch('/.netlify/functions/activities', {
                                         })}
                                 </tbody>
                             </table>
+                            </div>{/* end opp-desktop-table */}
+                            {/* ── Option 5 Detail Panel (Opps Tab) ── */}
+                            {selectedPipelineOpp && (() => {
+                                const opp = selectedPipelineOpp;
+                                const health = calculateDealHealth(opp);
+                                const stageDefault = (settings.funnelStages || []).find(s => s.name === opp.stage);
+                                const effectiveProb = (opp.probability !== null && opp.probability !== undefined) ? opp.probability : (stageDefault ? stageDefault.weight : null);
+                                const isOverridden = opp.probability !== null && opp.probability !== undefined && opp.probability !== (stageDefault ? stageDefault.weight : null);
+                                const probNum = (opp.probability !== null && opp.probability !== undefined) ? opp.probability / 100 : (stageDefault ? stageDefault.weight / 100 : 0.3);
+                                const totalVal = (parseFloat(opp.arr) || 0) + (opp.implementationCost || 0);
+                                const weighted = Math.round(totalVal * probNum);
+                                const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+                                const lastAct = oppActs[0];
+                                const daysSinceAct = lastAct ? Math.floor((new Date() - new Date(lastAct.date)) / 86400000) : null;
+                                const dealAgeDays = opp.createdDate ? Math.floor((new Date() - new Date(opp.createdDate)) / 86400000) : null;
+                                const timeInStageDays = opp.stageChangedDate ? Math.floor((new Date() - new Date(opp.stageChangedDate)) / 86400000) : null;
+                                const prods = Array.isArray(opp.products) ? opp.products : (opp.products ? [opp.products] : []);
+                                return (
+                                    <div style={{ width: '300px', flexShrink: 0, background: '#f8fafc', overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
+                                            <div>
+                                                <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#0f172a', lineHeight: 1.3 }}>{opp.opportunityName || opp.account}</div>
+                                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>{opp.account}</div>
+                                            </div>
+                                            <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1.1rem', lineHeight: 1, padding: '0', flexShrink: 0 }}>×</button>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: health.color, flexShrink: 0 }} />
+                                            <span style={{ fontSize: '0.8rem', fontWeight: '600', color: health.color }}>{health.status}</span>
+                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: 'auto' }}>{health.score}/100</span>
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                            {[
+                                                { label: 'Stage', value: <span style={{ background: getStageColor(opp.stage).text + '22', color: getStageColor(opp.stage).text, padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600' }}>{opp.stage}</span> },
+                                                canViewField('arr') && { label: 'ARR', value: '$' + (opp.arr || 0).toLocaleString() },
+                                                canViewField('implCost') && opp.implementationCost > 0 && { label: 'Impl. Cost', value: '$' + (opp.implementationCost || 0).toLocaleString() },
+                                                canViewField('probability') && { label: 'Probability', value: <span style={{ fontWeight: '600', color: isOverridden ? '#f59e0b' : '#475569' }}>{effectiveProb !== null ? effectiveProb + '%' : '—'}{isOverridden ? ' ✎' : ''}</span> },
+                                                canViewField('weightedValue') && { label: 'Weighted Value', value: '$' + weighted.toLocaleString() },
+                                                { label: 'Sales Rep', value: opp.salesRep || '—' },
+                                                { label: 'Close Date', value: opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
+                                                { label: 'Close Quarter', value: opp.closeQuarter || '—' },
+                                                prods.length > 0 && { label: 'Products', value: prods.join(', ') },
+                                                { label: 'Site Unionized', value: opp.unionized ? <span style={{ color: '#dc2626', fontWeight: '600' }}>Yes</span> : 'No' },
+                                                canViewField('dealAge') && dealAgeDays !== null && { label: 'Deal Age', value: <span style={{ color: dealAgeDays > 90 ? '#ef4444' : dealAgeDays > 60 ? '#f59e0b' : '#475569', fontWeight: '600' }}>{dealAgeDays}d</span> },
+                                                canViewField('timeInStage') && timeInStageDays !== null && { label: 'Time in Stage', value: <span style={{ color: (opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost' && timeInStageDays > 30) ? '#ef4444' : '#475569', fontWeight: '600' }}>{timeInStageDays}d</span> },
+                                                canViewField('activities') && { label: 'Activities', value: <span>{oppActs.length}{daysSinceAct !== null ? <span style={{ fontSize: '0.7rem', color: daysSinceAct > 14 ? '#ef4444' : '#94a3b8', marginLeft: '0.35rem' }}>{daysSinceAct}d ago</span> : null}</span> },
+                                                canViewField('nextSteps') && opp.nextSteps && { label: 'Next Steps', value: opp.nextSteps },
+                                                canViewField('notes') && opp.notes && { label: 'Notes', value: opp.notes },
+                                                (opp.stage === 'Closed Lost' && opp.lostCategory) && { label: 'Loss Reason', value: <span style={{ color: '#b91c1c', fontWeight: '600' }}>{opp.lostCategory}{opp.lostReason ? ' — ' + opp.lostReason : ''}</span> },
+                                            ].filter(Boolean).map((row, ri) => (
+                                                <div key={ri} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                                    <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', fontWeight: '600' }}>{row.label}</span>
+                                                    <span style={{ fontSize: '0.8rem', color: '#1e293b' }}>{row.value}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.25rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
+                                            <button className="btn" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
+                                                onClick={e => { e.stopPropagation(); handleEdit(opp); }}>✏️ Edit Opportunity</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
+                                                onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }}>+ Log Activity</button>
+                                            <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
+                                                onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Add Task</button>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                            </div>{/* end split layout */}
                             {oppFilteredOpps.length === 0 && (
                                 <div style={{ textAlign:'center', padding:'4rem 2rem', display:'flex', flexDirection:'column', alignItems:'center', gap:'1rem' }}>
                                     <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
