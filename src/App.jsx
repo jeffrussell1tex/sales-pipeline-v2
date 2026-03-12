@@ -3536,19 +3536,12 @@ dbFetch('/.netlify/functions/activities', {
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                                                     <div style={{ display: 'flex', gap: '3px' }}>
                                                         <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedPipelineOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color: '#fff', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
-                                                        <button className="action-btn" onClick={() => handleEdit(opp)}>Edit</button>
+                                                        <button onClick={() => handleEdit(opp)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
                                                     </div>
                                                     <div style={{ display: 'flex', gap: '3px' }}>
-                                                        <button className="action-btn" onClick={() => {
-                                                            setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account });
-                                                            setEditingActivity(null);
-                                                            setShowActivityModal(true);
-                                                        }}>+ Activity</button>
-                                                        <button className="action-btn" onClick={() => {
-                                                            setEditingTask({ relatedTo: opp.id, opportunityId: opp.id });
-                                                            setShowTaskModal(true);
-                                                        }}>+ Task</button>
-                                                        <button className="action-btn delete" onClick={() => handleDelete(opp.id)}>Delete</button>
+                                                        <button onClick={() => { setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Activity</button>
+                                                        <button onClick={() => { setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Task</button>
+                                                        <button onClick={() => handleDelete(opp.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                     </div>
                                                 </div>
                                             </td>
@@ -4187,15 +4180,12 @@ dbFetch('/.netlify/functions/activities', {
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                                                     <div style={{ display: 'flex', gap: '3px' }}>
                                                         <button onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedOppTabOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color: '#fff', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
-                                                        <button className="action-btn" onClick={() => handleEdit(opp)}>Edit</button>
+                                                        <button onClick={() => handleEdit(opp)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
                                                     </div>
                                                     <div style={{ display: 'flex', gap: '3px' }}>
-                                                        <button className="action-btn" onClick={() => {
-                                                            setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName||opp.account, companyName: opp.account });
-                                                            setEditingActivity(null); setShowActivityModal(true);
-                                                        }}>+ Activity</button>
-                                                        <button className="action-btn" onClick={() => { setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Task</button>
-                                                        <button className="action-btn delete" onClick={() => handleDelete(opp.id)}>Delete</button>
+                                                        <button onClick={() => { setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName||opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Activity</button>
+                                                        <button onClick={() => { setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Task</button>
+                                                        <button onClick={() => handleDelete(opp.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                     </div>
                                                 </div>
                                             </td>
