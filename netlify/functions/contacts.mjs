@@ -1,27 +1,44 @@
 import { db } from '../../db/index.js';
 import { contacts } from '../../db/schema.js';
 import { eq, asc } from 'drizzle-orm';
+import { verifyAuth } from './auth.mjs';
 
 export const handler = async (event) => {
-    const headers = {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-    };
-    if (event.httpMethod === 'OPTIONS') {
-        return { statusCode: 204, headers, body: '' };
-    }
-    const sanitize = (data) => {
-        const allowed = [
-            'id','prefix','firstName','lastName','middleName','suffix','nickName',
-            'title','company','department','workLocation','email','personalEmail',
-            'phone','mobile','address','city','state','zip','country',
-            'managers','directReports','assistantName','homeAddress','notes',
-            'assignedRep','assignedTerritory'
-        ];
-        return Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
-    };
+    const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
+    if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
+    const auth = await verifyAuth(event);
+    if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
+
+    const sanitize = (d) => ({
+        id:                d.id,
+        prefix:            d.prefix            || null,
+        firstName:         d.firstName         || null,
+        middleName:        d.middleName        || null,
+        lastName:          d.lastName          || null,
+        suffix:            d.suffix            || null,
+        nickName:          d.nickName          || null,
+        title:             d.title             || null,
+        company:           d.company           || null,
+        department:        d.department        || null,
+        workLocation:      d.workLocation      || null,
+        email:             d.email             || null,
+        personalEmail:     d.personalEmail     || null,
+        phone:             d.phone             || null,
+        mobile:            d.mobile            || null,
+        address:           d.address           || null,
+        city:              d.city              || null,
+        state:             d.state             || null,
+        zip:               d.zip               || null,
+        country:           d.country           || null,
+        managers:          d.managers          || [],
+        directReports:     d.directReports     || [],
+        assistantName:     d.assistantName     || null,
+        homeAddress:       d.homeAddress       || null,
+        notes:             d.notes             || null,
+        assignedRep:       d.assignedRep       || null,
+        assignedTerritory: d.assignedTerritory || null,
+    });
+
     try {
         if (event.httpMethod === 'GET') {
             const results = await db.select().from(contacts).orderBy(asc(contacts.lastName));
@@ -29,44 +46,33 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
-            if (!data.id) {
-                return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            }
+            if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const [inserted] = await db.insert(contacts).values(sanitize(data)).returning();
             return { statusCode: 201, headers, body: JSON.stringify({ contact: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
-            if (!data.id) {
-                return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            }
-            const { createdAt, ...upsertData } = sanitize(data);
-            const { id, ...updateData } = upsertData;
-            const [upserted] = await db.insert(contacts)
-                .values(upsertData)
-                .onConflictDoUpdate({
-                    target: contacts.id,
-                    set: { ...updateData, updatedAt: new Date() }
-                })
+            if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+            const clean = sanitize(data);
+            const { id, ...updateData } = clean;
+            const [upserted] = await db.insert(contacts).values(clean)
+                .onConflictDoUpdate({ target: contacts.id, set: { ...updateData, updatedAt: new Date() } })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ contact: upserted }) };
         }
         if (event.httpMethod === 'DELETE') {
-            const clear = event.queryStringParameters?.clear;
-            if (clear === 'true') {
+            if (event.queryStringParameters?.clear === 'true') {
                 await db.delete(contacts);
                 return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
             }
             const id = event.queryStringParameters?.id;
-            if (!id) {
-                return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
-            }
+            if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
             await db.delete(contacts).where(eq(contacts.id, id));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
-        console.error('Contacts function error:', err.message);
+        console.error('Contacts error:', err.message);
         return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
     }
 };

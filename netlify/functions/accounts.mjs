@@ -1,25 +1,33 @@
 import { db } from '../../db/index.js';
 import { accounts } from '../../db/schema.js';
 import { eq, asc } from 'drizzle-orm';
+import { verifyAuth } from './auth.mjs';
 
 export const handler = async (event) => {
-    const headers = {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-    };
-    if (event.httpMethod === 'OPTIONS') {
-        return { statusCode: 204, headers, body: '' };
-    }
-    const sanitize = (data) => {
-        const allowed = [
-            'id','name','verticalMarket','industry','address','city','state','zip',
-            'country','website','phone','accountOwner','assignedRep','assignedTerritory',
-            'parentAccountId','notes'
-        ];
-        return Object.fromEntries(Object.entries(data).filter(([k]) => allowed.includes(k)));
-    };
+    const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
+    if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
+    const auth = await verifyAuth(event);
+    if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
+
+    const sanitize = (d) => ({
+        id:                d.id,
+        name:              d.name              || 'Unnamed Account',
+        verticalMarket:    d.verticalMarket    || null,
+        industry:          d.industry          || null,
+        address:           d.address           || null,
+        city:              d.city              || null,
+        state:             d.state             || null,
+        zip:               d.zip               || null,
+        country:           d.country           || null,
+        website:           d.website           || null,
+        phone:             d.phone             || null,
+        accountOwner:      d.accountOwner      || null,
+        assignedRep:       d.assignedRep       || null,
+        assignedTerritory: d.assignedTerritory || null,
+        parentAccountId:   d.parentAccountId   || d.parentId || null,
+        notes:             d.notes             || null,
+    });
+
     try {
         if (event.httpMethod === 'GET') {
             const results = await db.select().from(accounts).orderBy(asc(accounts.name));
@@ -27,46 +35,33 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
-            if (!data.id) {
-                return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            }
-            if (data.parentId && !data.parentAccountId) data.parentAccountId = data.parentId;
+            if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const [inserted] = await db.insert(accounts).values(sanitize(data)).returning();
             return { statusCode: 201, headers, body: JSON.stringify({ account: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
-            if (!data.id) {
-                return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            }
-            if (data.parentId && !data.parentAccountId) data.parentAccountId = data.parentId;
-            const { createdAt, ...upsertData } = sanitize(data);
-            const { id, ...updateData } = upsertData;
-            const [upserted] = await db.insert(accounts)
-                .values(upsertData)
-                .onConflictDoUpdate({
-                    target: accounts.id,
-                    set: { ...updateData, updatedAt: new Date() }
-                })
+            if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+            const clean = sanitize(data);
+            const { id, ...updateData } = clean;
+            const [upserted] = await db.insert(accounts).values(clean)
+                .onConflictDoUpdate({ target: accounts.id, set: { ...updateData, updatedAt: new Date() } })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ account: upserted }) };
         }
         if (event.httpMethod === 'DELETE') {
-            const clear = event.queryStringParameters?.clear;
-            if (clear === 'true') {
+            if (event.queryStringParameters?.clear === 'true') {
                 await db.delete(accounts);
                 return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
             }
             const id = event.queryStringParameters?.id;
-            if (!id) {
-                return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
-            }
+            if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
             await db.delete(accounts).where(eq(accounts.id, id));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
-        console.error('Accounts function error:', err.message);
+        console.error('Accounts error:', err.message);
         return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
     }
 };
