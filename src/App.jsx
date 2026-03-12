@@ -305,12 +305,12 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                                         {lead.estimatedARR ? '$' + (parseFloat(lead.estimatedARR) >= 1000 ? Math.round(parseFloat(lead.estimatedARR)/1000)+'K' : parseFloat(lead.estimatedARR)) : '—'}
                                                     </td>
                                                     <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
-                                                        <div style={{ display:'flex', gap:'0.3rem' }}>
-                                                            <button onClick={() => setEditingLead(lead)} style={{ padding:'0.15rem 0.5rem', border:'1px solid #e2e8f0', borderRadius:'4px', background:'#fff', fontSize:'0.6rem', fontWeight:'700', cursor:'pointer', color:'#475569', fontFamily:'inherit' }}>Edit</button>
+                                                        <div style={{ display: 'flex', gap: '4px' }}>
+                                                            <button onClick={() => setEditingLead(lead)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
                                                             {lead.status !== 'Converted' && (
-                                                                <button onClick={() => convertLead(lead)} style={{ padding:'0.15rem 0.5rem', border:'1px solid #10b981', borderRadius:'4px', background:'none', fontSize:'0.6rem', fontWeight:'700', cursor:'pointer', color:'#10b981', fontFamily:'inherit' }}>→ Opp</button>
+                                                                <button onClick={() => convertLead(lead)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #6ee7b7', background: 'transparent', color: '#059669', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>→ Opp</button>
                                                             )}
-                                                            <button onClick={() => deleteLead(lead.id)} style={{ padding:'0.15rem 0.5rem', border:'1px solid #fecaca', borderRadius:'4px', background:'none', fontSize:'0.6rem', fontWeight:'700', cursor:'pointer', color:'#ef4444', fontFamily:'inherit' }}>Del</button>
+                                                            <button onClick={() => deleteLead(lead.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -4611,9 +4611,9 @@ dbFetch('/.netlify/functions/activities', {
                                                                             </td>
                                                                             <td style={{ padding: '0.5rem', color: '#64748b', fontSize: '0.8125rem' }}>{related}</td>
                                                                             <td style={{ padding: '0.5rem', textAlign: 'right' }}>
-                                                                                <div className="action-buttons">
-                                                                                    <button className="action-btn" onClick={e => { e.stopPropagation(); handleEditTask(task); }}>Edit</button>
-                                                                                    <button className="action-btn delete" onClick={e => { e.stopPropagation(); handleDeleteTask(task.id); }}>Delete</button>
+                                                                                <div style={{ display: 'flex', gap: '4px' }}>
+                                                                                    <button onClick={e => { e.stopPropagation(); handleEditTask(task); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                                                                    <button onClick={e => { e.stopPropagation(); handleDeleteTask(task.id); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                                                 </div>
                                                                             </td>
                                                                         </tr>
@@ -4946,10 +4946,10 @@ dbFetch('/.netlify/functions/activities', {
                                             })()}
                                         </div>
                                         <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: '500', flex: 1, textAlign: 'center' }}>{account.accountOwner || '—'}</span>
-                                        <div className="action-buttons" style={{ flexShrink: 0, textAlign: 'right', display: 'flex', gap: '0.25rem' }}>
-                                            <button className="action-btn" style={{ padding: '0.15rem 0.5rem', fontSize: '0.6875rem' }} onClick={() => handleEditAccount(account)}>Edit</button>
-                                            <button className="action-btn" style={{ padding: '0.15rem 0.5rem', fontSize: '0.6875rem' }} onClick={() => handleAddSubAccount(account)}>+ Sub</button>
-                                            <button className="action-btn delete" style={{ padding: '0.15rem 0.5rem', fontSize: '0.6875rem' }} onClick={() => handleDeleteAccount(account.id)}>Delete</button>
+                                        <div style={{ flexShrink: 0, textAlign: 'right', display: 'flex', gap: '4px' }}>
+                                            <button onClick={() => handleEditAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                            <button onClick={() => handleAddSubAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Sub</button>
+                                            <button onClick={() => handleDeleteAccount(account.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                         </div>
                                     </div>
                                     {expandedAccounts[account.id] && getSubAccounts(account.id).length > 0 && (
@@ -4957,9 +4957,9 @@ dbFetch('/.netlify/functions/activities', {
                                             {getSubAccounts(account.id).map(sub => (
                                                 <div key={sub.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.2rem 0', fontSize: '0.75rem' }}>
                                                     <span style={{ cursor: 'pointer', color: '#1e293b', fontWeight: '500' }} onClick={() => setViewingAccount(sub)}>↳ {sub.name}</span>
-                                                    <div className="action-buttons" style={{ flexShrink: 0 }}>
-                                                        <button className="action-btn" onClick={() => handleEditAccount(sub, true)}>Edit</button>
-                                                        <button className="action-btn delete" onClick={() => handleDeleteSubAccount(account.id, sub.id)}>Delete</button>
+                                                    <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
+                                                        <button onClick={() => handleEditAccount(sub, true)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                                        <button onClick={() => handleDeleteSubAccount(account.id, sub.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -5030,10 +5030,10 @@ dbFetch('/.netlify/functions/activities', {
                                                             <div style={{ color: '#2563eb', fontSize: '0.8125rem', fontWeight: '600', marginTop: '0.125rem' }}>{account.accountOwner}</div>
                                                         )}
                                                     </div>
-                                                    <div className="action-buttons" style={{ flexShrink: 0 }}>
-                                                        <button className="action-btn" onClick={() => handleEditAccount(account)}>Edit</button>
-                                                        <button className="action-btn" onClick={() => handleAddSubAccount(account)}>+ Sub</button>
-                                                        <button className="action-btn delete" onClick={() => handleDeleteAccount(account.id)}>Delete</button>
+                                                    <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
+                                                        <button onClick={() => handleEditAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                                        <button onClick={() => handleAddSubAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Sub</button>
+                                                        <button onClick={() => handleDeleteAccount(account.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                     </div>
                                                 </div>
 
@@ -5145,9 +5145,9 @@ dbFetch('/.netlify/functions/activities', {
                                                                 <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.2rem' }}>📍 {[subAccount.city, subAccount.state].filter(Boolean).join(', ')}</div>
                                                             )}
                                                         </div>
-                                                        <div className="action-buttons" style={{ flexShrink: 0 }}>
-                                                            <button className="action-btn" onClick={() => handleEditAccount(subAccount, true)}>Edit</button>
-                                                            <button className="action-btn delete" onClick={() => handleDeleteSubAccount(account.id, subAccount.id)}>Delete</button>
+                                                        <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
+                                                            <button onClick={() => handleEditAccount(subAccount, true)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                                            <button onClick={() => handleDeleteSubAccount(account.id, subAccount.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -5438,8 +5438,8 @@ dbFetch('/.netlify/functions/activities', {
                                                 {contact.title && <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.1rem' }}>{contact.title}</div>}
                                             </div>
                                             <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
-                                                <button className="action-btn" onClick={e => { e.stopPropagation(); handleEditContact(contact); }} style={{ padding: '0.2rem 0.5rem', fontSize: '0.6875rem' }}>Edit</button>
-                                                <button className="action-btn delete" onClick={e => { e.stopPropagation(); handleDeleteContact(contact.id); }} style={{ padding: '0.2rem 0.5rem', fontSize: '0.6875rem' }}>Del</button>
+                                                <button onClick={e => { e.stopPropagation(); handleEditContact(contact); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                                <button onClick={e => { e.stopPropagation(); handleDeleteContact(contact.id); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                             </div>
                                         </div>
                                         <div className="mobile-card-meta">
@@ -5507,9 +5507,9 @@ dbFetch('/.netlify/functions/activities', {
                                                 ) : '-'}
                                             </div>
                                         </div>
-                                        <div className="action-buttons" style={{ marginLeft: '0.375rem' }}>
-                                            <button className="action-btn" onClick={() => handleEditContact(contact)}>Edit</button>
-                                            <button className="action-btn delete" onClick={() => handleDeleteContact(contact.id)}>Delete</button>
+                                        <div style={{ marginLeft: '0.375rem', display: 'flex', gap: '4px' }}>
+                                            <button onClick={() => handleEditContact(contact)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                            <button onClick={() => handleDeleteContact(contact.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                         </div>
                                     </div>
                                     {/* end contacts-desktop-row */}
