@@ -3327,11 +3327,6 @@ dbFetch('/.netlify/functions/activities', {
                                     </div>
                                 );
                             })()}
-                            {!selectedPipelineOpp && (
-                                <div style={{ padding: '0.35rem 1rem', background: '#f1f5f9', borderBottom: '1px solid #e2e8f0', fontSize: '0.7rem', color: '#94a3b8' }}>
-                                    👆 Click any row to see full details
-                                </div>
-                            )}
                             <table>
                                 <thead>
                                     <tr>
@@ -3403,10 +3398,9 @@ dbFetch('/.netlify/functions/activities', {
                                             return (
                                         <React.Fragment key={opp.id}>
                                         <tr
-                                            style={{ background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : selectedOpps.includes(opp.id) ? '#dbeafe' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc', cursor: 'pointer', borderLeft: selectedPipelineOpp?.id === opp.id ? '3px solid #2563eb' : '3px solid transparent' }}
-                                            onClick={() => setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp)}
+                                            style={{ background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : selectedOpps.includes(opp.id) ? '#dbeafe' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc', borderLeft: selectedPipelineOpp?.id === opp.id ? '3px solid #2563eb' : '3px solid transparent' }}
                                         >
-                                            <td onClick={e => e.stopPropagation()} style={{ width: '36px' }}>
+                                            <td style={{ width: '36px' }}>
                                                 <input type="checkbox"
                                                     checked={selectedOpps.includes(opp.id)}
                                                     onChange={e => setSelectedOpps(prev => e.target.checked ? [...prev, opp.id] : prev.filter(id => id !== opp.id))}
@@ -3536,6 +3530,7 @@ dbFetch('/.netlify/functions/activities', {
                                             </td>
                                             <td style={{ whiteSpace: 'nowrap' }}>
                                                 <div className="action-buttons">
+                                                    <button className="action-btn" title="View details" onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ fontWeight: '700', color: selectedPipelineOpp?.id === opp.id ? '#2563eb' : undefined }}>›</button>
                                                     <button className="action-btn" onClick={() => {
                                                         setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account });
                                                         setEditingActivity(null);
@@ -3993,11 +3988,6 @@ dbFetch('/.netlify/functions/activities', {
                                     </div>
                                 );
                             })()}
-                            {!selectedPipelineOpp && (
-                                <div style={{ padding: '0.35rem 1rem', background: '#f1f5f9', borderBottom: '1px solid #e2e8f0', fontSize: '0.7rem', color: '#94a3b8' }}>
-                                    👆 Click any row to see full details
-                                </div>
-                            )}
                             <table>
                                 <thead>
                                     <tr>
@@ -4039,8 +4029,7 @@ dbFetch('/.netlify/functions/activities', {
                                             return (
                                         <React.Fragment key={opp.id}>
                                         <tr
-                                            style={{ background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : selectedOpps.includes(opp.id) ? '#dbeafe' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc', cursor: 'pointer', borderLeft: selectedPipelineOpp?.id === opp.id ? '3px solid #2563eb' : '3px solid transparent' }}
-                                            onClick={() => setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp)}
+                                            style={{ background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : selectedOpps.includes(opp.id) ? '#dbeafe' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc', borderLeft: selectedPipelineOpp?.id === opp.id ? '3px solid #2563eb' : '3px solid transparent' }}
                                         >
                                             <td onClick={e => e.stopPropagation()} style={{ width:'36px' }}>
                                                 <input type="checkbox"
@@ -4174,6 +4163,7 @@ dbFetch('/.netlify/functions/activities', {
 
                                             <td style={{ whiteSpace:'nowrap' }}>
                                                 <div className="action-buttons">
+                                                    <button className="action-btn" title="View details" onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ fontWeight: '700', color: selectedPipelineOpp?.id === opp.id ? '#2563eb' : undefined }}>›</button>
                                                     <button className="action-btn" onClick={() => {
                                                         setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName||opp.account, companyName: opp.account });
                                                         setEditingActivity(null); setShowActivityModal(true);
