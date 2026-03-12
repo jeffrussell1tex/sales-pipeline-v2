@@ -3295,9 +3295,10 @@ dbFetch('/.netlify/functions/activities', {
                                 })}
                             </div>
                             {/* Desktop table — hidden on mobile */}
+                            <div className="opp-desktop-wrap">
                             <div style={{ fontSize: '0.7rem', color: '#94a3b8', padding: '0.3rem 1rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>👆 Click any row to view full details</div>
-                            <div style={{ display: 'flex', alignItems: 'stretch', height: '520px' }}>
-                            <div className="opp-desktop-table" style={{ flex: 1, minWidth: 0, overflowY: 'auto', borderRight: selectedPipelineOpp ? '1px solid #e2e8f0' : 'none' }}>
+                            <div className="opp-split-layout">
+                            <div className="opp-desktop-table" style={{ borderRight: selectedPipelineOpp ? '1px solid #e2e8f0' : 'none' }}>
                             {/* Stale deals warning banner */}
                             {(() => {
                                 const staleDeals = pipelineFilteredOpps.filter(opp => {
@@ -3681,7 +3682,8 @@ dbFetch('/.netlify/functions/activities', {
                                     </div>
                                 );
                             })()}
-                            </div>{/* end split layout */}
+                            </div>{/* end opp-split-layout */}
+                            </div>{/* end opp-desktop-wrap */}
                         </div>
                     </div>
                     )}
@@ -3987,9 +3989,10 @@ dbFetch('/.netlify/functions/activities', {
                                 })}
                             </div>
                             {/* Desktop table */}
+                            <div className="opp-desktop-wrap">
                             <div style={{ fontSize: '0.7rem', color: '#94a3b8', padding: '0.3rem 1rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>👆 Click any row to view full details</div>
-                            <div style={{ display: 'flex', alignItems: 'stretch', height: '520px' }}>
-                            <div className="opp-desktop-table" style={{ flex: 1, minWidth: 0, overflowY: 'auto', borderRight: selectedOppTabOpp ? '1px solid #e2e8f0' : 'none' }}>
+                            <div className="opp-split-layout">
+                            <div className="opp-desktop-table" style={{ borderRight: selectedOppTabOpp ? '1px solid #e2e8f0' : 'none' }}>
                             {/* Stale deals warning banner */}
                             {(() => {
                                 const staleDeals = oppFilteredOpps.filter(opp => {
@@ -4303,7 +4306,8 @@ dbFetch('/.netlify/functions/activities', {
                                     </div>
                                 );
                             })()}
-                            </div>{/* end split layout */}
+                            </div>{/* end opp-split-layout */}
+                            </div>{/* end opp-desktop-wrap */}
                             {oppFilteredOpps.length === 0 && (
                                 <div style={{ textAlign:'center', padding:'4rem 2rem', display:'flex', flexDirection:'column', alignItems:'center', gap:'1rem' }}>
                                     <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">

@@ -828,6 +828,7 @@
 
             /* Opportunities & Contacts & Leads — hide table on mobile */
             .opp-desktop-table,
+            .opp-desktop-wrap,
             .contacts-desktop-table,
             .contacts-desktop-row,
             .leads-desktop-table { display: none !important; }
@@ -977,3 +978,30 @@
         .opp-mobile-cards,
         .contacts-mobile-cards,
         .leads-mobile-cards { display: none; }
+
+        /* ── Desktop: opp/leads table visible ── */
+        .opp-desktop-table,
+        .leads-desktop-table { display: block; }
+
+        /* ── Desktop wrapper (hint bar + split layout) ── */
+        .opp-desktop-wrap { display: block; }
+
+        /* ── Split layout: table + side panel ── */
+        .opp-split-layout {
+            display: flex;
+            align-items: stretch;
+            height: 520px;
+            overflow: hidden;
+        }
+
+        .opp-desktop-table {
+            flex: 1;
+            min-width: 0;
+            overflow-y: auto;
+        }
+
+        /* table-wrapper must not clip the split layout */
+        .table-wrapper {
+            overflow-x: visible;
+            overflow-y: visible;
+        }
