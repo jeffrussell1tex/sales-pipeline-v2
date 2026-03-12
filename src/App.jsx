@@ -770,6 +770,7 @@ function App() {
     const [selectedAccounts, setSelectedAccounts] = useState([]);
     const [selectedOpps, setSelectedOpps] = useState([]);
     const [selectedPipelineOpp, setSelectedPipelineOpp] = useState(null);
+    const [selectedOppTabOpp, setSelectedOppTabOpp] = useState(null);
     const [bulkAction, setBulkAction] = useState({ stage: '', rep: '' });
     const [tasksSubView, setTasksSubView] = useState('tasks');
     const [completedDateFrom, setCompletedDateFrom] = useState('');
@@ -3398,9 +3399,10 @@ dbFetch('/.netlify/functions/activities', {
                                             return (
                                         <React.Fragment key={opp.id}>
                                         <tr
-                                            style={{ background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : selectedOpps.includes(opp.id) ? '#dbeafe' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc', borderLeft: selectedPipelineOpp?.id === opp.id ? '3px solid #2563eb' : '3px solid transparent' }}
+                                            style={{ background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : selectedOpps.includes(opp.id) ? '#dbeafe' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc', borderLeft: selectedPipelineOpp?.id === opp.id ? '3px solid #2563eb' : '3px solid transparent', cursor: 'pointer' }}
+                                            onClick={() => setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp)}
                                         >
-                                            <td style={{ width: '36px' }}>
+                                            <td style={{ width: '36px' }} onClick={e => e.stopPropagation()}>
                                                 <input type="checkbox"
                                                     checked={selectedOpps.includes(opp.id)}
                                                     onChange={e => setSelectedOpps(prev => e.target.checked ? [...prev, opp.id] : prev.filter(id => id !== opp.id))}
@@ -3966,7 +3968,7 @@ dbFetch('/.netlify/functions/activities', {
                             </div>
                             {/* Desktop table */}
                             <div style={{ display: 'flex', alignItems: 'stretch' }}>
-                            <div className="opp-desktop-table" style={{ flex: 1, minWidth: 0, borderRight: selectedPipelineOpp ? '1px solid #e2e8f0' : 'none' }}>
+                            <div className="opp-desktop-table" style={{ flex: 1, minWidth: 0, borderRight: selectedOppTabOpp ? '1px solid #e2e8f0' : 'none' }}>
                             {/* Stale deals warning banner */}
                             {(() => {
                                 const staleDeals = oppFilteredOpps.filter(opp => {
@@ -4029,7 +4031,8 @@ dbFetch('/.netlify/functions/activities', {
                                             return (
                                         <React.Fragment key={opp.id}>
                                         <tr
-                                            style={{ background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : selectedOpps.includes(opp.id) ? '#dbeafe' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc', borderLeft: selectedPipelineOpp?.id === opp.id ? '3px solid #2563eb' : '3px solid transparent' }}
+                                            style={{ background: selectedOppTabOpp?.id === opp.id ? '#eff6ff' : selectedOpps.includes(opp.id) ? '#dbeafe' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc', borderLeft: selectedOppTabOpp?.id === opp.id ? '3px solid #2563eb' : '3px solid transparent', cursor: 'pointer' }}
+                                            onClick={() => setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp)}
                                         >
                                             <td onClick={e => e.stopPropagation()} style={{ width:'36px' }}>
                                                 <input type="checkbox"
@@ -4163,7 +4166,7 @@ dbFetch('/.netlify/functions/activities', {
 
                                             <td style={{ whiteSpace:'nowrap' }}>
                                                 <div className="action-buttons">
-                                                    <button className="action-btn" title="View details" onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ fontWeight: '700', color: selectedPipelineOpp?.id === opp.id ? '#2563eb' : undefined }}>›</button>
+                                                    <button className="action-btn" title="View details" onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp); }} style={{ fontWeight: '700', color: selectedOppTabOpp?.id === opp.id ? '#2563eb' : undefined }}>›</button>
                                                     <button className="action-btn" onClick={() => {
                                                         setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName||opp.account, companyName: opp.account });
                                                         setEditingActivity(null); setShowActivityModal(true);
@@ -4214,8 +4217,8 @@ dbFetch('/.netlify/functions/activities', {
                             </table>
                             </div>{/* end opp-desktop-table */}
                             {/* ── Option 5 Detail Panel (Opps Tab) ── */}
-                            {selectedPipelineOpp && (() => {
-                                const opp = selectedPipelineOpp;
+                            {selectedOppTabOpp && (() => {
+                                const opp = selectedOppTabOpp;
                                 const health = calculateDealHealth(opp);
                                 const stageDefault = (settings.funnelStages || []).find(s => s.name === opp.stage);
                                 const effectiveProb = (opp.probability !== null && opp.probability !== undefined) ? opp.probability : (stageDefault ? stageDefault.weight : null);
@@ -4236,7 +4239,7 @@ dbFetch('/.netlify/functions/activities', {
                                                 <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#0f172a', lineHeight: 1.3 }}>{opp.opportunityName || opp.account}</div>
                                                 <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>{opp.account}</div>
                                             </div>
-                                            <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1.1rem', lineHeight: 1, padding: '0', flexShrink: 0 }}>×</button>
+                                            <button onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1.1rem', lineHeight: 1, padding: '0', flexShrink: 0 }}>×</button>
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                                             <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: health.color, flexShrink: 0 }} />
