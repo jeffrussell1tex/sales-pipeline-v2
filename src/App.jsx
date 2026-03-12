@@ -4307,7 +4307,6 @@ dbFetch('/.netlify/functions/activities', {
                                     </div>
                                 </div>
                             )}
-                            </div>
                         </div>
                     </div>
                 </div>
