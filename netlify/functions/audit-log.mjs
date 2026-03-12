@@ -1,39 +1,24 @@
 import { db } from '../../db/index.js';
 import { auditLog } from '../../db/schema.js';
-import { desc, eq } from 'drizzle-orm';
-
-const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type'
-};
+import { desc } from 'drizzle-orm';
+import { verifyAuth } from './auth.mjs';
 
 export const handler = async (event) => {
-    if (event.httpMethod === 'OPTIONS') {
-        return { statusCode: 204, headers, body: '' };
-    }
+    const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
+    if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
+    const auth = await verifyAuth(event);
+    if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
 
     try {
-        // GET — return last 500 entries newest first
         if (event.httpMethod === 'GET') {
-            const entries = await db
-                .select()
-                .from(auditLog)
-                .orderBy(desc(auditLog.timestamp))
-                .limit(500);
-
+            const entries = await db.select().from(auditLog).orderBy(desc(auditLog.timestamp)).limit(500);
             return { statusCode: 200, headers, body: JSON.stringify({ entries }) };
         }
-
-        // POST — write a single audit entry
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
-
             if (!data.id || !data.action || !data.entityType || !data.entityId) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing required fields: id, action, entityType, entityId' }) };
             }
-
             const [inserted] = await db.insert(auditLog).values({
                 id:         data.id,
                 action:     data.action,
@@ -45,14 +30,11 @@ export const handler = async (event) => {
                 userName:   data.userName   || null,
                 timestamp:  data.timestamp  ? new Date(data.timestamp) : new Date(),
             }).returning();
-
             return { statusCode: 201, headers, body: JSON.stringify({ entry: inserted }) };
         }
-
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
-
     } catch (err) {
-        console.error('Audit log function error:', err.message);
+        console.error('Audit log error:', err.message);
         return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
     }
 };

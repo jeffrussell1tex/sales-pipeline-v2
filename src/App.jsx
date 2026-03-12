@@ -875,12 +875,9 @@ function App() {
       useEffect(() => {
     if (!clerkUser) return; // Don't load until authenticated
     const loadData = async () => {
-const token = await getToken().catch(() => '');
-const authHeaders = token ? { 'Authorization': 'Bearer ' + token } : {};
 const checkOk = (r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r; };
-const authFetch = (url) => fetch(url, { headers: authHeaders });
 
-authFetch('/.netlify/functions/opportunities')
+dbFetch('/.netlify/functions/opportunities')
 .then(checkOk).then(r => r.json())
 .then(data => {
     const loadedOpps = data.opportunities || [];
@@ -902,33 +899,33 @@ authFetch('/.netlify/functions/opportunities')
 })
 .catch(err => console.error('Failed to load opportunities:', err));
 
-authFetch('/.netlify/functions/accounts')
+dbFetch('/.netlify/functions/accounts')
     .then(checkOk).then(r => r.json())
     .then(data => setAccounts(data.accounts || []))
     .catch(err => console.error('Failed to load accounts:', err));
 
-authFetch('/.netlify/functions/contacts')
+dbFetch('/.netlify/functions/contacts')
     .then(checkOk).then(r => r.json())
     .then(data => setContacts(data.contacts || []))
     .catch(err => console.error('Failed to load contacts:', err));
 
-authFetch('/.netlify/functions/leads')
+dbFetch('/.netlify/functions/leads')
     .then(checkOk).then(r => r.json())
     .then(data => setLeads(data.leads || []))
     .catch(err => console.error('Failed to load leads:', err));
 
 
-authFetch('/.netlify/functions/tasks')
+dbFetch('/.netlify/functions/tasks')
     .then(checkOk).then(r => r.json())
     .then(data => setTasks(data.tasks || []))
     .catch(err => console.error('Failed to load tasks:', err));
 
-authFetch('/.netlify/functions/activities')
+dbFetch('/.netlify/functions/activities')
     .then(checkOk).then(r => r.json())
     .then(data => setActivities(data.activities || []))
     .catch(err => console.error('Failed to load activities:', err));
 
-authFetch('/.netlify/functions/settings')
+dbFetch('/.netlify/functions/settings')
     .then(checkOk).then(r => r.json())
     .then(data => {
         if (data.settings) {
@@ -7461,7 +7458,7 @@ ${bodyHtml}
                     {settingsView === 'audit-log' && (() => {
                         React.useEffect(() => {
                             setAuditLoading(true);
-                            fetch('/.netlify/functions/audit-log')
+                            dbFetch('/.netlify/functions/audit-log')
                                 .then(r => r.json())
                                 .then(data => {
                                     const normalized = (data.entries || []).map(e => ({
@@ -8629,14 +8626,6 @@ ${bodyHtml}
                                                         const syncToDb = async () => {
                                                             setRestoringBackup(true);
                                                             try {
-                                                                // Get fresh token explicitly
-                                                                const token = typeof window.__getClerkToken === 'function'
-                                                                    ? await window.__getClerkToken().catch(() => '')
-                                                                    : '';
-                                                                const authHeaders = token
-                                                                    ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
-                                                                    : { 'Content-Type': 'application/json' };
-
                                                                 const endpoints = [
                                                                     { key: 'opportunities', url: '/.netlify/functions/opportunities' },
                                                                     { key: 'accounts', url: '/.netlify/functions/accounts' },
@@ -8647,16 +8636,15 @@ ${bodyHtml}
                                                                 ];
                                                                 // Step 1: Clear all tables
                                                                 for (const { url } of endpoints) {
-                                                                    await fetch(`${url}?clear=true`, { method: 'DELETE', headers: authHeaders }).catch(() => {});
+                                                                    await dbFetch(`${url}?clear=true`, { method: 'DELETE' }).catch(() => {});
                                                                 }
                                                                 // Step 2: Insert records sequentially per table
                                                                 let insertOk = 0, insertFail = 0;
                                                                 for (const { key, url } of endpoints) {
                                                                     if (!d[key] || d[key].length === 0) continue;
                                                                     for (const record of d[key]) {
-                                                                        const r = await fetch(url, {
+                                                                        const r = await dbFetch(url, {
                                                                             method: 'POST',
-                                                                            headers: authHeaders,
                                                                             body: JSON.stringify(record)
                                                                         }).catch(() => null);
                                                                         if (r && r.ok) insertOk++;
@@ -8665,9 +8653,8 @@ ${bodyHtml}
                                                                 }
                                                                 console.log(`Restore complete: ${insertOk} ok, ${insertFail} failed`);
                                                                 if (d.settings) {
-                                                                    await fetch('/.netlify/functions/settings', {
+                                                                    await dbFetch('/.netlify/functions/settings', {
                                                                         method: 'PUT',
-                                                                        headers: authHeaders,
                                                                         body: JSON.stringify(d.settings)
                                                                     }).catch(() => {});
                                                                 }
@@ -9877,7 +9864,7 @@ ${bodyHtml}
                     existingLeads={leads}
                     onClose={() => setShowLeadImportModal(false)}
                     onImport={async (newLeads) => {
-                        const resp = await dbFetch('/api/leads', {
+                        const resp = await dbFetch('/.netlify/functions/leads', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(newLeads),
