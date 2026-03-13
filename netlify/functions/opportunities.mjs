@@ -131,8 +131,10 @@ export const handler = async (event) => {
                 .returning();
 
             // Email: notify rep when stage has changed
+            console.log('[stageChange] previousStage:', previousStage, '| newStage:', upserted.stage, '| salesRep:', upserted.salesRep);
             if (previousStage && upserted.stage !== previousStage && upserted.salesRep) {
                 getRepEmail(upserted.salesRep).then(repEmail => {
+                    console.log('[stageChange] getRepEmail("' + upserted.salesRep + '") →', repEmail);
                     if (!repEmail) return;
                     return sendEmail({
                         to: repEmail,
