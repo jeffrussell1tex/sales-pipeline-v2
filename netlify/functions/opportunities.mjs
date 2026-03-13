@@ -1,18 +1,18 @@
 import { db } from '../../db/index.js';
-import { opportunities } from '../../db/schema.js';
+import { opportunities, users } from '../../db/schema.js';
 import { eq, asc } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isManager } from './auth.mjs';
 import { sendEmail, emailTemplates } from './send-email.mjs';
-import { createClerkClient } from '@clerk/backend';
 
-// Looks up a Clerk user's email address by their userId.
+// Looks up a rep's email from the users table by their display name.
 // Returns null if not found so email failures never break the main response.
-async function getRepEmail(userId) {
-    if (!userId) return null;
+async function getRepEmail(repName) {
+    if (!repName) return null;
     try {
-        const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
-        const user  = await clerk.users.getUser(userId);
-        return user.emailAddresses?.[0]?.emailAddress || null;
+        const [user] = await db.select({ email: users.email })
+            .from(users)
+            .where(eq(users.name, repName));
+        return user?.email || null;
     } catch (err) {
         console.error('getRepEmail error:', err.message);
         return null;
@@ -90,9 +90,9 @@ export const handler = async (event) => {
 
             // Email: notify rep when a deal is assigned to them
             if (inserted.salesRep && inserted.salesRep !== userId) {
-                const repEmail = await getRepEmail(inserted.salesRep);
-                if (repEmail) {
-                    sendEmail({
+                getRepEmail(inserted.salesRep).then(repEmail => {
+                    if (!repEmail) return;
+                    return sendEmail({
                         to: repEmail,
                         ...emailTemplates.dealAssigned({
                             repName:       inserted.salesRep,
@@ -103,8 +103,8 @@ export const handler = async (event) => {
                             assignedBy:    userId,
                             opportunityId: inserted.id,
                         }),
-                    }).catch(err => console.error('dealAssigned email error:', err.message));
-                }
+                    });
+                }).catch(err => console.error('dealAssigned email error:', err.message));
             }
 
             return { statusCode: 201, headers, body: JSON.stringify({ opportunity: inserted }) };
@@ -132,9 +132,9 @@ export const handler = async (event) => {
 
             // Email: notify rep when stage has changed
             if (previousStage && upserted.stage !== previousStage && upserted.salesRep) {
-                const repEmail = await getRepEmail(upserted.salesRep);
-                if (repEmail) {
-                    sendEmail({
+                getRepEmail(upserted.salesRep).then(repEmail => {
+                    if (!repEmail) return;
+                    return sendEmail({
                         to: repEmail,
                         ...emailTemplates.stageChanged({
                             repName:       upserted.salesRep,
@@ -146,8 +146,8 @@ export const handler = async (event) => {
                             changedBy:     userId,
                             opportunityId: upserted.id,
                         }),
-                    }).catch(err => console.error('stageChanged email error:', err.message));
-                }
+                    });
+                }).catch(err => console.error('stageChanged email error:', err.message));
             }
 
             return { statusCode: 200, headers, body: JSON.stringify({ opportunity: upserted }) };
