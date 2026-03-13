@@ -2,6 +2,22 @@ import { db } from '../../db/index.js';
 import { opportunities } from '../../db/schema.js';
 import { eq, asc } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isManager } from './auth.mjs';
+import { sendEmail, emailTemplates } from './send-email.mjs';
+import { createClerkClient } from '@clerk/backend';
+
+// Looks up a Clerk user's email address by their userId.
+// Returns null if not found so email failures never break the main response.
+async function getRepEmail(userId) {
+    if (!userId) return null;
+    try {
+        const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+        const user  = await clerk.users.getUser(userId);
+        return user.emailAddresses?.[0]?.emailAddress || null;
+    } catch (err) {
+        console.error('getRepEmail error:', err.message);
+        return null;
+    }
+}
 
 export const handler = async (event) => {
     const headers = {
@@ -64,19 +80,46 @@ export const handler = async (event) => {
             }
             return { statusCode: 200, headers, body: JSON.stringify({ opportunities: results }) };
         }
+
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
             const [inserted] = await db.insert(opportunities).values(sanitize(data)).returning();
+
+            // Email: notify rep when a deal is assigned to them
+            if (inserted.salesRep && inserted.salesRep !== userId) {
+                const repEmail = await getRepEmail(inserted.salesRep);
+                if (repEmail) {
+                    sendEmail({
+                        to: repEmail,
+                        ...emailTemplates.dealAssigned({
+                            repName:       inserted.salesRep,
+                            dealName:      inserted.opportunityName || 'New Deal',
+                            account:       inserted.account,
+                            arr:           inserted.arr,
+                            stage:         inserted.stage,
+                            assignedBy:    userId,
+                            opportunityId: inserted.id,
+                        }),
+                    }).catch(err => console.error('dealAssigned email error:', err.message));
+                }
+            }
+
             return { statusCode: 201, headers, body: JSON.stringify({ opportunity: inserted }) };
         }
+
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
+
+            // Fetch the existing record so we can detect stage changes
+            const [existing] = await db.select().from(opportunities).where(eq(opportunities.id, data.id));
+            const previousStage = existing?.stage || null;
+
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(opportunities)
@@ -86,8 +129,30 @@ export const handler = async (event) => {
                     set: { ...updateData, updatedAt: new Date() }
                 })
                 .returning();
+
+            // Email: notify rep when stage has changed
+            if (previousStage && upserted.stage !== previousStage && upserted.salesRep) {
+                const repEmail = await getRepEmail(upserted.salesRep);
+                if (repEmail) {
+                    sendEmail({
+                        to: repEmail,
+                        ...emailTemplates.stageChanged({
+                            repName:       upserted.salesRep,
+                            dealName:      upserted.opportunityName || 'Deal',
+                            account:       upserted.account,
+                            arr:           upserted.arr,
+                            fromStage:     previousStage,
+                            toStage:       upserted.stage,
+                            changedBy:     userId,
+                            opportunityId: upserted.id,
+                        }),
+                    }).catch(err => console.error('stageChanged email error:', err.message));
+                }
+            }
+
             return { statusCode: 200, headers, body: JSON.stringify({ opportunity: upserted }) };
         }
+
         if (event.httpMethod === 'DELETE') {
             const clear = event.queryStringParameters?.clear;
             if (clear === 'true') {
@@ -101,6 +166,7 @@ export const handler = async (event) => {
             await db.delete(opportunities).where(eq(opportunities.id, id));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
+
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     } catch (err) {
         console.error('Opportunities function error:', err.message);
