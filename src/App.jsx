@@ -7647,7 +7647,7 @@ ${bodyHtml}
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {assignedUsers.filter(u => u.userType !== 'Manager' && u.userType !== 'Admin' && getRepTotal(u) > 0)
+                                                {allReps.filter(u => getRepTotal(u) > 0)
                                                     .sort((a,b) => (a.territory||'').localeCompare(b.territory||''))
                                                     .map((u, i, arr) => {
                                                         const tq = getRepTotal(u);
@@ -7676,7 +7676,7 @@ ${bodyHtml}
                                                             </React.Fragment>
                                                         );
                                                     })}
-                                                {assignedUsers.every(u => getRepTotal(u) === 0) && (
+                                                {allReps.every(u => getRepTotal(u) === 0) && (
                                                     <tr><td colSpan={7} style={{ padding:'1.5rem 0', color:'#94a3b8', textAlign:'center' }}>Set quotas to see commission projections.</td></tr>
                                                 )}
                                             </tbody>
