@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 
 export default function UserModal({ user, settings, onClose, onSave }) {
     const [formData, setFormData] = useState(user || {
@@ -6,12 +6,10 @@ export default function UserModal({ user, settings, onClose, onSave }) {
         name: '', title: '', company: '', department: '', workLocation: '',
         email: '', personalEmail: '', phone: '', mobile: '',
         role: '', userType: 'User',
-        username: '', password: '',
         address: '', city: '', state: '', zip: '', country: '',
         homeAddress: '', notes: ''
     });
     const [activeUserTab, setActiveUserTab] = useState('primary');
-    const [showPassword, setShowPassword] = useState(false);
 
     const handleChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -19,15 +17,6 @@ export default function UserModal({ user, settings, onClose, onSave }) {
             const fn = field === 'firstName' ? value : formData.firstName;
             const ln = field === 'lastName' ? value : formData.lastName;
             setFormData(prev => ({ ...prev, [field]: value, name: (fn + ' ' + ln).trim() }));
-        }
-        // Auto-generate username from first initial + last name if username empty
-        if ((field === 'firstName' || field === 'lastName') && !formData.username) {
-            const fn = field === 'firstName' ? value : formData.firstName;
-            const ln = field === 'lastName' ? value : formData.lastName;
-            if (fn && ln) {
-                const autoUsername = (fn.charAt(0) + ln).toLowerCase().replace(/[^a-z0-9]/g, '');
-                setFormData(prev => ({ ...prev, [field]: value, name: (fn + ' ' + ln).trim(), username: autoUsername }));
-            }
         }
     };
 
@@ -51,7 +40,7 @@ export default function UserModal({ user, settings, onClose, onSave }) {
 
                 <div style={{ display: 'flex', background: '#f1f3f5', borderRadius: '6px', padding: '3px', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '2px' }}>
                     <button type="button" onClick={() => setActiveUserTab('primary')} style={tabBtnStyle(activeUserTab === 'primary')}>Primary Info</button>
-                    <button type="button" onClick={() => setActiveUserTab('security')} style={tabBtnStyle(activeUserTab === 'security')}>Login & Security</button>
+                    <button type="button" onClick={() => setActiveUserTab('role')} style={tabBtnStyle(activeUserTab === 'role')}>Role &amp; Access</button>
                     <button type="button" onClick={() => setActiveUserTab('additional')} style={tabBtnStyle(activeUserTab === 'additional')}>Additional Info</button>
                 </div>
 
@@ -99,72 +88,28 @@ export default function UserModal({ user, settings, onClose, onSave }) {
                     </div>
                     )}
 
-                    {activeUserTab === 'security' && (
-                    <div style={{ maxWidth: '400px' }}>
+                    {activeUserTab === 'role' && (
+                    <div style={{ maxWidth: '480px' }}>
                         <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '1.25rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                                <span style={{ fontSize: '1.125rem' }}>🔐</span>
-                                <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>Login Credentials</span>
+                                <span style={{ fontSize: '1.125rem' }}>🔑</span>
+                                <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>Role &amp; Access Level</span>
                             </div>
                             <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '0 0 1rem', lineHeight: 1.5 }}>
-                                Set a username and password for this user. They will use these credentials to log in to the application.
+                                Set the user's role to control what they can see and do in the app. Login credentials are managed through Clerk — users receive an invitation email to set their own password.
                             </p>
-                            <div className="form-grid" style={{ gridTemplateColumns: '1fr' }}>
-                                <div className="form-group">
-                                    <label>Username*</label>
-                                    <input
-                                        type="text"
-                                        value={formData.username || ''}
-                                        onChange={e => setFormData(prev => ({ ...prev, username: e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, '') }))}
-                                        placeholder="e.g., jsmith"
-                                        required
-                                        autoComplete="off"
-                                        style={{ fontFamily: 'monospace, inherit' }}
-                                    />
-                                    <span style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '0.25rem', display: 'block' }}>Lowercase letters, numbers, dots, hyphens only</span>
-                                </div>
-                                <div className="form-group">
-                                    <label>Password*</label>
-                                    <div style={{ position: 'relative' }}>
-                                        <input
-                                            type={showPassword ? 'text' : 'password'}
-                                            value={formData.password || ''}
-                                            onChange={e => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                                            placeholder="Enter password"
-                                            required
-                                            autoComplete="new-password"
-                                            style={{ paddingRight: '3rem' }}
-                                        />
-                                        <button type="button" onClick={() => setShowPassword(!showPassword)}
-                                            style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8125rem', color: '#64748b', fontFamily: 'inherit', padding: '0.25rem' }}>
-                                            {showPassword ? '🙈' : '👁'}
-                                        </button>
-                                    </div>
-                                    {formData.password && (
-                                        <div style={{ marginTop: '0.375rem' }}>
-                                            <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.25rem' }}>
-                                                {[1,2,3,4].map(i => (
-                                                    <div key={i} style={{ flex: 1, height: '3px', borderRadius: '2px', background: formData.password.length >= i * 3 ? (formData.password.length >= 10 ? '#10b981' : formData.password.length >= 6 ? '#f59e0b' : '#ef4444') : '#e2e8f0' }} />
-                                                ))}
-                                            </div>
-                                            <span style={{ fontSize: '0.625rem', color: formData.password.length >= 10 ? '#10b981' : formData.password.length >= 6 ? '#f59e0b' : '#ef4444' }}>
-                                                {formData.password.length >= 10 ? 'Strong' : formData.password.length >= 6 ? 'Moderate' : 'Weak — use 6+ characters'}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                        <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                             <div className="form-group" style={{ marginBottom: 0 }}>
                                 <label>User Type / Role*</label>
                                 <select value={formData.userType || 'User'} onChange={e => setFormData(prev => ({ ...prev, userType: e.target.value }))} required>
-                                    <option value="Admin">Admin — Full access, manage settings & users</option>
-                                    <option value="Manager">Manager — View all data, edit & delete</option>
-                                    <option value="User">Sales Rep — Own data only, create & edit</option>
+                                    <option value="Admin">Admin — Full access, manage settings &amp; users</option>
+                                    <option value="Manager">Manager — View all data, edit &amp; delete</option>
+                                    <option value="User">Sales Rep — Own data only, create &amp; edit</option>
                                     <option value="ReadOnly">Read-Only — View only, no changes</option>
                                 </select>
                             </div>
+                        </div>
+                        <div style={{ padding: '0.875rem 1rem', background: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe', fontSize: '0.75rem', color: '#1e40af', lineHeight: 1.6 }}>
+                            <strong>How login works:</strong> Users sign in via Clerk using their email address. Create their profile here to assign their role and team, then invite them from the Clerk dashboard so they can set their password and access the app.
                         </div>
                     </div>
                     )}
@@ -193,4 +138,3 @@ export default function UserModal({ user, settings, onClose, onSave }) {
         </div>
     );
 }
-

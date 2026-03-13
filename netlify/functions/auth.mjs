@@ -18,7 +18,12 @@ export async function verifyAuth(event) {
         // Verify the JWT using the secret key
         const payload = await verifyToken(token, {
             secretKey: clerkSecretKey,
-            authorizedParties: ['https://salespipelinetracker.com', 'http://localhost:5173']
+            authorizedParties: [
+                'https://salespipelinetracker.com',
+                'https://sales-pipeline-v2.netlify.app',
+                'http://localhost:5173',
+                'http://localhost:8888',
+            ]
         });
         const userId = payload.sub || '';
 

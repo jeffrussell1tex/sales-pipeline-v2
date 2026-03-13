@@ -2543,8 +2543,6 @@ dbFetch('/.netlify/functions/activities', {
         return () => clearInterval(interval);
     }, [tasks, dismissedDueTodayAlerts]);
 
-    const [loginError, setLoginError] = useState('');
-
     const handleLogout = () => signOut();
 
     if (!clerkLoaded) {
@@ -8849,7 +8847,7 @@ ${bodyHtml}
 
                                 <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#fffbeb', borderRadius: '8px', border: '1px solid #fde68a' }}>
                                     <div style={{ fontSize: '0.8125rem', color: '#92400e' }}>
-                                        <strong>Note:</strong> Currently, all data is stored in your browser's local storage. Cloud and Google Sheets integrations are planned for future releases. Use Data Management to export/import data between devices in the meantime.
+                                        <strong>Note:</strong> All data is stored securely in your cloud Postgres database (Neon) and accessed via authenticated API calls. Each session is verified using your Clerk login token.
                                     </div>
                                 </div>
                             </div>
