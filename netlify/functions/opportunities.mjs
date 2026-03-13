@@ -90,21 +90,25 @@ export const handler = async (event) => {
 
             // Email: notify rep when a deal is assigned to them
             if (inserted.salesRep && inserted.salesRep !== userId) {
-                getRepEmail(inserted.salesRep).then(repEmail => {
-                    if (!repEmail) return;
-                    return sendEmail({
-                        to: repEmail,
-                        ...emailTemplates.dealAssigned({
-                            repName:       inserted.salesRep,
-                            dealName:      inserted.opportunityName || 'New Deal',
-                            account:       inserted.account,
-                            arr:           inserted.arr,
-                            stage:         inserted.stage,
-                            assignedBy:    userId,
-                            opportunityId: inserted.id,
-                        }),
-                    });
-                }).catch(err => console.error('dealAssigned email error:', err.message));
+                try {
+                    const repEmail = await getRepEmail(inserted.salesRep);
+                    if (repEmail) {
+                        await sendEmail({
+                            to: repEmail,
+                            ...emailTemplates.dealAssigned({
+                                repName:       inserted.salesRep,
+                                dealName:      inserted.opportunityName || 'New Deal',
+                                account:       inserted.account,
+                                arr:           inserted.arr,
+                                stage:         inserted.stage,
+                                assignedBy:    userId,
+                                opportunityId: inserted.id,
+                            }),
+                        });
+                    }
+                } catch (err) {
+                    console.error('dealAssigned email error:', err.message);
+                }
             }
 
             return { statusCode: 201, headers, body: JSON.stringify({ opportunity: inserted }) };
@@ -131,25 +135,29 @@ export const handler = async (event) => {
                 .returning();
 
             // Email: notify rep when stage has changed
-            console.log('[stageChange] previousStage:', previousStage, '| newStage:', upserted.stage, '| salesRep:', upserted.salesRep);
             if (previousStage && upserted.stage !== previousStage && upserted.salesRep) {
-                getRepEmail(upserted.salesRep).then(repEmail => {
-                    console.log('[stageChange] getRepEmail("' + upserted.salesRep + '") →', repEmail);
-                    if (!repEmail) return;
-                    return sendEmail({
-                        to: repEmail,
-                        ...emailTemplates.stageChanged({
-                            repName:       upserted.salesRep,
-                            dealName:      upserted.opportunityName || 'Deal',
-                            account:       upserted.account,
-                            arr:           upserted.arr,
-                            fromStage:     previousStage,
-                            toStage:       upserted.stage,
-                            changedBy:     userId,
-                            opportunityId: upserted.id,
-                        }),
-                    });
-                }).catch(err => console.error('stageChanged email error:', err.message));
+                try {
+                    const repEmail = await getRepEmail(upserted.salesRep);
+                    console.log('[stageChange] previousStage:', previousStage, '| newStage:', upserted.stage, '| salesRep:', upserted.salesRep, '| email:', repEmail);
+                    if (repEmail) {
+                        await sendEmail({
+                            to: repEmail,
+                            ...emailTemplates.stageChanged({
+                                repName:       upserted.salesRep,
+                                dealName:      upserted.opportunityName || 'Deal',
+                                account:       upserted.account,
+                                arr:           upserted.arr,
+                                fromStage:     previousStage,
+                                toStage:       upserted.stage,
+                                changedBy:     userId,
+                                opportunityId: upserted.id,
+                            }),
+                        });
+                        console.log('[stageChange] email sent to', repEmail);
+                    }
+                } catch (err) {
+                    console.error('stageChanged email error:', err.message);
+                }
             }
 
             return { statusCode: 200, headers, body: JSON.stringify({ opportunity: upserted }) };
