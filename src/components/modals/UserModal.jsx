@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-export default function UserModal({ user, onClose, onSave }) {
+export default function UserModal({ user, settings, onClose, onSave }) {
     const [formData, setFormData] = useState(user || {
         prefix: '', firstName: '', middleName: '', lastName: '', suffix: '', nickName: '',
         name: '', title: '', company: '', department: '', workLocation: '',
@@ -78,8 +78,18 @@ export default function UserModal({ user, onClose, onSave }) {
                         <div className="form-group"><label>Personal Email</label><input type="email" value={formData.personalEmail || ''} onChange={e => handleChange('personalEmail', e.target.value)} /></div>
                         <div className="form-group"><label>Work Phone</label><input type="tel" value={formData.phone || ''} onChange={e => handleChange('phone', e.target.value)} /></div>
                         <div className="form-group"><label>Mobile</label><input type="tel" value={formData.mobile || ''} onChange={e => handleChange('mobile', e.target.value)} /></div>
-                        <div className="form-group"><label>Territory</label><input type="text" value={formData.territory || ''} onChange={e => handleChange('territory', e.target.value)} placeholder="e.g., West, Northeast, EMEA" /></div>
-                        <div className="form-group"><label>Team</label><input type="text" value={formData.team || ''} onChange={e => handleChange('team', e.target.value)} placeholder="e.g., Enterprise, Mid-Market, SMB" /></div>
+                        <div className="form-group"><label>Territory</label>
+                            {formData.territory
+                                ? <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', background: '#f8fafc', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>📍 {formData.territory}</div>
+                                : <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', background: '#f8fafc', color: '#94a3b8' }}>Assigned via Team Builder</div>
+                            }
+                        </div>
+                        <div className="form-group"><label>Team</label>
+                            {formData.team
+                                ? <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', background: '#f8fafc', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>👥 {formData.team}</div>
+                                : <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', background: '#f8fafc', color: '#94a3b8' }}>Assigned via Team Builder</div>
+                            }
+                        </div>
                     </div>
                     )}
 

@@ -601,6 +601,111 @@ function KanbanView({ stages, pipelineFilteredOpps, kanbanDragging, kanbanDragOv
     );
 }
 
+
+function TerritoriesSettings({ settings, setSettings, onBack }) {
+    const { useState } = React;
+    const territories = settings.territories || [];
+    const [newName, setNewName] = useState('');
+    const [editingId, setEditingId] = useState(null);
+    const [editingName, setEditingName] = useState('');
+
+    const addTerritory = () => {
+        const trimmed = newName.trim();
+        if (!trimmed) return;
+        if (territories.some(t => t.name.toLowerCase() === trimmed.toLowerCase())) return;
+        const entry = { id: 'terr_' + Date.now(), name: trimmed };
+        setSettings(prev => ({ ...prev, territories: [...(prev.territories || []), entry] }));
+        setNewName('');
+    };
+
+    const saveEdit = (id) => {
+        const trimmed = editingName.trim();
+        if (!trimmed) return;
+        const oldName = territories.find(t => t.id === id)?.name;
+        const updatedTerritories = territories.map(t => t.id === id ? { ...t, name: trimmed } : t);
+        // Sync rename onto users and teams
+        const updatedUsers = (settings.users || []).map(u => u.territory === oldName ? { ...u, territory: trimmed } : u);
+        const updatedTeams = (settings.teams || []).map(t => t.territory === oldName ? { ...t, territory: trimmed } : t);
+        setSettings(prev => ({ ...prev, territories: updatedTerritories, users: updatedUsers, teams: updatedTeams }));
+        setEditingId(null);
+    };
+
+    const deleteTerritory = (id) => {
+        const name = territories.find(t => t.id === id)?.name;
+        const updatedTerritories = territories.filter(t => t.id !== id);
+        // Clear territory from users and teams that used it
+        const updatedUsers = (settings.users || []).map(u => u.territory === name ? { ...u, territory: '' } : u);
+        const updatedTeams = (settings.teams || []).map(t => t.territory === name ? { ...t, territory: '' } : t);
+        setSettings(prev => ({ ...prev, territories: updatedTerritories, users: updatedUsers, teams: updatedTeams }));
+    };
+
+    const inputStyle = { padding: '0.5rem 0.75rem', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'inherit', outline: 'none' };
+
+    return (
+        <div className="table-container">
+            <div className="table-header" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <button className="btn btn-secondary" onClick={onBack}>← Back</button>
+                <div>
+                    <h2>Territories</h2>
+                    <p style={{ margin: 0, fontSize: '0.875rem', color: '#64748b' }}>Define sales territories for assignment to teams and reps</p>
+                </div>
+            </div>
+            <div style={{ padding: '1.5rem', maxWidth: '520px' }}>
+                {/* Add new */}
+                <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                    <input
+                        style={{ ...inputStyle, flex: 1 }}
+                        value={newName}
+                        onChange={e => setNewName(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && addTerritory()}
+                        placeholder="e.g. Northeast, Gulf Coast, EMEA…"
+                    />
+                    <button className="btn" onClick={addTerritory} disabled={!newName.trim()}>+ Add</button>
+                </div>
+
+                {territories.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8', border: '1px dashed #e2e8f0', borderRadius: '8px' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📍</div>
+                        <div style={{ fontWeight: '600', marginBottom: '0.25rem' }}>No territories defined</div>
+                        <div style={{ fontSize: '0.875rem' }}>Add territories above to get started.</div>
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {territories.map(t => {
+                            const usersInTerritory = (settings.users || []).filter(u => u.territory === t.name).length;
+                            const teamsInTerritory = (settings.teams || []).filter(tm => tm.territory === t.name).length;
+                            return (
+                                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                                    {editingId === t.id ? (
+                                        <>
+                                            <input style={{ ...inputStyle, flex: 1 }} value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveEdit(t.id); if (e.key === 'Escape') setEditingId(null); }} autoFocus />
+                                            <button onClick={() => saveEdit(t.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: 'none', background: '#2563eb', color: '#fff', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+                                            <button onClick={() => setEditingId(null)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div style={{ flex: 1 }}>
+                                                <span style={{ fontWeight: '600', fontSize: '0.9375rem', color: '#1e293b' }}>📍 {t.name}</span>
+                                                <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: '0.75rem' }}>
+                                                    {usersInTerritory > 0 && `${usersInTerritory} rep${usersInTerritory > 1 ? 's' : ''}`}
+                                                    {usersInTerritory > 0 && teamsInTerritory > 0 && ' · '}
+                                                    {teamsInTerritory > 0 && `${teamsInTerritory} team${teamsInTerritory > 1 ? 's' : ''}`}
+                                                </span>
+                                            </div>
+                                            <button onClick={() => { setEditingId(t.id); setEditingName(t.name); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
+                                            <button onClick={() => deleteTerritory(t.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function TeamBuilder({ settings, setSettings, onBack }) {
     const { useState } = React;
     const allUsers = (settings.users || []).filter(u => u.name);
@@ -672,7 +777,11 @@ function TeamBuilder({ settings, setSettings, onBack }) {
                             </div>
                             <div>
                                 <label style={labelSt}>Territory</label>
-                                <input style={inputStyle} value={teamForm.territory} onChange={e => setTeamForm(p => ({ ...p, territory: e.target.value }))} placeholder="e.g. Northeast" />
+                                <select style={inputStyle} value={teamForm.territory} onChange={e => setTeamForm(p => ({ ...p, territory: e.target.value }))}>
+                                    <option value="">— Select territory —</option>
+                                    {(settings.territories || []).map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                                </select>
+                                {(settings.territories || []).length === 0 && <p style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: '0.375rem' }}>No territories defined. Add territories in the Territories settings first.</p>}
                             </div>
                         </div>
                         <div style={{ marginBottom: '1rem' }}>
@@ -823,6 +932,7 @@ function App() {
             fiscalYearStart: 10,
             users: [],
             teams: [],
+            territories: [],
             logoUrl: '',
             taskTypes: ['Call', 'Meeting', 'Email'],
             // auditLog moved to dedicated audit_log DB table
@@ -5453,11 +5563,11 @@ dbFetch('/.netlify/functions/activities', {
                                 });
                                 exportToCSV(
                                     `contacts-${new Date().toISOString().slice(0,10)}.csv`,
-                                    ['First Name','Last Name','Title','Company','Email','Phone','Mobile','LinkedIn','Territory','Notes'],
+                                    ['First Name','Last Name','Title','Company','Email','Phone','Mobile','LinkedIn','Notes'],
                                     sorted.map(c => [
                                         c.firstName||'', c.lastName||'', c.title||'', c.company||'',
                                         c.email||'', c.phone||'', c.mobile||'',
-                                        c.linkedin||'', c.territory||'', c.notes||''
+                                        c.linkedin||'', c.notes||''
                                     ])
                                 , 'contacts');
                             }}>{exportingCSV === 'contacts' ? '⏳ Exporting…' : '📤 Export'}</button>
@@ -7501,6 +7611,7 @@ ${bodyHtml}
                                     {[
                                         { view: 'users', icon: '👥', title: 'Manage Users', desc: 'Add, edit, and manage team members, roles, and permissions' },
                                         { view: 'team-builder', icon: '🏗️', title: 'Team Builder', desc: 'Define sales teams, assign managers, territories, and reps' },
+                                        { view: 'territories', icon: '📍', title: 'Territories', desc: 'Define sales territories available for assignment to teams and reps' },
                                         { view: 'pipelines', icon: '🔀', title: 'Pipelines', desc: 'Create and manage multiple sales pipelines (new business, renewals, product lines)' },
                                         { view: 'fiscal-year', icon: '📅', title: 'Fiscal Year Settings', desc: 'Configure fiscal year start month and quarter calculations' },
                                         { view: 'logo', icon: '🖼️', title: 'Company Logo', desc: 'Upload and manage your company logo' },
@@ -8044,6 +8155,14 @@ ${bodyHtml}
                             onBack={() => setSettingsView('menu')}
                         />
                     )}
+                    {settingsView === 'territories' && (
+                        <TerritoriesSettings
+                            settings={settings}
+                            setSettings={setSettings}
+                            onBack={() => setSettingsView('menu')}
+                        />
+                    )}
+
                     {settingsView === 'pain-points' && (
                         <div className="table-container">
                             <div className="table-header">
@@ -9049,6 +9168,7 @@ ${bodyHtml}
             {showUserModal && (
                 <UserModal
                     user={editingUser}
+                    settings={settings}
                     onClose={() => setShowUserModal(false)}
                     onSave={handleSaveUser}
                 />
