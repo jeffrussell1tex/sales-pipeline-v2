@@ -90,6 +90,12 @@ export default function UserModal({ user, settings, onClose, onSave }) {
                                 : <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', background: '#f8fafc', color: '#94a3b8' }}>Assigned via Team Builder</div>
                             }
                         </div>
+                        <div className="form-group"><label>Vertical</label>
+                            {formData.vertical
+                                ? <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', background: '#f8fafc', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>🏭 {formData.vertical}</div>
+                                : <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', background: '#f8fafc', color: '#94a3b8' }}>Assigned via Team Builder</div>
+                            }
+                        </div>
                     </div>
                     )}
 
