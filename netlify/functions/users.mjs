@@ -34,7 +34,7 @@ export const handler = async (event) => {
     const sanitize = (data) => ({
         id:           data.id,
         name:         ((data.firstName || '') + ' ' + (data.lastName || '')).trim() || data.name || '',
-        email:        data.email || '',
+        email:        data.email || data.personalEmail || '',
         role:         data.userType || data.role || 'User',
         team:         data.team     || null,
         territory:    data.territory || null,
