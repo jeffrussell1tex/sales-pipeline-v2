@@ -23,9 +23,11 @@ export const handler = async (event) => {
     }
 
     const { userRole } = auth;
+    console.log('users.mjs: userRole =', userRole, '| method =', event.httpMethod);
 
     // Only Admins and Managers can access user data
     if (!ADMIN_ROLES.includes(userRole)) {
+        console.warn('users.mjs: forbidden role', userRole);
         return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: insufficient role' }) };
     }
 
@@ -144,7 +146,7 @@ export const handler = async (event) => {
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
 
     } catch (err) {
-        console.error('Users function error:', err.message);
+        console.error('Users function error:', err.message, '| stack:', err.stack);
         return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
     }
 };
