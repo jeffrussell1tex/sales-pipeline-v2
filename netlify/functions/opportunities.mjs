@@ -138,7 +138,6 @@ export const handler = async (event) => {
             if (previousStage && upserted.stage !== previousStage && upserted.salesRep) {
                 try {
                     const repEmail = await getRepEmail(upserted.salesRep);
-                    console.log('[stageChange] previousStage:', previousStage, '| newStage:', upserted.stage, '| salesRep:', upserted.salesRep, '| email:', repEmail);
                     if (repEmail) {
                         await sendEmail({
                             to: repEmail,
@@ -153,7 +152,9 @@ export const handler = async (event) => {
                                 opportunityId: upserted.id,
                             }),
                         });
-                        console.log('[stageChange] email sent to', repEmail);
+                        console.log('stageChanged email sent to', repEmail);
+                    } else {
+                        console.warn('stageChanged: no email found for rep', upserted.salesRep);
                     }
                 } catch (err) {
                     console.error('stageChanged email error:', err.message);

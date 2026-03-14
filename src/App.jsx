@@ -1397,7 +1397,6 @@ dbFetch('/.netlify/functions/settings')
                             { name: 'Closed Won', weight: 100 },
                             { name: 'Closed Lost', weight: 0 }
                         ],
-                users: data.settings.users || prev.users || [],
             }));
         }
         // Mark settings as loaded from DB — enables the save effect.
@@ -1409,6 +1408,16 @@ dbFetch('/.netlify/functions/settings')
         // Allow saves even on error so the app isn't permanently stuck
         setTimeout(() => { settingsReady.current = true; }, 0);
     });
+
+// Load users from dedicated endpoint (admins/managers only — others get empty list)
+dbFetch('/.netlify/functions/users')
+    .then(r => r.ok ? r.json() : { users: [] })
+    .then(data => {
+        if (data.users && data.users.length > 0) {
+            setSettings(prev => ({ ...prev, users: data.users }));
+        }
+    })
+    .catch(() => {}); // Non-fatal — reps just won't see user list
     };
     loadData();
 }, [clerkUser]);
@@ -1778,31 +1787,57 @@ dbFetch('/.netlify/functions/settings')
     };
 
     const handleDeleteUser = (userId) => {
-        showConfirm('Are you sure you want to delete this user?', () => {
-            setSettings(prev => ({
-                ...prev,
-                users: (prev.users || []).filter(u => u.id !== userId)
-            }));
+        showConfirm('Are you sure you want to delete this user?', async () => {
+            try {
+                await dbFetch(`/.netlify/functions/users?id=${userId}`, { method: 'DELETE' });
+                setSettings(prev => ({
+                    ...prev,
+                    users: (prev.users || []).filter(u => u.id !== userId)
+                }));
+            } catch (err) {
+                console.error('Failed to delete user:', err);
+            }
         });
     };
 
-    const handleSaveUser = (userData) => {
+    const handleSaveUser = async (userData) => {
         if (editingUser) {
-            setSettings(prev => ({
-                ...prev,
-                users: (prev.users || []).map(u =>
-                    u.id === editingUser.id ? { ...userData, id: editingUser.id } : u
-                )
-            }));
+            const payload = { ...userData, id: editingUser.id };
+            try {
+                const res = await dbFetch('/.netlify/functions/users', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                const saved = data.user || payload;
+                setSettings(prev => ({
+                    ...prev,
+                    users: (prev.users || []).map(u => u.id === editingUser.id ? saved : u)
+                }));
+            } catch (err) {
+                console.error('Failed to update user:', err);
+            }
         } else {
             const newId = 'usr_' + Date.now();
-            const newUser = { ...userData, id: newId };
-            setSettings(prev => ({
-                ...prev,
-                users: [...(prev.users || []), newUser]
-            }));
-            if (showModal) {
-                setLastCreatedRepName(newUser.name);
+            const payload = { ...userData, id: newId };
+            try {
+                const res = await dbFetch('/.netlify/functions/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                const saved = data.user || payload;
+                setSettings(prev => ({
+                    ...prev,
+                    users: [...(prev.users || []), saved]
+                }));
+                if (showModal) {
+                    setLastCreatedRepName(saved.name);
+                }
+            } catch (err) {
+                console.error('Failed to create user:', err);
             }
         }
         setShowUserModal(false);

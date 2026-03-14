@@ -8,12 +8,12 @@ export const users = pgTable('users', {
     id:            text('id').primaryKey(),                          // e.g. "usr_001"
     name:          varchar('name', { length: 255 }).notNull(),
     email:         varchar('email', { length: 255 }).notNull().unique(),
-    passwordHash:  text('password_hash').notNull(),
-    role:          varchar('role', { length: 50 }).notNull(),        // Admin | Manager | User | ReadOnly
+    role:          varchar('role', { length: 50 }).notNull().default('User'),  // Admin | Manager | User | ReadOnly
     team:          varchar('team', { length: 255 }),
     territory:     varchar('territory', { length: 255 }),
     quota:         decimal('quota', { precision: 12, scale: 2 }),
     active:        boolean('active').notNull().default(true),
+    profile:       jsonb('profile').default('{}'),                   // full profile fields (firstName, lastName, phone, etc.)
     createdAt:     timestamp('created_at').notNull().defaultNow(),
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 });
