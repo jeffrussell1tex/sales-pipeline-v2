@@ -1336,6 +1336,12 @@ function App() {
     const [showLeadImportModal, setShowLeadImportModal] = useState(false);
     const [csvImportType, setCsvImportType] = useState('contacts');
 
+    // Calendar strip state
+    const [calendarEvents, setCalendarEvents] = useState([]);
+    const [calendarLoading, setCalendarLoading] = useState(false);
+    const [calendarError, setCalendarError] = useState(null);
+    const [calendarConnected, setCalendarConnected] = useState(false);
+
     // Loading states for import/export operations
     const [exportingCSV, setExportingCSV] = useState(null); // tracks which CSV is exporting by key
     const [exportingBackup, setExportingBackup] = useState(false);
@@ -3662,6 +3668,180 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             </div>
                                         ))}
                                     </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* ── WEEKLY CALENDAR STRIP ── */}
+                    {(() => {
+                        const fetchCalendarEvents = async () => {
+                            setCalendarLoading(true);
+                            setCalendarError(null);
+                            try {
+                                const now = new Date();
+                                const weekStart = new Date(now);
+                                weekStart.setHours(0, 0, 0, 0);
+                                const weekEnd = new Date(weekStart);
+                                weekEnd.setDate(weekStart.getDate() + 7);
+                                const res = await fetch('/.netlify/functions/calendar-events?timeMin=' + weekStart.toISOString() + '&timeMax=' + weekEnd.toISOString());
+                                if (!res.ok) throw new Error('Failed to load calendar');
+                                const data = await res.json();
+                                setCalendarEvents(data.events || []);
+                                setCalendarConnected(true);
+                            } catch (err) {
+                                setCalendarError(err.message);
+                                setCalendarConnected(false);
+                            } finally {
+                                setCalendarLoading(false);
+                            }
+                        };
+
+                        // Build 7-day columns starting today
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const days = Array.from({ length: 7 }, (_, i) => {
+                            const d = new Date(today);
+                            d.setDate(today.getDate() + i);
+                            return d;
+                        });
+                        const dayLabels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                        const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+                        const getEventsForDay = (day) => {
+                            return calendarEvents.filter(ev => {
+                                const evDate = new Date(ev.start?.dateTime || ev.start?.date);
+                                evDate.setHours(0,0,0,0);
+                                return evDate.getTime() === day.getTime();
+                            });
+                        };
+
+                        const formatTime = (isoStr) => {
+                            if (!isoStr) return '';
+                            const d = new Date(isoStr);
+                            const h = d.getHours();
+                            const m = d.getMinutes();
+                            const ampm = h >= 12 ? 'pm' : 'am';
+                            return (h % 12 || 12) + (m ? ':' + String(m).padStart(2,'0') : '') + ampm;
+                        };
+
+                        const eventColors = ['#2563eb','#7c3aed','#0891b2','#0d9488','#059669','#d97706','#dc2626'];
+                        const getEventColor = (idx) => eventColors[idx % eventColors.length];
+
+                        return (
+                            <div className="table-container" style={{ marginBottom: '1.5rem' }}>
+                                <div className="table-header">
+                                    <h2>📅 THIS WEEK</h2>
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                        {calendarConnected && (
+                                            <button className="btn" onClick={fetchCalendarEvents} disabled={calendarLoading}
+                                                style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
+                                                {calendarLoading ? '↻ Refreshing…' : '↻ Refresh'}
+                                            </button>
+                                        )}
+                                        {!calendarConnected && !calendarLoading && (
+                                            <button className="btn" onClick={fetchCalendarEvents}
+                                                style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem', background: '#2563eb', color: '#fff', border: 'none' }}>
+                                                Connect Google Calendar
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                                <div style={{ padding: '1rem 1.25rem' }}>
+                                    {calendarLoading && (
+                                        <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b', fontSize: '0.875rem' }}>
+                                            <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', marginRight: '0.5rem' }}>↻</span>
+                                            Loading calendar events…
+                                        </div>
+                                    )}
+                                    {calendarError && !calendarLoading && (
+                                        <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8', fontSize: '0.8125rem' }}>
+                                            <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📅</div>
+                                            <div style={{ fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Connect your Google Calendar</div>
+                                            <div style={{ color: '#94a3b8', marginBottom: '1rem', fontSize: '0.75rem' }}>See this week's meetings alongside your pipeline</div>
+                                            <button onClick={fetchCalendarEvents}
+                                                style={{ padding: '0.45rem 1.25rem', border: 'none', borderRadius: '6px', background: '#2563eb', color: '#fff', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                                Connect Google Calendar
+                                            </button>
+                                        </div>
+                                    )}
+                                    {!calendarLoading && !calendarError && calendarConnected && (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.625rem' }}>
+                                            {days.map((day, di) => {
+                                                const isToday = di === 0;
+                                                const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                                                const events = getEventsForDay(day);
+                                                return (
+                                                    <div key={di} style={{
+                                                        border: isToday ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                                                        borderRadius: '10px',
+                                                        background: isToday ? '#eff6ff' : isWeekend ? '#fafafa' : '#fff',
+                                                        overflow: 'hidden',
+                                                        minHeight: '120px'
+                                                    }}>
+                                                        {/* Day header */}
+                                                        <div style={{
+                                                            padding: '0.5rem 0.625rem 0.375rem',
+                                                            borderBottom: '1px solid ' + (isToday ? '#bfdbfe' : '#f1f5f9'),
+                                                            background: isToday ? '#dbeafe' : 'transparent'
+                                                        }}>
+                                                            <div style={{ fontSize: '0.6rem', fontWeight: '700', color: isToday ? '#2563eb' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                                                                {dayLabels[day.getDay()]}
+                                                            </div>
+                                                            <div style={{ fontSize: '1rem', fontWeight: '800', color: isToday ? '#2563eb' : '#1e293b', lineHeight: 1.1 }}>
+                                                                {day.getDate()}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.6rem', color: isToday ? '#3b82f6' : '#cbd5e1' }}>
+                                                                {monthNames[day.getMonth()]}
+                                                            </div>
+                                                        </div>
+                                                        {/* Events */}
+                                                        <div style={{ padding: '0.375rem 0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                            {events.length === 0 ? (
+                                                                <div style={{ fontSize: '0.6rem', color: '#e2e8f0', textAlign: 'center', padding: '0.5rem 0', userSelect: 'none' }}>—</div>
+                                                            ) : (
+                                                                events.slice(0, 4).map((ev, ei) => (
+                                                                    <div key={ev.id || ei} title={ev.summary}
+                                                                        style={{
+                                                                            background: getEventColor(ei) + '14',
+                                                                            borderLeft: '2px solid ' + getEventColor(ei),
+                                                                            borderRadius: '3px',
+                                                                            padding: '0.2rem 0.3rem',
+                                                                            cursor: 'default'
+                                                                        }}>
+                                                                        {ev.start?.dateTime && (
+                                                                            <div style={{ fontSize: '0.575rem', fontWeight: '700', color: getEventColor(ei), lineHeight: 1 }}>
+                                                                                {formatTime(ev.start.dateTime)}
+                                                                            </div>
+                                                                        )}
+                                                                        <div style={{ fontSize: '0.625rem', fontWeight: '600', color: '#1e293b', lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                                                            {ev.summary || 'Untitled'}
+                                                                        </div>
+                                                                    </div>
+                                                                ))
+                                                            )}
+                                                            {events.length > 4 && (
+                                                                <div style={{ fontSize: '0.575rem', color: '#94a3b8', textAlign: 'center', paddingTop: '0.125rem' }}>
+                                                                    +{events.length - 4} more
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                    {!calendarLoading && !calendarError && !calendarConnected && (
+                                        <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                                            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📅</div>
+                                            <div style={{ fontWeight: '600', color: '#475569', fontSize: '0.875rem', marginBottom: '0.25rem' }}>See your week at a glance</div>
+                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '1rem' }}>Connect Google Calendar to see this week's meetings alongside your pipeline</div>
+                                            <button onClick={fetchCalendarEvents}
+                                                style={{ padding: '0.5rem 1.25rem', border: 'none', borderRadius: '8px', background: '#2563eb', color: '#fff', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                                Connect Google Calendar
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         );
