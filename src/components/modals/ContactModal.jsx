@@ -337,6 +337,7 @@ export default function ContactModal({ contact, contacts, accounts, settings, on
                 </div>
             )}
         </div>
+        </>
     );
 }
 
@@ -380,6 +381,5 @@ export function NestedNewAccountForm({ name, onSave, onCancel }) {
                 <button type="submit" className="btn">Save Account</button>
             </div>
         </form>
-        </>
     );
 }
