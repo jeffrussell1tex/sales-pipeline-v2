@@ -1846,35 +1846,77 @@ dbFetch('/.netlify/functions/users?me=true')
         });
     };
 
-    const handleSaveUser = (userData) => {
+    const handleSaveUser = async (userData) => {
         if (editingUser) {
             const payload = { ...userData, id: editingUser.id, email: userData.email || editingUser.email || '' };
+            // Optimistic update
             setSettings(prev => ({
                 ...prev,
                 users: (prev.users || []).map(u => u.id === editingUser.id ? payload : u)
             }));
-            dbFetch('/.netlify/functions/users', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            }).catch(err => console.error('Failed to update user:', err));
+            setShowUserModal(false);
+            setEditingUser(null);
+            try {
+                const res = await dbFetch('/.netlify/functions/users', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (!res.ok) throw new Error(`Server returned ${res.status}`);
+                const data = await res.json();
+                // Sync state with the server-normalized record
+                if (data.user) {
+                    setSettings(prev => ({
+                        ...prev,
+                        users: (prev.users || []).map(u => u.id === data.user.id ? data.user : u)
+                    }));
+                }
+            } catch (err) {
+                console.error('Failed to update user:', err);
+                // Roll back optimistic update
+                setSettings(prev => ({
+                    ...prev,
+                    users: (prev.users || []).map(u => u.id === editingUser.id ? editingUser : u)
+                }));
+                alert('Failed to save user. Please try again.');
+            }
         } else {
             const newId = 'usr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
             const payload = { ...userData, id: newId, email: userData.email || '' };
+            // Optimistic update
             setSettings(prev => ({
                 ...prev,
                 users: [...(prev.users || []), payload]
             }));
-            dbFetch('/.netlify/functions/users', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            }).catch(err => console.error('Failed to create user:', err));
-            if (showModal) {
-                setLastCreatedRepName(payload.name);
+            setShowUserModal(false);
+            try {
+                const res = await dbFetch('/.netlify/functions/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (!res.ok) throw new Error(`Server returned ${res.status}`);
+                const data = await res.json();
+                // Replace optimistic record with server-normalized record
+                if (data.user) {
+                    setSettings(prev => ({
+                        ...prev,
+                        users: (prev.users || []).map(u => u.id === payload.id ? data.user : u)
+                    }));
+                }
+                if (showModal) {
+                    setLastCreatedRepName(data.user?.name || payload.name);
+                }
+            } catch (err) {
+                console.error('Failed to create user:', err);
+                // Roll back optimistic insert
+                setSettings(prev => ({
+                    ...prev,
+                    users: (prev.users || []).filter(u => u.id !== payload.id)
+                }));
+                alert('Failed to save user. Please try again.');
             }
         }
-        setShowUserModal(false);
     };
 
     const handleUpdateFiscalYearStart = (month) => {
