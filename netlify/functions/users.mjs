@@ -168,8 +168,12 @@ export const handler = async (event) => {
                 return row;
             } catch (err) {
                 // Postgres unique_violation = code 23505
-                const isUniqueViolation = err.code === '23505' || err.message?.includes('unique');
-                const isEmailField = err.detail?.includes('email') || err.constraint?.includes('email');
+                // The Neon serverless driver may surface the constraint info in
+                // err.message, err.detail, err.constraint, or err.cause — check all.
+                const errStr = [err.message, err.detail, err.constraint, err.cause?.message]
+                    .filter(Boolean).join(' ').toLowerCase();
+                const isUniqueViolation = err.code === '23505' || errStr.includes('unique');
+                const isEmailField = errStr.includes('email');
                 if (isUniqueViolation && isEmailField) {
                     const dupErr = new Error('A user with that email address already exists. Please use a different email.');
                     dupErr.code = 'EMAIL_DUPLICATE';
