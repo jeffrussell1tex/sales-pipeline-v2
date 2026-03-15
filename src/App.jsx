@@ -1400,13 +1400,16 @@ dbFetch('/.netlify/functions/settings')
     .then(checkOk).then(r => r.json())
     .then(data => {
         if (data.settings) {
+            // Destructure users out — users come exclusively from the /users endpoint.
+            // Never let a stale users array embedded in the settings blob overwrite them.
+            const { users: _stripUsers, ...settingsFromDb } = data.settings;
             setSettings(prev => ({
                 ...prev,
-                ...data.settings,
-                taskTypes: data.settings.taskTypes || prev.taskTypes || ['Call', 'Meeting', 'Email'],
-                quotaData: data.settings.quotaData ? { ...prev.quotaData, ...data.settings.quotaData } : prev.quotaData,
-                funnelStages: (data.settings.funnelStages && data.settings.funnelStages.length > 0)
-                    ? data.settings.funnelStages
+                ...settingsFromDb,
+                taskTypes: settingsFromDb.taskTypes || prev.taskTypes || ['Call', 'Meeting', 'Email'],
+                quotaData: settingsFromDb.quotaData ? { ...prev.quotaData, ...settingsFromDb.quotaData } : prev.quotaData,
+                funnelStages: (settingsFromDb.funnelStages && settingsFromDb.funnelStages.length > 0)
+                    ? settingsFromDb.funnelStages
                     : (prev.funnelStages && prev.funnelStages.length > 0)
                         ? prev.funnelStages
                         : [
@@ -1552,12 +1555,15 @@ dbFetch('/.netlify/functions/users?me=true')
     // Without this check, the effect fires on mount with defaults/localStorage
     // and overwrites real data in the database.
     if (!settingsReady.current) return;
-    // Settings saved to DB (source of truth); localStorage copy kept for offline fallback
-    try { safeStorage.setItem('salesSettings', JSON.stringify(settings)); } catch(e) {}
+    // Strip users from the settings blob — users are managed exclusively by the
+    // /users endpoint and must never be embedded here. Storing them in both places
+    // causes a race on load where the stale settings blob overwrites the /users table.
+    const { users: _stripUsers, ...settingsToSave } = settings;
+    try { safeStorage.setItem('salesSettings', JSON.stringify(settingsToSave)); } catch(e) {}
     dbFetch('/.netlify/functions/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
+        body: JSON.stringify(settingsToSave)
     }).catch(err => console.error('Failed to save settings:', err));
 }, [settings]);
 
