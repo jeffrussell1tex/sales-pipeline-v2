@@ -1152,6 +1152,10 @@ function App() {
     const [showUserModal, setShowUserModal] = useState(false);
     const [showTaskModal, setShowTaskModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
+    const [showProfilePanel, setShowProfilePanel] = useState(false);
+    const [profilePanelTab, setProfilePanelTab] = useState('profile');
+    const [myProfile, setMyProfile] = useState(null);
+    const [profileSaving, setProfileSaving] = useState(false);
     const [editingOpp, setEditingOpp] = useState(null);
     const [editingAccount, setEditingAccount] = useState(null);
     const [editingSubAccount, setEditingSubAccount] = useState(null);
@@ -1418,6 +1422,12 @@ dbFetch('/.netlify/functions/users')
         }
     })
     .catch(() => {}); // Non-fatal — reps just won't see user list
+
+// Load current user's own profile (notification prefs, etc.)
+dbFetch('/.netlify/functions/users?me=true')
+    .then(r => r.ok ? r.json() : null)
+    .then(data => { if (data?.user) setMyProfile(data.user); })
+    .catch(() => {});
     };
     loadData();
 }, [clerkUser]);
@@ -1439,6 +1449,7 @@ dbFetch('/.netlify/functions/users')
                 if (showContactModal) { setShowContactModal(false); setEditingContact(null); return; }
                 if (showTaskModal) { setShowTaskModal(false); setEditingTask(null); return; }
                 if (showUserModal) { setShowUserModal(false); setEditingUser(null); return; }
+                if (showProfilePanel) { setShowProfilePanel(false); return; }
                 if (confirmModal) { setConfirmModal(null); return; }
                 if (notesPopover) { setNotesPopover(null); return; }
                 if (undoToast) { clearTimeout(undoToast.timerId); setUndoToast(null); return; }
@@ -2706,14 +2717,20 @@ dbFetch('/.netlify/functions/activities', {
                     </div>
                     <div className="header-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.375rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <div style={{ 
+                        <div style={{ position: 'relative' }}>
+                        <div
+                            onClick={() => { setShowProfilePanel(v => !v); setProfilePanelTab('profile'); }}
+                            title="My profile & settings"
+                            style={{ 
                             display: 'flex', 
                             alignItems: 'center', 
                             gap: '0.5rem',
                             padding: '0.375rem 0.5rem 0.375rem 0.875rem',
-                            background: '#f1f3f5',
+                            background: showProfilePanel ? '#e0e7ff' : '#f1f3f5',
                             borderRadius: '20px',
-                            border: '1px solid #e2e8f0'
+                            border: showProfilePanel ? '1px solid #a5b4fc' : '1px solid #e2e8f0',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s',
                         }}>
                             <div style={{
                                 width: '28px',
@@ -2736,7 +2753,7 @@ dbFetch('/.netlify/functions/activities', {
                                 </div>
                             </div>
                             <button
-                                onClick={handleLogout}
+                                onClick={e => { e.stopPropagation(); handleLogout(); }}
                                 title="Sign out"
                                 style={{
                                     background: 'none',
@@ -2756,6 +2773,211 @@ dbFetch('/.netlify/functions/activities', {
                             >
                                 Logout
                             </button>
+                        </div>
+
+                        {/* ── Profile Panel ─────────────────────────────────── */}
+                        {showProfilePanel && (() => {
+                            const DEFAULT_PREFS = {
+                                stageChanged:       { enabled: true,  mode: 'instant' },
+                                dealAssigned:       { enabled: true,  mode: 'instant' },
+                                opportunityCreated: { enabled: true,  mode: 'instant' },
+                                opportunityUpdated: { enabled: false, mode: 'digest'  },
+                                dealClosed:         { enabled: true,  mode: 'instant' },
+                                commentAdded:       { enabled: true,  mode: 'instant' },
+                                taskDigest:         { enabled: true,  mode: 'digest'  },
+                                overdueTaskNudge:   { enabled: true,  mode: 'digest'  },
+                            };
+                            const ALERT_LABELS = {
+                                stageChanged:       'Deal stage changed',
+                                dealAssigned:       'Deal assigned to me',
+                                opportunityCreated: 'New opportunity created',
+                                opportunityUpdated: 'Opportunity updated',
+                                dealClosed:         'Deal closed (Won or Lost)',
+                                commentAdded:       'Comment added to deal',
+                                taskDigest:         'Daily task digest',
+                                overdueTaskNudge:   'Overdue task reminder',
+                            };
+                            const prefs = myProfile?.notificationPrefs || DEFAULT_PREFS;
+                            const digestTime = myProfile?.digestTime || '08:00';
+
+                            const saveProfile = async (updates) => {
+                                setProfileSaving(true);
+                                const updated = { ...(myProfile || {}), ...updates };
+                                setMyProfile(updated);
+                                try {
+                                    // Find user's DB record id
+                                    const myDbUser = (settings.users || []).find(u => u.name === currentUser);
+                                    if (myDbUser) {
+                                        await dbFetch('/.netlify/functions/users?me=true', {
+                                            method: 'PUT',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ ...myDbUser, ...updates }),
+                                        });
+                                    }
+                                } catch (err) {
+                                    console.error('Failed to save profile:', err);
+                                } finally {
+                                    setProfileSaving(false);
+                                }
+                            };
+
+                            const togglePref = (alertType, field, value) => {
+                                const newPrefs = { ...prefs, [alertType]: { ...(prefs[alertType] || DEFAULT_PREFS[alertType]), [field]: value } };
+                                saveProfile({ notificationPrefs: newPrefs });
+                            };
+
+                            const panelTabBtn = (tab, label) => (
+                                <button onClick={() => setProfilePanelTab(tab)} style={{
+                                    padding: '0.5rem 1rem', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                                    fontSize: '0.8125rem', fontWeight: '600', borderRadius: '6px',
+                                    background: profilePanelTab === tab ? '#2563eb' : 'transparent',
+                                    color: profilePanelTab === tab ? '#fff' : '#64748b',
+                                    transition: 'all 0.15s',
+                                }}>{label}</button>
+                            );
+
+                            return (
+                                <>
+                                <div style={{ position: 'fixed', inset: 0, zIndex: 1099 }} onClick={() => setShowProfilePanel(false)} />
+                                <div style={{
+                                    position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+                                    width: '420px', background: '#fff', borderRadius: '12px',
+                                    border: '1px solid #e2e8f0', boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+                                    zIndex: 1100, overflow: 'hidden',
+                                }} onClick={e => e.stopPropagation()}>
+
+                                    {/* Header */}
+                                    <div style={{ background: '#1a1a2e', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+                                        <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: isAdmin ? '#7c3aed' : isManager ? '#059669' : '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.125rem', fontWeight: '700', flexShrink: 0 }}>
+                                            {currentUser.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                                        </div>
+                                        <div>
+                                            <div style={{ color: '#fff', fontWeight: '700', fontSize: '0.9375rem' }}>{currentUser}</div>
+                                            <div style={{ color: '#8b92a9', fontSize: '0.75rem', marginTop: '2px' }}>{clerkUser?.emailAddresses?.[0]?.emailAddress}</div>
+                                            <div style={{ marginTop: '4px' }}>
+                                                <span style={{ background: isAdmin ? '#7c3aed' : isManager ? '#059669' : '#2563eb', color: '#fff', fontSize: '0.6rem', fontWeight: '700', padding: '2px 8px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                    {userRole === 'User' ? 'Sales Rep' : userRole}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Tabs */}
+                                    <div style={{ display: 'flex', gap: '0.25rem', padding: '0.75rem 1rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                                        {panelTabBtn('profile', '👤 Profile')}
+                                        {panelTabBtn('notifications', '🔔 Notifications')}
+                                    </div>
+
+                                    <div style={{ padding: '1.25rem 1.5rem', maxHeight: '460px', overflowY: 'auto' }}>
+
+                                        {/* ── Profile Tab ─────────────────────────────── */}
+                                        {profilePanelTab === 'profile' && (() => {
+                                            const [localForm, setLocalForm] = React.useState({
+                                                firstName: myProfile?.firstName || currentUser.split(' ')[0] || '',
+                                                lastName:  myProfile?.lastName  || currentUser.split(' ').slice(1).join(' ') || '',
+                                                email:     myProfile?.email     || clerkUser?.emailAddresses?.[0]?.emailAddress || '',
+                                                phone:     myProfile?.phone     || '',
+                                                title:     myProfile?.title     || '',
+                                            });
+
+                                            const inputStyle = { width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box' };
+                                            const labelStyle = { fontSize: '0.75rem', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '4px' };
+
+                                            return (
+                                                <div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem', marginBottom: '0.875rem' }}>
+                                                        <div><label style={labelStyle}>First Name</label><input style={inputStyle} value={localForm.firstName} onChange={e => setLocalForm(p => ({ ...p, firstName: e.target.value }))} /></div>
+                                                        <div><label style={labelStyle}>Last Name</label><input style={inputStyle} value={localForm.lastName} onChange={e => setLocalForm(p => ({ ...p, lastName: e.target.value }))} /></div>
+                                                    </div>
+                                                    <div style={{ marginBottom: '0.875rem' }}><label style={labelStyle}>Work Email</label><input style={inputStyle} type="email" value={localForm.email} onChange={e => setLocalForm(p => ({ ...p, email: e.target.value }))} /></div>
+                                                    <div style={{ marginBottom: '0.875rem' }}><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={localForm.phone} onChange={e => setLocalForm(p => ({ ...p, phone: e.target.value }))} /></div>
+                                                    <div style={{ marginBottom: '1.25rem' }}><label style={labelStyle}>Title</label><input style={inputStyle} value={localForm.title} onChange={e => setLocalForm(p => ({ ...p, title: e.target.value }))} /></div>
+                                                    <div style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '6px', fontSize: '0.75rem', color: '#64748b', marginBottom: '1rem' }}>
+                                                        🔑 Password is managed via Clerk. <a href="https://accounts.clerk.dev" target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Change password →</a>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => saveProfile({ firstName: localForm.firstName, lastName: localForm.lastName, email: localForm.email, phone: localForm.phone, title: localForm.title })}
+                                                        disabled={profileSaving}
+                                                        style={{ width: '100%', padding: '0.625rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                                        {profileSaving ? 'Saving…' : 'Save Profile'}
+                                                    </button>
+                                                </div>
+                                            );
+                                        })()}
+
+                                        {/* ── Notifications Tab ───────────────────────── */}
+                                        {profilePanelTab === 'notifications' && (
+                                            <div>
+                                                <p style={{ fontSize: '0.8125rem', color: '#64748b', margin: '0 0 1rem', lineHeight: 1.5 }}>
+                                                    Choose which alerts you receive and whether they're sent immediately or bundled into a daily digest.
+                                                </p>
+
+                                                {/* Digest time picker */}
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '1rem' }}>
+                                                    <div>
+                                                        <div style={{ fontWeight: '600', fontSize: '0.8125rem', color: '#1e293b' }}>Daily digest time</div>
+                                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>When to send your daily digest email (UTC)</div>
+                                                    </div>
+                                                    <input
+                                                        type="time"
+                                                        value={digestTime}
+                                                        onChange={e => saveProfile({ digestTime: e.target.value })}
+                                                        style={{ padding: '0.375rem 0.5rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#fff' }}
+                                                    />
+                                                </div>
+
+                                                {/* Alert rows */}
+                                                {Object.entries(ALERT_LABELS).map(([alertType, label]) => {
+                                                    const pref = prefs[alertType] || DEFAULT_PREFS[alertType];
+                                                    const isDigestOnly = alertType === 'taskDigest' || alertType === 'overdueTaskNudge';
+                                                    return (
+                                                        <div key={alertType} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0', borderBottom: '1px solid #f1f3f5' }}>
+                                                            <div style={{ flex: 1 }}>
+                                                                <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{label}</div>
+                                                                {isDigestOnly && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>Digest only</div>}
+                                                            </div>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                {/* Enabled toggle */}
+                                                                <button
+                                                                    onClick={() => togglePref(alertType, 'enabled', !pref.enabled)}
+                                                                    style={{
+                                                                        width: '36px', height: '20px', borderRadius: '999px', border: 'none', cursor: 'pointer',
+                                                                        background: pref.enabled ? '#2563eb' : '#d1d5db',
+                                                                        position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                                                                    }}
+                                                                    title={pref.enabled ? 'Disable' : 'Enable'}
+                                                                >
+                                                                    <span style={{ position: 'absolute', top: '2px', left: pref.enabled ? '18px' : '2px', width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }} />
+                                                                </button>
+
+                                                                {/* Mode selector — only show for non-digest-only alerts */}
+                                                                {!isDigestOnly && pref.enabled && (
+                                                                    <select
+                                                                        value={pref.mode}
+                                                                        onChange={e => togglePref(alertType, 'mode', e.target.value)}
+                                                                        style={{ fontSize: '0.75rem', padding: '0.2rem 0.375rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontFamily: 'inherit', background: '#fff', cursor: 'pointer' }}
+                                                                    >
+                                                                        <option value="instant">Instant</option>
+                                                                        <option value="digest">Digest</option>
+                                                                    </select>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {profileSaving && (
+                                        <div style={{ padding: '0.5rem 1.5rem', background: '#f0fdf4', borderTop: '1px solid #bbf7d0', fontSize: '0.75rem', color: '#059669', fontWeight: '600' }}>
+                                            ✓ Saving preferences…
+                                        </div>
+                                    )}
+                                </div>
+                                </>
+                            );
+                        })()}
                         </div>
                         <button
                             onClick={() => setShowShortcuts(v => !v)}

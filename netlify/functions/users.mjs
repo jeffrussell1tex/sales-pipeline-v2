@@ -22,19 +22,50 @@ export const handler = async (event) => {
         return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     }
 
-    const { userRole } = auth;
-    console.log('users.mjs: userRole =', userRole, '| method =', event.httpMethod);
+    const { userId, userRole } = auth;
 
-    // Only Admins and Managers can access user data
+    // GET ?me=true — any authenticated user can fetch their own record
+    if (event.httpMethod === 'GET' && event.queryStringParameters?.me === 'true') {
+        try {
+            const [row] = await db.select().from(users).where(eq(users.name, userId));
+            if (!row) return { statusCode: 404, headers, body: JSON.stringify({ error: 'User not found' }) };
+            return { statusCode: 200, headers, body: JSON.stringify({ user: flatten(row) }) };
+        } catch (err) {
+            console.error('Users /me error:', err.message);
+            return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        }
+    }
+
+    // PUT ?me=true — any authenticated user can update their own profile/prefs
+    if (event.httpMethod === 'PUT' && event.queryStringParameters?.me === 'true') {
+        try {
+            const data = JSON.parse(event.body || '{}');
+            if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+            const clean = sanitize(data);
+            const { id, ...updateData } = clean;
+            const [updated] = await db
+                .insert(users).values(clean)
+                .onConflictDoUpdate({ target: users.id, set: { ...updateData, updatedAt: new Date() } })
+                .returning();
+            return { statusCode: 200, headers, body: JSON.stringify({ user: flatten(updated) }) };
+        } catch (err) {
+            console.error('Users /me PUT error:', err.message);
+            return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+        }
+    }
+
+    // Only Admins and Managers can access the full user list
     if (!ADMIN_ROLES.includes(userRole)) {
         console.warn('users.mjs: forbidden role', userRole);
         return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: insufficient role' }) };
     }
 
+    console.log('users.mjs: userRole =', userRole, '| method =', event.httpMethod);
+
     const sanitize = (data) => ({
         id:           data.id,
         name:         ((data.firstName || '') + ' ' + (data.lastName || '')).trim() || data.name || '',
-        email:        data.email || data.personalEmail || '',
+        email:        data.email || '',
         role:         data.userType || data.role || 'User',
         team:         data.team     || null,
         territory:    data.territory || null,
@@ -64,6 +95,8 @@ export const handler = async (event) => {
             vertical:      data.vertical      || null,
             teamId:        data.teamId        || null,
             userType:      data.userType      || 'User',
+            notificationPrefs: data.notificationPrefs || null,
+            digestTime:    data.digestTime    || '08:00',
         },
     });
 
@@ -146,7 +179,7 @@ export const handler = async (event) => {
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
 
     } catch (err) {
-        console.error('Users function error:', err.message, '| stack:', err.stack);
+        console.error('Users function error:', err.message);
         return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
     }
 };

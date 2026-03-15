@@ -191,6 +191,90 @@ export const emailTemplates = {
     },
 
     /**
+     * Sent when a new opportunity is created.
+     * @param {{ repName, dealName, account, arr, stage, createdBy, opportunityId }} data
+     */
+    opportunityCreated({ repName, dealName, account, arr, stage, createdBy, opportunityId }) {
+        const subject = `New opportunity assigned: ${dealName}`;
+        const html = layout(subject, `
+            <h2>A new opportunity has been created</h2>
+            <p>Hi ${repName}, <strong>${createdBy}</strong> created a new opportunity assigned to you.</p>
+            <div class="detail-box">
+                <div class="detail-row"><span class="detail-label">Deal</span><span>${dealName}</span></div>
+                <div class="detail-row"><span class="detail-label">Account</span><span>${account || '—'}</span></div>
+                <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
+                <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage || 'Discovery')}</span></div>
+            </div>
+            <a class="btn" href="${appUrl}?deal=${opportunityId}">View Deal →</a>
+        `);
+        return { subject, html };
+    },
+
+    /**
+     * Sent when an opportunity is updated.
+     * @param {{ repName, dealName, account, arr, stage, updatedBy, opportunityId }} data
+     */
+    opportunityUpdated({ repName, dealName, account, arr, stage, updatedBy, opportunityId }) {
+        const subject = `Deal updated: ${dealName}`;
+        const html = layout(subject, `
+            <h2>An opportunity was updated</h2>
+            <p>Hi ${repName}, <strong>${updatedBy}</strong> made changes to one of your deals.</p>
+            <div class="detail-box">
+                <div class="detail-row"><span class="detail-label">Deal</span><span>${dealName}</span></div>
+                <div class="detail-row"><span class="detail-label">Account</span><span>${account || '—'}</span></div>
+                <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
+                <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage || 'Discovery')}</span></div>
+            </div>
+            <a class="btn" href="${appUrl}?deal=${opportunityId}">View Deal →</a>
+        `);
+        return { subject, html };
+    },
+
+    /**
+     * Sent when a deal is closed (won or lost).
+     * @param {{ repName, dealName, account, arr, outcome, closedBy, opportunityId }} data
+     */
+    dealClosed({ repName, dealName, account, arr, outcome, closedBy, opportunityId }) {
+        const isWon  = outcome === 'Won';
+        const emoji  = isWon ? '🎉' : '📋';
+        const subject = `${emoji} Deal ${isWon ? 'won' : 'lost'}: ${dealName}`;
+        const html = layout(subject, `
+            <h2>${isWon ? '🎉 Deal closed — well done!' : 'Deal marked as lost'}</h2>
+            <p>Hi ${repName}, <strong>${closedBy}</strong> marked the following deal as <strong>Closed ${outcome}</strong>.</p>
+            <div class="detail-box">
+                <div class="detail-row"><span class="detail-label">Deal</span><span>${dealName}</span></div>
+                <div class="detail-row"><span class="detail-label">Account</span><span>${account || '—'}</span></div>
+                <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
+                <div class="detail-row"><span class="detail-label">Outcome</span><span class="badge ${isWon ? 'badge-green' : 'badge-red'}">Closed ${outcome}</span></div>
+            </div>
+            <a class="btn" href="${appUrl}?deal=${opportunityId}">View Deal →</a>
+        `);
+        return { subject, html };
+    },
+
+    /**
+     * Sent when a comment is added to a deal.
+     * @param {{ repName, dealName, account, comment, commentBy, opportunityId }} data
+     */
+    commentAdded({ repName, dealName, account, comment, commentBy, opportunityId }) {
+        const subject = `New comment on ${dealName}`;
+        const html = layout(subject, `
+            <h2>New comment on your deal</h2>
+            <p>Hi ${repName}, <strong>${commentBy}</strong> left a comment on one of your deals.</p>
+            <div class="detail-box">
+                <div class="detail-row"><span class="detail-label">Deal</span><span>${dealName}</span></div>
+                <div class="detail-row"><span class="detail-label">Account</span><span>${account || '—'}</span></div>
+                <div class="detail-row" style="flex-direction:column; gap:4px">
+                    <span class="detail-label">Comment</span>
+                    <span style="color:#4a4a6a; margin-top:4px; font-style:italic">"${comment}"</span>
+                </div>
+            </div>
+            <a class="btn" href="${appUrl}?deal=${opportunityId}">View Deal →</a>
+        `);
+        return { subject, html };
+    },
+
+    /**
      * Daily morning digest of tasks due today (sent to individual reps).
      * @param {{ repName, tasks: Array<{ title, opportunityName, dueTime, priority }> }} data
      */
