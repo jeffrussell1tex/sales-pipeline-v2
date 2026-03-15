@@ -153,31 +153,50 @@ export const handler = async (event) => {
             };
         }
 
+        // ── Upsert helper — returns the saved row, throws on email conflict ────
+        const upsertUser = async (clean) => {
+            const { id, ...updateData } = clean;
+            try {
+                const [row] = await db
+                    .insert(users)
+                    .values(clean)
+                    .onConflictDoUpdate({
+                        target: users.id,
+                        set: { ...updateData, updatedAt: new Date() },
+                    })
+                    .returning();
+                return row;
+            } catch (err) {
+                // Postgres unique_violation = code 23505
+                const isUniqueViolation = err.code === '23505' || err.message?.includes('unique');
+                const isEmailField = err.detail?.includes('email') || err.constraint?.includes('email');
+                if (isUniqueViolation && isEmailField) {
+                    const dupErr = new Error('A user with that email address already exists. Please use a different email.');
+                    dupErr.code = 'EMAIL_DUPLICATE';
+                    throw dupErr;
+                }
+                throw err;
+            }
+        };
+
         // ── POST (create) ─────────────────────────────────────────────────────
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body || '{}');
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
-            const clean = sanitize(data);
-            const { id, ...updateData } = clean;
-            // ON CONFLICT upsert — always returns a row, never crashes on duplicate id/email
-            const [result] = await db
-                .insert(users)
-                .values(clean)
-                .onConflictDoUpdate({
-                    target: users.id,
-                    set: { ...updateData, updatedAt: new Date() },
-                })
-                .returning();
-            if (!result) {
-                return { statusCode: 500, headers, body: JSON.stringify({ error: 'Insert returned no row' }) };
+            try {
+                const result = await upsertUser(sanitize(data));
+                if (!result) {
+                    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Insert returned no row' }) };
+                }
+                return { statusCode: 201, headers, body: JSON.stringify({ user: flatten(result) }) };
+            } catch (err) {
+                if (err.code === 'EMAIL_DUPLICATE') {
+                    return { statusCode: 409, headers, body: JSON.stringify({ error: err.message, field: 'email' }) };
+                }
+                throw err;
             }
-            return {
-                statusCode: 201,
-                headers,
-                body: JSON.stringify({ user: flatten(result) }),
-            };
         }
 
         // ── PUT (update) ──────────────────────────────────────────────────────
@@ -186,25 +205,18 @@ export const handler = async (event) => {
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
-            const clean = sanitize(data);
-            const { id, ...updateData } = clean;
-            // Upsert on PUT too — handles users created externally not yet in DB
-            const [result] = await db
-                .insert(users)
-                .values(clean)
-                .onConflictDoUpdate({
-                    target: users.id,
-                    set: { ...updateData, updatedAt: new Date() },
-                })
-                .returning();
-            if (!result) {
-                return { statusCode: 500, headers, body: JSON.stringify({ error: 'Update returned no row' }) };
+            try {
+                const result = await upsertUser(sanitize(data));
+                if (!result) {
+                    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Update returned no row' }) };
+                }
+                return { statusCode: 200, headers, body: JSON.stringify({ user: flatten(result) }) };
+            } catch (err) {
+                if (err.code === 'EMAIL_DUPLICATE') {
+                    return { statusCode: 409, headers, body: JSON.stringify({ error: err.message, field: 'email' }) };
+                }
+                throw err;
             }
-            return {
-                statusCode: 200,
-                headers,
-                body: JSON.stringify({ user: flatten(result) }),
-            };
         }
 
         // ── DELETE ────────────────────────────────────────────────────────────

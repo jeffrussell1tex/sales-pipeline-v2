@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function UserModal({ user, settings, onClose, onSave }) {
+export default function UserModal({ user, settings, onClose, onSave, errorMessage }) {
     const [formData, setFormData] = useState(user || {
         prefix: '', firstName: '', middleName: '', lastName: '', suffix: '', nickName: '',
         name: '', title: '', company: '', department: '', workLocation: '',
@@ -10,6 +10,11 @@ export default function UserModal({ user, settings, onClose, onSave }) {
         homeAddress: '', notes: ''
     });
     const [activeUserTab, setActiveUserTab] = useState('primary');
+
+    // Auto-switch to the tab containing the email field when an error arrives
+    React.useEffect(() => {
+        if (errorMessage) setActiveUserTab('primary');
+    }, [errorMessage]);
 
     const handleChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -47,6 +52,12 @@ export default function UserModal({ user, settings, onClose, onSave }) {
                 <form onSubmit={handleSubmit}>
                     {activeUserTab === 'primary' && (
                     <div className="form-grid">
+                        {errorMessage && (
+                            <div style={{ gridColumn: '1 / -1', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.625rem 0.875rem', display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                                <span style={{ fontSize: '1rem', flexShrink: 0 }}>⚠️</span>
+                                <span style={{ fontSize: '0.8125rem', color: '#b91c1c', lineHeight: 1.5 }}>{errorMessage}</span>
+                            </div>
+                        )}
                         <div className="form-group" style={{ gridColumn: 'span 1' }}>
                             <label>Prefix</label>
                             <select value={formData.prefix || ''} onChange={e => handleChange('prefix', e.target.value)}>
@@ -63,7 +74,7 @@ export default function UserModal({ user, settings, onClose, onSave }) {
                         <div className="form-group"><label>Company</label><input type="text" value={formData.company || ''} onChange={e => handleChange('company', e.target.value)} /></div>
                         <div className="form-group"><label>Department</label><input type="text" value={formData.department || ''} onChange={e => handleChange('department', e.target.value)} /></div>
                         <div className="form-group"><label>Work Location</label><input type="text" value={formData.workLocation || ''} onChange={e => handleChange('workLocation', e.target.value)} /></div>
-                        <div className="form-group"><label>Work Email</label><input type="email" value={formData.email || ''} onChange={e => handleChange('email', e.target.value)} /></div>
+                        <div className="form-group"><label>Work Email</label><input type="email" value={formData.email || ''} onChange={e => handleChange('email', e.target.value)} style={errorMessage ? { borderColor: '#f87171', background: '#fff5f5' } : {}} /></div>
                         <div className="form-group"><label>Personal Email</label><input type="email" value={formData.personalEmail || ''} onChange={e => handleChange('personalEmail', e.target.value)} /></div>
                         <div className="form-group"><label>Work Phone</label><input type="tel" value={formData.phone || ''} onChange={e => handleChange('phone', e.target.value)} /></div>
                         <div className="form-group"><label>Mobile</label><input type="tel" value={formData.mobile || ''} onChange={e => handleChange('mobile', e.target.value)} /></div>

@@ -1846,7 +1846,10 @@ dbFetch('/.netlify/functions/users?me=true')
         });
     };
 
+    const [userModalError, setUserModalError] = useState(null);
+
     const handleSaveUser = async (userData) => {
+        setUserModalError(null);
         if (editingUser) {
             const payload = { ...userData, id: editingUser.id, email: userData.email || editingUser.email || '' };
             // Optimistic update
@@ -1862,9 +1865,20 @@ dbFetch('/.netlify/functions/users?me=true')
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
+                if (res.status === 409) {
+                    const data = await res.json();
+                    // Roll back optimistic update and re-open modal with error
+                    setSettings(prev => ({
+                        ...prev,
+                        users: (prev.users || []).map(u => u.id === editingUser.id ? editingUser : u)
+                    }));
+                    setEditingUser(editingUser);
+                    setUserModalError(data.error || 'Duplicate email address.');
+                    setShowUserModal(true);
+                    return;
+                }
                 if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const data = await res.json();
-                // Sync state with the server-normalized record
                 if (data.user) {
                     setSettings(prev => ({
                         ...prev,
@@ -1895,9 +1909,20 @@ dbFetch('/.netlify/functions/users?me=true')
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
+                if (res.status === 409) {
+                    const data = await res.json();
+                    // Roll back optimistic insert and re-open modal with error
+                    setSettings(prev => ({
+                        ...prev,
+                        users: (prev.users || []).filter(u => u.id !== payload.id)
+                    }));
+                    setEditingUser(null);
+                    setUserModalError(data.error || 'Duplicate email address.');
+                    setShowUserModal(true);
+                    return;
+                }
                 if (!res.ok) throw new Error(`Server returned ${res.status}`);
                 const data = await res.json();
-                // Replace optimistic record with server-normalized record
                 if (data.user) {
                     setSettings(prev => ({
                         ...prev,
@@ -9754,8 +9779,9 @@ ${bodyHtml}
                 <UserModal
                     user={editingUser}
                     settings={settings}
-                    onClose={() => setShowUserModal(false)}
+                    onClose={() => { setShowUserModal(false); setUserModalError(null); }}
                     onSave={handleSaveUser}
+                    errorMessage={userModalError}
                 />
             )}
 
