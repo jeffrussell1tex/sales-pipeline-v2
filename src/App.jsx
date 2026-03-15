@@ -1077,6 +1077,13 @@ function App() {
     }, [clerkUser]);
     const [activeTab, setActiveTab] = useState('home');
 
+    // ── Quick-log panel (pipeline floating button) ──
+    const [quickLogOpen, setQuickLogOpen] = useState(false);
+    const [quickLogForm, setQuickLogForm] = useState({ type: 'Call', notes: '', opportunityId: '' });
+
+    // ── Follow-up task prompt (shown after saving an activity) ──
+    const [followUpPrompt, setFollowUpPrompt] = useState(null); // { opportunityId, opportunityName }
+
     // ── Mobile: track viewport for pipeline list view ──
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
     useEffect(() => {
@@ -2357,6 +2364,14 @@ dbFetch('/.netlify/functions/activities', {
     dbFetch('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) }).catch(err => console.error('Failed to save activity:', err));
 }
         setShowActivityModal(false);
+        // Show follow-up task prompt if activity was linked to an opportunity
+        if (activityData.opportunityId) {
+            const linkedOpp = (opportunities || []).find(o => o.id === activityData.opportunityId);
+            setFollowUpPrompt({ opportunityId: activityData.opportunityId, opportunityName: linkedOpp?.opportunityName || linkedOpp?.account || 'this deal' });
+        }
+        // Close quick-log panel if it was open
+        setQuickLogOpen(false);
+        setQuickLogForm({ type: 'Call', notes: '', opportunityId: '' });
     };
 
     // Deal Health Calculation
@@ -3215,6 +3230,18 @@ dbFetch('/.netlify/functions/activities', {
                     style={{ position: 'relative' }}
                 >
                     TASKS
+                    {(() => {
+                        const now = new Date(); now.setHours(0,0,0,0);
+                        const overdueCount = visibleTasks.filter(t => {
+                            const s = t.status || (t.completed ? 'Completed' : 'Open');
+                            return (s === 'Open' || s === 'In-Process') && t.dueDate && new Date(t.dueDate) < now;
+                        }).length;
+                        return overdueCount > 0 ? (
+                            <span style={{ position: 'absolute', top: '3px', right: '3px', background: '#ef4444', color: '#fff', borderRadius: '999px', fontSize: '0.5rem', fontWeight: '800', minWidth: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 }}>
+                                {overdueCount > 99 ? '99+' : overdueCount}
+                            </span>
+                        ) : null;
+                    })()}
                     {(opportunities || []).reduce((acc, opp) => acc + (opp.comments || []).filter(c => c.timestamp > feedLastRead && c.author !== currentUser && (c.mentions || []).includes(currentUser)).length, 0) > 0 && (
                         <span style={{ position: 'absolute', top: '4px', right: '4px', background: '#ef4444', color: '#fff', borderRadius: '999px', fontSize: '0.5rem', fontWeight: '800', minWidth: '13px', height: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 2px', lineHeight: 1 }}>!</span>
                     )}
@@ -4034,6 +4061,32 @@ dbFetch('/.netlify/functions/activities', {
                                 }} style={{ padding: '0.2rem 0.625rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     🗑 Delete
                                 </button>
+                                <div style={{ width: '1px', height: '18px', background: '#bfdbfe' }} />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>📋 Task:</span>
+                                    <input
+                                        placeholder="Task title…"
+                                        id="bulk-task-title-input"
+                                        style={{ fontSize: '0.75rem', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '0.2rem 0.5rem', background: '#fff', color: '#1e293b', width: '140px' }}
+                                    />
+                                    <button onClick={() => {
+                                        const titleEl = document.getElementById('bulk-task-title-input');
+                                        const title = titleEl ? titleEl.value.trim() : '';
+                                        if (!title) return;
+                                        const today = new Date().toISOString().split('T')[0];
+                                        const newTasks = selectedOpps.map(oppId => {
+                                            const opp = (opportunities || []).find(o => o.id === oppId);
+                                            const newTask = { id: 'task_' + Date.now() + '_' + Math.random().toString(36).slice(2,6), title, type: 'Follow-up', status: 'Open', dueDate: today, assignedTo: opp?.salesRep || currentUser, relatedTo: oppId, opportunityId: oppId, account: opp?.account || '', createdAt: new Date().toISOString() };
+                                            dbFetch('/.netlify/functions/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTask) }).catch(console.error);
+                                            return newTask;
+                                        });
+                                        setTasks(prev => [...prev, ...newTasks]);
+                                        if (titleEl) titleEl.value = '';
+                                        setSelectedOpps([]); setBulkAction({ stage: '', rep: '' });
+                                    }} style={{ padding: '0.2rem 0.625rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                        Create
+                                    </button>
+                                </div>
                                 <button onClick={() => { setSelectedOpps([]); setBulkAction({ stage: '', rep: '' }); }}
                                     style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#64748b', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '600' }}>
                                     Clear selection ✕
@@ -4418,24 +4471,56 @@ dbFetch('/.netlify/functions/activities', {
                                                 </div>
                                             ))}
                                         </div>
-                                        {/* Activity log in panel */}
-                                        {oppActs.length > 0 && (
-                                            <div style={{ paddingTop: '0.5rem', borderTop: '1px solid #e2e8f0' }}>
-                                                <div style={{ fontSize: '0.65rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Activity Log <span style={{ background: '#dbeafe', color: '#1e40af', padding: '0.1rem 0.35rem', borderRadius: '999px', fontWeight: '700', marginLeft: '0.25rem' }}>{oppActs.length}</span></div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                                                    {oppActs.slice(0, 8).map(a => (
-                                                        <div key={a.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.35rem 0.625rem', fontSize: '0.75rem', color: '#475569' }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: a.notes ? '0.2rem' : 0 }}>
-                                                                <span style={{ background: '#dbeafe', color: '#1e40af', padding: '0.05rem 0.35rem', borderRadius: '3px', fontSize: '0.625rem', fontWeight: '700', flexShrink: 0 }}>{a.type}</span>
-                                                                <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>{a.date ? new Date(a.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</span>
-                                                            </div>
-                                                            {a.notes && <div style={{ color: '#64748b', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.notes}</div>}
-                                                        </div>
-                                                    ))}
-                                                    {oppActs.length > 8 && <div style={{ fontSize: '0.7rem', color: '#94a3b8', textAlign: 'center' }}>+{oppActs.length - 8} more</div>}
+                                        {/* Activity timeline in panel */}
+                                        <div style={{ paddingTop: '0.5rem', borderTop: '1px solid #e2e8f0' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                                <div style={{ fontSize: '0.65rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                    Activity Timeline
+                                                    {oppActs.length > 0 && <span style={{ background: '#dbeafe', color: '#1e40af', padding: '0.1rem 0.35rem', borderRadius: '999px', fontWeight: '700', marginLeft: '0.375rem' }}>{oppActs.length}</span>}
                                                 </div>
+                                                <button onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }}
+                                                    style={{ fontSize: '0.6rem', fontWeight: '700', color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '0.15rem 0.4rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                                    + Log
+                                                </button>
                                             </div>
-                                        )}
+                                            {oppActs.length === 0 ? (
+                                                <div style={{ textAlign: 'center', padding: '0.75rem 0', color: '#94a3b8', fontSize: '0.75rem', fontStyle: 'italic' }}>No activities yet</div>
+                                            ) : (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                                                    {(() => {
+                                                        const actTypeIcons = { Call: '📞', Email: '📧', Meeting: '🤝', Demo: '💻', 'Proposal Sent': '📄', 'Follow-up': '🔄', Note: '📝', Other: '📝' };
+                                                        const actTypeColors = { Call: '#dbeafe', Email: '#fce7f3', Meeting: '#d1fae5', Demo: '#ede9fe', 'Proposal Sent': '#fef3c7', 'Follow-up': '#ffedd5', Note: '#f1f5f9', Other: '#f1f5f9' };
+                                                        const actTypeText = { Call: '#1e40af', Email: '#9d174d', Meeting: '#065f46', Demo: '#5b21b6', 'Proposal Sent': '#92400e', 'Follow-up': '#9a3412', Note: '#475569', Other: '#475569' };
+                                                        const sorted = [...oppActs].sort((a,b) => new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0));
+                                                        return sorted.slice(0, 10).map((a, idx) => {
+                                                            const icon = actTypeIcons[a.type] || '📝';
+                                                            const bg = actTypeColors[a.type] || '#f1f5f9';
+                                                            const tc = actTypeText[a.type] || '#475569';
+                                                            const dateStr = a.date ? new Date(a.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+                                                            const isLast = idx === Math.min(sorted.length, 10) - 1;
+                                                            return (
+                                                                <div key={a.id} style={{ display: 'flex', gap: '0.5rem', paddingBottom: isLast ? '0' : '0.5rem', position: 'relative' }}>
+                                                                    {/* Timeline spine */}
+                                                                    {!isLast && <div style={{ position: 'absolute', left: '11px', top: '22px', bottom: '0', width: '1px', background: '#e2e8f0' }} />}
+                                                                    {/* Icon dot */}
+                                                                    <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: bg, border: '1px solid ' + tc + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', flexShrink: 0, zIndex: 1 }}>{icon}</div>
+                                                                    {/* Content */}
+                                                                    <div style={{ flex: 1, minWidth: 0, paddingBottom: '0.35rem' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', flexWrap: 'wrap' }}>
+                                                                            <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: tc, background: bg, padding: '0.05rem 0.35rem', borderRadius: '3px' }}>{a.type || 'Activity'}</span>
+                                                                            <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{dateStr}</span>
+                                                                            {a.author && <span style={{ fontSize: '0.6rem', color: '#94a3b8', marginLeft: 'auto' }}>{a.author.split(' ')[0]}</span>}
+                                                                        </div>
+                                                                        {a.notes && <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.2rem', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{a.notes}</div>}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        });
+                                                    })()}
+                                                    {oppActs.length > 10 && <div style={{ fontSize: '0.7rem', color: '#94a3b8', textAlign: 'center', paddingTop: '0.25rem' }}>+{oppActs.length - 10} more activities</div>}
+                                                </div>
+                                            )}
+                                        </div>
                                         {/* Action buttons */}
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.25rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
                                             <button className="btn" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
@@ -4454,6 +4539,79 @@ dbFetch('/.netlify/functions/activities', {
                     </div>
                     )}
                     </div>{/* end spt-pipeline-desktop */}
+
+                    {/* ════ FLOATING QUICK-LOG ACTIVITY BUTTON ════ */}
+                    <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 500, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+                        {quickLogOpen && (
+                            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', padding: '1rem', width: '280px', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}
+                                onClick={e => e.stopPropagation()}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#0f172a' }}>⚡ Quick Log Activity</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.375rem' }}>
+                                    {['Call','Email','Meeting','Demo','Follow-up','Note'].map(t => (
+                                        <button key={t} onClick={() => setQuickLogForm(f => ({ ...f, type: t }))}
+                                            style={{ padding: '0.3rem 0.25rem', borderRadius: '6px', border: '1px solid ' + (quickLogForm.type === t ? '#2563eb' : '#e2e8f0'), background: quickLogForm.type === t ? '#eff6ff' : '#f8fafc', color: quickLogForm.type === t ? '#2563eb' : '#64748b', fontSize: '0.6875rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                            {quickLogForm.type === t ? '✓ ' : ''}{t}
+                                        </button>
+                                    ))}
+                                </div>
+                                <select value={quickLogForm.opportunityId} onChange={e => setQuickLogForm(f => ({ ...f, opportunityId: e.target.value }))}
+                                    style={{ fontSize: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.35rem 0.5rem', background: '#f8fafc', color: '#1e293b', fontFamily: 'inherit' }}>
+                                    <option value="">— Link to deal (optional) —</option>
+                                    {(pipelineFilteredOpps || []).map(o => <option key={o.id} value={o.id}>{o.opportunityName || o.account}</option>)}
+                                </select>
+                                <textarea value={quickLogForm.notes} onChange={e => setQuickLogForm(f => ({ ...f, notes: e.target.value }))}
+                                    placeholder="Notes…" rows={2}
+                                    style={{ fontSize: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.35rem 0.5rem', background: '#f8fafc', color: '#1e293b', fontFamily: 'inherit', resize: 'none' }} />
+                                <div style={{ display: 'flex', gap: '0.375rem' }}>
+                                    <button onClick={() => { setQuickLogOpen(false); setQuickLogForm({ type: 'Call', notes: '', opportunityId: '' }); }}
+                                        style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                        Cancel
+                                    </button>
+                                    <button onClick={() => {
+                                        const linkedOpp = quickLogForm.opportunityId ? (opportunities || []).find(o => o.id === quickLogForm.opportunityId) : null;
+                                        handleSaveActivity({
+                                            type: quickLogForm.type,
+                                            notes: quickLogForm.notes,
+                                            date: new Date().toISOString().split('T')[0],
+                                            opportunityId: quickLogForm.opportunityId || null,
+                                            opportunityName: linkedOpp?.opportunityName || linkedOpp?.account || '',
+                                            companyName: linkedOpp?.account || '',
+                                            salesRep: currentUser,
+                                        });
+                                    }} style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                        Save
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                        <button onClick={() => setQuickLogOpen(v => !v)}
+                            style={{ width: '48px', height: '48px', borderRadius: '50%', background: quickLogOpen ? '#1d4ed8' : '#2563eb', color: '#fff', border: 'none', boxShadow: '0 4px 16px rgba(37,99,235,0.45)', fontSize: '1.25rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
+                            title="Quick-log an activity">
+                            {quickLogOpen ? '×' : '📞'}
+                        </button>
+                    </div>
+
+                    {/* ════ FOLLOW-UP TASK PROMPT ════ */}
+                    {followUpPrompt && (
+                        <div style={{ position: 'fixed', bottom: '5rem', right: '1.5rem', zIndex: 501, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '1rem', width: '260px' }}
+                            onClick={e => e.stopPropagation()}>
+                            <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.375rem' }}>✅ Activity logged!</div>
+                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.75rem' }}>Create a follow-up task for <strong>{followUpPrompt.opportunityName}</strong>?</div>
+                            <div style={{ display: 'flex', gap: '0.375rem' }}>
+                                <button onClick={() => setFollowUpPrompt(null)}
+                                    style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                    Skip
+                                </button>
+                                <button onClick={() => {
+                                    setEditingTask({ relatedTo: followUpPrompt.opportunityId, opportunityId: followUpPrompt.opportunityId, type: 'Follow-up', dueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0] });
+                                    setShowTaskModal(true);
+                                    setFollowUpPrompt(null);
+                                }} style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                    + Add Task
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -7264,7 +7422,7 @@ ${bodyHtml}
                             const byType = filtActs.reduce((acc,a)=>{ const t=a.type||'Other'; acc[t]=(acc[t]||0)+1; return acc; },{});
                             const typeRows = Object.entries(byType).sort((a,b)=>b[1]-a[1]);
                             const maxTypeCount = Math.max(...typeRows.map(([,c])=>c),1);
-                            const byRep = filtActs.reduce((acc,a)=>{ const r=a.rep||a.salesRep||a.assignedTo||'Unknown'; if(!acc[r])acc[r]={count:0}; acc[r].count++; return acc; },{});
+                            const byRep = filtActs.reduce((acc,a)=>{ const r=a.rep||a.salesRep||a.assignedTo||a.author||'Unknown'; if(!acc[r])acc[r]={count:0,lastDate:null,thisWeek:0}; acc[r].count++; const d=new Date(a.date||a.createdAt||0); if(!acc[r].lastDate||d>acc[r].lastDate)acc[r].lastDate=d; const weekAgo=new Date(now-7*86400000); if(d>=weekAgo)acc[r].thisWeek++; return acc; },{});
                             const repActRows = Object.entries(byRep).sort((a,b)=>b[1].count-a[1].count);
                             return (
                             <div style={cardStyle}>
@@ -7289,7 +7447,8 @@ ${bodyHtml}
                                   </div>
                                 ))}
                               </div>
-                              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.25rem' }}>
+                              <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:'1.25rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
                                 <div>
                                   <div style={labelStyle}>By Activity Type</div>
                                   {typeRows.length === 0 ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem', marginTop:'0.5rem' }}>No activities logged yet.</div> :
@@ -7306,26 +7465,46 @@ ${bodyHtml}
                                     ))
                                   }
                                 </div>
-                                <div>
-                                  <div style={labelStyle}>By Rep</div>
-                                  {repActRows.length === 0 ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem', marginTop:'0.5rem' }}>No activities logged yet.</div> :
-                                    repActRows.map(([rep,{count}])=>{
-                                      const maxC = Math.max(...repActRows.map(([,{count}])=>count),1);
-                                      return (
-                                      <div key={rep} style={{ marginBottom:'0.5rem' }}>
-                                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.2rem' }}>
-                                          <span style={{ fontSize:'0.75rem', fontWeight:'600', color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'120px' }}>{rep}</span>
-                                          <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#1e293b' }}>{count}</span>
-                                        </div>
-                                        <div style={{ height:'5px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
-                                          <div style={{ height:'100%', width:(count/maxC*100)+'%', background:'linear-gradient(to right,#10b981,#059669)', borderRadius:'3px' }}/>
-                                        </div>
-                                      </div>
-                                      );
-                                    })
-                                  }
+                                <div style={{ gridColumn: 'span 2' }}>
+                                  {/* placeholder to keep By Activity Type left-aligned */}
                                 </div>
-                              </div>
+                                </div>{/* end inner 2-col grid */}
+                                <div>
+                                  <div style={labelStyle}>Rep Activity Summary</div>
+                                  {repActRows.length === 0 ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem', marginTop:'0.5rem' }}>No activities logged yet.</div> : (
+                                    <div style={{ overflowX: 'auto', marginTop: '0.5rem' }}>
+                                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                                        <thead><tr>
+                                          {['Rep', 'Total', 'This Week', 'Last Activity', 'Status'].map(h => (
+                                            <th key={h} style={{ padding: '0.4rem 0.75rem', textAlign: h === 'Rep' ? 'left' : 'right', fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>{h}</th>
+                                          ))}
+                                        </tr></thead>
+                                        <tbody>
+                                          {repActRows.map(([rep, {count, lastDate, thisWeek}], i) => {
+                                            const daysSince = lastDate ? Math.floor((now - lastDate) / 86400000) : null;
+                                            const statusColor = daysSince === null ? '#94a3b8' : daysSince <= 3 ? '#10b981' : daysSince <= 7 ? '#f59e0b' : '#ef4444';
+                                            const statusLabel = daysSince === null ? '—' : daysSince === 0 ? 'Today' : daysSince === 1 ? 'Yesterday' : daysSince <= 7 ? `${daysSince}d ago` : daysSince <= 30 ? `${daysSince}d ago` : '30d+ ago';
+                                            const statusDot = daysSince === null ? '○' : daysSince <= 3 ? '●' : daysSince <= 7 ? '●' : '⚠';
+                                            return (
+                                              <tr key={rep} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
+                                                <td style={{ padding: '0.5rem 0.75rem', fontWeight: '600', color: '#1e293b', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rep}</td>
+                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#475569', fontWeight: '600' }}>{count}</td>
+                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: thisWeek > 0 ? '#2563eb' : '#94a3b8', fontWeight: thisWeek > 0 ? '700' : '400' }}>{thisWeek}</td>
+                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                                                  {lastDate ? lastDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                                                </td>
+                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                                  <span style={{ color: statusColor, fontSize: '0.75rem', fontWeight: '700' }}>{statusDot} {statusLabel}</span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>{/* end outer grid */}
                             </div>
                             );
                           })()}
