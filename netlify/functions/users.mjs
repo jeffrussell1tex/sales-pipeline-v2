@@ -27,7 +27,12 @@ export const handler = async (event) => {
     // GET ?me=true — any authenticated user can fetch their own record
     if (event.httpMethod === 'GET' && event.queryStringParameters?.me === 'true') {
         try {
-            const [row] = await db.select().from(users).where(eq(users.name, userId));
+            const { createClerkClient } = await import('@clerk/backend');
+            const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+            const clerkUser = await clerk.users.getUser(userId);
+            const displayName = ((clerkUser.firstName || '') + ' ' + (clerkUser.lastName || '')).trim()
+                || clerkUser.emailAddresses?.[0]?.emailAddress || '';
+            const [row] = await db.select().from(users).where(eq(users.name, displayName));
             if (!row) return { statusCode: 404, headers, body: JSON.stringify({ error: 'User not found' }) };
             return { statusCode: 200, headers, body: JSON.stringify({ user: flatten(row) }) };
         } catch (err) {

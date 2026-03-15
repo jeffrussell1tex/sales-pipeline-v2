@@ -1156,6 +1156,7 @@ function App() {
     const [profilePanelTab, setProfilePanelTab] = useState('profile');
     const [myProfile, setMyProfile] = useState(null);
     const [profileSaving, setProfileSaving] = useState(false);
+    const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', email: '', phone: '', title: '' });
     const [editingOpp, setEditingOpp] = useState(null);
     const [editingAccount, setEditingAccount] = useState(null);
     const [editingSubAccount, setEditingSubAccount] = useState(null);
@@ -1426,7 +1427,18 @@ dbFetch('/.netlify/functions/users')
 // Load current user's own profile (notification prefs, etc.)
 dbFetch('/.netlify/functions/users?me=true')
     .then(r => r.ok ? r.json() : null)
-    .then(data => { if (data?.user) setMyProfile(data.user); })
+    .then(data => {
+        if (data?.user) {
+            setMyProfile(data.user);
+            setProfileForm({
+                firstName: data.user.firstName || '',
+                lastName:  data.user.lastName  || '',
+                email:     data.user.email     || '',
+                phone:     data.user.phone     || '',
+                title:     data.user.title     || '',
+            });
+        }
+    })
     .catch(() => {});
     };
     loadData();
@@ -2719,7 +2731,19 @@ dbFetch('/.netlify/functions/activities', {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <div style={{ position: 'relative' }}>
                         <div
-                            onClick={() => { setShowProfilePanel(v => !v); setProfilePanelTab('profile'); }}
+                            onClick={() => {
+                                setShowProfilePanel(v => !v);
+                                setProfilePanelTab('profile');
+                                if (!myProfile) {
+                                    setProfileForm({
+                                        firstName: currentUser.split(' ')[0] || '',
+                                        lastName:  currentUser.split(' ').slice(1).join(' ') || '',
+                                        email:     clerkUser?.emailAddresses?.[0]?.emailAddress || '',
+                                        phone:     '',
+                                        title:     '',
+                                    });
+                                }
+                            }}
                             title="My profile & settings"
                             style={{ 
                             display: 'flex', 
@@ -2872,31 +2896,22 @@ dbFetch('/.netlify/functions/activities', {
 
                                         {/* ── Profile Tab ─────────────────────────────── */}
                                         {profilePanelTab === 'profile' && (() => {
-                                            const [localForm, setLocalForm] = React.useState({
-                                                firstName: myProfile?.firstName || currentUser.split(' ')[0] || '',
-                                                lastName:  myProfile?.lastName  || currentUser.split(' ').slice(1).join(' ') || '',
-                                                email:     myProfile?.email     || clerkUser?.emailAddresses?.[0]?.emailAddress || '',
-                                                phone:     myProfile?.phone     || '',
-                                                title:     myProfile?.title     || '',
-                                            });
-
                                             const inputStyle = { width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box' };
                                             const labelStyle = { fontSize: '0.75rem', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '4px' };
-
                                             return (
                                                 <div>
                                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem', marginBottom: '0.875rem' }}>
-                                                        <div><label style={labelStyle}>First Name</label><input style={inputStyle} value={localForm.firstName} onChange={e => setLocalForm(p => ({ ...p, firstName: e.target.value }))} /></div>
-                                                        <div><label style={labelStyle}>Last Name</label><input style={inputStyle} value={localForm.lastName} onChange={e => setLocalForm(p => ({ ...p, lastName: e.target.value }))} /></div>
+                                                        <div><label style={labelStyle}>First Name</label><input style={inputStyle} value={profileForm.firstName} onChange={e => setProfileForm(p => ({ ...p, firstName: e.target.value }))} /></div>
+                                                        <div><label style={labelStyle}>Last Name</label><input style={inputStyle} value={profileForm.lastName} onChange={e => setProfileForm(p => ({ ...p, lastName: e.target.value }))} /></div>
                                                     </div>
-                                                    <div style={{ marginBottom: '0.875rem' }}><label style={labelStyle}>Work Email</label><input style={inputStyle} type="email" value={localForm.email} onChange={e => setLocalForm(p => ({ ...p, email: e.target.value }))} /></div>
-                                                    <div style={{ marginBottom: '0.875rem' }}><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={localForm.phone} onChange={e => setLocalForm(p => ({ ...p, phone: e.target.value }))} /></div>
-                                                    <div style={{ marginBottom: '1.25rem' }}><label style={labelStyle}>Title</label><input style={inputStyle} value={localForm.title} onChange={e => setLocalForm(p => ({ ...p, title: e.target.value }))} /></div>
+                                                    <div style={{ marginBottom: '0.875rem' }}><label style={labelStyle}>Work Email</label><input style={inputStyle} type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} /></div>
+                                                    <div style={{ marginBottom: '0.875rem' }}><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={profileForm.phone} onChange={e => setProfileForm(p => ({ ...p, phone: e.target.value }))} /></div>
+                                                    <div style={{ marginBottom: '1.25rem' }}><label style={labelStyle}>Title</label><input style={inputStyle} value={profileForm.title} onChange={e => setProfileForm(p => ({ ...p, title: e.target.value }))} /></div>
                                                     <div style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '6px', fontSize: '0.75rem', color: '#64748b', marginBottom: '1rem' }}>
                                                         🔑 Password is managed via Clerk. <a href="https://accounts.clerk.dev" target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Change password →</a>
                                                     </div>
                                                     <button
-                                                        onClick={() => saveProfile({ firstName: localForm.firstName, lastName: localForm.lastName, email: localForm.email, phone: localForm.phone, title: localForm.title })}
+                                                        onClick={() => saveProfile({ firstName: profileForm.firstName, lastName: profileForm.lastName, email: profileForm.email, phone: profileForm.phone, title: profileForm.title })}
                                                         disabled={profileSaving}
                                                         style={{ width: '100%', padding: '0.625rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                                                         {profileSaving ? 'Saving…' : 'Save Profile'}
