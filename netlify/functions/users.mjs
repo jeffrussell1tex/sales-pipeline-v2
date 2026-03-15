@@ -161,19 +161,17 @@ export const handler = async (event) => {
             }
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
-            let result;
-            try {
-                // Try plain insert first
-                const [inserted] = await db.insert(users).values(clean).returning();
-                result = inserted;
-            } catch (insertErr) {
-                // If insert fails (duplicate, constraint, etc.) fall back to update
-                const [updated] = await db
-                    .update(users)
-                    .set({ ...updateData, updatedAt: new Date() })
-                    .where(eq(users.id, data.id))
-                    .returning();
-                result = updated;
+            // ON CONFLICT upsert — always returns a row, never crashes on duplicate id/email
+            const [result] = await db
+                .insert(users)
+                .values(clean)
+                .onConflictDoUpdate({
+                    target: users.id,
+                    set: { ...updateData, updatedAt: new Date() },
+                })
+                .returning();
+            if (!result) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: 'Insert returned no row' }) };
             }
             return {
                 statusCode: 201,
@@ -190,15 +188,22 @@ export const handler = async (event) => {
             }
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
-            const [updated] = await db
-                .update(users)
-                .set({ ...updateData, updatedAt: new Date() })
-                .where(eq(users.id, data.id))
+            // Upsert on PUT too — handles users created externally not yet in DB
+            const [result] = await db
+                .insert(users)
+                .values(clean)
+                .onConflictDoUpdate({
+                    target: users.id,
+                    set: { ...updateData, updatedAt: new Date() },
+                })
                 .returning();
+            if (!result) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: 'Update returned no row' }) };
+            }
             return {
                 statusCode: 200,
                 headers,
-                body: JSON.stringify({ user: flatten(updated) }),
+                body: JSON.stringify({ user: flatten(result) }),
             };
         }
 
