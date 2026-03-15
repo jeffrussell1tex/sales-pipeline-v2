@@ -1005,3 +1005,103 @@
             overflow-x: visible;
             overflow-y: visible;
         }
+
+        /* ═══════════════════════════════════════════════════════
+           MOBILE ENHANCEMENTS — Option 3 Implementation
+           ═══════════════════════════════════════════════════════ */
+
+        /* ── Sticky first column in all horizontally-scrolling tables ── */
+        @media (max-width: 1024px) {
+            .table-container {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .table-container table td:first-child,
+            .table-container table th:first-child {
+                position: sticky;
+                left: 0;
+                z-index: 2;
+                background: #fff;
+            }
+            .table-container table th:first-child {
+                background: #f8fafc;
+            }
+            /* Ensure even/hover row backgrounds don't break sticky column */
+            .table-container tbody tr:nth-child(even) td:first-child {
+                background: #f8fafc;
+            }
+            .table-container tbody tr:hover td:first-child {
+                background: #eff6ff;
+            }
+        }
+
+        /* ── Pipeline mobile card list (shows on mobile, hidden on desktop) ── */
+        .spt-pipeline-mobile { display: none; }
+        .spt-pipeline-desktop { display: block; }
+
+        /* ── Minimum 44×44px tap targets on interactive elements ── */
+        @media (max-width: 640px) {
+
+            /* ── Safe area support for iPhone notch/home indicator ── */
+            .app-container {
+                padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+            }
+            .nav-tabs {
+                padding-bottom: calc(0.25rem + env(safe-area-inset-bottom, 0px));
+            }
+
+            /* ── Tap targets: buttons, selects, checkboxes ── */
+            button:not(.action-btn):not(.nav-tab):not(.spt-pipeline-mobile button) {
+                min-height: 44px;
+            }
+            select, input[type="text"], input[type="number"],
+            input[type="email"], input[type="date"], input[type="search"] {
+                min-height: 44px;
+            }
+            input[type="checkbox"], input[type="radio"] {
+                width: 20px !important;
+                height: 20px !important;
+                min-width: 20px;
+                min-height: 20px;
+            }
+
+            /* ── Nav tab touch targets ── */
+            .nav-tab {
+                min-height: 44px;
+                padding-top: 0.375rem;
+                padding-bottom: 0.375rem;
+            }
+
+            /* ── Pipeline: show mobile cards, hide desktop views ── */
+            .spt-pipeline-mobile  { display: block !important; }
+            .spt-pipeline-desktop { display: none !important; }
+
+            /* ── Pipeline mobile card styles ── */
+            .spt-pipeline-card {
+                background: #fff;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                padding: 0.875rem 1rem;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+                cursor: pointer;
+                transition: box-shadow 0.15s;
+                active: box-shadow 0 2px 8px rgba(0,0,0,0.12);
+            }
+
+            /* ── Header: compress on small screens ── */
+            .header-inner {
+                padding: 0.5rem 0.75rem !important;
+            }
+            .header h1 { font-size: 1rem !important; }
+            .header p   { display: none !important; }
+
+            /* ── Table headers: allow wrapping to multiple lines ── */
+            .table-header {
+                flex-wrap: wrap;
+            }
+
+            /* ── Modals: ensure they clear the fixed bottom nav ── */
+            .modal {
+                max-height: calc(95vh - 64px);
+            }
+        }

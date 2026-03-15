@@ -540,7 +540,7 @@ function KanbanView({ stages, pipelineFilteredOpps, kanbanDragging, kanbanDragOv
 
     return (
         <div style={{ padding: '1rem 1.25rem 1.5rem' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div className="spt-kanban-wrap" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
                 {stages.filter(s => s !== 'Closed Lost').map((stage, idx) => {
                     const color = stageColors[idx % stageColors.length];
                     const colOpps = pipelineFilteredOpps.filter(o => o.stage === stage);
@@ -1076,6 +1076,15 @@ function App() {
         }
     }, [clerkUser]);
     const [activeTab, setActiveTab] = useState('home');
+
+    // ── Mobile: track viewport for pipeline list view ──
+    const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
+    useEffect(() => {
+        const onResize = () => setIsMobile(window.innerWidth < 640);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+
     const [opportunities, setOpportunities] = useState([]);
     const [accounts, setAccounts] = useState([]);
     const [tasks, setTasks] = useState([]);
@@ -3847,6 +3856,52 @@ dbFetch('/.netlify/functions/activities', {
                     </div>
                     {/* ════ END SUMMARY PANEL ════ */}
 
+                    {/* ════ MOBILE PIPELINE CARD LIST (≤640px only) ════ */}
+                    <div className="spt-pipeline-mobile" style={{ padding: '0.75rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                            <span style={{ fontSize: '0.6875rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{pipelineFilteredOpps.length} deal{pipelineFilteredOpps.length !== 1 ? 's' : ''}</span>
+                            <button onClick={() => { setEditingOpp(null); setShowModal(true); }} style={{ padding: '0.45rem 0.875rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>+ New Deal</button>
+                        </div>
+                        {pipelineFilteredOpps.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8', fontSize: '0.875rem' }}>No deals match the current filter.</div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                                {pipelineFilteredOpps.map(opp => {
+                                    const health = calculateDealHealth(opp);
+                                    const healthColor = health.score >= 70 ? '#10b981' : health.score >= 40 ? '#f59e0b' : '#ef4444';
+                                    const sc = getStageColor(opp.stage);
+                                    return (
+                                        <div key={opp.id} className="mobile-record-card"
+                                            onClick={() => { setEditingOpp(opp); setShowModal(true); }}>
+                                            <div className="mobile-card-top">
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div className="mobile-card-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {opp.opportunityName || opp.account || 'Unnamed'}
+                                                    </div>
+                                                    <div className="mobile-card-sub">{opp.account}{opp.salesRep ? ` · ${opp.salesRep}` : ''}</div>
+                                                </div>
+                                                {canViewField('arr') && (
+                                                    <div className="mobile-card-arr">${((parseFloat(opp.arr)||0)/1000).toFixed(0)}K</div>
+                                                )}
+                                            </div>
+                                            <div className="mobile-card-meta">
+                                                <span style={{ background: sc.text + '22', color: sc.text, padding: '0.125rem 0.5rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700' }}>{opp.stage}</span>
+                                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: healthColor, display: 'inline-block' }} />
+                                                <span className="mobile-card-meta-item" style={{ color: healthColor, fontWeight: '600' }}>{health.status}</span>
+                                                {opp.forecastedCloseDate && (
+                                                    <span className="mobile-card-meta-item">📅 {new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ════ DESKTOP VIEWS: VIEW TOGGLE + FUNNEL / KANBAN / TABLE ════ */}
+                    <div className="spt-pipeline-desktop">
+
                     {/* ════ VIEW TOGGLE ════ */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
                         <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.25rem' }}>View:</span>
@@ -4398,6 +4453,7 @@ dbFetch('/.netlify/functions/activities', {
                         </div>
                     </div>
                     )}
+                    </div>{/* end spt-pipeline-desktop */}
                 </div>
             )}
 
