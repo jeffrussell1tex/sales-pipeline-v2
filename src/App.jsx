@@ -1847,99 +1847,72 @@ dbFetch('/.netlify/functions/users?me=true')
     };
 
     const [userModalError, setUserModalError] = useState(null);
+    const [userModalSaving, setUserModalSaving] = useState(false);
 
     const handleSaveUser = async (userData) => {
         setUserModalError(null);
+        setUserModalSaving(true);
         if (editingUser) {
             const payload = { ...userData, id: editingUser.id, email: userData.email || editingUser.email || '' };
-            // Optimistic update
-            setSettings(prev => ({
-                ...prev,
-                users: (prev.users || []).map(u => u.id === editingUser.id ? payload : u)
-            }));
-            setShowUserModal(false);
-            setEditingUser(null);
             try {
                 const res = await dbFetch('/.netlify/functions/users', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                if (res.status === 409) {
-                    const data = await res.json();
-                    // Roll back optimistic update and re-open modal with error
-                    setSettings(prev => ({
-                        ...prev,
-                        users: (prev.users || []).map(u => u.id === editingUser.id ? editingUser : u)
-                    }));
-                    setEditingUser(editingUser);
-                    setUserModalError(data.error || 'Duplicate email address.');
-                    setShowUserModal(true);
+                const data = await res.json();
+                if (!res.ok) {
+                    setUserModalError(data.error || 'Failed to save user. Please try again.');
+                    setUserModalSaving(false);
                     return;
                 }
-                if (!res.ok) throw new Error(`Server returned ${res.status}`);
-                const data = await res.json();
+                // Success — update state and close
                 if (data.user) {
                     setSettings(prev => ({
                         ...prev,
                         users: (prev.users || []).map(u => u.id === data.user.id ? data.user : u)
                     }));
                 }
+                setShowUserModal(false);
+                setEditingUser(null);
+                setUserModalError(null);
             } catch (err) {
                 console.error('Failed to update user:', err);
-                // Roll back optimistic update
-                setSettings(prev => ({
-                    ...prev,
-                    users: (prev.users || []).map(u => u.id === editingUser.id ? editingUser : u)
-                }));
-                alert('Failed to save user. Please try again.');
+                setUserModalError('Failed to save user. Please check your connection and try again.');
+            } finally {
+                setUserModalSaving(false);
             }
         } else {
             const newId = 'usr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
             const payload = { ...userData, id: newId, email: userData.email || '' };
-            // Optimistic update
-            setSettings(prev => ({
-                ...prev,
-                users: [...(prev.users || []), payload]
-            }));
-            setShowUserModal(false);
             try {
                 const res = await dbFetch('/.netlify/functions/users', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                if (res.status === 409) {
-                    const data = await res.json();
-                    // Roll back optimistic insert and re-open modal with error
-                    setSettings(prev => ({
-                        ...prev,
-                        users: (prev.users || []).filter(u => u.id !== payload.id)
-                    }));
-                    setEditingUser(null);
-                    setUserModalError(data.error || 'Duplicate email address.');
-                    setShowUserModal(true);
+                const data = await res.json();
+                if (!res.ok) {
+                    setUserModalError(data.error || 'Failed to save user. Please try again.');
+                    setUserModalSaving(false);
                     return;
                 }
-                if (!res.ok) throw new Error(`Server returned ${res.status}`);
-                const data = await res.json();
-                if (data.user) {
-                    setSettings(prev => ({
-                        ...prev,
-                        users: (prev.users || []).map(u => u.id === payload.id ? data.user : u)
-                    }));
-                }
-                if (showModal) {
-                    setLastCreatedRepName(data.user?.name || payload.name);
-                }
-            } catch (err) {
-                console.error('Failed to create user:', err);
-                // Roll back optimistic insert
+                // Success — add to state and close
+                const savedUser = data.user || payload;
                 setSettings(prev => ({
                     ...prev,
-                    users: (prev.users || []).filter(u => u.id !== payload.id)
+                    users: [...(prev.users || []), savedUser]
                 }));
-                alert('Failed to save user. Please try again.');
+                if (showModal) {
+                    setLastCreatedRepName(savedUser.name || payload.name);
+                }
+                setShowUserModal(false);
+                setUserModalError(null);
+            } catch (err) {
+                console.error('Failed to create user:', err);
+                setUserModalError('Failed to save user. Please check your connection and try again.');
+            } finally {
+                setUserModalSaving(false);
             }
         }
     };
@@ -9779,9 +9752,10 @@ ${bodyHtml}
                 <UserModal
                     user={editingUser}
                     settings={settings}
-                    onClose={() => { setShowUserModal(false); setUserModalError(null); }}
+                    onClose={() => { setShowUserModal(false); setUserModalError(null); setUserModalSaving(false); }}
                     onSave={handleSaveUser}
                     errorMessage={userModalError}
+                    saving={userModalSaving}
                 />
             )}
 
