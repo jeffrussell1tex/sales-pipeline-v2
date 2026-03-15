@@ -1846,44 +1846,32 @@ dbFetch('/.netlify/functions/users?me=true')
         });
     };
 
-    const handleSaveUser = async (userData) => {
+    const handleSaveUser = (userData) => {
         if (editingUser) {
             const payload = { ...userData, id: editingUser.id };
-            try {
-                const res = await dbFetch('/.netlify/functions/users', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-                const data = await res.json();
-                const saved = data.user || payload;
-                setSettings(prev => ({
-                    ...prev,
-                    users: (prev.users || []).map(u => u.id === editingUser.id ? saved : u)
-                }));
-            } catch (err) {
-                console.error('Failed to update user:', err);
-            }
+            setSettings(prev => ({
+                ...prev,
+                users: (prev.users || []).map(u => u.id === editingUser.id ? payload : u)
+            }));
+            dbFetch('/.netlify/functions/users', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            }).catch(err => console.error('Failed to update user:', err));
         } else {
-            const newId = 'usr_' + Date.now();
+            const newId = 'usr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
             const payload = { ...userData, id: newId };
-            try {
-                const res = await dbFetch('/.netlify/functions/users', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-                const data = await res.json();
-                const saved = data.user || payload;
-                setSettings(prev => ({
-                    ...prev,
-                    users: [...(prev.users || []), saved]
-                }));
-                if (showModal) {
-                    setLastCreatedRepName(saved.name);
-                }
-            } catch (err) {
-                console.error('Failed to create user:', err);
+            setSettings(prev => ({
+                ...prev,
+                users: [...(prev.users || []), payload]
+            }));
+            dbFetch('/.netlify/functions/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            }).catch(err => console.error('Failed to create user:', err));
+            if (showModal) {
+                setLastCreatedRepName(payload.name);
             }
         }
         setShowUserModal(false);
