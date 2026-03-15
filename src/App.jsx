@@ -10988,7 +10988,7 @@ ${bodyHtml}
                     <button onClick={() => setQuickLogOpen(v => !v)}
                         style={{ width: '52px', height: '52px', borderRadius: '50%', background: quickLogOpen ? '#1d4ed8' : 'linear-gradient(135deg,#2563eb,#7c3aed)', color: '#fff', border: 'none', boxShadow: '0 4px 20px rgba(37,99,235,0.5)', fontSize: '1.375rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', lineHeight: '1' }}
                         title="Quick-log an activity">
-                        {quickLogOpen ? '✕' : '📞'}
+                        {quickLogOpen ? '✕' : '⚡'}
                     </button>
                 </div>
             )}
