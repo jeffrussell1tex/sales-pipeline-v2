@@ -4503,7 +4503,7 @@ dbFetch('/.netlify/functions/activities', {
                                                                     {/* Timeline spine */}
                                                                     {!isLast && <div style={{ position: 'absolute', left: '11px', top: '22px', bottom: '0', width: '1px', background: '#e2e8f0' }} />}
                                                                     {/* Icon dot */}
-                                                                    <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: bg, border: '1px solid ' + tc + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', flexShrink: 0, zIndex: 1 }}>{icon}</div>
+                                                                    <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: bg, border: '1px solid ' + tc + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0, zIndex: 1 }}>{icon}</div>
                                                                     {/* Content */}
                                                                     <div style={{ flex: 1, minWidth: 0, paddingBottom: '0.35rem' }}>
                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', flexWrap: 'wrap' }}>
@@ -4540,78 +4540,6 @@ dbFetch('/.netlify/functions/activities', {
                     )}
                     </div>{/* end spt-pipeline-desktop */}
 
-                    {/* ════ FLOATING QUICK-LOG ACTIVITY BUTTON ════ */}
-                    <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 500, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
-                        {quickLogOpen && (
-                            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', padding: '1rem', width: '280px', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}
-                                onClick={e => e.stopPropagation()}>
-                                <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#0f172a' }}>⚡ Quick Log Activity</div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.375rem' }}>
-                                    {['Call','Email','Meeting','Demo','Follow-up','Note'].map(t => (
-                                        <button key={t} onClick={() => setQuickLogForm(f => ({ ...f, type: t }))}
-                                            style={{ padding: '0.3rem 0.25rem', borderRadius: '6px', border: '1px solid ' + (quickLogForm.type === t ? '#2563eb' : '#e2e8f0'), background: quickLogForm.type === t ? '#eff6ff' : '#f8fafc', color: quickLogForm.type === t ? '#2563eb' : '#64748b', fontSize: '0.6875rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                            {quickLogForm.type === t ? '✓ ' : ''}{t}
-                                        </button>
-                                    ))}
-                                </div>
-                                <select value={quickLogForm.opportunityId} onChange={e => setQuickLogForm(f => ({ ...f, opportunityId: e.target.value }))}
-                                    style={{ fontSize: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.35rem 0.5rem', background: '#f8fafc', color: '#1e293b', fontFamily: 'inherit' }}>
-                                    <option value="">— Link to deal (optional) —</option>
-                                    {(pipelineFilteredOpps || []).map(o => <option key={o.id} value={o.id}>{o.opportunityName || o.account}</option>)}
-                                </select>
-                                <textarea value={quickLogForm.notes} onChange={e => setQuickLogForm(f => ({ ...f, notes: e.target.value }))}
-                                    placeholder="Notes…" rows={2}
-                                    style={{ fontSize: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.35rem 0.5rem', background: '#f8fafc', color: '#1e293b', fontFamily: 'inherit', resize: 'none' }} />
-                                <div style={{ display: 'flex', gap: '0.375rem' }}>
-                                    <button onClick={() => { setQuickLogOpen(false); setQuickLogForm({ type: 'Call', notes: '', opportunityId: '' }); }}
-                                        style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                        Cancel
-                                    </button>
-                                    <button onClick={() => {
-                                        const linkedOpp = quickLogForm.opportunityId ? (opportunities || []).find(o => o.id === quickLogForm.opportunityId) : null;
-                                        handleSaveActivity({
-                                            type: quickLogForm.type,
-                                            notes: quickLogForm.notes,
-                                            date: new Date().toISOString().split('T')[0],
-                                            opportunityId: quickLogForm.opportunityId || null,
-                                            opportunityName: linkedOpp?.opportunityName || linkedOpp?.account || '',
-                                            companyName: linkedOpp?.account || '',
-                                            salesRep: currentUser,
-                                        });
-                                    }} style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                        Save
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                        <button onClick={() => setQuickLogOpen(v => !v)}
-                            style={{ width: '48px', height: '48px', borderRadius: '50%', background: quickLogOpen ? '#1d4ed8' : '#2563eb', color: '#fff', border: 'none', boxShadow: '0 4px 16px rgba(37,99,235,0.45)', fontSize: '1.25rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}
-                            title="Quick-log an activity">
-                            {quickLogOpen ? '×' : '📞'}
-                        </button>
-                    </div>
-
-                    {/* ════ FOLLOW-UP TASK PROMPT ════ */}
-                    {followUpPrompt && (
-                        <div style={{ position: 'fixed', bottom: '5rem', right: '1.5rem', zIndex: 501, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '1rem', width: '260px' }}
-                            onClick={e => e.stopPropagation()}>
-                            <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.375rem' }}>✅ Activity logged!</div>
-                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.75rem' }}>Create a follow-up task for <strong>{followUpPrompt.opportunityName}</strong>?</div>
-                            <div style={{ display: 'flex', gap: '0.375rem' }}>
-                                <button onClick={() => setFollowUpPrompt(null)}
-                                    style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                    Skip
-                                </button>
-                                <button onClick={() => {
-                                    setEditingTask({ relatedTo: followUpPrompt.opportunityId, opportunityId: followUpPrompt.opportunityId, type: 'Follow-up', dueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0] });
-                                    setShowTaskModal(true);
-                                    setFollowUpPrompt(null);
-                                }} style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                    + Add Task
-                                </button>
-                            </div>
-                        </div>
-                    )}
                 </div>
             )}
 
@@ -11008,6 +10936,81 @@ ${bodyHtml}
                                 >{taskDueQueue.length > 0 ? `Dismiss · Next (${taskDueQueue.length})` : 'Dismiss'}</button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ════ QUICK-LOG FLOATING BUTTON (pipeline tab only) ════ */}
+            {activeTab === 'pipeline' && (
+                <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9990, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+                    {quickLogOpen && (
+                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.18)', padding: '1rem', width: '280px', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}
+                            onClick={e => e.stopPropagation()}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#0f172a' }}>⚡ Quick Log Activity</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.375rem' }}>
+                                {['Call','Email','Meeting','Demo','Follow-up','Note'].map(t => (
+                                    <button key={t} onClick={() => setQuickLogForm(f => ({ ...f, type: t }))}
+                                        style={{ padding: '0.3rem 0.25rem', borderRadius: '6px', border: '1px solid ' + (quickLogForm.type === t ? '#2563eb' : '#e2e8f0'), background: quickLogForm.type === t ? '#eff6ff' : '#f8fafc', color: quickLogForm.type === t ? '#2563eb' : '#64748b', fontSize: '0.6875rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                        {quickLogForm.type === t ? '✓ ' : ''}{t}
+                                    </button>
+                                ))}
+                            </div>
+                            <select value={quickLogForm.opportunityId} onChange={e => setQuickLogForm(f => ({ ...f, opportunityId: e.target.value }))}
+                                style={{ fontSize: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.35rem 0.5rem', background: '#f8fafc', color: '#1e293b', fontFamily: 'inherit' }}>
+                                <option value="">— Link to deal (optional) —</option>
+                                {(pipelineFilteredOpps || []).map(o => <option key={o.id} value={o.id}>{o.opportunityName || o.account}</option>)}
+                            </select>
+                            <textarea value={quickLogForm.notes} onChange={e => setQuickLogForm(f => ({ ...f, notes: e.target.value }))}
+                                placeholder="Notes…" rows={2}
+                                style={{ fontSize: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.35rem 0.5rem', background: '#f8fafc', color: '#1e293b', fontFamily: 'inherit', resize: 'none' }} />
+                            <div style={{ display: 'flex', gap: '0.375rem' }}>
+                                <button onClick={() => { setQuickLogOpen(false); setQuickLogForm({ type: 'Call', notes: '', opportunityId: '' }); }}
+                                    style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                    Cancel
+                                </button>
+                                <button onClick={() => {
+                                    const linkedOpp = quickLogForm.opportunityId ? (opportunities || []).find(o => o.id === quickLogForm.opportunityId) : null;
+                                    handleSaveActivity({
+                                        type: quickLogForm.type,
+                                        notes: quickLogForm.notes,
+                                        date: new Date().toISOString().split('T')[0],
+                                        opportunityId: quickLogForm.opportunityId || null,
+                                        opportunityName: linkedOpp?.opportunityName || linkedOpp?.account || '',
+                                        companyName: linkedOpp?.account || '',
+                                        salesRep: currentUser,
+                                    });
+                                }} style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                    Save
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    <button onClick={() => setQuickLogOpen(v => !v)}
+                        style={{ width: '52px', height: '52px', borderRadius: '50%', background: quickLogOpen ? '#1d4ed8' : 'linear-gradient(135deg,#2563eb,#7c3aed)', color: '#fff', border: 'none', boxShadow: '0 4px 20px rgba(37,99,235,0.5)', fontSize: '1.375rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', lineHeight: '1' }}
+                        title="Quick-log an activity">
+                        {quickLogOpen ? '✕' : '📞'}
+                    </button>
+                </div>
+            )}
+
+            {/* ════ FOLLOW-UP TASK PROMPT (persists across tabs) ════ */}
+            {followUpPrompt && (
+                <div style={{ position: 'fixed', bottom: '5.5rem', right: '1.5rem', zIndex: 9991, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', padding: '1rem', width: '260px' }}
+                    onClick={e => e.stopPropagation()}>
+                    <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.375rem' }}>✅ Activity logged!</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.75rem' }}>Create a follow-up task for <strong>{followUpPrompt.opportunityName}</strong>?</div>
+                    <div style={{ display: 'flex', gap: '0.375rem' }}>
+                        <button onClick={() => setFollowUpPrompt(null)}
+                            style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            Skip
+                        </button>
+                        <button onClick={() => {
+                            setEditingTask({ relatedTo: followUpPrompt.opportunityId, opportunityId: followUpPrompt.opportunityId, type: 'Follow-up', dueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0] });
+                            setShowTaskModal(true);
+                            setFollowUpPrompt(null);
+                        }} style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            + Add Task
+                        </button>
                     </div>
                 </div>
             )}
