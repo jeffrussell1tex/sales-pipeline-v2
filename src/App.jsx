@@ -22,8 +22,8 @@ function LeadForm({ lead, onSave, onClose, canSeeAll, allReps }) {
     const [form, setForm] = React.useState(lead || { firstName:'', lastName:'', company:'', title:'', email:'', phone:'', source:'', status:'New', score:50, estimatedARR:0, assignedTo:'', notes:'' });
     const set = (k, v) => setForm(f => ({...f, [k]: v}));
     return (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <div style={{ background:'#fff', borderRadius:'12px', padding:'1.5rem', width:'480px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:9999, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
+            <div className="lead-form-modal" style={{ background:'#fff', borderRadius:'12px 12px 0 0', padding:'1.5rem', width:'100%', maxWidth:'480px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.25rem' }}>
                     <h3 style={{ fontSize:'1rem', fontWeight:'800', color:'#0f172a' }}>{lead && lead.id ? 'Edit Lead' : 'New Lead'}</h3>
                     <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'1.25rem', color:'#94a3b8', cursor:'pointer' }}>✕</button>
@@ -2872,7 +2872,7 @@ dbFetch('/.netlify/functions/activities', {
                             return (
                                 <>
                                 <div style={{ position: 'fixed', inset: 0, zIndex: 1099 }} onClick={() => setShowProfilePanel(false)} />
-                                <div style={{
+                                <div className="spt-profile-panel" style={{
                                     position: 'absolute', top: 'calc(100% + 8px)', right: 0,
                                     width: '420px', background: '#fff', borderRadius: '12px',
                                     border: '1px solid #e2e8f0', boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
@@ -3159,7 +3159,7 @@ dbFetch('/.netlify/functions/activities', {
                         {showSearchResults && globalSearch.length > 0 && (
                             <>
                             <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} onClick={() => setShowSearchResults(false)} />
-                            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: '0.375rem', width: '380px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 1000 }} onClick={e => e.stopPropagation()}>
+                            <div className="spt-search-results" style={{ position: 'absolute', top: '100%', right: 0, marginTop: '0.375rem', width: '380px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 1000 }} onClick={e => e.stopPropagation()}>
                                 {(() => {
                                     const q = globalSearch.toLowerCase();
                                     const matchedAccounts = accounts.filter(a => (a.name || '').toLowerCase().includes(q) || (a.accountOwner || '').toLowerCase().includes(q)).slice(0, 5);
