@@ -74,7 +74,7 @@ export const handler = async (event) => {
         role:         data.userType || data.role || 'User',
         team:         data.team     || null,
         territory:    data.territory || null,
-        quota:        data.quota    ?? null,
+        quota:        (data.quota !== null && data.quota !== undefined && data.quota !== '') ? parseFloat(data.quota) : null,
         active:       data.active   ?? true,
         // Store the full profile as jsonb for fields not in dedicated columns
         profile: {
@@ -137,7 +137,15 @@ export const handler = async (event) => {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
             const clean = sanitize(data);
-            const [inserted] = await db.insert(users).values(clean).returning();
+            const { id, ...updateData } = clean;
+            const [inserted] = await db
+                .insert(users)
+                .values(clean)
+                .onConflictDoUpdate({
+                    target: users.id,
+                    set: { ...updateData, updatedAt: new Date() },
+                })
+                .returning();
             return {
                 statusCode: 201,
                 headers,
