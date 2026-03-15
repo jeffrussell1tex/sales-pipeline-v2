@@ -9879,9 +9879,14 @@ ${bodyHtml}
                     onSave={handleSaveContact}
                     onSaveNewContact={(newContactData) => {
                         const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                        const newContact = { ...newContactData, id: newId };
-                        setContacts([...contacts, newContact]);
-                        return newContact;
+                        const nc = { ...newContactData, id: newId, createdAt: new Date().toISOString() };
+                        setContacts(prev => [...prev, nc]);
+                        dbFetch('/.netlify/functions/contacts', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(nc)
+                        }).catch(err => console.error('Failed to save inline contact:', err));
+                        return nc;
                     }}
                     onAddAccount={() => {
                         setShowAccountModal(true);
