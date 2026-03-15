@@ -48,11 +48,19 @@ export const handler = async (event) => {
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
-            const [updated] = await db
-                .insert(users).values(clean)
-                .onConflictDoUpdate({ target: users.id, set: { ...updateData, updatedAt: new Date() } })
-                .returning();
-            return { statusCode: 200, headers, body: JSON.stringify({ user: flatten(updated) }) };
+            let upsertResult;
+            try {
+                const [ins] = await db.insert(users).values(clean).returning();
+                upsertResult = ins;
+            } catch {
+                const [upd] = await db
+                    .update(users)
+                    .set({ ...updateData, updatedAt: new Date() })
+                    .where(eq(users.id, data.id))
+                    .returning();
+                upsertResult = upd;
+            }
+            return { statusCode: 200, headers, body: JSON.stringify({ user: flatten(upsertResult) }) };
         } catch (err) {
             console.error('Users /me PUT error:', err.message);
             return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
@@ -69,8 +77,9 @@ export const handler = async (event) => {
 
     const sanitize = (data) => ({
         id:           data.id,
-        name:         ((data.firstName || '') + ' ' + (data.lastName || '')).trim() || data.name || '',
-        email:        data.email || '',
+        name:         ((data.firstName || '') + ' ' + (data.lastName || '')).trim() || data.name || 'Unnamed User',
+        // email is notNull + unique in schema — use a unique placeholder if not provided
+        email:        (data.email && data.email.trim()) ? data.email.trim() : `${data.id}@placeholder.local`,
         role:         data.userType || data.role || 'User',
         team:         data.team     || null,
         territory:    data.territory || null,
@@ -109,7 +118,8 @@ export const handler = async (event) => {
     const flatten = (row) => ({
         id:            row.id,
         name:          row.name,
-        email:         row.email,
+        // Don't expose placeholder emails to the frontend
+        email:         (row.email && row.email.endsWith('@placeholder.local')) ? '' : (row.email || ''),
         userType:      row.role,
         role:          row.role,
         team:          row.team,
@@ -138,18 +148,24 @@ export const handler = async (event) => {
             }
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
-            const [inserted] = await db
-                .insert(users)
-                .values(clean)
-                .onConflictDoUpdate({
-                    target: users.id,
-                    set: { ...updateData, updatedAt: new Date() },
-                })
-                .returning();
+            let result;
+            try {
+                // Try plain insert first
+                const [inserted] = await db.insert(users).values(clean).returning();
+                result = inserted;
+            } catch (insertErr) {
+                // If insert fails (duplicate, constraint, etc.) fall back to update
+                const [updated] = await db
+                    .update(users)
+                    .set({ ...updateData, updatedAt: new Date() })
+                    .where(eq(users.id, data.id))
+                    .returning();
+                result = updated;
+            }
             return {
                 statusCode: 201,
                 headers,
-                body: JSON.stringify({ user: flatten(inserted) }),
+                body: JSON.stringify({ user: flatten(result) }),
             };
         }
 
@@ -162,12 +178,9 @@ export const handler = async (event) => {
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
             const [updated] = await db
-                .insert(users)
-                .values(clean)
-                .onConflictDoUpdate({
-                    target: users.id,
-                    set: { ...updateData, updatedAt: new Date() },
-                })
+                .update(users)
+                .set({ ...updateData, updatedAt: new Date() })
+                .where(eq(users.id, data.id))
                 .returning();
             return {
                 statusCode: 200,
