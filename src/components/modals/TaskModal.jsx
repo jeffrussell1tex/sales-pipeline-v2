@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import TimePicker from '../ui/TimePicker';
 
 export default function TaskModal({ task, taskTypes, opportunities, accounts, contacts, settings, onClose, onSave, onAddTaskType, onSaveNewContact, onSaveNewAccount, onAddOpportunity, onAddContact, onAddAccount, errorMessage, onDismissError, saving }) {
-    const [formData, setFormData] = useState(task ? { ...task, status: task.status || (task.completed ? 'Completed' : 'Open'), assignedTo: task.assignedTo || '', priority: task.priority || 'Medium' } : {
+    const [formData, setFormData] = useState(task ? { ...task, status: task.status || (task.completed ? 'Completed' : 'Open'), assignedTo: task.assignedTo || '', priority: task.priority || 'Medium', addToCalendar: false } : {
         title: '',
         description: '',
         type: (taskTypes || ['Call'])[0] || 'Call',
@@ -17,7 +17,8 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
         completed: false,
         status: 'Open',
         assignedTo: '',
-        priority: 'Medium'
+        priority: 'Medium',
+        addToCalendar: true
     });
 
     const [showNewTypeInput, setShowNewTypeInput] = useState(false);
@@ -371,6 +372,22 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                             <TimePicker value={formData.reminderTime} onChange={val => handleChange('reminderTime', val)} />
                         </div>
                     </div>
+                    {/* ── Add to Google Calendar checkbox ── */}
+                    {formData.dueDate && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.75rem 0', borderTop: '1px solid #f1f5f9', marginTop: '0.25rem' }}>
+                            <input
+                                type="checkbox"
+                                id="addToCalendar"
+                                checked={!!formData.addToCalendar}
+                                onChange={e => handleChange('addToCalendar', e.target.checked)}
+                                style={{ width: '16px', height: '16px', accentColor: '#2563eb', cursor: 'pointer', flexShrink: 0 }}
+                            />
+                            <label htmlFor="addToCalendar" style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
+                                📅 Add to Google Calendar
+                            </label>
+                            <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>Creates an all-day event on the due date</span>
+                        </div>
+                    )}
                     <div className="modal-actions">
                         <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
                             Cancel

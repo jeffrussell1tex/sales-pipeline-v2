@@ -1970,6 +1970,26 @@ dbFetch(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' })
     const handleSaveTask = async (taskData) => {
         setTaskModalError(null);
         setTaskModalSaving(true);
+
+        const fireCalendarEvent = async (task) => {
+            if (!task.addToCalendar || !task.dueDate) return;
+            try {
+                const relatedOpp = task.opportunityId ? (opportunities || []).find(o => o.id === task.opportunityId) : null;
+                const description = [
+                    task.description || task.notes || '',
+                    relatedOpp ? 'Opportunity: ' + (relatedOpp.opportunityName || relatedOpp.account) : '',
+                    task.type ? 'Type: ' + task.type : '',
+                ].filter(Boolean).join('\n');
+                await fetch('/.netlify/functions/calendar-add-event', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: task.title, date: task.dueDate, description }),
+                });
+            } catch (err) {
+                console.warn('Calendar event creation failed (non-blocking):', err);
+            }
+        };
+
         if (editingTask) {
             const payload = { ...taskData, id: editingTask.id };
             try {
@@ -1978,6 +1998,7 @@ dbFetch(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' })
                 if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
                 setTasks(tasks.map(t => t.id === editingTask.id ? (data.task || payload) : t));
                 addAudit('update', 'task', editingTask.id, taskData.title || editingTask.id, taskData.type || '');
+                fireCalendarEvent(payload);
                 setShowTaskModal(false); setTaskModalError(null);
             } catch (err) { console.error('Failed to update task:', err); setTaskModalError('Failed to save task. Please check your connection and try again.'); }
             finally { setTaskModalSaving(false); }
@@ -1990,6 +2011,7 @@ dbFetch(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' })
                 if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
                 setTasks([...tasks, data.task || newTask]);
                 addAudit('create', 'task', newId, taskData.title || newId, taskData.type || '');
+                fireCalendarEvent(newTask);
                 setShowTaskModal(false); setTaskModalError(null);
             } catch (err) { console.error('Failed to save task:', err); setTaskModalError('Failed to save task. Please check your connection and try again.'); }
             finally { setTaskModalSaving(false); }
