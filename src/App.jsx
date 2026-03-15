@@ -2014,6 +2014,39 @@ dbFetch(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' })
         }
     };
 
+    const [calendarAddingTaskId, setCalendarAddingTaskId] = useState(null);
+    const [calendarAddFeedback, setCalendarAddFeedback] = useState({}); // taskId -> 'success' | 'error'
+
+    const handleAddTaskToCalendar = async (e, task) => {
+        e.stopPropagation();
+        if (!task.dueDate) return;
+        setCalendarAddingTaskId(task.id);
+        try {
+            const relatedOpp = task.opportunityId ? (opportunities || []).find(o => o.id === task.opportunityId) : null;
+            const description = [
+                task.notes || '',
+                relatedOpp ? 'Opportunity: ' + (relatedOpp.opportunityName || relatedOpp.account) : '',
+                task.type ? 'Type: ' + task.type : '',
+            ].filter(Boolean).join('\n');
+            const res = await fetch('/.netlify/functions/calendar-add-event', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: task.title,
+                    date: task.dueDate,
+                    description,
+                }),
+            });
+            if (!res.ok) throw new Error('Failed');
+            setCalendarAddFeedback(prev => ({ ...prev, [task.id]: 'success' }));
+        } catch {
+            setCalendarAddFeedback(prev => ({ ...prev, [task.id]: 'error' }));
+        } finally {
+            setCalendarAddingTaskId(null);
+            setTimeout(() => setCalendarAddFeedback(prev => { const n = { ...prev }; delete n[task.id]; return n; }), 3000);
+        }
+    };
+
     const handleAddContact = () => {
         setEditingContact(null);
         setShowContactModal(true);
@@ -5729,6 +5762,14 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                                             <td style={{ padding: '0.5rem', color: '#64748b', fontSize: '0.8125rem' }}>{related}</td>
                                                                             <td style={{ padding: '0.5rem', textAlign: 'right' }}>
                                                                                 <div style={{ display: 'flex', gap: '4px' }}>
+                                                                                    {task.dueDate && (
+                                                                                        <button onClick={e => handleAddTaskToCalendar(e, task)}
+                                                                                            disabled={calendarAddingTaskId === task.id}
+                                                                                            title={calendarAddFeedback[task.id] === 'success' ? 'Added to calendar!' : calendarAddFeedback[task.id] === 'error' ? 'Failed — try again' : 'Add to Google Calendar'}
+                                                                                            style={{ padding: '4px 8px', borderRadius: '999px', border: '0.5px solid ' + (calendarAddFeedback[task.id] === 'success' ? '#10b981' : calendarAddFeedback[task.id] === 'error' ? '#fca5a5' : '#cbd5e1'), background: calendarAddFeedback[task.id] === 'success' ? '#d1fae5' : 'transparent', color: calendarAddFeedback[task.id] === 'success' ? '#059669' : calendarAddFeedback[task.id] === 'error' ? '#dc2626' : '#64748b', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                                                                                            {calendarAddingTaskId === task.id ? '…' : calendarAddFeedback[task.id] === 'success' ? '✓ Added' : calendarAddFeedback[task.id] === 'error' ? '✕ Failed' : '📅'}
+                                                                                        </button>
+                                                                                    )}
                                                                                     <button onClick={e => { e.stopPropagation(); handleEditTask(task); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
                                                                                     <button onClick={e => { e.stopPropagation(); handleDeleteTask(task.id); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                                                 </div>
