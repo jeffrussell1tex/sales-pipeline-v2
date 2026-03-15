@@ -2980,6 +2980,12 @@ dbFetch('/.netlify/functions/activities', {
                                                         </div>
                                                     );
                                                 })}
+                                                <button
+                                                    onClick={() => saveProfile({ notificationPrefs: prefs, digestTime })}
+                                                    disabled={profileSaving}
+                                                    style={{ width: '100%', padding: '0.625rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', marginTop: '1rem' }}>
+                                                    {profileSaving ? 'Saving…' : 'Save Notification Settings'}
+                                                </button>
                                             </div>
                                         )}
                                     </div>
