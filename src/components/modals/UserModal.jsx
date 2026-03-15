@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function UserModal({ user, settings, onClose, onSave, errorMessage, saving }) {
+export default function UserModal({ user, settings, onClose, onSave, errorMessage, onDismissError, saving }) {
     const [formData, setFormData] = useState(user || {
         prefix: '', firstName: '', middleName: '', lastName: '', suffix: '', nickName: '',
         name: '', title: '', company: '', department: '', workLocation: '',
@@ -48,9 +48,9 @@ export default function UserModal({ user, settings, onClose, onSave, errorMessag
                     <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.0625rem', fontWeight: '700', color: '#1e293b' }}>Failed to Save User</h3>
                     <p style={{ margin: '0 0 1.5rem', fontSize: '0.875rem', color: '#64748b', lineHeight: 1.6 }}>{errorMessage}</p>
                     <button
-                        onClick={onClose}
+                        onClick={onDismissError}
                         style={{ padding: '0.5rem 1.5rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#1e293b', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
-                        Close
+                        Fix Email
                     </button>
                 </div>
             </div>

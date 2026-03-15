@@ -1958,29 +1958,36 @@ dbFetch(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' })
         });
     };
 
-    const handleSaveTask = (taskData) => {
+    const [taskModalError, setTaskModalError] = useState(null);
+    const [taskModalSaving, setTaskModalSaving] = useState(false);
+
+    const handleSaveTask = async (taskData) => {
+        setTaskModalError(null);
+        setTaskModalSaving(true);
         if (editingTask) {
-    setTasks(tasks.map(t => 
-    t.id === editingTask.id ? { ...taskData, id: editingTask.id } : t
-));
-dbFetch('/.netlify/functions/tasks', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...taskData, id: editingTask.id })
-}).catch(err => console.error('Failed to update task:', err));
-            addAudit('update', 'task', editingTask.id, taskData.title || editingTask.id, taskData.type || '');
+            const payload = { ...taskData, id: editingTask.id };
+            try {
+                const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const data = await res.json();
+                if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
+                setTasks(tasks.map(t => t.id === editingTask.id ? (data.task || payload) : t));
+                addAudit('update', 'task', editingTask.id, taskData.title || editingTask.id, taskData.type || '');
+                setShowTaskModal(false); setTaskModalError(null);
+            } catch (err) { console.error('Failed to update task:', err); setTaskModalError('Failed to save task. Please check your connection and try again.'); }
+            finally { setTaskModalSaving(false); }
         } else {
             const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
             const newTask = { ...taskData, id: newId };
-setTasks([...tasks, newTask]);
-dbFetch('/.netlify/functions/tasks', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(newTask)
-}).catch(err => console.error('Failed to save task:', err));
-            addAudit('create', 'task', newId, taskData.title || newId, taskData.type || '');
+            try {
+                const res = await dbFetch('/.netlify/functions/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTask) });
+                const data = await res.json();
+                if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
+                setTasks([...tasks, data.task || newTask]);
+                addAudit('create', 'task', newId, taskData.title || newId, taskData.type || '');
+                setShowTaskModal(false); setTaskModalError(null);
+            } catch (err) { console.error('Failed to save task:', err); setTaskModalError('Failed to save task. Please check your connection and try again.'); }
+            finally { setTaskModalSaving(false); }
         }
-        setShowTaskModal(false);
     };
 
     const handleCompleteTask = (taskId, newStatus) => {
@@ -2028,29 +2035,36 @@ dbFetch(`/.netlify/functions/contacts?id=${contactId}`, { method: 'DELETE' })
         });
     };
 
-    const handleSaveContact = (contactData) => {
+    const [contactModalError, setContactModalError] = useState(null);
+    const [contactModalSaving, setContactModalSaving] = useState(false);
+
+    const handleSaveContact = async (contactData) => {
+        setContactModalError(null);
+        setContactModalSaving(true);
         if (editingContact) {
-    setContacts(contacts.map(c => 
-    c.id === editingContact.id ? { ...contactData, id: editingContact.id } : c
-));
-dbFetch('/.netlify/functions/contacts', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...contactData, id: editingContact.id })
-}).catch(err => console.error('Failed to update contact:', err));
-            addAudit('update', 'contact', editingContact.id, ((contactData.firstName||'') + ' ' + (contactData.lastName||'')).trim() || editingContact.id, contactData.company || '');
+            const payload = { ...contactData, id: editingContact.id };
+            try {
+                const res = await dbFetch('/.netlify/functions/contacts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const data = await res.json();
+                if (!res.ok) { setContactModalError(data.error || 'Failed to save contact. Please try again.'); setContactModalSaving(false); return; }
+                setContacts(contacts.map(c => c.id === editingContact.id ? (data.contact || payload) : c));
+                addAudit('update', 'contact', editingContact.id, ((contactData.firstName||'') + ' ' + (contactData.lastName||'')).trim() || editingContact.id, contactData.company || '');
+                setShowContactModal(false); setContactModalError(null);
+            } catch (err) { console.error('Failed to update contact:', err); setContactModalError('Failed to save contact. Please check your connection and try again.'); }
+            finally { setContactModalSaving(false); }
         } else {
             const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
             const newContact = { ...contactData, id: newId };
-setContacts([...contacts, newContact]);
-dbFetch('/.netlify/functions/contacts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(newContact)
-}).catch(err => console.error('Failed to save contact:', err));
-            addAudit('create', 'contact', newId, ((contactData.firstName||'') + ' ' + (contactData.lastName||'')).trim() || newId, contactData.company || '');
+            try {
+                const res = await dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newContact) });
+                const data = await res.json();
+                if (!res.ok) { setContactModalError(data.error || 'Failed to save contact. Please try again.'); setContactModalSaving(false); return; }
+                setContacts([...contacts, data.contact || newContact]);
+                addAudit('create', 'contact', newId, ((contactData.firstName||'') + ' ' + (contactData.lastName||'')).trim() || newId, contactData.company || '');
+                setShowContactModal(false); setContactModalError(null);
+            } catch (err) { console.error('Failed to save contact:', err); setContactModalError('Failed to save contact. Please check your connection and try again.'); }
+            finally { setContactModalSaving(false); }
         }
-        setShowContactModal(false);
     };
 
     const handleEdit = (opp) => {
@@ -2076,7 +2090,10 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
         });
     };
 
-    const handleSave = (formData) => {
+    const [oppModalError, setOppModalError] = useState(null);
+    const [oppModalSaving, setOppModalSaving] = useState(false);
+
+        const handleSave = (formData) => {
         const today = new Date().toISOString().split('T')[0];
         const prevOpp = editingOpp ? opportunities.find(o => o.id === editingOpp.id) : null;
         const stageChanged = prevOpp && prevOpp.stage !== formData.stage;
@@ -2112,27 +2129,32 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
 
         if (editingOpp && editingOpp.id) {
             const updatedOpp = { ...enrichedData, id: editingOpp.id };
-            setOpportunities(opportunities.map(opp =>
-                opp.id === editingOpp.id ? updatedOpp : opp
-            ));
-            dbFetch('/.netlify/functions/opportunities', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedOpp)
-            }).catch(err => console.error('Failed to update opportunity:', err));
-            addAudit('update', 'opportunity', editingOpp.id, enrichedData.opportunityName || enrichedData.account || editingOpp.id, enrichedData.account || '');
+            setOppModalSaving(true); setOppModalError(null);
+            dbFetch('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedOpp) })
+                .then(async res => {
+                    const data = await res.json();
+                    if (!res.ok) { setOppModalError(data.error || 'Failed to save opportunity. Please try again.'); return; }
+                    setOpportunities(opportunities.map(opp => opp.id === editingOpp.id ? (data.opportunity || updatedOpp) : opp));
+                    addAudit('update', 'opportunity', editingOpp.id, enrichedData.opportunityName || enrichedData.account || editingOpp.id, enrichedData.account || '');
+                    setShowModal(false); setOppModalError(null);
+                })
+                .catch(err => { console.error('Failed to update opportunity:', err); setOppModalError('Failed to save opportunity. Please check your connection and try again.'); })
+                .finally(() => setOppModalSaving(false));
         } else {
             const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
             const newOpp = { ...enrichedData, id: newId, pipelineId: activePipeline.id, createdBy: currentUser || '' };
-            setOpportunities([...opportunities, newOpp]);
-            dbFetch('/.netlify/functions/opportunities', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newOpp)
-            }).catch(err => console.error('Failed to save opportunity:', err));
-            addAudit('create', 'opportunity', newId, enrichedData.opportunityName || enrichedData.account || newId, enrichedData.account || '');
+            setOppModalSaving(true); setOppModalError(null);
+            dbFetch('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) })
+                .then(async res => {
+                    const data = await res.json();
+                    if (!res.ok) { setOppModalError(data.error || 'Failed to save opportunity. Please try again.'); return; }
+                    setOpportunities([...opportunities, data.opportunity || newOpp]);
+                    addAudit('create', 'opportunity', newId, enrichedData.opportunityName || enrichedData.account || newId, enrichedData.account || '');
+                    setShowModal(false); setOppModalError(null);
+                })
+                .catch(err => { console.error('Failed to save opportunity:', err); setOppModalError('Failed to save opportunity. Please check your connection and try again.'); })
+                .finally(() => setOppModalSaving(false));
         }
-        setShowModal(false);
     };
 
     const completeLostSave = (formData, editingOppRef, lostReason, lostCategory) => {
@@ -2232,54 +2254,58 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
         handleDeleteAccount(subAccountId);
     };
 
-    const handleSaveAccount = (formData) => {
-        if (editingAccount) {
-            const updatedAccount = { ...formData, id: editingAccount.id };
-            setAccounts(accounts.map(acc => acc.id === editingAccount.id ? updatedAccount : acc));
-            dbFetch('/.netlify/functions/accounts', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedAccount)
-            }).catch(err => console.error('Failed to update account:', err));
-            addAudit('update', 'account', editingAccount.id, formData.name || editingAccount.id, formData.industry || '');
-        } else if (editingSubAccount) {
-            const updatedSub = { ...formData, id: editingSubAccount.id, parentId: editingSubAccount.parentId };
-            setAccounts(accounts.map(acc => acc.id === editingSubAccount.id ? updatedSub : acc));
-            dbFetch('/.netlify/functions/accounts', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedSub)
-            }).catch(err => console.error('Failed to update sub-account:', err));
-            addAudit('update', 'account', editingSubAccount.id, formData.name || editingSubAccount.id, '');
-        } else if (parentAccountForSub) {
-            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-            const newSub = { ...formData, id: newId, parentId: parentAccountForSub.id };
-            setAccounts([...accounts, newSub]);
-            dbFetch('/.netlify/functions/accounts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newSub)
-            }).catch(err => console.error('Failed to save sub-account:', err));
-            addAudit('create', 'account', newId, formData.name || newId, 'Sub of ' + parentAccountForSub.name);
-        } else {
-            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-            const newAccount = { ...formData, id: newId };
-            setAccounts([...accounts, newAccount]);
-            dbFetch('/.netlify/functions/accounts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newAccount)
-            }).catch(err => console.error('Failed to save account:', err));
-            addAudit('create', 'account', newId, formData.name || newId, formData.industry || '');
-            if (accountCreatedFromOppForm) {
-                setLastCreatedAccountName(formData.name);
-                setEditingOpp(pendingOppFormData);
-                setShowModal(true);
-                setAccountCreatedFromOppForm(false);
-                setPendingOppFormData(null);
+    const [accountModalError, setAccountModalError] = useState(null);
+    const [accountModalSaving, setAccountModalSaving] = useState(false);
+
+    const handleSaveAccount = async (formData) => {
+        setAccountModalError(null);
+        setAccountModalSaving(true);
+        try {
+            let payload, method, auditAction, auditId, auditName, auditDetail;
+            if (editingAccount) {
+                payload = { ...formData, id: editingAccount.id };
+                method = 'PUT'; auditAction = 'update'; auditId = editingAccount.id;
+                auditName = formData.name || editingAccount.id; auditDetail = formData.industry || '';
+            } else if (editingSubAccount) {
+                payload = { ...formData, id: editingSubAccount.id, parentId: editingSubAccount.parentId };
+                method = 'PUT'; auditAction = 'update'; auditId = editingSubAccount.id;
+                auditName = formData.name || editingSubAccount.id; auditDetail = '';
+            } else if (parentAccountForSub) {
+                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                payload = { ...formData, id: newId, parentId: parentAccountForSub.id };
+                method = 'POST'; auditAction = 'create'; auditId = newId;
+                auditName = formData.name || newId; auditDetail = 'Sub of ' + parentAccountForSub.name;
+            } else {
+                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                payload = { ...formData, id: newId };
+                method = 'POST'; auditAction = 'create'; auditId = newId;
+                auditName = formData.name || newId; auditDetail = formData.industry || '';
             }
+            const res = await dbFetch('/.netlify/functions/accounts', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json();
+            if (!res.ok) { setAccountModalError(data.error || 'Failed to save account. Please try again.'); setAccountModalSaving(false); return; }
+            const saved = data.account || payload;
+            if (method === 'PUT') {
+                setAccounts(accounts.map(acc => acc.id === saved.id ? saved : acc));
+            } else {
+                setAccounts([...accounts, saved]);
+                if (auditDetail === '' || auditDetail.startsWith('Sub of')) { /* sub-account — no extra steps */ }
+                else if (accountCreatedFromOppForm) {
+                    setLastCreatedAccountName(formData.name);
+                    setEditingOpp(pendingOppFormData);
+                    setShowModal(true);
+                    setAccountCreatedFromOppForm(false);
+                    setPendingOppFormData(null);
+                }
+            }
+            addAudit(auditAction, 'account', auditId, auditName, auditDetail);
+            setShowAccountModal(false); setAccountModalError(null);
+        } catch (err) {
+            console.error('Failed to save account:', err);
+            setAccountModalError('Failed to save account. Please check your connection and try again.');
+        } finally {
+            setAccountModalSaving(false);
         }
-        setShowAccountModal(false);
     };
 
     // Stage color palette - unique color for each stage
@@ -2382,29 +2408,39 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
         });
     };
 
-    const handleSaveActivity = (activityData) => {
+    const [activityModalError, setActivityModalError] = useState(null);
+    const [activityModalSaving, setActivityModalSaving] = useState(false);
+
+    const handleSaveActivity = async (activityData) => {
+        setActivityModalError(null);
+        setActivityModalSaving(true);
         if (editingActivity) {
-setActivities(activities.map(a => 
-    a.id === editingActivity.id ? { ...activityData, id: editingActivity.id } : a
-));
-dbFetch('/.netlify/functions/activities', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...activityData, id: editingActivity.id })
-}).catch(err => console.error('Failed to update activity:', err));
+            const payload = { ...activityData, id: editingActivity.id };
+            try {
+                const res = await dbFetch('/.netlify/functions/activities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const data = await res.json();
+                if (!res.ok) { setActivityModalError(data.error || 'Failed to save activity. Please try again.'); setActivityModalSaving(false); return; }
+                setActivities(activities.map(a => a.id === editingActivity.id ? (data.activity || payload) : a));
+                setShowActivityModal(false); setActivityModalError(null);
+            } catch (err) { console.error('Failed to update activity:', err); setActivityModalError('Failed to save activity. Please check your connection and try again.'); }
+            finally { setActivityModalSaving(false); }
         } else {
-    const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-    const newActivity = { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' };
-    setActivities([...activities, newActivity]);
-    dbFetch('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) }).catch(err => console.error('Failed to save activity:', err));
-}
-        setShowActivityModal(false);
+            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            const newActivity = { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' };
+            try {
+                const res = await dbFetch('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) });
+                const data = await res.json();
+                if (!res.ok) { setActivityModalError(data.error || 'Failed to save activity. Please try again.'); setActivityModalSaving(false); return; }
+                setActivities([...activities, data.activity || newActivity]);
+                setShowActivityModal(false); setActivityModalError(null);
+            } catch (err) { console.error('Failed to save activity:', err); setActivityModalError('Failed to save activity. Please check your connection and try again.'); }
+            finally { setActivityModalSaving(false); }
+        }
         // Show follow-up task prompt if activity was linked to an opportunity
         if (activityData.opportunityId) {
             const linkedOpp = (opportunities || []).find(o => o.id === activityData.opportunityId);
             setFollowUpPrompt({ opportunityId: activityData.opportunityId, opportunityName: linkedOpp?.opportunityName || linkedOpp?.account || 'this deal' });
         }
-        // Close quick-log panel if it was open
         setQuickLogOpen(false);
         setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' });
         setQuickLogContactResults([]);
@@ -9698,8 +9734,11 @@ ${bodyHtml}
                             return updated;
                         });
                     }}
-                    onClose={() => setShowModal(false)}
+                    onClose={() => { setShowModal(false); setOppModalError(null); setOppModalSaving(false); }}
+                    onDismissError={() => setOppModalError(null)}
                     onSave={handleSave}
+                    errorMessage={oppModalError}
+                    saving={oppModalSaving}
                     onAddAccount={handleAddAccountFromOpportunity}
                     lastCreatedAccountName={lastCreatedAccountName}
                     lastCreatedRepName={lastCreatedRepName}
@@ -9741,10 +9780,13 @@ ${bodyHtml}
                     account={editingAccount || editingSubAccount}
                     isSubAccount={!!parentAccountForSub || !!editingSubAccount}
                     settings={settings}
-                    onClose={() => setShowAccountModal(false)}
+                    onClose={() => { setShowAccountModal(false); setAccountModalError(null); setAccountModalSaving(false); }}
+                    onDismissError={() => setAccountModalError(null)}
                     onSave={handleSaveAccount}
                     onAddRep={() => { setShowUserModal(true); setEditingUser(null); }}
                     existingAccounts={accounts}
+                    errorMessage={accountModalError}
+                    saving={accountModalSaving}
                 />
             )}
 
@@ -9753,6 +9795,7 @@ ${bodyHtml}
                     user={editingUser}
                     settings={settings}
                     onClose={() => { setShowUserModal(false); setUserModalError(null); setUserModalSaving(false); }}
+                    onDismissError={() => setUserModalError(null)}
                     onSave={handleSaveUser}
                     errorMessage={userModalError}
                     saving={userModalSaving}
@@ -9767,8 +9810,11 @@ ${bodyHtml}
                     accounts={accounts}
                     contacts={contacts}
                     settings={settings}
-                    onClose={() => setShowTaskModal(false)}
+                    onClose={() => { setShowTaskModal(false); setTaskModalError(null); setTaskModalSaving(false); }}
+                    onDismissError={() => setTaskModalError(null)}
                     onSave={handleSaveTask}
+                    errorMessage={taskModalError}
+                    saving={taskModalSaving}
                     onAddTaskType={handleAddTaskType}
                     onSaveNewContact={(data) => {
                         const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
@@ -9905,8 +9951,11 @@ ${bodyHtml}
                     contacts={contacts}
                     accounts={accounts}
                     settings={settings}
-                    onClose={() => setShowContactModal(false)}
+                    onClose={() => { setShowContactModal(false); setContactModalError(null); setContactModalSaving(false); }}
+                    onDismissError={() => setContactModalError(null)}
                     onSave={handleSaveContact}
+                    errorMessage={contactModalError}
+                    saving={contactModalSaving}
                     onSaveNewContact={(newContactData) => {
                         const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
                         const nc = { ...newContactData, id: newId, createdAt: new Date().toISOString() };
@@ -10594,8 +10643,11 @@ ${bodyHtml}
                     opportunities={opportunities}
                     contacts={contacts}
                     accounts={accounts}
-                    onClose={() => setShowActivityModal(false)}
+                    onClose={() => { setShowActivityModal(false); setActivityModalError(null); setActivityModalSaving(false); }}
+                    onDismissError={() => setActivityModalError(null)}
                     onSave={handleSaveActivity}
+                    errorMessage={activityModalError}
+                    saving={activityModalSaving}
                     initialContext={activityInitialContext}
                     onSaveNewContact={(data) => {
                         const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);

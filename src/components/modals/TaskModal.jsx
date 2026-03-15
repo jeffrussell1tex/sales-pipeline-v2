@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import TimePicker from '../ui/TimePicker';
 
-export default function TaskModal({ task, taskTypes, opportunities, accounts, contacts, settings, onClose, onSave, onAddTaskType, onSaveNewContact, onSaveNewAccount, onAddOpportunity, onAddContact, onAddAccount }) {
+export default function TaskModal({ task, taskTypes, opportunities, accounts, contacts, settings, onClose, onSave, onAddTaskType, onSaveNewContact, onSaveNewAccount, onAddOpportunity, onAddContact, onAddAccount, errorMessage, onDismissError, saving }) {
     const [formData, setFormData] = useState(task ? { ...task, status: task.status || (task.completed ? 'Completed' : 'Open'), assignedTo: task.assignedTo || '', priority: task.priority || 'Medium' } : {
         title: '',
         description: '',
@@ -64,6 +64,23 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
     ];
 
     return (
+        <>
+        {errorMessage && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+                 onClick={e => e.stopPropagation()}>
+                <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '2rem', maxWidth: '420px', width: '90%', textAlign: 'center' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: '1.5rem' }}>⚠️</div>
+                    <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.0625rem', fontWeight: '700', color: '#1e293b' }}>Failed to Save Task</h3>
+                    <p style={{ margin: '0 0 1.5rem', fontSize: '0.875rem', color: '#64748b', lineHeight: 1.6 }}>{errorMessage}</p>
+                    <button
+                        onClick={onDismissError}
+                        style={{ padding: '0.5rem 1.5rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#1e293b', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        OK
+                    </button>
+                </div>
+            </div>
+        )}
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div className="modal-overlay" onClick={e => e.stopPropagation()}>
             <div className="modal" onClick={e => e.stopPropagation()}>
                 <h2>{task ? 'Edit Task' : 'New Task'}</h2>
@@ -355,11 +372,12 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                         </div>
                     </div>
                     <div className="modal-actions">
-                        <button type="button" className="btn btn-secondary" onClick={onClose}>
+                        <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
                             Cancel
                         </button>
-                        <button type="submit" className="btn">
-                            {task ? 'Update' : 'Create'}
+                        <button type="submit" className="btn" disabled={saving} style={{ opacity: saving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            {saving && <span style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
+                            {saving ? 'Saving…' : (task ? 'Update' : 'Create')}
                         </button>
                     </div>
                 </form>
@@ -385,6 +403,6 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                 </div>
             )}
         </div>
+        </>
     );
 }
-
