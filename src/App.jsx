@@ -1848,7 +1848,7 @@ dbFetch('/.netlify/functions/users?me=true')
 
     const handleSaveUser = (userData) => {
         if (editingUser) {
-            const payload = { ...userData, id: editingUser.id };
+            const payload = { ...userData, id: editingUser.id, email: userData.email || editingUser.email || '' };
             setSettings(prev => ({
                 ...prev,
                 users: (prev.users || []).map(u => u.id === editingUser.id ? payload : u)
@@ -1860,7 +1860,7 @@ dbFetch('/.netlify/functions/users?me=true')
             }).catch(err => console.error('Failed to update user:', err));
         } else {
             const newId = 'usr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-            const payload = { ...userData, id: newId };
+            const payload = { ...userData, id: newId, email: userData.email || '' };
             setSettings(prev => ({
                 ...prev,
                 users: [...(prev.users || []), payload]

@@ -136,9 +136,6 @@ export const handler = async (event) => {
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
-            if (!data.email) {
-                return { statusCode: 400, headers, body: JSON.stringify({ error: 'email is required' }) };
-            }
             const clean = sanitize(data);
             const [inserted] = await db.insert(users).values(clean).returning();
             return {
