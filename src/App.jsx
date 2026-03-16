@@ -839,6 +839,21 @@ function TeamBuilder({ settings, setSettings, onBack }) {
             return u;
         });
         setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
+
+        // Persist team assignment changes to the /users DB endpoint for each affected user.
+        // Without this, team fields only exist in React state and are lost on logout/login.
+        const affectedUsers = updatedUsers.filter(u => {
+            const orig = (settings.users || []).find(ou => ou.id === u.id);
+            return orig && (orig.team !== u.team || orig.teamId !== u.teamId || orig.territory !== u.territory || orig.vertical !== u.vertical);
+        });
+        affectedUsers.forEach(u => {
+            dbFetch('/.netlify/functions/users', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(u),
+            }).catch(err => console.error('Failed to persist team assignment for user', u.id, err));
+        });
+
         closeForm();
     };
 
@@ -846,6 +861,19 @@ function TeamBuilder({ settings, setSettings, onBack }) {
         const updatedTeams = teams.filter(t => t.id !== teamId);
         const updatedUsers = (settings.users || []).map(u => u.teamId === teamId ? { ...u, team: '', territory: '', vertical: '', teamId: '' } : u);
         setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
+
+        // Persist the cleared team fields to the /users DB endpoint for each affected user.
+        const affectedUsers = updatedUsers.filter(u => {
+            const orig = (settings.users || []).find(ou => ou.id === u.id);
+            return orig && orig.teamId === teamId;
+        });
+        affectedUsers.forEach(u => {
+            dbFetch('/.netlify/functions/users', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(u),
+            }).catch(err => console.error('Failed to clear team assignment for user', u.id, err));
+        });
     };
 
     const toggleRep = (repId) => {
