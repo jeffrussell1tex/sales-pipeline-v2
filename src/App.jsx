@@ -5895,7 +5895,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                     {taskViewMode === 'card' ? (
                                                         sectionTasks.map((task, tIdx) => (
                                                             <div key={task.id} style={{ borderLeft: '3px solid ' + borderColor, marginBottom: '0.25rem', borderRadius: '0 6px 6px 0' }}>
-                                                                <TaskItem task={task} opportunities={opportunities} contacts={contacts} accounts={accounts} onEdit={handleEditTask} onComplete={handleCompleteTask} onDelete={handleDeleteTask} onView={setViewingTask} rowIndex={tIdx} />
+                                                                <TaskItem task={task} opportunities={opportunities} contacts={contacts} accounts={accounts} onEdit={handleEditTask} onComplete={handleCompleteTask} onDelete={handleDeleteTask} onView={setViewingTask} onPrep={task => { setMeetingPrepEvent({ summary: task.title, start: { date: task.dueDate }, attendeeCount: 0 }); setMeetingPrepOppId(task.opportunityId); setMeetingPrepOpen(true); }} rowIndex={tIdx} />
                                                             </div>
                                                         ))
                                                     ) : (
@@ -6078,7 +6078,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: '0.75rem' }}>{isOpen ? '▼' : '▶'}</span>
                                         </div>
                                         {isOpen && sTasks.map((task, tIdx) => (
-                                            <TaskItem key={task.id} task={task} opportunities={opportunities} contacts={contacts} accounts={accounts} onEdit={handleEditTask} onComplete={handleCompleteTask} onDelete={handleDeleteTask} onView={setViewingTask} rowIndex={tIdx} />
+                                            <TaskItem key={task.id} task={task} opportunities={opportunities} contacts={contacts} accounts={accounts} onEdit={handleEditTask} onComplete={handleCompleteTask} onDelete={handleDeleteTask} onView={setViewingTask} onPrep={task => { setMeetingPrepEvent({ summary: task.title, start: { date: task.dueDate }, attendeeCount: 0 }); setMeetingPrepOppId(task.opportunityId); setMeetingPrepOpen(true); }} rowIndex={tIdx} />
                                         ))}
                                     </div>
                                 );

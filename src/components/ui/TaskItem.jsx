@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-export default function TaskItem({ task, opportunities, contacts, accounts, onEdit, onComplete, onDelete, onView, rowIndex }) {
+export default function TaskItem({ task, opportunities, contacts, accounts, onEdit, onComplete, onDelete, onView, onPrep, rowIndex }) {
     const relatedOpp = task.opportunityId ? (opportunities || []).find(o => o.id === task.opportunityId) : null;
     const relatedContact = task.contactId ? (contacts || []).find(c => c.id === task.contactId) : null;
     const relatedAccount = task.accountId ? (accounts || []).find(a => a.id === task.accountId) : null;
@@ -79,6 +79,9 @@ export default function TaskItem({ task, opportunities, contacts, accounts, onEd
                 </div>
             </div>
             <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
+                {onPrep && task.opportunityId && (
+                    <button onClick={(e) => { e.stopPropagation(); onPrep(task); }} style={{ padding: '4px 8px', borderRadius: '999px', border: '0.5px solid #7c3aed', background: '#f5f3ff', color: '#6d28d9', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Prep</button>
+                )}
                 <button onClick={(e) => { e.stopPropagation(); onEdit(task); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
                 <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
             </div>
