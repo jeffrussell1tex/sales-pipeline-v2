@@ -1375,6 +1375,17 @@ function App() {
     const [calendarError, setCalendarError] = useState(null);
     const [calendarConnected, setCalendarConnected] = useState(false);
 
+    // Calendar view state
+    const [calView, setCalView] = useState('week'); // 'week' | 'month'
+    const [calOffset, setCalOffset] = useState(0);  // week/month offset from today
+    const [showCalConfig, setShowCalConfig] = useState(false);
+    const [calShowGcal, setCalShowGcal] = useState(true);
+    const [calShowCalls, setCalShowCalls] = useState(true);
+    const [calShowMeetings, setCalShowMeetings] = useState(true);
+    const [calShowWeekends, setCalShowWeekends] = useState(true);
+    const [calRepFilter, setCalRepFilter] = useState('all'); // 'all' or a rep name
+    const [calProvider, setCalProvider] = useState('google'); // 'google' | 'microsoft' | 'yahoo' | 'apple'
+
     // Log from Calendar state
     const [logFromCalOpen, setLogFromCalOpen] = useState(false);
     const [logFromCalDateFrom, setLogFromCalDateFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0]; });
@@ -3868,156 +3879,292 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                         );
                     })()}
 
-                    {/* ── WEEKLY CALENDAR STRIP ── */}
+                    {/* ── CALENDAR STRIP (week / month view with activities) ── */}
                     {(() => {
-                        // fetchCalendarEvents is hoisted to component level and called automatically
-                        // when the home tab loads — no manual button press needed.
+                        const today = new Date(); today.setHours(0,0,0,0);
 
-                        // Build 7-day columns starting today
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        const days = Array.from({ length: 7 }, (_, i) => {
-                            const d = new Date(today);
-                            d.setDate(today.getDate() + i);
-                            return d;
-                        });
+                        // ── helpers ──
+                        const formatTime = (iso) => { if (!iso) return ''; const d = new Date(iso); const h = d.getHours(), m = d.getMinutes(); return (h%12||12)+(m?':'+String(m).padStart(2,'0'):'')+(h>=12?'pm':'am'); };
+                        const isSameDay = (a, b) => { const x=new Date(a); x.setHours(0,0,0,0); const y=new Date(b); y.setHours(0,0,0,0); return x.getTime()===y.getTime(); };
                         const dayLabels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
                         const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-                        const getEventsForDay = (day) => {
-                            return calendarEvents.filter(ev => {
-                                const evDate = new Date(ev.start?.dateTime || ev.start?.date);
-                                evDate.setHours(0,0,0,0);
-                                return evDate.getTime() === day.getTime();
-                            });
+                        // ── filtered SPT activities (calls + meetings only) ──
+                        const sptActivities = (activities || []).filter(a => {
+                            if (!a.date) return false;
+                            if (a.type === 'Call' && !calShowCalls) return false;
+                            if (a.type === 'Meeting' && !calShowMeetings) return false;
+                            if (a.type !== 'Call' && a.type !== 'Meeting') return false;
+                            if (calRepFilter !== 'all' && a.author !== calRepFilter && (a.salesRep || a.assignedTo) !== calRepFilter) return false;
+                            return true;
+                        });
+
+                        const getActivitiesForDay = (day) => sptActivities.filter(a => isSameDay(a.date, day));
+                        const getEventsForDay = (day) => calShowGcal ? calendarEvents.filter(ev => {
+                            const d = new Date(ev.start?.dateTime || ev.start?.date); d.setHours(0,0,0,0);
+                            return d.getTime() === day.getTime();
+                        }) : [];
+
+                        // ── week view helpers ──
+                        const weekStart = new Date(today); weekStart.setDate(today.getDate() + calOffset * 7);
+                        // snap to Sunday of that week
+                        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+                        const weekDays = Array.from({length:7}, (_,i) => { const d=new Date(weekStart); d.setDate(weekStart.getDate()+i); return d; });
+                        const visibleWeekDays = calShowWeekends ? weekDays : weekDays.filter(d => d.getDay()!==0 && d.getDay()!==6);
+
+                        // ── month view helpers ──
+                        const monthBase = new Date(today.getFullYear(), today.getMonth() + calOffset, 1);
+                        const firstDayOfMonth = new Date(monthBase);
+                        const lastDayOfMonth = new Date(monthBase.getFullYear(), monthBase.getMonth()+1, 0);
+                        const monthGridStart = new Date(firstDayOfMonth); monthGridStart.setDate(1 - firstDayOfMonth.getDay());
+                        const totalCells = Math.ceil((firstDayOfMonth.getDay() + lastDayOfMonth.getDate()) / 7) * 7;
+                        const monthDays = Array.from({length: totalCells}, (_,i) => { const d=new Date(monthGridStart); d.setDate(monthGridStart.getDate()+i); return d; });
+
+                        // ── header label ──
+                        const headerLabel = calView === 'week'
+                            ? monthNames[weekStart.getMonth()] + ' ' + weekStart.getFullYear()
+                            : monthNames[monthBase.getMonth()] + ' ' + monthBase.getFullYear();
+
+                        const allRepNames = [...new Set((settings.users||[]).filter(u=>u.name && u.userType !== 'ReadOnly').map(u=>u.name))].sort();
+
+                        // ── event/activity card renderers ──
+                        const GcalEvent = ({ev, ei}) => (
+                            <div title={ev.summary + ' — click to prep'} onClick={() => { setMeetingPrepEvent(ev); setMeetingPrepOpen(true); }}
+                                style={{ background:'#E6F1FB', borderLeft:'2px solid #185FA5', borderRadius:'3px', padding:'2px 4px', marginBottom:'2px', cursor:'pointer' }}>
+                                {ev.start?.dateTime && <div style={{ fontSize:'0.525rem', fontWeight:'700', color:'#185FA5', lineHeight:1 }}>{formatTime(ev.start.dateTime)}</div>}
+                                <div style={{ fontSize:'0.575rem', fontWeight:'600', color:'#0C447C', lineHeight:1.25, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>{ev.summary||'Untitled'}</div>
+                            </div>
+                        );
+
+                        const ActivityChip = ({a}) => {
+                            const isCall = a.type === 'Call';
+                            const bg = isCall ? '#FAEEDA' : '#E1F5EE';
+                            const border = isCall ? '#854F0B' : '#0F6E56';
+                            const color = isCall ? '#633806' : '#085041';
+                            const label = (a.companyName || a.opportunityName || a.contactName || a.author || '').slice(0,20) || a.type;
+                            return (
+                                <div style={{ background:bg, borderLeft:'2px solid '+border, borderRadius:'3px', padding:'2px 4px', marginBottom:'2px' }}>
+                                    <div style={{ fontSize:'0.525rem', fontWeight:'700', color:border, lineHeight:1 }}>logged</div>
+                                    <div style={{ fontSize:'0.575rem', fontWeight:'600', color, lineHeight:1.25, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.type} · {label}</div>
+                                </div>
+                            );
                         };
 
-                        const formatTime = (isoStr) => {
-                            if (!isoStr) return '';
-                            const d = new Date(isoStr);
-                            const h = d.getHours();
-                            const m = d.getMinutes();
-                            const ampm = h >= 12 ? 'pm' : 'am';
-                            return (h % 12 || 12) + (m ? ':' + String(m).padStart(2,'0') : '') + ampm;
+                        const ActivityBadges = ({day}) => {
+                            const acts = getActivitiesForDay(day);
+                            const calls = acts.filter(a=>a.type==='Call');
+                            const meetings = acts.filter(a=>a.type==='Meeting');
+                            return (
+                                <div style={{ display:'flex', flexWrap:'wrap', gap:'2px', marginTop:'2px' }}>
+                                    {calls.length > 0 && <span style={{ fontSize:'0.5rem', fontWeight:'600', padding:'1px 4px', borderRadius:'999px', background:'#FAEEDA', color:'#633806' }}>{calls.length} call{calls.length>1?'s':''}</span>}
+                                    {meetings.length > 0 && <span style={{ fontSize:'0.5rem', fontWeight:'600', padding:'1px 4px', borderRadius:'999px', background:'#E1F5EE', color:'#085041' }}>{meetings.length} mtg{meetings.length>1?'s':''}</span>}
+                                </div>
+                            );
                         };
-
-                        const eventColors = ['#2563eb','#7c3aed','#0891b2','#0d9488','#059669','#d97706','#dc2626'];
-                        const getEventColor = (idx) => eventColors[idx % eventColors.length];
 
                         return (
-                            <div className="table-container" style={{ marginBottom: '1.5rem' }}>
-                                <div className="table-header">
-                                    <h2>📅 THIS WEEK</h2>
-                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <div className="table-container" style={{ marginBottom:'1.5rem' }}>
+
+                                {/* ── Header ── */}
+                                <div className="table-header" style={{ flexWrap:'wrap', gap:'0.5rem' }}>
+                                    <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                                        <h2>📅 {headerLabel}</h2>
+                                        <div style={{ display:'flex', gap:'2px' }}>
+                                            <button onClick={() => setCalOffset(o=>o-1)} style={{ padding:'2px 7px', border:'1px solid #e2e8f0', borderRadius:'4px', background:'#f8fafc', cursor:'pointer', fontFamily:'inherit', fontSize:'0.75rem', color:'#475569' }}>&#8249;</button>
+                                            <button onClick={() => setCalOffset(0)} style={{ padding:'2px 7px', border:'1px solid #e2e8f0', borderRadius:'4px', background:'#f8fafc', cursor:'pointer', fontFamily:'inherit', fontSize:'0.75rem', color:'#475569' }}>Today</button>
+                                            <button onClick={() => setCalOffset(o=>o+1)} style={{ padding:'2px 7px', border:'1px solid #e2e8f0', borderRadius:'4px', background:'#f8fafc', cursor:'pointer', fontFamily:'inherit', fontSize:'0.75rem', color:'#475569' }}>&#8250;</button>
+                                        </div>
+                                    </div>
+                                    <div style={{ display:'flex', gap:'0.375rem', alignItems:'center', flexWrap:'wrap' }}>
+                                        {/* View toggle */}
+                                        <div style={{ display:'flex', background:'#f1f3f5', borderRadius:'6px', padding:'2px', gap:'2px' }}>
+                                            {['week','month'].map(v => (
+                                                <button key={v} onClick={() => { setCalView(v); setCalOffset(0); }}
+                                                    style={{ padding:'3px 10px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
+                                                        background: calView===v ? '#fff' : 'transparent',
+                                                        color: calView===v ? '#1e293b' : '#64748b',
+                                                        boxShadow: calView===v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                                                    {v.charAt(0).toUpperCase()+v.slice(1)}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {/* Configure button */}
+                                        <button onClick={() => setShowCalConfig(v=>!v)}
+                                            style={{ padding:'3px 10px', border:'1px solid '+(showCalConfig?'#2563eb':'#e2e8f0'), borderRadius:'6px', background: showCalConfig?'#eff6ff':'#f8fafc', color: showCalConfig?'#2563eb':'#475569', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                                            ⚙ Configure
+                                        </button>
                                         {calendarConnected && (
-                                            <button className="btn" onClick={fetchCalendarEvents} disabled={calendarLoading}
-                                                style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
-                                                {calendarLoading ? '↻ Refreshing…' : '↻ Refresh'}
-                                            </button>
-                                        )}
-                                        {!calendarConnected && !calendarLoading && (
-                                            <button className="btn" onClick={fetchCalendarEvents}
-                                                style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem', background: '#2563eb', color: '#fff', border: 'none' }}>
-                                                Connect Google Calendar
+                                            <button className="btn" onClick={fetchCalendarEvents} disabled={calendarLoading} style={{ fontSize:'0.6875rem', padding:'3px 8px' }}>
+                                                {calendarLoading ? '↻…' : '↻ Refresh'}
                                             </button>
                                         )}
                                     </div>
                                 </div>
-                                <div style={{ padding: '1rem 1.25rem' }}>
+
+                                {/* ── Configure Panel ── */}
+                                {showCalConfig && (
+                                    <div style={{ margin:'0 1.25rem 0.75rem', padding:'1rem', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', display:'flex', flexWrap:'wrap', gap:'1.25rem' }}>
+
+                                        {/* Provider */}
+                                        <div>
+                                            <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.5rem' }}>Calendar provider</div>
+                                            <div style={{ display:'flex', gap:'0.375rem', flexWrap:'wrap' }}>
+                                                {[
+                                                    { id:'google',    label:'Google' },
+                                                    { id:'microsoft', label:'Microsoft' },
+                                                    { id:'apple',     label:'Apple' },
+                                                    { id:'yahoo',     label:'Yahoo' },
+                                                ].map(p => (
+                                                    <button key={p.id} onClick={() => setCalProvider(p.id)}
+                                                        style={{ padding:'4px 10px', borderRadius:'6px', border:'1px solid '+(calProvider===p.id?'#2563eb':'#e2e8f0'), background:calProvider===p.id?'#eff6ff':'#fff', color:calProvider===p.id?'#2563eb':'#475569', fontSize:'0.75rem', fontWeight: calProvider===p.id?'700':'400', cursor:'pointer', fontFamily:'inherit' }}>
+                                                        {calProvider===p.id ? '✓ ' : ''}{p.label}
+                                                        {p.id !== 'google' && <span style={{ fontSize:'0.6rem', color:'#94a3b8', marginLeft:'4px' }}>(coming soon)</span>}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Show/hide toggles */}
+                                        <div>
+                                            <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.5rem' }}>Show on calendar</div>
+                                            <div style={{ display:'flex', flexDirection:'column', gap:'0.375rem' }}>
+                                                {[
+                                                    { label:'Google Calendar events', val:calShowGcal,     set:setCalShowGcal },
+                                                    { label:'Logged calls',           val:calShowCalls,    set:setCalShowCalls },
+                                                    { label:'Logged meetings',        val:calShowMeetings, set:setCalShowMeetings },
+                                                    { label:'Weekends',               val:calShowWeekends, set:setCalShowWeekends },
+                                                ].map(t => (
+                                                    <label key={t.label} style={{ display:'flex', alignItems:'center', gap:'0.5rem', cursor:'pointer', fontSize:'0.8125rem', color:'#1e293b' }}>
+                                                        <input type="checkbox" checked={t.val} onChange={e => t.set(e.target.checked)} style={{ width:'14px', height:'14px', accentColor:'#2563eb', cursor:'pointer' }} />
+                                                        {t.label}
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Rep filter (admin/manager only) */}
+                                        {canSeeAll && allRepNames.length > 1 && (
+                                            <div>
+                                                <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.5rem' }}>Filter by rep</div>
+                                                <select value={calRepFilter} onChange={e => setCalRepFilter(e.target.value)}
+                                                    style={{ padding:'4px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:'#1e293b', background:'#fff' }}>
+                                                    <option value="all">All reps</option>
+                                                    {allRepNames.map(n => <option key={n} value={n}>{n}</option>)}
+                                                </select>
+                                            </div>
+                                        )}
+
+                                        {/* Default view */}
+                                        <div>
+                                            <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.5rem' }}>Default view</div>
+                                            <div style={{ display:'flex', gap:'0.375rem' }}>
+                                                {['week','month'].map(v => (
+                                                    <button key={v} onClick={() => setCalView(v)}
+                                                        style={{ padding:'4px 10px', borderRadius:'6px', border:'1px solid '+(calView===v?'#2563eb':'#e2e8f0'), background:calView===v?'#eff6ff':'#fff', color:calView===v?'#2563eb':'#475569', fontSize:'0.75rem', fontWeight:calView===v?'700':'400', cursor:'pointer', fontFamily:'inherit' }}>
+                                                        {calView===v?'✓ ':''}{v.charAt(0).toUpperCase()+v.slice(1)}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div style={{ padding:'1rem 1.25rem' }}>
+                                    {/* Loading / error / not connected states */}
                                     {calendarLoading && (
-                                        <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b', fontSize: '0.875rem' }}>
-                                            <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', marginRight: '0.5rem' }}>↻</span>
-                                            Loading calendar events…
+                                        <div style={{ textAlign:'center', padding:'2rem', color:'#64748b', fontSize:'0.875rem' }}>
+                                            <span style={{ display:'inline-block', animation:'spin 1s linear infinite', marginRight:'0.5rem' }}>↻</span>
+                                            Loading calendar…
                                         </div>
                                     )}
                                     {calendarError && !calendarLoading && (
-                                        <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8', fontSize: '0.8125rem' }}>
-                                            <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📅</div>
-                                            <div style={{ fontWeight: '600', color: '#475569', marginBottom: '0.25rem' }}>Connect your Google Calendar</div>
-                                            <div style={{ color: '#94a3b8', marginBottom: '1rem', fontSize: '0.75rem' }}>See this week's meetings alongside your pipeline</div>
-                                            <button onClick={fetchCalendarEvents}
-                                                style={{ padding: '0.45rem 1.25rem', border: 'none', borderRadius: '6px', background: '#2563eb', color: '#fff', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                                Connect Google Calendar
-                                            </button>
+                                        <div style={{ textAlign:'center', padding:'1.5rem', color:'#94a3b8', fontSize:'0.8125rem' }}>
+                                            <div style={{ fontWeight:'600', color:'#475569', marginBottom:'0.25rem' }}>Connect your Google Calendar</div>
+                                            <div style={{ marginBottom:'1rem', fontSize:'0.75rem' }}>See this week's meetings alongside your pipeline</div>
+                                            <button onClick={fetchCalendarEvents} style={{ padding:'0.45rem 1.25rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.8125rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>Connect Google Calendar</button>
                                         </div>
                                     )}
-                                    {!calendarLoading && !calendarError && calendarConnected && (
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.625rem' }}>
-                                            {days.map((day, di) => {
-                                                const isToday = di === 0;
-                                                const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-                                                const events = getEventsForDay(day);
+                                    {!calendarLoading && !calendarError && !calendarConnected && (
+                                        <div style={{ textAlign:'center', padding:'2rem', color:'#94a3b8' }}>
+                                            <div style={{ fontSize:'2rem', marginBottom:'0.5rem' }}>📅</div>
+                                            <div style={{ fontWeight:'600', color:'#475569', fontSize:'0.875rem', marginBottom:'0.25rem' }}>See your week at a glance</div>
+                                            <div style={{ fontSize:'0.75rem', marginBottom:'1rem' }}>Connect Google Calendar to see meetings alongside your pipeline</div>
+                                            <button onClick={fetchCalendarEvents} style={{ padding:'0.5rem 1.25rem', border:'none', borderRadius:'8px', background:'#2563eb', color:'#fff', fontSize:'0.8125rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>Connect Google Calendar</button>
+                                        </div>
+                                    )}
+
+                                    {/* ── WEEK VIEW ── */}
+                                    {!calendarLoading && !calendarError && calendarConnected && calView === 'week' && (
+                                        <>
+                                        <div style={{ display:'grid', gridTemplateColumns:`repeat(${visibleWeekDays.length}, 1fr)`, gap:'0.5rem' }}>
+                                            {visibleWeekDays.map((day, di) => {
+                                                const isToday = isSameDay(day, today);
+                                                const isWeekend = day.getDay()===0 || day.getDay()===6;
+                                                const gcalEvs = getEventsForDay(day);
+                                                const acts = getActivitiesForDay(day);
                                                 return (
-                                                    <div key={di} style={{
-                                                        border: isToday ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                                                        borderRadius: '10px',
-                                                        background: isToday ? '#eff6ff' : isWeekend ? '#fafafa' : '#fff',
-                                                        overflow: 'hidden',
-                                                        minHeight: '120px'
-                                                    }}>
-                                                        {/* Day header */}
-                                                        <div style={{
-                                                            padding: '0.5rem 0.625rem 0.375rem',
-                                                            borderBottom: '1px solid ' + (isToday ? '#bfdbfe' : '#f1f5f9'),
-                                                            background: isToday ? '#dbeafe' : 'transparent'
-                                                        }}>
-                                                            <div style={{ fontSize: '0.6rem', fontWeight: '700', color: isToday ? '#2563eb' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                                                                {dayLabels[day.getDay()]}
-                                                            </div>
-                                                            <div style={{ fontSize: '1rem', fontWeight: '800', color: isToday ? '#2563eb' : '#1e293b', lineHeight: 1.1 }}>
-                                                                {day.getDate()}
-                                                            </div>
-                                                            <div style={{ fontSize: '0.6rem', color: isToday ? '#3b82f6' : '#cbd5e1' }}>
-                                                                {monthNames[day.getMonth()]}
-                                                            </div>
+                                                    <div key={di} style={{ border: isToday?'2px solid #2563eb':'1px solid #e2e8f0', borderRadius:'10px', background: isToday?'#eff6ff': isWeekend?'#fafafa':'#fff', overflow:'hidden', minHeight:'110px' }}>
+                                                        <div style={{ padding:'0.4rem 0.5rem 0.3rem', borderBottom:'1px solid '+(isToday?'#bfdbfe':'#f1f5f9'), background:isToday?'#dbeafe':'transparent' }}>
+                                                            <div style={{ fontSize:'0.575rem', fontWeight:'700', color:isToday?'#2563eb':'#94a3b8', textTransform:'uppercase', letterSpacing:'0.07em' }}>{dayLabels[day.getDay()]}</div>
+                                                            <div style={{ fontSize:'0.9375rem', fontWeight:'800', color:isToday?'#2563eb':'#1e293b', lineHeight:1.1 }}>{day.getDate()}</div>
+                                                            <div style={{ fontSize:'0.575rem', color:isToday?'#3b82f6':'#cbd5e1' }}>{monthNames[day.getMonth()]}</div>
                                                         </div>
-                                                        {/* Events */}
-                                                        <div style={{ padding: '0.375rem 0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                                            {events.length === 0 ? (
-                                                                <div style={{ fontSize: '0.6rem', color: '#e2e8f0', textAlign: 'center', padding: '0.5rem 0', userSelect: 'none' }}>—</div>
-                                                            ) : (
-                                                                events.slice(0, 4).map((ev, ei) => (
-                                                                    <div key={ev.id || ei} title={ev.summary + ' — click to prep'}
-                                                                        onClick={() => { setMeetingPrepEvent(ev); setMeetingPrepOpen(true); }}
-                                                                        style={{
-                                                                            background: getEventColor(ei) + '14',
-                                                                            borderLeft: '2px solid ' + getEventColor(ei),
-                                                                            borderRadius: '3px',
-                                                                            padding: '0.2rem 0.3rem',
-                                                                            cursor: 'pointer'
-                                                                        }}>
-                                                                        {ev.start?.dateTime && (
-                                                                            <div style={{ fontSize: '0.575rem', fontWeight: '700', color: getEventColor(ei), lineHeight: 1 }}>
-                                                                                {formatTime(ev.start.dateTime)}
-                                                                            </div>
-                                                                        )}
-                                                                        <div style={{ fontSize: '0.625rem', fontWeight: '600', color: '#1e293b', lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                                                                            {ev.summary || 'Untitled'}
-                                                                        </div>
-                                                                        <div style={{ fontSize: '0.525rem', color: getEventColor(ei), marginTop: '0.15rem', fontWeight: '700', letterSpacing: '0.03em' }}>PREP →</div>
-                                                                    </div>
-                                                                ))
-                                                            )}
-                                                            {events.length > 4 && (
-                                                                <div style={{ fontSize: '0.575rem', color: '#94a3b8', textAlign: 'center', paddingTop: '0.125rem' }}>
-                                                                    +{events.length - 4} more
-                                                                </div>
-                                                            )}
+                                                        <div style={{ padding:'0.3rem 0.4rem' }}>
+                                                            {gcalEvs.length===0 && acts.length===0 && <div style={{ fontSize:'0.575rem', color:'#e2e8f0', textAlign:'center', padding:'0.4rem 0', userSelect:'none' }}>—</div>}
+                                                            {gcalEvs.slice(0,3).map((ev,ei) => <GcalEvent key={ev.id||ei} ev={ev} ei={ei} />)}
+                                                            {acts.slice(0,3).map((a,ai) => <ActivityChip key={a.id||ai} a={a} />)}
+                                                            {gcalEvs.length + acts.length > 6 && <div style={{ fontSize:'0.525rem', color:'#94a3b8', textAlign:'center' }}>+{gcalEvs.length+acts.length-6} more</div>}
                                                         </div>
                                                     </div>
                                                 );
                                             })}
                                         </div>
+                                        {/* Legend */}
+                                        <div style={{ display:'flex', gap:'0.875rem', marginTop:'0.625rem', flexWrap:'wrap' }}>
+                                            {calShowGcal && <div style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'0.6875rem', color:'#64748b' }}><div style={{ width:'8px', height:'8px', borderRadius:'2px', background:'#185FA5', flexShrink:0 }}></div>Google Calendar</div>}
+                                            {calShowCalls && <div style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'0.6875rem', color:'#64748b' }}><div style={{ width:'8px', height:'8px', borderRadius:'2px', background:'#854F0B', flexShrink:0 }}></div>Logged call</div>}
+                                            {calShowMeetings && <div style={{ display:'flex', alignItems:'center', gap:'4px', fontSize:'0.6875rem', color:'#64748b' }}><div style={{ width:'8px', height:'8px', borderRadius:'2px', background:'#0F6E56', flexShrink:0 }}></div>Logged meeting</div>}
+                                        </div>
+                                        </>
                                     )}
-                                    {!calendarLoading && !calendarError && !calendarConnected && (
-                                        <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
-                                            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📅</div>
-                                            <div style={{ fontWeight: '600', color: '#475569', fontSize: '0.875rem', marginBottom: '0.25rem' }}>See your week at a glance</div>
-                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '1rem' }}>Connect Google Calendar to see this week's meetings alongside your pipeline</div>
-                                            <button onClick={fetchCalendarEvents}
-                                                style={{ padding: '0.5rem 1.25rem', border: 'none', borderRadius: '8px', background: '#2563eb', color: '#fff', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                                Connect Google Calendar
-                                            </button>
+
+                                    {/* ── MONTH VIEW ── */}
+                                    {!calendarLoading && !calendarError && calendarConnected && calView === 'month' && (
+                                        <div style={{ border:'1px solid #e2e8f0', borderRadius:'8px', overflow:'hidden' }}>
+                                            {/* Day-of-week headers */}
+                                            <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', background:'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
+                                                {dayLabels.map(d => <div key={d} style={{ padding:'4px 0', textAlign:'center', fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em' }}>{d}</div>)}
+                                            </div>
+                                            {/* Month grid */}
+                                            <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)' }}>
+                                                {monthDays.map((day, di) => {
+                                                    const isToday = isSameDay(day, today);
+                                                    const isCurrentMonth = day.getMonth() === monthBase.getMonth();
+                                                    const gcalEvs = getEventsForDay(day);
+                                                    const acts = getActivitiesForDay(day);
+                                                    const calls = acts.filter(a=>a.type==='Call');
+                                                    const meetings = acts.filter(a=>a.type==='Meeting');
+                                                    const isLastCol = (di+1)%7===0;
+                                                    const isLastRow = di >= monthDays.length-7;
+                                                    return (
+                                                        <div key={di} style={{ borderRight: isLastCol?'none':'1px solid #f1f5f9', borderBottom: isLastRow?'none':'1px solid #f1f5f9', padding:'4px 5px', minHeight:'68px', background: isToday?'#f0f7ff': !isCurrentMonth?'#fafafa':'#fff' }}>
+                                                            <div style={{ width:'20px', height:'20px', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:'2px', background:isToday?'#185FA5':'transparent' }}>
+                                                                <span style={{ fontSize:'0.6875rem', fontWeight:'500', color: isToday?'#fff': isCurrentMonth?'#475569':'#cbd5e1' }}>{day.getDate()}</span>
+                                                            </div>
+                                                            {gcalEvs.slice(0,2).map((ev,ei) => (
+                                                                <div key={ev.id||ei} onClick={() => { setMeetingPrepEvent(ev); setMeetingPrepOpen(true); }}
+                                                                    style={{ fontSize:'0.55rem', fontWeight:'600', color:'#0C447C', background:'#E6F1FB', borderRadius:'3px', padding:'1px 3px', marginBottom:'1px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', cursor:'pointer' }}>
+                                                                    {ev.summary||'Event'}
+                                                                </div>
+                                                            ))}
+                                                            <div style={{ display:'flex', flexWrap:'wrap', gap:'2px' }}>
+                                                                {calShowCalls && calls.length>0 && <span style={{ fontSize:'0.5rem', fontWeight:'600', padding:'1px 4px', borderRadius:'999px', background:'#FAEEDA', color:'#633806' }}>{calls.length} call{calls.length>1?'s':''}</span>}
+                                                                {calShowMeetings && meetings.length>0 && <span style={{ fontSize:'0.5rem', fontWeight:'600', padding:'1px 4px', borderRadius:'999px', background:'#E1F5EE', color:'#085041' }}>{meetings.length} mtg{meetings.length>1?'s':''}</span>}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
