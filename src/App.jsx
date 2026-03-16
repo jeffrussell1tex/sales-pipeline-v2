@@ -1347,9 +1347,13 @@ function App() {
     });
     const [viewingTask, setViewingTask] = useState(null);
     const [taskReminderPopup, setTaskReminderPopup] = useState(null);
+    const [taskReminderSnoozeH, setTaskReminderSnoozeH] = useState(0);
+    const [taskReminderSnoozeM, setTaskReminderSnoozeM] = useState(15);
     const [dbOffline, setDbOffline] = useState(false);
     const [taskDuePopup, setTaskDuePopup] = useState(null);
     const [taskDueQueue, setTaskDueQueue] = useState([]);
+    const [taskDueSnoozeH, setTaskDueSnoozeH] = useState(0);
+    const [taskDueSnoozeM, setTaskDueSnoozeM] = useState(15);
     const [dismissedDueTodayAlerts, setDismissedDueTodayAlerts] = useState([]);
     const [dismissedReminders, setDismissedReminders] = useState([]);
     const [healthPopover, setHealthPopover] = useState(null);
@@ -12119,22 +12123,27 @@ ${bodyHtml}
                                     </div>
                                 )}
                             </div>
-                            {/* Snooze buttons */}
-                            <div style={{ display:'flex', gap:'0.375rem', marginBottom:'0.625rem' }}>
-                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', alignSelf:'center', marginRight:'2px' }}>Snooze:</div>
-                                {[5, 10, 15, 30].map(mins => (
-                                    <button key={mins}
-                                        onClick={() => {
-                                            const task = taskReminderPopup;
-                                            setTaskReminderPopup(null);
-                                            setTimeout(() => setTaskReminderPopup(task), mins * 60 * 1000);
-                                        }}
-                                        style={{ flex:1, padding:'0.375rem 0', background:'#f1f5f9', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'6px', fontWeight:'600', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s' }}
-                                        onMouseEnter={e => { e.target.style.background='#e2e8f0'; }}
-                                        onMouseLeave={e => { e.target.style.background='#f1f5f9'; }}>
-                                        {mins}m
-                                    </button>
-                                ))}
+                            {/* Snooze selector */}
+                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.625rem', padding:'0.5rem 0.75rem', background:'#f8fafc', borderRadius:'8px', border:'1px solid #e2e8f0' }}>
+                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Snooze</span>
+                                <select value={taskReminderSnoozeH} onChange={e => setTaskReminderSnoozeH(Number(e.target.value))}
+                                    style={{ padding:'3px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:'#1e293b', background:'#fff' }}>
+                                    {[0,1,2,3,4,5,6,8,12,24].map(h => <option key={h} value={h}>{h}h</option>)}
+                                </select>
+                                <select value={taskReminderSnoozeM} onChange={e => setTaskReminderSnoozeM(Number(e.target.value))}
+                                    style={{ padding:'3px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:'#1e293b', background:'#fff' }}>
+                                    {[0,5,10,15,20,30,45].map(m => <option key={m} value={m}>{m}m</option>)}
+                                </select>
+                                <button onClick={() => {
+                                        const task = taskReminderPopup;
+                                        const ms = (taskReminderSnoozeH * 60 + taskReminderSnoozeM) * 60 * 1000;
+                                        if (ms <= 0) return;
+                                        setTaskReminderPopup(null);
+                                        setTimeout(() => setTaskReminderPopup(task), ms);
+                                    }}
+                                    style={{ padding:'4px 14px', background:'#f59e0b', color:'#fff', border:'none', borderRadius:'6px', fontWeight:'700', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
+                                    Snooze
+                                </button>
                             </div>
                             <div style={{ display: 'flex', gap: '0.75rem' }}>
                                 <button
@@ -12228,6 +12237,29 @@ ${bodyHtml}
                                         {taskDuePopup.notes}
                                     </div>
                                 )}
+                            </div>
+
+                            {/* Snooze selector */}
+                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'0.875rem', padding:'0.5rem 0.75rem', background:'#f8fafc', borderRadius:'8px', border:'1px solid #e2e8f0' }}>
+                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Snooze</span>
+                                <select value={taskDueSnoozeH} onChange={e => setTaskDueSnoozeH(Number(e.target.value))}
+                                    style={{ padding:'3px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:'#1e293b', background:'#fff' }}>
+                                    {[0,1,2,3,4,5,6,8,12,24].map(h => <option key={h} value={h}>{h}h</option>)}
+                                </select>
+                                <select value={taskDueSnoozeM} onChange={e => setTaskDueSnoozeM(Number(e.target.value))}
+                                    style={{ padding:'3px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:'#1e293b', background:'#fff' }}>
+                                    {[0,5,10,15,20,30,45].map(m => <option key={m} value={m}>{m}m</option>)}
+                                </select>
+                                <button onClick={() => {
+                                        const task = taskDuePopup;
+                                        const ms = (taskDueSnoozeH * 60 + taskDueSnoozeM) * 60 * 1000;
+                                        if (ms <= 0) return;
+                                        if (taskDueQueue.length > 0) { setTaskDuePopup(taskDueQueue[0]); setTaskDueQueue(prev => prev.slice(1)); } else { setTaskDuePopup(null); }
+                                        setTimeout(() => setTaskDuePopup(task), ms);
+                                    }}
+                                    style={{ padding:'4px 14px', background:'#f59e0b', color:'#fff', border:'none', borderRadius:'6px', fontWeight:'700', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>
+                                    Snooze
+                                </button>
                             </div>
 
                             {/* Action buttons */}
