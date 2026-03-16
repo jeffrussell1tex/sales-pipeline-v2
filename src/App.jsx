@@ -7425,7 +7425,19 @@ ${bodyHtml}
                             })();
                             // Sum per-user quotas for visible reps only
                             const quotaMode = (settings.users||[]).find(u => u.quotaType)?.quotaType || 'annual';
-                            const visibleUsers = (settings.users||[]).filter(u => u.userType !== 'ReadOnly' && u.userType !== 'Admin' && u.userType !== 'Manager' && u.name && visibleRepNames.has(u.name));
+                            // Build the quota rollup correctly:
+                            // - When a rep/team/territory slice is active, sum only those users' quotas
+                            // - When no slice is active (admin viewing all), sum ALL non-ReadOnly users with quota set
+                            // - Never filter by Admin/Manager role — they can carry quota too
+                            const hasSlice = reportsRep || reportsTeam || reportsTerritory;
+                            const visibleUsers = (settings.users||[]).filter(u => {
+                                if (u.userType === 'ReadOnly') return false;
+                                if (!u.name) return false;
+                                if (hasSlice) return visibleRepNames.has(u.name);
+                                // No slice: include any user who has quota configured
+                                const hasQuota = (u.annualQuota || 0) > 0 || (u.q1Quota || 0) > 0 || (u.q2Quota || 0) > 0 || (u.q3Quota || 0) > 0 || (u.q4Quota || 0) > 0;
+                                return hasQuota;
+                            });
                             const totalQuota = visibleUsers.reduce((s, u) => {
                               if ((u.quotaType || quotaMode) === 'annual') return s + (u.annualQuota || 0);
                               return s + (u.q1Quota||0) + (u.q2Quota||0) + (u.q3Quota||0) + (u.q4Quota||0);
