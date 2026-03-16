@@ -1005,6 +1005,36 @@ function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, inputSt, updateRe
     const bodyStyle = { padding:'0.875rem 1rem', display:'flex', flexDirection:'column', gap:'8px' };
     const lblStyle  = { fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'3px' };
     const qGridStyle = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' };
+
+    // Use local state for the input values so typing feels instant.
+    // Only persist to DB on blur (when user leaves the field) to avoid
+    // writing partial/zero values on every keystroke.
+    const [localAnnual, setLocalAnnual] = React.useState(u.annualQuota != null ? String(u.annualQuota) : '');
+    const [localQ, setLocalQ] = React.useState(() => {
+        const out = {};
+        ['q1','q2','q3','q4'].forEach(q => { out[q] = u[q+'Quota'] != null ? String(u[q+'Quota']) : ''; });
+        return out;
+    });
+
+    // Sync local state when the user record updates from outside (e.g. initial DB load)
+    React.useEffect(() => { setLocalAnnual(u.annualQuota != null ? String(u.annualQuota) : ''); }, [u.annualQuota]);
+    React.useEffect(() => {
+        setLocalQ(prev => {
+            const out = { ...prev };
+            ['q1','q2','q3','q4'].forEach(q => { out[q] = u[q+'Quota'] != null ? String(u[q+'Quota']) : ''; });
+            return out;
+        });
+    }, [u.q1Quota, u.q2Quota, u.q3Quota, u.q4Quota]);
+
+    const commitAnnual = (rawVal) => {
+        const val = parseFloat(rawVal);
+        if (!isNaN(val) && val >= 0) updateRepField(u.id, 'annualQuota', val);
+    };
+    const commitQ = (qKey, rawVal) => {
+        const val = parseFloat(rawVal);
+        if (!isNaN(val) && val >= 0) updateRepField(u.id, qKey + 'Quota', val);
+    };
+
     return (
         <div style={cardStyle}>
             <div style={topStyle}>
@@ -1020,24 +1050,27 @@ function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, inputSt, updateRe
                 {quotaMode === 'annual' ? (
                     <div>
                         <div style={lblStyle}>Annual quota</div>
-                        <input type="number" value={u.annualQuota||''} placeholder="0"
-                            onChange={e => updateRepField(u.id, 'annualQuota', parseFloat(e.target.value)||0)}
-                            style={inputSt}
-                            onFocus={e=>e.target.style.borderColor='#2563eb'}
-                            onBlur={e=>e.target.style.borderColor='#e2e8f0'} />
+                        <input type="number" value={localAnnual} placeholder="0"
+                            onChange={e => setLocalAnnual(e.target.value)}
+                            onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitAnnual(e.target.value); }}
+                            onFocus={e => e.target.style.borderColor='#2563eb'}
+                            style={inputSt} />
                     </div>
                 ) : (
                     <div style={qGridStyle}>
-                        {quarters.map(q => (
-                            <div key={q}>
-                                <div style={lblStyle}>{q}</div>
-                                <input type="number" value={u[q.toLowerCase()+'Quota']||''} placeholder="0"
-                                    onChange={e => updateRepField(u.id, q.toLowerCase()+'Quota', parseFloat(e.target.value)||0)}
-                                    style={{ ...inputSt, fontSize:'0.8125rem' }}
-                                    onFocus={e=>e.target.style.borderColor='#2563eb'}
-                                    onBlur={e=>e.target.style.borderColor='#e2e8f0'} />
-                            </div>
-                        ))}
+                        {quarters.map(q => {
+                            const qKey = q.toLowerCase();
+                            return (
+                                <div key={q}>
+                                    <div style={lblStyle}>{q}</div>
+                                    <input type="number" value={localQ[qKey]||''} placeholder="0"
+                                        onChange={e => setLocalQ(prev => ({ ...prev, [qKey]: e.target.value }))}
+                                        onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitQ(qKey, e.target.value); }}
+                                        onFocus={e => e.target.style.borderColor='#2563eb'}
+                                        style={{ ...inputSt, fontSize:'0.8125rem' }} />
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>
@@ -1594,6 +1627,14 @@ dbFetch('/.netlify/functions/users?me=true')
 
 
 
+
+    // Auto-fetch calendar events when the home tab is active and calendar is not yet loaded.
+    // This removes the need for the user to manually click "Connect Google Calendar" every session.
+    useEffect(() => {
+        if (activeTab === 'home' && !calendarConnected && !calendarLoading && !calendarError) {
+            fetchCalendarEvents();
+        }
+    }, [activeTab]);
 
     // Security: determine user role
     // Role derived from Clerk user metadata (set via Clerk dashboard)
@@ -2547,6 +2588,29 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
         setQuickLogOpen(false);
         setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });
         setQuickLogContactResults([]);
+    };
+
+    // ── Calendar strip auto-fetch (hoisted so useEffect can call it) ──────────
+    const fetchCalendarEvents = async () => {
+        setCalendarLoading(true);
+        setCalendarError(null);
+        try {
+            const now = new Date();
+            const weekStart = new Date(now);
+            weekStart.setHours(0, 0, 0, 0);
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 7);
+            const res = await fetch('/.netlify/functions/calendar-events?timeMin=' + weekStart.toISOString() + '&timeMax=' + weekEnd.toISOString());
+            if (!res.ok) throw new Error('Failed to load calendar');
+            const data = await res.json();
+            setCalendarEvents(data.events || []);
+            setCalendarConnected(true);
+        } catch (err) {
+            setCalendarError(err.message);
+            setCalendarConnected(false);
+        } finally {
+            setCalendarLoading(false);
+        }
     };
 
     // Log from Calendar handlers
@@ -3806,27 +3870,8 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
 
                     {/* ── WEEKLY CALENDAR STRIP ── */}
                     {(() => {
-                        const fetchCalendarEvents = async () => {
-                            setCalendarLoading(true);
-                            setCalendarError(null);
-                            try {
-                                const now = new Date();
-                                const weekStart = new Date(now);
-                                weekStart.setHours(0, 0, 0, 0);
-                                const weekEnd = new Date(weekStart);
-                                weekEnd.setDate(weekStart.getDate() + 7);
-                                const res = await fetch('/.netlify/functions/calendar-events?timeMin=' + weekStart.toISOString() + '&timeMax=' + weekEnd.toISOString());
-                                if (!res.ok) throw new Error('Failed to load calendar');
-                                const data = await res.json();
-                                setCalendarEvents(data.events || []);
-                                setCalendarConnected(true);
-                            } catch (err) {
-                                setCalendarError(err.message);
-                                setCalendarConnected(false);
-                            } finally {
-                                setCalendarLoading(false);
-                            }
-                        };
+                        // fetchCalendarEvents is hoisted to component level and called automatically
+                        // when the home tab loads — no manual button press needed.
 
                         // Build 7-day columns starting today
                         const today = new Date();
