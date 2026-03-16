@@ -62,6 +62,13 @@ export const handler = async (event) => {
             userType:      data.userType      || 'User',
             notificationPrefs: data.notificationPrefs || null,
             digestTime:    data.digestTime    || '08:00',
+            // Quota fields — stored in profile jsonb so they survive DB round-trips
+            annualQuota:   data.annualQuota   ?? null,
+            q1Quota:       data.q1Quota       ?? null,
+            q2Quota:       data.q2Quota       ?? null,
+            q3Quota:       data.q3Quota       ?? null,
+            q4Quota:       data.q4Quota       ?? null,
+            quotaType:     data.quotaType     || null,
         },
     });
 

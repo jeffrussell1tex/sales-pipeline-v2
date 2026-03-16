@@ -25,10 +25,36 @@ export const handler = async (event) => {
                 painPoints:      row.painPoints      || [],
                 verticalMarkets: row.verticalMarkets || [],
                 fieldVisibility: row.fieldVisibility || {},
-            }})};
+                // Extended fields — stored in the extra jsonb blob column
+                quotaData:       row.extra?.quotaData       || null,
+                commissionTiers: row.extra?.commissionTiers || null,
+                pipelines:       row.extra?.pipelines       || null,
+                teams:           row.extra?.teams           || null,
+                territories:     row.extra?.territories     || null,
+                verticals:       row.extra?.verticals       || null,
+                kpiTolerances:   row.extra?.kpiTolerances   || null,
+                kpiTargets:      row.extra?.kpiTargets      || null,
+                logoUrl:         row.extra?.logoUrl         || null,
+                kpiConfig:       row.extra?.kpiConfig       || null,
+                commissionPlan:  row.extra?.commissionPlan  || null,
+            }})});
         }
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
+            // Build the extra jsonb blob for fields without dedicated columns
+            const extra = {
+                quotaData:       data.quotaData       || null,
+                commissionTiers: data.commissionTiers || null,
+                pipelines:       data.pipelines       || null,
+                teams:           data.teams           || null,
+                territories:     data.territories     || null,
+                verticals:       data.verticals       || null,
+                kpiTolerances:   data.kpiTolerances   || null,
+                kpiTargets:      data.kpiTargets      || null,
+                logoUrl:         data.logoUrl         || null,
+                kpiConfig:       data.kpiConfig       || null,
+                commissionPlan:  data.commissionPlan  || null,
+            };
             const dbRow = {
                 id:              SETTINGS_ID,
                 companyName:     data.companyName     || null,
@@ -39,11 +65,12 @@ export const handler = async (event) => {
                 painPoints:      data.painPoints      || [],
                 verticalMarkets: data.verticalMarkets || [],
                 fieldVisibility: data.fieldVisibility || {},
+                extra,
                 updatedAt:       new Date(),
             };
             await db.insert(settings).values(dbRow).onConflictDoUpdate({
                 target: settings.id,
-                set: { companyName: dbRow.companyName, companyLogo: dbRow.companyLogo, fiscalYearStart: dbRow.fiscalYearStart, stages: dbRow.stages, taskTypes: dbRow.taskTypes, painPoints: dbRow.painPoints, verticalMarkets: dbRow.verticalMarkets, fieldVisibility: dbRow.fieldVisibility, updatedAt: dbRow.updatedAt }
+                set: { companyName: dbRow.companyName, companyLogo: dbRow.companyLogo, fiscalYearStart: dbRow.fiscalYearStart, stages: dbRow.stages, taskTypes: dbRow.taskTypes, painPoints: dbRow.painPoints, verticalMarkets: dbRow.verticalMarkets, fieldVisibility: dbRow.fieldVisibility, extra: dbRow.extra, updatedAt: dbRow.updatedAt }
             });
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }

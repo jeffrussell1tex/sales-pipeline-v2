@@ -8320,17 +8320,40 @@ ${bodyHtml}
                         };
 
                         const updateRepField = (userId, field, value) => {
-                            setSettings(prev => ({
-                                ...prev,
-                                users: (prev.users||[]).map(u => u.id === userId ? { ...u, [field]: value } : u)
-                            }));
+                            setSettings(prev => {
+                                const updatedUsers = (prev.users||[]).map(u =>
+                                    u.id === userId ? { ...u, [field]: value } : u
+                                );
+                                // Persist quota field change to /users DB endpoint immediately.
+                                // Without this, quota values only live in React state and are
+                                // lost on logout because the settings save effect strips users.
+                                const updatedUser = updatedUsers.find(u => u.id === userId);
+                                if (updatedUser) {
+                                    dbFetch('/.netlify/functions/users', {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(updatedUser),
+                                    }).catch(err => console.error('Failed to persist quota for user', userId, err));
+                                }
+                                return { ...prev, users: updatedUsers };
+                            });
                         };
 
                         const setAllQuotaMode = (mode) => {
-                            setSettings(prev => ({
-                                ...prev,
-                                users: (prev.users||[]).map(u => u.userType !== 'ReadOnly' ? { ...u, quotaType: mode } : u)
-                            }));
+                            setSettings(prev => {
+                                const updatedUsers = (prev.users||[]).map(u =>
+                                    u.userType !== 'ReadOnly' ? { ...u, quotaType: mode } : u
+                                );
+                                // Persist quotaType change to DB for all affected users
+                                updatedUsers.filter(u => u.userType !== 'ReadOnly').forEach(u => {
+                                    dbFetch('/.netlify/functions/users', {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(u),
+                                    }).catch(err => console.error('Failed to persist quotaType for user', u.id, err));
+                                });
+                                return { ...prev, users: updatedUsers };
+                            });
                         };
 
                         // Won revenue per rep name (kept for commission plan below)

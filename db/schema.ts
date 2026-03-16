@@ -177,6 +177,7 @@ export const settings = pgTable('settings', {
     painPoints:      jsonb('pain_points').default('[]'),
     verticalMarkets: jsonb('vertical_markets').default('[]'),
     fieldVisibility: jsonb('field_visibility').default('{}'),        // role-based field access
+    extra:           jsonb('extra').default('{}'),                   // overflow blob: quotaData, pipelines, teams, territories, verticals, commissionPlan, kpiConfig, logoUrl
     updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 });
 
