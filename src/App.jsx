@@ -839,21 +839,6 @@ function TeamBuilder({ settings, setSettings, onBack }) {
             return u;
         });
         setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
-
-        // Persist team assignment changes to the /users DB endpoint for each affected user.
-        // Without this, team fields only exist in React state and are lost on logout/login.
-        const affectedUsers = updatedUsers.filter(u => {
-            const orig = (settings.users || []).find(ou => ou.id === u.id);
-            return orig && (orig.team !== u.team || orig.teamId !== u.teamId || orig.territory !== u.territory || orig.vertical !== u.vertical);
-        });
-        affectedUsers.forEach(u => {
-            dbFetch('/.netlify/functions/users', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(u),
-            }).catch(err => console.error('Failed to persist team assignment for user', u.id, err));
-        });
-
         closeForm();
     };
 
@@ -861,19 +846,6 @@ function TeamBuilder({ settings, setSettings, onBack }) {
         const updatedTeams = teams.filter(t => t.id !== teamId);
         const updatedUsers = (settings.users || []).map(u => u.teamId === teamId ? { ...u, team: '', territory: '', vertical: '', teamId: '' } : u);
         setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
-
-        // Persist the cleared team fields to the /users DB endpoint for each affected user.
-        const affectedUsers = updatedUsers.filter(u => {
-            const orig = (settings.users || []).find(ou => ou.id === u.id);
-            return orig && orig.teamId === teamId;
-        });
-        affectedUsers.forEach(u => {
-            dbFetch('/.netlify/functions/users', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(u),
-            }).catch(err => console.error('Failed to clear team assignment for user', u.id, err));
-        });
     };
 
     const toggleRep = (repId) => {
@@ -1107,7 +1079,7 @@ function App() {
 
     // ── Quick-log panel (pipeline floating button) ──
     const [quickLogOpen, setQuickLogOpen] = useState(false);
-    const [quickLogForm, setQuickLogForm] = useState({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' });
+    const [quickLogForm, setQuickLogForm] = useState({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });
     const [quickLogContactResults, setQuickLogContactResults] = useState([]);
 
     // ── Follow-up task prompt (shown after saving an activity) ──
@@ -2503,6 +2475,30 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
     const handleSaveActivity = async (activityData) => {
         setActivityModalError(null);
         setActivityModalSaving(true);
+
+        const fireActivityCalendarEvent = async (activity) => {
+            if (!activity.addToCalendar || !activity.date) return;
+            try {
+                const relatedOpp = activity.opportunityId ? (opportunities || []).find(o => o.id === activity.opportunityId) : null;
+                const description = [
+                    activity.notes || '',
+                    relatedOpp ? 'Opportunity: ' + (relatedOpp.opportunityName || relatedOpp.account) : '',
+                    activity.companyName ? 'Company: ' + activity.companyName : '',
+                ].filter(Boolean).join('\n');
+                await fetch('/.netlify/functions/calendar-add-event', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: activity.type + (activity.companyName ? ' — ' + activity.companyName : '') + (relatedOpp ? ' — ' + (relatedOpp.opportunityName || relatedOpp.account) : ''),
+                        date: activity.date,
+                        description,
+                    }),
+                });
+            } catch (err) {
+                console.warn('Calendar event creation failed (non-blocking):', err);
+            }
+        };
+
         if (editingActivity) {
             const payload = { ...activityData, id: editingActivity.id };
             try {
@@ -2510,6 +2506,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                 const data = await res.json();
                 if (!res.ok) { setActivityModalError(data.error || 'Failed to save activity. Please try again.'); setActivityModalSaving(false); return; }
                 setActivities(activities.map(a => a.id === editingActivity.id ? (data.activity || payload) : a));
+                fireActivityCalendarEvent(payload);
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) { console.error('Failed to update activity:', err); setActivityModalError('Failed to save activity. Please check your connection and try again.'); }
             finally { setActivityModalSaving(false); }
@@ -2521,6 +2518,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                 const data = await res.json();
                 if (!res.ok) { setActivityModalError(data.error || 'Failed to save activity. Please try again.'); setActivityModalSaving(false); return; }
                 setActivities([...activities, data.activity || newActivity]);
+                fireActivityCalendarEvent(newActivity);
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) { console.error('Failed to save activity:', err); setActivityModalError('Failed to save activity. Please check your connection and try again.'); }
             finally { setActivityModalSaving(false); }
@@ -2531,7 +2529,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
             setFollowUpPrompt({ opportunityId: activityData.opportunityId, opportunityName: linkedOpp?.opportunityName || linkedOpp?.account || 'this deal' });
         }
         setQuickLogOpen(false);
-        setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' });
+        setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });
         setQuickLogContactResults([]);
     };
 
@@ -11409,9 +11407,23 @@ ${bodyHtml}
                                 placeholder="Notes…" rows={2}
                                 style={{ fontSize: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.35rem 0.5rem', background: '#f8fafc', color: '#1e293b', fontFamily: 'inherit', resize: 'none' }} />
 
+                            {/* Add to Calendar */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.375rem 0', borderTop: '1px solid #f1f5f9' }}>
+                                <input
+                                    type="checkbox"
+                                    id="quickLogCal"
+                                    checked={!!quickLogForm.addToCalendar}
+                                    onChange={e => setQuickLogForm(f => ({ ...f, addToCalendar: e.target.checked }))}
+                                    style={{ width: '14px', height: '14px', accentColor: '#2563eb', cursor: 'pointer', flexShrink: 0 }}
+                                />
+                                <label htmlFor="quickLogCal" style={{ fontSize: '0.6875rem', fontWeight: '600', color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
+                                    📅 Add to Google Calendar
+                                </label>
+                            </div>
+
                             {/* Actions */}
                             <div style={{ display: 'flex', gap: '0.375rem' }}>
-                                <button onClick={() => { setQuickLogOpen(false); setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '' }); setQuickLogContactResults([]); }}
+                                <button onClick={() => { setQuickLogOpen(false); setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false }); setQuickLogContactResults([]); }}
                                     style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     Cancel
                                 </button>
@@ -11427,6 +11439,7 @@ ${bodyHtml}
                                         contactId: quickLogForm.contactId || null,
                                         contactName: quickLogForm.contactSearch || '',
                                         salesRep: currentUser,
+                                        addToCalendar: !!quickLogForm.addToCalendar,
                                     });
                                 }} style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     Save

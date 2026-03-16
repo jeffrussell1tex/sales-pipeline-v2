@@ -7,7 +7,8 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
         opportunityId: initialContext?.opportunityId || '',
         contactId: initialContext?.contactId || '',
         companyName: '',
-        notes: ''
+        notes: '',
+        addToCalendar: false
     });
 
     const [nestedModal, setNestedModal] = useState(null);
@@ -235,6 +236,20 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
                                 rows="5"
                             />
                         </div>
+                    </div>
+                    {/* ── Add to Google Calendar ── */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.75rem 0', borderTop: '1px solid #f1f5f9', marginTop: '0.25rem' }}>
+                        <input
+                            type="checkbox"
+                            id="activityAddToCalendar"
+                            checked={!!formData.addToCalendar}
+                            onChange={e => handleChange('addToCalendar', e.target.checked)}
+                            style={{ width: '16px', height: '16px', accentColor: '#2563eb', cursor: 'pointer', flexShrink: 0 }}
+                        />
+                        <label htmlFor="activityAddToCalendar" style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
+                            📅 Add to Google Calendar
+                        </label>
+                        <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>Creates an all-day event on the activity date</span>
                     </div>
                     <div className="modal-actions">
                         <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
