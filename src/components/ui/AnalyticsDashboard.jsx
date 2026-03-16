@@ -372,10 +372,16 @@ export default function AnalyticsDashboard({ opportunities, settings, quotaData,
                 const totalWeightedValue = funnelData.reduce((s, d) => s + d.weighted, 0);
                 const funnelColors = ['#6366f1', '#818cf8', '#a78bfa', '#c084fc', '#3b82f6', '#2563eb', '#10b981', '#14b8a6'];
 
-                // Quota calculations
-                const qd = quotaData || { type: 'annual', annualQuota: 0, q1Quota: 0, q2Quota: 0, q3Quota: 0, q4Quota: 0 };
-                const totalQuota = qd.type === 'annual' ? (qd.annualQuota || 0) :
-                    ((qd.q1Quota || 0) + (qd.q2Quota || 0) + (qd.q3Quota || 0) + (qd.q4Quota || 0));
+                // Quota calculations — sum per-rep quotas from user records.
+                // The old global quotaData blob is no longer used for totals;
+                // quota is now set per-rep in the Sales Manager tab and stored on user objects.
+                const quotaMode = (users || []).find(u => u.quotaType)?.quotaType || 'annual';
+                const totalQuota = (users || [])
+                    .filter(u => u.userType !== 'ReadOnly')
+                    .reduce((s, u) => {
+                        if ((u.quotaType || quotaMode) === 'annual') return s + (u.annualQuota || 0);
+                        return s + (u.q1Quota || 0) + (u.q2Quota || 0) + (u.q3Quota || 0) + (u.q4Quota || 0);
+                    }, 0);
                 const closedWonValue = opportunities.filter(o => o.stage === 'Closed Won')
                     .reduce((s, o) => s + (o.arr || 0) + (o.implementationCost || 0), 0);
                 const remainingQuota = Math.max(0, totalQuota - closedWonValue);
