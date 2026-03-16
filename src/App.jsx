@@ -3890,13 +3890,15 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                         const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
                         // ── filtered SPT activities (calls + meetings only) ──
+                        // Personal calendar — show only the logged-in user's own activities.
+                        // Managers/admins have dedicated reports for rep activity review.
                         const sptActivities = (activities || []).filter(a => {
                             if (!a.date) return false;
                             if (a.type === 'Call' && !calShowCalls) return false;
                             if (a.type === 'Meeting' && !calShowMeetings) return false;
                             if (a.type !== 'Call' && a.type !== 'Meeting') return false;
-                            if (calRepFilter !== 'all' && a.author !== calRepFilter && (a.salesRep || a.assignedTo) !== calRepFilter) return false;
-                            return true;
+                            // Only show activities logged by the current user
+                            return a.author === currentUser || a.salesRep === currentUser || a.assignedTo === currentUser;
                         });
 
                         const getActivitiesForDay = (day) => sptActivities.filter(a => isSameDay(a.date, day));
@@ -4041,18 +4043,6 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 ))}
                                             </div>
                                         </div>
-
-                                        {/* Rep filter (admin/manager only) */}
-                                        {canSeeAll && allRepNames.length > 1 && (
-                                            <div>
-                                                <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.5rem' }}>Filter by rep</div>
-                                                <select value={calRepFilter} onChange={e => setCalRepFilter(e.target.value)}
-                                                    style={{ padding:'4px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', color:'#1e293b', background:'#fff' }}>
-                                                    <option value="all">All reps</option>
-                                                    {allRepNames.map(n => <option key={n} value={n}>{n}</option>)}
-                                                </select>
-                                            </div>
-                                        )}
 
                                         {/* Default view */}
                                         <div>
