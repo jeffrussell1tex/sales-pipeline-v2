@@ -193,6 +193,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
 
                 {/* LEFT: LEAD LIST */}
                 <div>
+                    {leadView === 'list' && (
                     <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
                         {/* TOOLBAR */}
                         <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
@@ -210,6 +211,18 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                 </button>
                             ))}
                             <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
+                                {/* View toggle */}
+                                <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
+                                    {[{v:'list',icon:'☰'},{v:'kanban',icon:'⬛'}].map(({v,icon}) => (
+                                        <button key={v} onClick={() => setLeadView(v)}
+                                            style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
+                                                background: leadView===v ? '#fff' : 'transparent',
+                                                color: leadView===v ? '#1e293b' : '#64748b',
+                                                boxShadow: leadView===v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                                            {icon} {v === 'list' ? 'List' : 'Kanban'}
+                                        </button>
+                                    ))}
+                                </div>
                                 {canSeeAll && <button onClick={onImportClick} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#10b981', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>}
                                 <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
                             </div>
@@ -320,14 +333,13 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                 </table>
                         </div>
                         </div>
+                    </div>
+                    )}
 
-                        {/* KANBAN VIEW - always visible below list */}
-                        <div style={{ borderTop:'1px solid #e2e8f0' }}>
-                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.625rem 1rem', background:'#f8fafc', cursor:'pointer' }} onClick={() => setLeadKanbanOpen(o => !o)}>
-                                <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>🗂 Kanban View</span>
-                                <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>{leadKanbanOpen ? '▲' : '▼'}</span>
-                            </div>
-                            {leadKanbanOpen && (
+                        {/* KANBAN VIEW - shown when leadView === 'kanban' */}
+                        {leadView === 'kanban' && (
+                        <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
+                            {(
                             <div style={{ padding:'0.75rem' }}>
                                 <div style={{ display:'flex', flexWrap:'wrap', gap:'0.625rem' }}>
                                     {Object.entries(stageColors).map(([stage, color]) => {
@@ -375,6 +387,8 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                 <button onClick={bulkAssign} style={{ padding:'0.25rem 0.625rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>Assign</button>
                                 <button onClick={() => { setSelectedLeads([]); setAssignTarget(''); }} style={{ marginLeft:'auto', background:'none', border:'none', color:'#64748b', fontSize:'0.75rem', cursor:'pointer', fontWeight:'600', fontFamily:'inherit' }}>Clear ✕</button>
                             </div>
+                        )}
+                        </div>
                         )}
                     </div>
                 </div>
@@ -1286,6 +1300,7 @@ function App() {
     const [reportOppSortField, setReportOppSortField] = useState('closeDate');
     const [reportOppSortDir, setReportOppSortDir] = useState('asc');
     const [pipelineStageFilter, setPipelineStageFilter] = useState([]);
+    const [oppTabView, setOppTabView] = useState('list'); // 'list' | 'kanban'
     const [oppQuarterFilter, setOppQuarterFilter] = useState([]);
     const [oppStageFilter, setOppStageFilter] = useState([]);
     const [oppRepFilter, setOppRepFilter] = useState([]);
@@ -5433,8 +5448,20 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 </button>
                             )}
 
-                            {/* Right side: count + CSV + New */}
+                            {/* Right side: view toggle + count + CSV + New */}
                             <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginLeft:'auto', flexShrink:0 }}>
+                                {/* List / Kanban toggle */}
+                                <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
+                                    {[{v:'list',label:'☰ List'},{v:'kanban',label:'⬛ Kanban'}].map(({v,label}) => (
+                                        <button key={v} onClick={() => setOppTabView(v)}
+                                            style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
+                                                background: oppTabView===v ? '#fff' : 'transparent',
+                                                color: oppTabView===v ? '#1e293b' : '#64748b',
+                                                boxShadow: oppTabView===v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
                                 <span style={{ fontSize:'0.6875rem', color:'#94a3b8', fontWeight:'600' }}>{oppFilteredOpps.length} deals</span>
                                 <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} disabled={exportingCSV === 'opps'} onClick={() => {
                                     exportToCSV(
@@ -5546,7 +5573,8 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     );
                                 })}
                             </div>
-                            {/* Desktop table */}
+                            {/* Desktop table — list view */}
+                            {oppTabView === 'list' && (
                             <div className="opp-desktop-wrap">
                             <div style={{ fontSize: '0.7rem', color: '#94a3b8', padding: '0.3rem 1rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>👆 Click any row to view full details</div>
                             <div className="opp-split-layout">
@@ -5858,7 +5886,56 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                             })()}
                             </div>{/* end opp-split-layout */}
                             </div>{/* end opp-desktop-wrap */}
-                            {oppFilteredOpps.length === 0 && (
+                            )}{/* end oppTabView list */}
+
+                            {/* Kanban view */}
+                            {oppTabView === 'kanban' && (
+                            <div style={{ padding:'0.75rem 1rem', overflowX:'auto' }}>
+                                <div style={{ display:'flex', gap:'0.625rem', minWidth:'max-content' }}>
+                                    {stages.filter(s => s !== 'Closed Lost').map(stage => {
+                                        const colOpps = oppFilteredOpps.filter(o => o.stage === stage);
+                                        const sc = getStageColor(stage);
+                                        return (
+                                            <div key={stage} style={{ width:'220px', flexShrink:0, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+                                                <div style={{ padding:'0.5rem 0.75rem', borderTop:'3px solid '+sc.text, borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', background:'#fff' }}>
+                                                    <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:sc.text, textTransform:'uppercase', letterSpacing:'0.04em', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{stage}</span>
+                                                    <div style={{ display:'flex', alignItems:'center', gap:'0.375rem', flexShrink:0 }}>
+                                                        <span style={{ fontSize:'0.6rem', fontWeight:'700', background:'#e2e8f0', color:'#64748b', borderRadius:'10px', padding:'0.1rem 0.35rem' }}>{colOpps.length}</span>
+                                                        {colOpps.length > 0 && <span style={{ fontSize:'0.6rem', color:'#94a3b8' }}>${Math.round(colOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0)/1000)}K</span>}
+                                                    </div>
+                                                </div>
+                                                <div style={{ padding:'0.5rem', display:'flex', flexDirection:'column', gap:'0.375rem', minHeight:'80px', maxHeight:'70vh', overflowY:'auto' }}>
+                                                    {colOpps.map(opp => {
+                                                        const health = calculateDealHealth(opp);
+                                                        return (
+                                                            <div key={opp.id}
+                                                                onClick={() => { setEditingOpp(opp); setShowModal(true); }}
+                                                                style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'0.5rem 0.625rem', cursor:'pointer', transition:'all 0.1s' }}
+                                                                onMouseEnter={e => { e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.boxShadow='0 2px 8px rgba(37,99,235,0.1)'; }}
+                                                                onMouseLeave={e => { e.currentTarget.style.borderColor='#e2e8f0'; e.currentTarget.style.boxShadow='none'; }}>
+                                                                <div style={{ fontSize:'0.75rem', fontWeight:'700', color:'#1e293b', marginBottom:'0.2rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                                                    {opp.opportunityName || opp.account || '—'}
+                                                                </div>
+                                                                {opp.account && opp.opportunityName && <div style={{ fontSize:'0.625rem', color:'#64748b', marginBottom:'0.2rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{opp.account}</div>}
+                                                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'0.25rem' }}>
+                                                                    <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#1e293b' }}>${(parseFloat(opp.arr)||0).toLocaleString()}</span>
+                                                                    <div style={{ width:'20px', height:'20px', borderRadius:'50%', background: health.score >= 70 ? '#dcfce7' : health.score >= 40 ? '#fef3c7' : '#fee2e2', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.5rem', fontWeight:'800', color: health.score >= 70 ? '#16a34a' : health.score >= 40 ? '#d97706' : '#dc2626', flexShrink:0 }}>{health.score}</div>
+                                                                </div>
+                                                                {opp.forecastedCloseDate && <div style={{ fontSize:'0.575rem', color:'#94a3b8', marginTop:'0.15rem' }}>Close: {new Date(opp.forecastedCloseDate).toLocaleDateString()}</div>}
+                                                                {opp.salesRep && <div style={{ fontSize:'0.575rem', color:'#94a3b8' }}>{opp.salesRep}</div>}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {colOpps.length === 0 && <div style={{ fontSize:'0.6875rem', color:'#cbd5e1', textAlign:'center', padding:'1rem 0', fontStyle:'italic' }}>Empty</div>}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            )}{/* end oppTabView kanban */}
+
+                            {oppTabView === 'list' && oppFilteredOpps.length === 0 && (
                                 <div style={{ textAlign:'center', padding:'4rem 2rem', display:'flex', flexDirection:'column', alignItems:'center', gap:'1rem' }}>
                                     <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
                                         <rect x="8" y="20" width="56" height="36" rx="6" fill="#eff6ff" stroke="#93c5fd" strokeWidth="1.5"/>
@@ -7267,9 +7344,38 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                     return visibleOpportunities;
                 })();
 
-                const wonOpps = reportsOpps.filter(o => o.stage === 'Closed Won');
-                const lostOpps = reportsOpps.filter(o => o.stage === 'Closed Lost');
-                const openOpps = reportsOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
+                // Apply time period filter to reportsOpps for pipeline/performance/revenue tabs
+                const reportsTimedOpps = (() => {
+                    if (reportTimePeriod === 'all') return reportsOpps;
+                    const now = new Date();
+                    const fy = now.getFullYear();
+                    const qRanges = {
+                        Q1: [`${fy}-01-01`, `${fy}-03-31`],
+                        Q2: [`${fy}-04-01`, `${fy}-06-30`],
+                        Q3: [`${fy}-07-01`, `${fy}-09-30`],
+                        Q4: [`${fy}-10-01`, `${fy}-12-31`],
+                        FY: [`${fy}-01-01`, `${fy}-12-31`],
+                    };
+                    if (reportTimePeriod === 'custom') {
+                        return reportsOpps.filter(o => {
+                            const d = o.forecastedCloseDate || o.createdDate || '';
+                            if (!d) return false;
+                            if (reportDateFrom && d < reportDateFrom) return false;
+                            if (reportDateTo && d > reportDateTo) return false;
+                            return true;
+                        });
+                    }
+                    const [from, to] = qRanges[reportTimePeriod] || [];
+                    if (!from) return reportsOpps;
+                    return reportsOpps.filter(o => {
+                        const d = o.forecastedCloseDate || o.createdDate || '';
+                        return d >= from && d <= to;
+                    });
+                })();
+
+                const wonOpps = reportsTimedOpps.filter(o => o.stage === 'Closed Won');
+                const lostOpps = reportsTimedOpps.filter(o => o.stage === 'Closed Lost');
+                const openOpps = reportsTimedOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
 
                 const totalWonRevenue = wonOpps.reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
                 const totalPipelineValue = openOpps.reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
@@ -7651,55 +7757,24 @@ ${bodyHtml}
                         {/* ════════════════════════════════════════════
                              TAB: PIPELINE
                             ════════════════════════════════════════════ */}
-                        {reportSubTab === 'pipeline' && (
-                        <div style={{ padding:'1rem 1.25rem 1.5rem' }}>
-                          {/* ── Time period filter ── */}
-                          {(() => {
+                        {/* ── Sticky floating period filter bar (pipeline/performance/revenue) ── */}
+                        {['pipeline','performance','revenue'].includes(reportSubTab) && (() => {
                             const now = new Date();
                             const fy = now.getFullYear();
-                            // Compute Q start months (calendar year quarters)
-                            const qRanges = {
-                                Q1: [`${fy}-01-01`, `${fy}-03-31`],
-                                Q2: [`${fy}-04-01`, `${fy}-06-30`],
-                                Q3: [`${fy}-07-01`, `${fy}-09-30`],
-                                Q4: [`${fy}-10-01`, `${fy}-12-31`],
-                                FY: [`${fy}-01-01`, `${fy}-12-31`],
-                            };
-                            const applyTimePeriod = (opps) => {
-                                if (reportTimePeriod === 'all') return opps;
-                                if (reportTimePeriod === 'custom') {
-                                    if (!reportDateFrom && !reportDateTo) return opps;
-                                    return opps.filter(o => {
-                                        const d = o.forecastedCloseDate || o.createdDate || '';
-                                        if (!d) return false;
-                                        if (reportDateFrom && d < reportDateFrom) return false;
-                                        if (reportDateTo && d > reportDateTo) return false;
-                                        return true;
-                                    });
-                                }
-                                const [from, to] = qRanges[reportTimePeriod] || [];
-                                if (!from) return opps;
-                                return opps.filter(o => {
-                                    const d = o.forecastedCloseDate || o.createdDate || '';
-                                    return d >= from && d <= to;
-                                });
-                            };
-                            const filteredByTime = applyTimePeriod(reportsOpps);
                             return (
-                              <>
-                                <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'1rem', flexWrap:'wrap' }}>
-                                    <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em' }}>Period:</span>
+                                <div style={{ position:'sticky', top:'0', zIndex:50, background:'rgba(255,255,255,0.97)', borderBottom:'1px solid #e2e8f0', padding:'0.5rem 1.25rem', display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap', backdropFilter:'blur(4px)' }}>
+                                    <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', flexShrink:0 }}>Period:</span>
                                     {['all','Q1','Q2','Q3','Q4','FY','custom'].map(p => (
                                         <button key={p} onClick={() => setReportTimePeriod(p)}
                                             style={{ padding:'3px 12px', borderRadius:'999px', border:'1px solid', cursor:'pointer', fontFamily:'inherit', fontSize:'0.75rem', fontWeight:'600', transition:'all 0.15s',
-                                                background: reportTimePeriod === p ? '#2563eb' : '#fff',
+                                                background: reportTimePeriod === p ? '#2563eb' : 'transparent',
                                                 color:      reportTimePeriod === p ? '#fff' : '#475569',
                                                 borderColor: reportTimePeriod === p ? '#2563eb' : '#d1d5db' }}>
                                             {p === 'all' ? 'All time' : p === 'FY' ? `FY ${fy}` : p === 'custom' ? 'Custom' : p}
                                         </button>
                                     ))}
                                     {reportTimePeriod === 'custom' && (
-                                        <div style={{ display:'flex', alignItems:'center', gap:'0.375rem', marginLeft:'0.25rem' }}>
+                                        <div style={{ display:'flex', alignItems:'center', gap:'0.375rem' }}>
                                             <input type="date" value={reportDateFrom} onChange={e => setReportDateFrom(e.target.value)}
                                                 style={{ padding:'3px 8px', border:'1px solid #d1d5db', borderRadius:'6px', fontSize:'0.75rem', fontFamily:'inherit', color:'#1e293b' }} />
                                             <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>to</span>
@@ -7708,15 +7783,17 @@ ${bodyHtml}
                                         </div>
                                     )}
                                     {reportTimePeriod !== 'all' && (
-                                        <span style={{ fontSize:'0.75rem', color:'#64748b', marginLeft:'4px' }}>
-                                            {filteredByTime.length} of {reportsOpps.length} opportunities
+                                        <span style={{ fontSize:'0.6875rem', color:'#64748b', marginLeft:'4px' }}>
+                                            {reportsTimedOpps.length} of {reportsOpps.length} opportunities
                                         </span>
                                     )}
                                 </div>
-                                <AnalyticsDashboard opportunities={filteredByTime} settings={settings} quotaData={settings.quotaData} accounts={accounts} users={settings.users || []} />
-                              </>
                             );
-                          })()}
+                        })()}
+
+                        {reportSubTab === 'pipeline' && (
+                        <div style={{ padding:'1rem 1.25rem 1.5rem' }}>
+                          <AnalyticsDashboard opportunities={reportsTimedOpps} settings={settings} quotaData={settings.quotaData} accounts={accounts} users={settings.users || []} />
                         </div>
                         )}
 
@@ -11980,7 +12057,7 @@ ${bodyHtml}
                             {/* Snooze buttons */}
                             <div style={{ display:'flex', gap:'0.375rem', marginBottom:'0.625rem' }}>
                                 <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', alignSelf:'center', marginRight:'2px' }}>Snooze:</div>
-                                {[5, 10, 15].map(mins => (
+                                {[5, 10, 15, 30].map(mins => (
                                     <button key={mins}
                                         onClick={() => {
                                             const task = taskReminderPopup;
