@@ -998,7 +998,7 @@ function TeamBuilder({ settings, setSettings, onBack }) {
     );
 }
 
-function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, inputSt, updateRepField }) {
+function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, inputSt, updateRepField, compactInput }) {
     const initials = (name) => (name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
     const cardStyle = { background:'#fff', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' };
     const topStyle  = { display:'flex', alignItems:'center', gap:'10px', padding:'0.75rem 1rem', borderBottom:'1px solid #f1f5f9' };
@@ -1034,6 +1034,37 @@ function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, inputSt, updateRe
         const val = parseFloat(rawVal);
         if (!isNaN(val) && val >= 0) updateRepField(u.id, qKey + 'Quota', val);
     };
+
+    // compactInput mode — renders only the input(s), no card wrapper
+    // Used by the Option C list layout where the card chrome is handled by the row
+    if (compactInput) {
+        if (quotaMode === 'annual') {
+            return (
+                <input type="number" value={localAnnual} placeholder="0"
+                    onChange={e => setLocalAnnual(e.target.value)}
+                    onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitAnnual(e.target.value); }}
+                    onFocus={e => e.target.style.borderColor='#2563eb'}
+                    style={inputSt} />
+            );
+        }
+        return (
+            <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                {quarters.map(q => {
+                    const qKey = q.toLowerCase();
+                    return (
+                        <div key={q} style={{ display:'flex', flexDirection:'column', gap:'1px' }}>
+                            <div style={{ fontSize:'0.5rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>{q}</div>
+                            <input type="number" value={localQ[qKey]||''} placeholder="0"
+                                onChange={e => setLocalQ(prev => ({ ...prev, [qKey]: e.target.value }))}
+                                onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitQ(qKey, e.target.value); }}
+                                onFocus={e => e.target.style.borderColor='#2563eb'}
+                                style={inputSt} />
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
 
     return (
         <div style={cardStyle}>
@@ -8649,126 +8680,188 @@ ${bodyHtml}
 
                             {/* ── QUOTA BOARD ─────────────────────────────── */}
                             <div style={smCard}>
-                                {/* Header */}
-                                <div style={smHdr}>
+                                {/* ── Header ── */}
+                                <div style={{ ...smHdr, flexWrap:'wrap', gap:'0.5rem' }}>
                                     <div>
                                         <div style={smTitle}>Assign Quotas</div>
                                         <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'0.125rem' }}>
-                                            {viewerIsAdmin
-                                                ? 'Set quotas for all reps — filter by territory using the pills below'
-                                                : `Your team · ${visibleReps.length} rep${visibleReps.length !== 1 ? 's' : ''}`}
+                                            ${filteredTotal.toLocaleString()} assigned
+                                            {viewerIsAdmin ? '' : ` · your team · ${visibleReps.length} rep${visibleReps.length !== 1 ? 's' : ''}`}
                                         </div>
                                     </div>
-                                    <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'8px', padding:'2px', gap:'2px' }}>
-                                        {['annual','quarterly'].map(t => (
-                                            <button key={t} onClick={() => setAllQuotaMode(t)} style={{
-                                                padding:'0.3rem 0.875rem', borderRadius:'6px', border:'none', cursor:'pointer',
-                                                fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
-                                                background: quotaMode === t ? '#fff' : 'transparent',
-                                                color:      quotaMode === t ? '#1e293b' : '#64748b',
-                                                boxShadow:  quotaMode === t ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                                            }}>{t === 'annual' ? '📅 Annual' : '📊 Quarterly'}</button>
-                                        ))}
+                                    <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', flexWrap:'wrap' }}>
+                                        {/* Territory filter pills */}
+                                        {viewerIsAdmin && visibleTerritories.length > 1 && (
+                                            <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+                                                {['all', ...visibleTerritories].map(t => (
+                                                    <button key={t} onClick={() => setTerrFilter(t)} style={{
+                                                        padding:'3px 10px', borderRadius:'999px', border:'1px solid', cursor:'pointer',
+                                                        fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'600', transition:'all 0.15s',
+                                                        background: terrFilter === t ? '#185FA5' : 'transparent',
+                                                        color:      terrFilter === t ? '#fff' : '#475569',
+                                                        borderColor: terrFilter === t ? '#185FA5' : '#d1d5db',
+                                                    }}>{t === 'all' ? 'All' : t}</button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div style={{ width:'1px', height:'16px', background:'#e2e8f0' }} />
+                                        {/* Annual / Quarterly toggle */}
+                                        <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
+                                            {['annual','quarterly'].map(t => (
+                                                <button key={t} onClick={() => setAllQuotaMode(t)} style={{
+                                                    padding:'3px 10px', borderRadius:'4px', border:'none', cursor:'pointer',
+                                                    fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
+                                                    background: quotaMode === t ? '#fff' : 'transparent',
+                                                    color:      quotaMode === t ? '#1e293b' : '#64748b',
+                                                    boxShadow:  quotaMode === t ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                                }}>{t === 'annual' ? 'Annual' : 'Quarterly'}</button>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
 
-                                {/* Admin territory filter pills */}
-                                {viewerIsAdmin && visibleTerritories.length > 1 && (
-                                    <div style={{ display:'flex', alignItems:'center', gap:'6px', padding:'0.625rem 1.5rem', borderBottom:'1px solid #f1f5f9', flexWrap:'wrap' }}>
-                                        <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', marginRight:'2px' }}>Territory:</span>
-                                        {['all', ...visibleTerritories].map(t => (
-                                            <button key={t} onClick={() => setTerrFilter(t)} style={{
-                                                padding:'3px 12px', borderRadius:'999px', border:'1px solid', cursor:'pointer',
-                                                fontFamily:'inherit', fontSize:'0.75rem', fontWeight:'600', transition:'all 0.15s',
-                                                background: terrFilter === t ? '#185FA5' : '#fff',
-                                                color:      terrFilter === t ? '#fff' : '#475569',
-                                                borderColor: terrFilter === t ? '#185FA5' : '#d1d5db',
-                                            }}>{t === 'all' ? 'All' : t}</button>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* Manager context bar (manager view only) */}
-                                {!viewerIsAdmin && currentUserObj && (
-                                    <div style={{ display:'flex', alignItems:'center', gap:'10px', padding:'0.625rem 1.5rem', borderBottom:'1px solid #f1f5f9', background:'#f8fafc', fontSize:'0.8125rem', color:'#475569' }}>
-                                        <div style={{ width:'28px', height:'28px', borderRadius:'50%', background:'#B5D4F4', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'700', color:'#185FA5', flexShrink:0 }}>
-                                            {(currentUserObj.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}
+                                {/* ── Column headers ── */}
+                                {visibleReps.length > 0 && (
+                                    <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 200px 100px', gap:'0', padding:'6px 1.5rem', background:'#f8fafc', borderBottom:'1px solid #f1f5f9' }}>
+                                        <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em' }}>Rep</div>
+                                        <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em' }}>
+                                            {quotaMode === 'annual' ? 'Annual quota' : 'Total quota'}
                                         </div>
-                                        <span><strong style={{ color:'#1e293b' }}>{currentUserObj.name}</strong> — {currentUserObj.team || 'your team'}{currentUserObj.territory ? ` · ${currentUserObj.territory}` : ''}</span>
+                                        <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em' }}>Attainment</div>
+                                        <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', textAlign:'right' }}>Closed won</div>
                                     </div>
                                 )}
 
-                                {/* Empty states */}
+                                {/* ── Empty states ── */}
                                 {allReps.length === 0 ? (
                                     <div style={{ padding:'2.5rem', textAlign:'center', color:'#94a3b8' }}>
                                         No sales reps configured yet. Add users in <strong>Settings → Manage Users</strong>.
                                     </div>
                                 ) : visibleReps.length === 0 ? (
                                     <div style={{ padding:'2.5rem', textAlign:'center', color:'#94a3b8' }}>
-                                        No reps are assigned to your team yet. Go to <strong>Settings → Team Builder</strong> to assign reps.
+                                        No reps assigned to your team yet. Go to <strong>Settings → Team Builder</strong> to assign reps.
                                     </div>
                                 ) : (
-                                    <div style={{ padding:'1.25rem 1.5rem' }}>
-                                        {/* Render reps grouped by territory when admin shows all, or flat list otherwise */}
-                                        {(viewerIsAdmin && terrFilter === 'all') ? (
-                                            // Admin all-view: group by territory with divider labels
-                                            <>
-                                                {renderTerritories.map(terr => {
-                                                    const terrReps = filteredReps.filter(u => u.territory && u.territory.trim() === terr);
-                                                    if (terrReps.length === 0) return null;
-                                                    const [dotBg, dotTxt] = terrColorMap[terr] || ['#e2e8f0','#475569'];
-                                                    const terrTotal = terrReps.reduce((s,u) => s + getRepTotal(u), 0);
-                                                    return (
-                                                        <div key={terr} style={{ marginBottom:'1.5rem' }}>
-                                                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'0.75rem' }}>
-                                                                <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.06em' }}>📍 {terr}</span>
-                                                                <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>{terrReps.length} rep{terrReps.length !== 1 ? 's' : ''} · territory total: <strong style={{ color:'#1e293b' }}>${terrTotal.toLocaleString()}</strong></span>
+                                    <>
+                                        {/* ── Rep rows grouped by territory ── */}
+                                        {renderTerritories.map(terr => {
+                                            const terrReps = filteredReps.filter(u => u.territory && u.territory.trim() === terr);
+                                            if (terrReps.length === 0) return null;
+                                            const [dotBg, dotTxt] = terrColorMap[terr] || ['#e2e8f0','#475569'];
+                                            const terrTotal = terrReps.reduce((s,u) => s + getRepTotal(u), 0);
+                                            return (
+                                                <div key={terr}>
+                                                    {/* Territory section header — only shown in all-view */}
+                                                    {viewerIsAdmin && terrFilter === 'all' && (
+                                                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 1.5rem', background:'#f8fafc', borderBottom:'1px solid #f1f5f9' }}>
+                                                            <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                                                                <div style={{ width:'3px', height:'14px', borderRadius:'2px', background: dotBg === '#e2e8f0' ? '#94a3b8' : dotTxt }} />
+                                                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>{terr}</span>
                                                             </div>
-                                                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:'10px' }}>
-                                                                {terrReps.map(u => (
-                                                                    <QuotaRepCard key={u.id} u={u} quotaMode={quotaMode} quarters={quarters} dotBg={dotBg} dotTxt={dotTxt} inputSt={inputSt} updateRepField={updateRepField} />
-                                                                ))}
+                                                            <span style={{ fontSize:'0.6875rem', color:'#94a3b8' }}>
+                                                                {terrReps.length} rep{terrReps.length !== 1 ? 's' : ''} · <strong style={{ color:'#1e293b' }}>${terrTotal.toLocaleString()}</strong>
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    {/* Rep rows */}
+                                                    {terrReps.map((u, ui) => {
+                                                        const repWon = (opportunities||[]).filter(o => o.stage === 'Closed Won' && (o.salesRep === u.name || o.assignedTo === u.name))
+                                                            .reduce((s,o) => s+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0), 0);
+                                                        const quota = getRepTotal(u);
+                                                        const attainPct = quota > 0 ? Math.min((repWon / quota) * 100, 100) : 0;
+                                                        const attainColor = attainPct >= 100 ? '#10b981' : attainPct >= 75 ? '#f59e0b' : attainPct >= 40 ? '#185FA5' : '#94a3b8';
+                                                        const initials = (u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+                                                        const isLast = ui === terrReps.length - 1;
+                                                        return (
+                                                            <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 200px 100px', gap:'0', padding:'10px 1.5rem', borderBottom: isLast && terrFilter !== 'all' ? 'none' : '1px solid #f1f5f9', alignItems:'center', transition:'background 0.1s' }}
+                                                                onMouseEnter={e => e.currentTarget.style.background='#fafafa'}
+                                                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                                {/* Rep name + avatar */}
+                                                                <div style={{ display:'flex', alignItems:'center', gap:'10px', minWidth:0 }}>
+                                                                    <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:dotBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'700', color:dotTxt, flexShrink:0 }}>
+                                                                        {initials}
+                                                                    </div>
+                                                                    <div style={{ minWidth:0 }}>
+                                                                        <div style={{ fontSize:'0.875rem', fontWeight:'600', color:'#1e293b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.name}</div>
+                                                                        <div style={{ fontSize:'0.6875rem', color:'#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.team || u.territory || '—'}</div>
+                                                                    </div>
+                                                                </div>
+                                                                {/* Quota input */}
+                                                                <div>
+                                                                    {quotaMode === 'annual' ? (
+                                                                        <QuotaRepCard u={u} quotaMode="annual" quarters={quarters} dotBg={dotBg} dotTxt={dotTxt} inputSt={{ padding:'4px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', background:'#f8fafc', color:'#1e293b', width:'110px' }} updateRepField={updateRepField} compactInput />
+                                                                    ) : (
+                                                                        <QuotaRepCard u={u} quotaMode="quarterly" quarters={quarters} dotBg={dotBg} dotTxt={dotTxt} inputSt={{ padding:'4px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.75rem', fontFamily:'inherit', background:'#f8fafc', color:'#1e293b', width:'80px' }} updateRepField={updateRepField} compactInput />
+                                                                    )}
+                                                                </div>
+                                                                {/* Attainment bar */}
+                                                                <div style={{ display:'flex', alignItems:'center', gap:'8px', paddingRight:'0.5rem' }}>
+                                                                    <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
+                                                                        <div style={{ height:'100%', width:attainPct+'%', background:attainColor, borderRadius:'3px', transition:'width 0.4s ease' }} />
+                                                                    </div>
+                                                                    <span style={{ fontSize:'0.75rem', fontWeight:'700', color:attainColor, minWidth:'36px', textAlign:'right' }}>
+                                                                        {quota > 0 ? attainPct.toFixed(1)+'%' : '—'}
+                                                                    </span>
+                                                                </div>
+                                                                {/* Closed won */}
+                                                                <div style={{ textAlign:'right', fontSize:'0.8125rem', color:'#64748b', fontWeight:'500' }}>
+                                                                    {repWon > 0 ? '$'+repWon.toLocaleString() : '—'}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                                {/* Unassigned reps — show at bottom */}
-                                                {filteredReps.filter(u => !u.territory || !u.territory.trim()).length > 0 && (
-                                                    <div style={{ marginBottom:'1.5rem' }}>
-                                                        <div style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#f59e0b', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.75rem' }}>⚠️ No territory assigned</div>
-                                                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:'10px' }}>
-                                                            {filteredReps.filter(u => !u.territory || !u.territory.trim()).map(u => (
-                                                                <QuotaRepCard key={u.id} u={u} quotaMode={quotaMode} quarters={quarters} dotBg="#e2e8f0" dotTxt="#64748b" inputSt={inputSt} updateRepField={updateRepField} />
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </>
-                                        ) : (
-                                            // Single territory filter or manager view: flat card grid, no dividers
-                                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:'10px' }}>
-                                                {filteredReps.map(u => {
-                                                    const terr = u.territory ? u.territory.trim() : '';
-                                                    const [dotBg, dotTxt] = terrColorMap[terr] || ['#e2e8f0','#475569'];
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+                                        })}
+
+                                        {/* Unassigned reps */}
+                                        {viewerIsAdmin && filteredReps.filter(u => !u.territory || !u.territory.trim()).length > 0 && (
+                                            <div>
+                                                <div style={{ display:'flex', alignItems:'center', padding:'6px 1.5rem', background:'#fffbeb', borderBottom:'1px solid #fef3c7' }}>
+                                                    <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#b45309', textTransform:'uppercase', letterSpacing:'0.06em' }}>No territory assigned</span>
+                                                </div>
+                                                {filteredReps.filter(u => !u.territory || !u.territory.trim()).map((u, ui, arr) => {
+                                                    const repWon = (opportunities||[]).filter(o => o.stage === 'Closed Won' && (o.salesRep === u.name || o.assignedTo === u.name))
+                                                        .reduce((s,o) => s+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0), 0);
+                                                    const quota = getRepTotal(u);
+                                                    const attainPct = quota > 0 ? Math.min((repWon/quota)*100,100) : 0;
+                                                    const attainColor = attainPct >= 100 ? '#10b981' : attainPct >= 75 ? '#f59e0b' : attainPct >= 40 ? '#185FA5' : '#94a3b8';
+                                                    const initials = (u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
                                                     return (
-                                                        <QuotaRepCard key={u.id} u={u} quotaMode={quotaMode} quarters={quarters} dotBg={dotBg} dotTxt={dotTxt} inputSt={inputSt} updateRepField={updateRepField} />
+                                                        <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 200px 100px', gap:'0', padding:'10px 1.5rem', borderBottom: ui < arr.length-1 ? '1px solid #f1f5f9' : 'none', alignItems:'center' }}
+                                                            onMouseEnter={e => e.currentTarget.style.background='#fafafa'}
+                                                            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                            <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                                                                <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:'#e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', flexShrink:0 }}>{initials}</div>
+                                                                <div><div style={{ fontSize:'0.875rem', fontWeight:'600', color:'#1e293b' }}>{u.name}</div><div style={{ fontSize:'0.6875rem', color:'#94a3b8' }}>No territory</div></div>
+                                                            </div>
+                                                            <div><QuotaRepCard u={u} quotaMode={quotaMode} quarters={quarters} dotBg="#e2e8f0" dotTxt="#64748b" inputSt={{ padding:'4px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', background:'#f8fafc', color:'#1e293b', width:'110px' }} updateRepField={updateRepField} compactInput /></div>
+                                                            <div style={{ display:'flex', alignItems:'center', gap:'8px', paddingRight:'0.5rem' }}>
+                                                                <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}><div style={{ height:'100%', width:attainPct+'%', background:attainColor, borderRadius:'3px' }} /></div>
+                                                                <span style={{ fontSize:'0.75rem', fontWeight:'700', color:attainColor, minWidth:'36px', textAlign:'right' }}>{quota > 0 ? attainPct.toFixed(1)+'%' : '—'}</span>
+                                                            </div>
+                                                            <div style={{ textAlign:'right', fontSize:'0.8125rem', color:'#64748b' }}>{repWon > 0 ? '$'+repWon.toLocaleString() : '—'}</div>
+                                                        </div>
                                                     );
                                                 })}
                                             </div>
                                         )}
-                                    </div>
+                                    </>
                                 )}
 
-                                {/* Footer total */}
+                                {/* ── Footer total ── */}
                                 {filteredReps.length > 0 && (
-                                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.875rem 1.5rem', background:'#f8fafc', borderTop:'1px solid #f1f5f9' }}>
-                                        <div>
-                                            <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em' }}>
-                                                {viewerIsAdmin && terrFilter !== 'all' ? `${terrFilter} total quota` : 'Total quota assigned'}
-                                            </div>
-                                            <div style={{ fontSize:'1.125rem', fontWeight:'800', color:'#1e293b', marginTop:'2px' }}>
-                                                ${filteredTotal.toLocaleString()}
-                                            </div>
+                                    <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 200px 100px', padding:'10px 1.5rem', background:'#f8fafc', borderTop:'1px solid #e2e8f0', alignItems:'center' }}>
+                                        <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em' }}>
+                                            {viewerIsAdmin && terrFilter !== 'all' ? `${terrFilter} total` : 'Total assigned'}
+                                        </div>
+                                        <div style={{ fontSize:'1rem', fontWeight:'700', color:'#1e293b' }}>${filteredTotal.toLocaleString()}</div>
+                                        <div />
+                                        <div style={{ textAlign:'right', fontSize:'0.8125rem', fontWeight:'600', color:'#10b981' }}>
+                                            ${filteredReps.reduce((s,u) => {
+                                                return s + (opportunities||[]).filter(o => o.stage === 'Closed Won' && (o.salesRep === u.name || o.assignedTo === u.name))
+                                                    .reduce((ss,o) => ss+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0), 0);
+                                            }, 0).toLocaleString()}
                                         </div>
                                     </div>
                                 )}
