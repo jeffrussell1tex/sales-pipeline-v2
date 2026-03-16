@@ -336,10 +336,8 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                     </div>
                     )}
 
-                        {/* KANBAN VIEW - shown when leadView === 'kanban' */}
-                        {leadView === 'kanban' && (
+                    {leadView === 'kanban' && (
                         <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
-                            {(
                             <div style={{ padding:'0.75rem' }}>
                                 <div style={{ display:'flex', flexWrap:'wrap', gap:'0.625rem' }}>
                                     {Object.entries(stageColors).map(([stage, color]) => {
@@ -371,23 +369,24 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                     })}
                                 </div>
                             </div>
-                            )}{/* end leadView kanban */}
+                        </div>
+                    )}{/* end leadView kanban */}
 
-                        {/* BULK ACTION BAR */}
-                        {canSeeAll && selectedLeads.length > 0 && (
-                            <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.625rem 1rem', background:'#eff6ff', borderTop:'1px solid #bfdbfe' }}>
-                                <span style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1d4ed8' }}>{selectedLeads.length} selected</span>
-                                <div style={{ width:'1px', height:'16px', background:'#bfdbfe' }}></div>
-                                <span style={{ fontSize:'0.75rem', color:'#64748b', fontWeight:'600' }}>Assign to:</span>
-                                <select value={assignTarget} onChange={e => setAssignTarget(e.target.value)} style={{ fontSize:'0.75rem', border:'1px solid #bfdbfe', borderRadius:'6px', padding:'0.2rem 0.5rem', background:'#fff', color:'#1e293b', fontFamily:'inherit' }}>
-                                    <option value="">— pick rep —</option>
-                                    {allReps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
-                                </select>
-                                <button onClick={bulkAssign} style={{ padding:'0.25rem 0.625rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>Assign</button>
-                                <button onClick={() => { setSelectedLeads([]); setAssignTarget(''); }} style={{ marginLeft:'auto', background:'none', border:'none', color:'#64748b', fontSize:'0.75rem', cursor:'pointer', fontWeight:'600', fontFamily:'inherit' }}>Clear ✕</button>
-                            </div>
-                        )}
-                    </div>
+                    {/* BULK ACTION BAR */}
+                    {canSeeAll && selectedLeads.length > 0 && (
+                        <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.625rem 1rem', background:'#eff6ff', borderTop:'1px solid #bfdbfe' }}>
+                            <span style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1d4ed8' }}>{selectedLeads.length} selected</span>
+                            <div style={{ width:'1px', height:'16px', background:'#bfdbfe' }}></div>
+                            <span style={{ fontSize:'0.75rem', color:'#64748b', fontWeight:'600' }}>Assign to:</span>
+                            <select value={assignTarget} onChange={e => setAssignTarget(e.target.value)} style={{ fontSize:'0.75rem', border:'1px solid #bfdbfe', borderRadius:'6px', padding:'0.2rem 0.5rem', background:'#fff', color:'#1e293b', fontFamily:'inherit' }}>
+                                <option value="">— pick rep —</option>
+                                {allReps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                            </select>
+                            <button onClick={bulkAssign} style={{ padding:'0.25rem 0.625rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>Assign</button>
+                            <button onClick={() => { setSelectedLeads([]); setAssignTarget(''); }} style={{ marginLeft:'auto', background:'none', border:'none', color:'#64748b', fontSize:'0.75rem', cursor:'pointer', fontWeight:'600', fontFamily:'inherit' }}>Clear ✕</button>
+                        </div>
+                    )}
+                </div>
                 </div>
 
                 {/* RIGHT PANEL — managers/admins only */}
@@ -456,7 +455,6 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                     </div>
                 )}
             </div>
-        </div>
     );
 }
 
@@ -5881,8 +5879,8 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     </div>
                                 );
                             })()}
-                            </div>{/* end opp-split-layout */}
-                            </div>{/* end opp-desktop-wrap */}
+                            </div>
+                            </div>
                             )}{/* end oppTabView list */}
 
                             {/* Kanban view */}
