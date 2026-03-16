@@ -1048,20 +1048,24 @@ function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, inputSt, updateRe
             );
         }
         return (
-            <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
-                {quarters.map(q => {
-                    const qKey = q.toLowerCase();
-                    return (
-                        <div key={q} style={{ display:'flex', flexDirection:'column', gap:'1px' }}>
-                            <div style={{ fontSize:'0.5rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>{q}</div>
-                            <input type="number" value={localQ[qKey]||''} placeholder="0"
-                                onChange={e => setLocalQ(prev => ({ ...prev, [qKey]: e.target.value }))}
-                                onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitQ(qKey, e.target.value); }}
-                                onFocus={e => e.target.style.borderColor='#2563eb'}
-                                style={inputSt} />
-                        </div>
-                    );
-                })}
+            <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                {[['Q1','Q2'],['Q3','Q4']].map((pair, pi) => (
+                    <div key={pi} style={{ display:'flex', gap:'4px' }}>
+                        {pair.map(q => {
+                            const qKey = q.toLowerCase();
+                            return (
+                                <div key={q} style={{ display:'flex', flexDirection:'column', gap:'1px' }}>
+                                    <div style={{ fontSize:'0.5rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>{q}</div>
+                                    <input type="number" value={localQ[qKey]||''} placeholder="0"
+                                        onChange={e => setLocalQ(prev => ({ ...prev, [qKey]: e.target.value }))}
+                                        onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitQ(qKey, e.target.value); }}
+                                        onFocus={e => e.target.style.borderColor='#2563eb'}
+                                        style={inputSt} />
+                                </div>
+                            );
+                        })}
+                    </div>
+                ))}
             </div>
         );
     }
