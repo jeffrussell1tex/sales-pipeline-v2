@@ -37,24 +37,34 @@ export const handler = async (event) => {
                 logoUrl:         row.extra?.logoUrl         || null,
                 kpiConfig:       row.extra?.kpiConfig       || null,
                 commissionPlan:  row.extra?.commissionPlan  || null,
-            }})};
+            }}});
         }
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
-            // Build the extra jsonb blob for fields without dedicated columns
+
+            // Read existing row first so we can merge extra fields safely.
+            // This prevents a partial save (e.g. from the quota manager) from
+            // nulling out teams/territories/pipelines/verticals that weren't
+            // included in the payload.
+            const existing = await db.select().from(settings).where(eq(settings.id, SETTINGS_ID));
+            const existingExtra = existing.length > 0 ? (existing[0].extra || {}) : {};
+
+            // Merge: incoming data wins for any key it explicitly provides (even null),
+            // but keys absent from the payload fall back to whatever is already in the DB.
             const extra = {
-                quotaData:       data.quotaData       || null,
-                commissionTiers: data.commissionTiers || null,
-                pipelines:       data.pipelines       || null,
-                teams:           data.teams           || null,
-                territories:     data.territories     || null,
-                verticals:       data.verticals       || null,
-                kpiTolerances:   data.kpiTolerances   || null,
-                kpiTargets:      data.kpiTargets      || null,
-                logoUrl:         data.logoUrl         || null,
-                kpiConfig:       data.kpiConfig       || null,
-                commissionPlan:  data.commissionPlan  || null,
+                quotaData:       'quotaData'       in data ? (data.quotaData       || null) : existingExtra.quotaData       || null,
+                commissionTiers: 'commissionTiers' in data ? (data.commissionTiers || null) : existingExtra.commissionTiers || null,
+                pipelines:       'pipelines'       in data ? (data.pipelines       || null) : existingExtra.pipelines       || null,
+                teams:           'teams'           in data ? (data.teams           || null) : existingExtra.teams           || null,
+                territories:     'territories'     in data ? (data.territories     || null) : existingExtra.territories     || null,
+                verticals:       'verticals'       in data ? (data.verticals       || null) : existingExtra.verticals       || null,
+                kpiTolerances:   'kpiTolerances'   in data ? (data.kpiTolerances   || null) : existingExtra.kpiTolerances   || null,
+                kpiTargets:      'kpiTargets'      in data ? (data.kpiTargets      || null) : existingExtra.kpiTargets      || null,
+                logoUrl:         'logoUrl'         in data ? (data.logoUrl         || null) : existingExtra.logoUrl         || null,
+                kpiConfig:       'kpiConfig'       in data ? (data.kpiConfig       || null) : existingExtra.kpiConfig       || null,
+                commissionPlan:  'commissionPlan'  in data ? (data.commissionPlan  || null) : existingExtra.commissionPlan  || null,
             };
+
             const dbRow = {
                 id:              SETTINGS_ID,
                 companyName:     data.companyName     || null,

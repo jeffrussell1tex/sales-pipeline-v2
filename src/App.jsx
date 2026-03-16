@@ -1279,6 +1279,9 @@ function App() {
     const [reportsTeam, setReportsTeam] = useState(null);
     const [reportsTerritory, setReportsTerritory] = useState(null);
     const [reportSubTab, setReportSubTab] = useState('pipeline');
+    const [reportTimePeriod, setReportTimePeriod] = useState('all'); // 'all' | 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'FY' | 'custom'
+    const [reportDateFrom, setReportDateFrom] = useState('');
+    const [reportDateTo, setReportDateTo] = useState('');
     const [actPeriod, setActPeriod] = useState('Last 30 Days');
     const [reportOppSortField, setReportOppSortField] = useState('closeDate');
     const [reportOppSortDir, setReportOppSortDir] = useState('asc');
@@ -1319,6 +1322,7 @@ function App() {
     });
     const [viewingTask, setViewingTask] = useState(null);
     const [taskReminderPopup, setTaskReminderPopup] = useState(null);
+    const [dbOffline, setDbOffline] = useState(false);
     const [taskDuePopup, setTaskDuePopup] = useState(null);
     const [taskDueQueue, setTaskDueQueue] = useState([]);
     const [dismissedDueTodayAlerts, setDismissedDueTodayAlerts] = useState([]);
@@ -1447,7 +1451,7 @@ function App() {
       useEffect(() => {
     if (!clerkUser) return; // Don't load until authenticated
     const loadData = async () => {
-const checkOk = (r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r; };
+const checkOk = (r) => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r; };
 
 dbFetch('/.netlify/functions/opportunities')
 .then(checkOk).then(r => r.json())
@@ -3524,6 +3528,17 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                 </div>
             </header>
 
+            {/* ── DB OFFLINE BANNER ── */}
+            {dbOffline && (
+                <div style={{ background:'#dc2626', color:'#fff', padding:'0.5rem 1.25rem', display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:'0.8125rem', fontWeight:'600', zIndex:9999 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'0.625rem' }}>
+                        <span style={{ fontSize:'1rem' }}>⚠️</span>
+                        <span>Database connection lost — changes may not be saving. Check your connection and refresh.</span>
+                    </div>
+                    <button onClick={() => setDbOffline(false)} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:'#fff', borderRadius:'4px', padding:'2px 8px', cursor:'pointer', fontSize:'0.75rem', fontWeight:'700', fontFamily:'inherit' }}>✕</button>
+                </div>
+            )}
+
             <nav className="nav-tabs">
                 <button 
                     className={`nav-tab ${activeTab === 'home' ? 'active' : ''}`}
@@ -3718,21 +3733,31 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     </div>
                                 ) : (
                                     <div style={{ display: 'grid', gap: '0.75rem' }}>
-                                        {visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed').sort((a, b) => new Date(a.dueDate || '9999') - new Date(b.dueDate || '9999')).slice(0, 5).map(task => (
-                                            <div key={task.id} style={{
-                                                padding: '0.75rem',
-                                                border: '1px solid #e2e8f0',
-                                                borderRadius: '6px',
-                                                background: '#f1f3f5'
-                                            }}>
-                                                <div style={{ fontWeight: '600', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                                        {visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed').sort((a, b) => new Date(a.dueDate || '9999') - new Date(b.dueDate || '9999')).slice(0, 5).map(task => {
+                                            const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
+                                            return (
+                                            <div key={task.id}
+                                                onClick={() => { setEditingTask(task); setShowTaskModal(true); }}
+                                                style={{
+                                                    padding: '0.75rem',
+                                                    border: '1px solid ' + (isOverdue ? '#fecaca' : '#e2e8f0'),
+                                                    borderRadius: '6px',
+                                                    background: isOverdue ? '#fff5f5' : '#f8fafc',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.15s',
+                                                }}
+                                                onMouseEnter={e => e.currentTarget.style.background = isOverdue ? '#fee2e2' : '#f1f5f9'}
+                                                onMouseLeave={e => e.currentTarget.style.background = isOverdue ? '#fff5f5' : '#f8fafc'}>
+                                                <div style={{ fontWeight: '600', fontSize: '0.875rem', marginBottom: '0.25rem', color: '#1e293b' }}>
                                                     {task.title}
                                                 </div>
-                                                <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>
-                                                    {task.type} • Due: {new Date(task.dueDate).toLocaleDateString()}
+                                                <div style={{ fontSize: '0.75rem', color: isOverdue ? '#ef4444' : '#64748b' }}>
+                                                    {task.type}{task.dueDate ? ' • Due: ' + new Date(task.dueDate).toLocaleDateString() : ''}
+                                                    {isOverdue ? ' — Overdue' : ''}
                                                 </div>
                                             </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -4279,17 +4304,26 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                             ) : (
                                 <div style={{ display: 'grid', gap: '0.75rem' }}>
                                     {visibleOpportunities.slice(0, 5).map(opp => (
-                                        <div key={opp.id} style={{
-                                            padding: '0.75rem',
-                                            border: '1px solid #e2e8f0',
-                                            borderRadius: '6px',
-                                            background: '#f1f3f5'
-                                        }}>
-                                            <div style={{ fontWeight: '600', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
-                                                {opp.account} - {opp.site}
+                                        <div key={opp.id}
+                                            onClick={() => { setEditingOpp(opp); setShowModal(true); }}
+                                            style={{
+                                                padding: '0.75rem',
+                                                border: '1px solid #e2e8f0',
+                                                borderRadius: '6px',
+                                                background: '#f8fafc',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.15s',
+                                            }}
+                                            onMouseEnter={e => { e.currentTarget.style.background='#f1f5f9'; e.currentTarget.style.borderColor='#cbd5e1'; }}
+                                            onMouseLeave={e => { e.currentTarget.style.background='#f8fafc'; e.currentTarget.style.borderColor='#e2e8f0'; }}>
+                                            <div style={{ fontWeight: '600', fontSize: '0.875rem', marginBottom: '0.25rem', color:'#1e293b' }}>
+                                                {opp.opportunityName || opp.account + (opp.site ? ' - ' + opp.site : '')}
                                             </div>
-                                            <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>
-                                                ${opp.arr.toLocaleString()} ARR • {opp.stage}
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', display:'flex', gap:'0.5rem', alignItems:'center' }}>
+                                                <span style={{ fontWeight:'600', color:'#1e293b' }}>${(opp.arr||0).toLocaleString()}</span>
+                                                <span>·</span>
+                                                <span>{opp.stage}</span>
+                                                {opp.salesRep && <><span>·</span><span>{opp.salesRep}</span></>}
                                             </div>
                                         </div>
                                     ))}
@@ -7619,7 +7653,70 @@ ${bodyHtml}
                             ════════════════════════════════════════════ */}
                         {reportSubTab === 'pipeline' && (
                         <div style={{ padding:'1rem 1.25rem 1.5rem' }}>
-                          <AnalyticsDashboard opportunities={reportsOpps} settings={settings} quotaData={settings.quotaData} accounts={accounts} users={settings.users || []} />
+                          {/* ── Time period filter ── */}
+                          {(() => {
+                            const now = new Date();
+                            const fy = now.getFullYear();
+                            // Compute Q start months (calendar year quarters)
+                            const qRanges = {
+                                Q1: [`${fy}-01-01`, `${fy}-03-31`],
+                                Q2: [`${fy}-04-01`, `${fy}-06-30`],
+                                Q3: [`${fy}-07-01`, `${fy}-09-30`],
+                                Q4: [`${fy}-10-01`, `${fy}-12-31`],
+                                FY: [`${fy}-01-01`, `${fy}-12-31`],
+                            };
+                            const applyTimePeriod = (opps) => {
+                                if (reportTimePeriod === 'all') return opps;
+                                if (reportTimePeriod === 'custom') {
+                                    if (!reportDateFrom && !reportDateTo) return opps;
+                                    return opps.filter(o => {
+                                        const d = o.forecastedCloseDate || o.createdDate || '';
+                                        if (!d) return false;
+                                        if (reportDateFrom && d < reportDateFrom) return false;
+                                        if (reportDateTo && d > reportDateTo) return false;
+                                        return true;
+                                    });
+                                }
+                                const [from, to] = qRanges[reportTimePeriod] || [];
+                                if (!from) return opps;
+                                return opps.filter(o => {
+                                    const d = o.forecastedCloseDate || o.createdDate || '';
+                                    return d >= from && d <= to;
+                                });
+                            };
+                            const filteredByTime = applyTimePeriod(reportsOpps);
+                            return (
+                              <>
+                                <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'1rem', flexWrap:'wrap' }}>
+                                    <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em' }}>Period:</span>
+                                    {['all','Q1','Q2','Q3','Q4','FY','custom'].map(p => (
+                                        <button key={p} onClick={() => setReportTimePeriod(p)}
+                                            style={{ padding:'3px 12px', borderRadius:'999px', border:'1px solid', cursor:'pointer', fontFamily:'inherit', fontSize:'0.75rem', fontWeight:'600', transition:'all 0.15s',
+                                                background: reportTimePeriod === p ? '#2563eb' : '#fff',
+                                                color:      reportTimePeriod === p ? '#fff' : '#475569',
+                                                borderColor: reportTimePeriod === p ? '#2563eb' : '#d1d5db' }}>
+                                            {p === 'all' ? 'All time' : p === 'FY' ? `FY ${fy}` : p === 'custom' ? 'Custom' : p}
+                                        </button>
+                                    ))}
+                                    {reportTimePeriod === 'custom' && (
+                                        <div style={{ display:'flex', alignItems:'center', gap:'0.375rem', marginLeft:'0.25rem' }}>
+                                            <input type="date" value={reportDateFrom} onChange={e => setReportDateFrom(e.target.value)}
+                                                style={{ padding:'3px 8px', border:'1px solid #d1d5db', borderRadius:'6px', fontSize:'0.75rem', fontFamily:'inherit', color:'#1e293b' }} />
+                                            <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>to</span>
+                                            <input type="date" value={reportDateTo} onChange={e => setReportDateTo(e.target.value)}
+                                                style={{ padding:'3px 8px', border:'1px solid #d1d5db', borderRadius:'6px', fontSize:'0.75rem', fontFamily:'inherit', color:'#1e293b' }} />
+                                        </div>
+                                    )}
+                                    {reportTimePeriod !== 'all' && (
+                                        <span style={{ fontSize:'0.75rem', color:'#64748b', marginLeft:'4px' }}>
+                                            {filteredByTime.length} of {reportsOpps.length} opportunities
+                                        </span>
+                                    )}
+                                </div>
+                                <AnalyticsDashboard opportunities={filteredByTime} settings={settings} quotaData={settings.quotaData} accounts={accounts} users={settings.users || []} />
+                              </>
+                            );
+                          })()}
                         </div>
                         )}
 
@@ -11880,6 +11977,23 @@ ${bodyHtml}
                                     </div>
                                 )}
                             </div>
+                            {/* Snooze buttons */}
+                            <div style={{ display:'flex', gap:'0.375rem', marginBottom:'0.625rem' }}>
+                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', alignSelf:'center', marginRight:'2px' }}>Snooze:</div>
+                                {[5, 10, 15].map(mins => (
+                                    <button key={mins}
+                                        onClick={() => {
+                                            const task = taskReminderPopup;
+                                            setTaskReminderPopup(null);
+                                            setTimeout(() => setTaskReminderPopup(task), mins * 60 * 1000);
+                                        }}
+                                        style={{ flex:1, padding:'0.375rem 0', background:'#f1f5f9', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'6px', fontWeight:'600', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s' }}
+                                        onMouseEnter={e => { e.target.style.background='#e2e8f0'; }}
+                                        onMouseLeave={e => { e.target.style.background='#f1f5f9'; }}>
+                                        {mins}m
+                                    </button>
+                                ))}
+                            </div>
                             <div style={{ display: 'flex', gap: '0.75rem' }}>
                                 <button
                                     onClick={() => {
@@ -12011,8 +12125,8 @@ ${bodyHtml}
                 </div>
             )}
 
-            {/* ════ QUICK-LOG FLOATING BUTTON (pipeline tab only) ════ */}
-            {activeTab === 'pipeline' && (
+            {/* ════ QUICK-LOG FLOATING BUTTON (home, pipeline, opportunities tabs) ════ */}
+            {(activeTab === 'pipeline' || activeTab === 'home' || activeTab === 'opportunities') && (
                 <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9990, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
                     {quickLogOpen && (
                         <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.18)', padding: '1rem', width: '300px', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}
