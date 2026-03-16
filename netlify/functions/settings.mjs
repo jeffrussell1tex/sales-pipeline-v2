@@ -37,7 +37,7 @@ export const handler = async (event) => {
                 logoUrl:         row.extra?.logoUrl         || null,
                 kpiConfig:       row.extra?.kpiConfig       || null,
                 commissionPlan:  row.extra?.commissionPlan  || null,
-            }}});
+            }})};
         }
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
