@@ -86,7 +86,6 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
     const scoreColor = s => s >= 70 ? '#dc2626' : s >= 40 ? '#d97706' : '#2563eb';
     const statusStyle = { New:{bg:'#eff6ff',color:'#2563eb'}, Contacted:{bg:'#f0fdf4',color:'#16a34a'}, Qualified:{bg:'#fdf4ff',color:'#9333ea'}, Working:{bg:'#fff7ed',color:'#ea580c'}, Converted:{bg:'#d1fae5',color:'#047857'}, Dead:{bg:'#f1f5f9',color:'#94a3b8'} };
 
-    // Role-based filtering
     const visibleLeads = canSeeAll
         ? leads
         : leads.filter(l => !l.assignedTo || l.assignedTo === currentUser);
@@ -94,10 +93,9 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
     const reps = (settings.users || []).filter(u => u.role === 'Rep' || u.role === 'User');
     const allReps = (settings.users || []).filter(u => u.name);
 
-    // Local state via ref trick — use window globals scoped to leads tab
     const [leadFilter, setLeadFilter] = React.useState('all');
-    const [leadView, setLeadView] = React.useState('list');
-    const [leadKanbanOpen, setLeadKanbanOpen] = React.useState(true);
+    const [leadView, setLeadView] = React.useState('list'); // 'list' | 'kanban' | 'funnel'
+    const [leadFunnelExpanded, setLeadFunnelExpanded] = React.useState(null);
     const [selectedLeads, setSelectedLeads] = React.useState([]);
     const [assignTarget, setAssignTarget] = React.useState('');
     const [newLead, setNewLead] = React.useState(null);
@@ -138,33 +136,37 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
     };
 
     const convertLead = (lead) => {
-        // Mark lead converted and open new opportunity modal pre-filled
         const updated = { ...lead, status: 'Converted', convertedAt: new Date().toISOString() };
         saveLead(updated);
-        const prefill = { account: lead.company, opportunityName: lead.company + ' — ' + (lead.source || 'Lead'), salesRep: lead.assignedTo || currentUser, notes: lead.notes || '' };
+        const prefill = {
+            account: lead.company || '',
+            opportunityName: [lead.firstName, lead.lastName].filter(Boolean).join(' ') + (lead.company ? ' - ' + lead.company : ''),
+            salesRep: lead.assignedTo || currentUser || '',
+            arr: lead.estimatedARR || 0,
+            stage: 'Qualification',
+            contacts: [lead.firstName, lead.lastName].filter(Boolean).join(' '),
+            notes: lead.notes || '',
+        };
         setEditingOpp(prefill);
         setShowModal(true);
     };
 
-    const bulkAssign = async () => {
+    const bulkAssign = () => {
         if (!assignTarget || selectedLeads.length === 0) return;
         const updated = leads.map(l => selectedLeads.includes(l.id) ? { ...l, assignedTo: assignTarget } : l);
         setLeads(updated);
-        for (const l of updated.filter(l => selectedLeads.includes(l.id))) {
-            await dbFetch('/.netlify/functions/leads', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(l) }).catch(console.error);
-        }
+        updated.filter(l => selectedLeads.includes(l.id)).forEach(l =>
+            dbFetch('/.netlify/functions/leads', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(l) }).catch(console.error)
+        );
         setSelectedLeads([]); setAssignTarget('');
     };
 
-    const repLoad = allReps.map(rep => ({
-        ...rep,
-        count: visibleLeads.filter(l => l.assignedTo === rep.name && l.status !== 'Converted' && l.status !== 'Dead').length
-    })).sort((a, b) => a.count - b.count);
+    const repColors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899'];
+    const repLoad = allReps.filter(u => u.name).map(u => ({
+        name: u.name,
+        count: visibleLeads.filter(l => l.assignedTo === u.name).length
+    })).filter(r => r.count > 0 || canSeeAll).slice(0, 8);
     const maxLoad = Math.max(...repLoad.map(r => r.count), 1);
-
-    const repColors = ['#2563eb','#7c3aed','#10b981','#f59e0b','#ef4444','#0ea5e9','#ec4899'];
-
-
 
     return (
         <div className="tab-page">
@@ -191,11 +193,11 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
             {/* MAIN LAYOUT */}
             <div style={{ display:'grid', gridTemplateColumns: canSeeAll ? '1fr 300px' : '1fr', gap:'1rem', padding:'1rem 1.25rem' }}>
 
-                {/* LEFT: LEAD LIST */}
+                {/* LEFT: always-visible card wrapping toolbar + view content */}
                 <div>
-                    {leadView === 'list' && (
                     <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
-                        {/* TOOLBAR */}
+
+                        {/* TOOLBAR — always visible regardless of view */}
                         <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
                             <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', marginRight:'0.25rem' }}>Leads</span>
                             <div style={{ width:'1px', height:'16px', background:'#e2e8f0' }}></div>
@@ -213,13 +215,13 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                             <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
                                 {/* View toggle */}
                                 <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
-                                    {[{v:'list',icon:'☰'},{v:'kanban',icon:'⬛'}].map(({v,icon}) => (
+                                    {[{v:'list',label:'☰ List'},{v:'kanban',label:'⬛ Kanban'},{v:'funnel',label:'🔻 Funnel'}].map(({v,label}) => (
                                         <button key={v} onClick={() => setLeadView(v)}
                                             style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
                                                 background: leadView===v ? '#fff' : 'transparent',
                                                 color: leadView===v ? '#1e293b' : '#64748b',
                                                 boxShadow: leadView===v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
-                                            {icon} {v === 'list' ? 'List' : 'Kanban'}
+                                            {label}
                                         </button>
                                     ))}
                                 </div>
@@ -229,84 +231,66 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                         </div>
 
                         {/* LIST VIEW */}
-                        {/* Mobile cards — Leads */}
-                        <div className="leads-mobile-cards" style={{ padding:'0.75rem', display:'none' }}>
-                            {filtered.length === 0 ? (
-                                <div style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.875rem' }}>No leads found</div>
-                            ) : filtered.map(lead => {
-                                const sc = lead.score || 0;
-                                const st = lead.status || 'New';
-                                const ss = statusStyle[st] || statusStyle.New;
-                                return (
-                                    <div key={lead.id} className="mobile-record-card" onClick={() => setEditingLead(lead)}>
-                                        <div className="mobile-card-top">
-                                            <div style={{ flex:1, minWidth:0 }}>
-                                                <div className="mobile-card-title">{lead.firstName} {lead.lastName}</div>
-                                                <div className="mobile-card-sub">{[lead.title, lead.company].filter(Boolean).join(' · ')}</div>
-                                            </div>
-                                            <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'0.25rem', flexShrink:0 }}>
-                                                <span style={{ background: scoreBg(sc), color: scoreColor(sc), fontWeight:'800', fontSize:'0.6875rem', padding:'0.125rem 0.5rem', borderRadius:'999px' }}>{sc}</span>
-                                                <span style={{ background:ss.bg, color:ss.color, fontWeight:'700', fontSize:'0.625rem', padding:'0.1rem 0.4rem', borderRadius:'999px' }}>{st}</span>
-                                            </div>
-                                        </div>
-                                        <div className="mobile-card-meta">
-                                            {lead.source && <span className="mobile-card-meta-item">📌 {lead.source}</span>}
-                                            {lead.assignedTo && <span className="mobile-card-meta-item">👤 {lead.assignedTo}</span>}
-                                            {lead.estimatedARR > 0 && <span className="mobile-card-meta-item" style={{ fontWeight:'700', color:'#2563eb' }}>${(lead.estimatedARR||0).toLocaleString()}</span>}
-                                        </div>
-                                        <div className="mobile-card-actions" onClick={e => e.stopPropagation()}>
-                                            <button className="primary" onClick={() => setEditingLead(lead)}>✏️ Edit</button>
-                                            {lead.status !== 'Converted' && <button onClick={() => { convertLead(lead); }} style={{ color:'#10b981', borderColor:'#a7f3d0' }}>✓ Convert</button>}
-                                            <button onClick={() => { showConfirm('Delete this lead?', () => { setLeads(prev => prev.filter(l => l.id !== lead.id)); dbFetch(`/.netlify/functions/leads?id=${lead.id}`, { method:'DELETE' }).catch(console.error); }); }} style={{ color:'#ef4444', borderColor:'#fecaca' }}>🗑</button>
-                                        </div>
+                        {leadView === 'list' && (
+                        <div>
+                            {/* Desktop table */}
+                            <div className="leads-desktop-table">
+                                {/* Bulk select bar */}
+                                {canSeeAll && selectedLeads.length > 0 && (
+                                    <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.5rem 1rem', background:'#eff6ff', borderBottom:'1px solid #bfdbfe' }}>
+                                        <span style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1d4ed8' }}>{selectedLeads.length} selected</span>
+                                        <div style={{ width:'1px', height:'16px', background:'#bfdbfe' }}></div>
+                                        <span style={{ fontSize:'0.75rem', color:'#64748b', fontWeight:'600' }}>Assign to:</span>
+                                        <select value={assignTarget} onChange={e => setAssignTarget(e.target.value)} style={{ fontSize:'0.75rem', border:'1px solid #bfdbfe', borderRadius:'6px', padding:'0.2rem 0.5rem', background:'#fff', color:'#1e293b', fontFamily:'inherit' }}>
+                                            <option value="">— pick rep —</option>
+                                            {allReps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                                        </select>
+                                        <button onClick={bulkAssign} style={{ padding:'0.25rem 0.625rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>Assign</button>
+                                        <button onClick={() => { setSelectedLeads([]); setAssignTarget(''); }} style={{ marginLeft:'auto', background:'none', border:'none', color:'#64748b', fontSize:'0.75rem', cursor:'pointer', fontWeight:'600', fontFamily:'inherit' }}>Clear ✕</button>
                                     </div>
-                                );
-                            })}
-                        </div>
-                        {/* Desktop table */}
-                        <div className="leads-desktop-table">
-                        <div style={{ overflowX:'auto' }}>
+                                )}
                                 <table style={{ width:'100%', borderCollapse:'collapse' }}>
                                     <thead>
-                                        <tr>
-                                            {canSeeAll && <th style={{ padding:'0.5rem 0.75rem', textAlign:'left', fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', width:'36px' }}><input type="checkbox" style={{ width:'14px', height:'14px', accentColor:'#2563eb' }} onChange={e => setSelectedLeads(e.target.checked ? filtered.map(l=>l.id) : [])} /></th>}
-                                            {['Score','Name / Company','Source','Status', ...(canSeeAll?['Assigned To']:[]), 'Est. ARR','Actions'].map(h => (
-                                                <th key={h} style={{ padding:'0.5rem 0.75rem', textAlign:'left', fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', whiteSpace:'nowrap' }}>{h}</th>
+                                        <tr style={{ background:'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
+                                            {canSeeAll && <th style={{ padding:'0.5rem 0.75rem', textAlign:'left', fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', width:'32px' }}><input type="checkbox" onChange={e => setSelectedLeads(e.target.checked ? filtered.map(l => l.id) : [])} checked={selectedLeads.length === filtered.length && filtered.length > 0} /></th>}
+                                            {['Score','Name / Company','Source','Status', ...(canSeeAll?['Assigned To']:[]),'Est. ARR','Actions'].map(h => (
+                                                <th key={h} style={{ padding:'0.5rem 0.75rem', textAlign:'left', fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em' }}>{h}</th>
                                             ))}
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filtered.length === 0 && (
-                                            <tr><td colSpan={99} style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.875rem' }}>No leads found</td></tr>
-                                        )}
-                                        {filtered.map(lead => {
-                                            const sc = lead.score || 0;
-                                            const st = lead.status || 'New';
-                                            const ss = statusStyle[st] || statusStyle.New;
-                                            const isUnassigned = !lead.assignedTo;
+                                        {filtered.length === 0 ? (
+                                            <tr><td colSpan={canSeeAll ? 8 : 6} style={{ padding:'2rem', textAlign:'center', color:'#94a3b8', fontSize:'0.875rem' }}>No leads found</td></tr>
+                                        ) : filtered.map((lead, li) => {
+                                            const isUnassigned = canSeeAll && !lead.assignedTo;
                                             return (
-                                                <tr key={lead.id} style={{ background: isUnassigned && canSeeAll ? '#fffbeb' : 'transparent' }}
-                                                    onMouseEnter={e => e.currentTarget.style.background = isUnassigned && canSeeAll ? '#fef9c3' : '#f8fafc'}
-                                                    onMouseLeave={e => e.currentTarget.style.background = isUnassigned && canSeeAll ? '#fffbeb' : 'transparent'}>
-                                                    {canSeeAll && <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}><input type="checkbox" style={{ width:'14px', height:'14px', accentColor:'#2563eb' }} checked={selectedLeads.includes(lead.id)} onChange={e => setSelectedLeads(prev => e.target.checked ? [...prev, lead.id] : prev.filter(i=>i!==lead.id))} /></td>}
+                                                <tr key={lead.id}
+                                                    style={{ background: isUnassigned && canSeeAll ? '#fffbeb' : li % 2 === 0 ? '#ffffff' : '#f8fafc', borderBottom:'1px solid #f1f5f9', transition:'background 0.1s' }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = isUnassigned && canSeeAll ? '#fffbeb' : li % 2 === 0 ? '#ffffff' : '#f8fafc'}>
+                                                    {canSeeAll && (
+                                                        <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
+                                                            <input type="checkbox" checked={selectedLeads.includes(lead.id)} onChange={e => setSelectedLeads(prev => e.target.checked ? [...prev, lead.id] : prev.filter(id => id !== lead.id))} />
+                                                        </td>
+                                                    )}
                                                     <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
-                                                        <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:scoreBg(sc), color:scoreColor(sc), display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'800' }}>{sc}</div>
+                                                        <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:scoreBg(lead.score||0), color:scoreColor(lead.score||0), display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'800' }}>{lead.score||0}</div>
                                                     </td>
                                                     <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
                                                         <div style={{ fontWeight:'600', color:'#1e293b', fontSize:'0.8125rem' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || '—'}</div>
-                                                        <div style={{ fontSize:'0.75rem', color:'#64748b' }}>{[lead.company, lead.title].filter(Boolean).join(' · ') || '—'}</div>
+                                                        <div style={{ fontSize:'0.75rem', color:'#64748b' }}>{lead.company || '—'}</div>
                                                     </td>
                                                     <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
                                                         <span style={{ padding:'0.1rem 0.4rem', borderRadius:'4px', fontSize:'0.6rem', fontWeight:'700', background:'#f1f5f9', color:'#64748b' }}>{lead.source || '—'}</span>
                                                     </td>
                                                     <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
-                                                        <span style={{ padding:'0.15rem 0.5rem', borderRadius:'999px', fontSize:'0.625rem', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.05em', background:ss.bg, color:ss.color }}>{st}</span>
+                                                        <span style={{ padding:'0.15rem 0.5rem', borderRadius:'999px', fontSize:'0.625rem', fontWeight:'700', background:(statusStyle[lead.status||'New']||statusStyle.New).bg, color:(statusStyle[lead.status||'New']||statusStyle.New).color }}>{lead.status||'New'}</span>
                                                     </td>
                                                     {canSeeAll && (
                                                         <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
                                                             {lead.assignedTo ? (
                                                                 <div style={{ display:'flex', alignItems:'center', gap:'0.375rem' }}>
-                                                                    <div style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#2563eb', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.55rem', fontWeight:'800', color:'#fff' }}>{lead.assignedTo.slice(0,2).toUpperCase()}</div>
+                                                                    <div style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#2563eb', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.5rem', fontWeight:'700', flexShrink:0 }}>{lead.assignedTo.slice(0,2).toUpperCase()}</div>
                                                                     <span style={{ fontSize:'0.75rem', color:'#475569' }}>{lead.assignedTo}</span>
                                                                 </div>
                                                             ) : (
@@ -314,16 +298,16 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                                             )}
                                                         </td>
                                                     )}
-                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9', fontSize:'0.75rem', fontWeight:'700', color:'#2563eb' }}>
-                                                        {lead.estimatedARR ? '$' + (parseFloat(lead.estimatedARR) >= 1000 ? Math.round(parseFloat(lead.estimatedARR)/1000)+'K' : parseFloat(lead.estimatedARR)) : '—'}
+                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9', fontStyle: lead.estimatedARR ? 'normal' : 'italic', color: lead.estimatedARR ? '#1e293b' : '#94a3b8', fontSize:'0.8125rem', fontWeight: lead.estimatedARR ? '600' : '400' }}>
+                                                        {lead.estimatedARR ? '$' + (parseFloat(lead.estimatedARR) >= 1000 ? Math.round(parseFloat(lead.estimatedARR)/1000)+'K' : parseFloat(lead.estimatedARR).toLocaleString()) : '—'}
                                                     </td>
-                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9' }}>
-                                                        <div style={{ display: 'flex', gap: '4px' }}>
-                                                            <button onClick={() => setEditingLead(lead)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f1f5f9', fontSize:'0.6875rem' }}>
+                                                        <div style={{ display:'flex', gap:'4px' }}>
+                                                            <button onClick={() => setEditingLead(lead)} style={{ padding:'4px 10px', borderRadius:'999px', border:'0.5px solid #94a3b8', background:'transparent', color:'#475569', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>Edit</button>
                                                             {lead.status !== 'Converted' && (
-                                                                <button onClick={() => convertLead(lead)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #6ee7b7', background: 'transparent', color: '#059669', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>→ Opp</button>
+                                                                <button onClick={() => convertLead(lead)} style={{ padding:'4px 10px', borderRadius:'999px', border:'0.5px solid #6ee7b7', background:'transparent', color:'#059669', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>→ Opp</button>
                                                             )}
-                                                            <button onClick={() => deleteLead(lead.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
+                                                            <button onClick={() => deleteLead(lead.id)} style={{ padding:'4px 10px', borderRadius:'999px', border:'0.5px solid #fca5a5', background:'transparent', color:'#dc2626', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>Delete</button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -331,63 +315,90 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                         })}
                                     </tbody>
                                 </table>
-                        </div>
-                        </div>
-                    </div>
-                    )}
-
-                    {leadView === 'kanban' && (
-                        <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
-                            <div style={{ padding:'0.75rem' }}>
-                                <div style={{ display:'flex', flexWrap:'wrap', gap:'0.625rem' }}>
-                                    {Object.entries(stageColors).map(([stage, color]) => {
-                                        const colLeads = filtered.filter(l => (l.status || 'New') === stage);
-                                        return (
-                                            <div key={stage} style={{ width:'190px', flexShrink:0, flexGrow:1, minWidth:'160px', maxWidth:'220px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-                                                <div style={{ padding:'0.5rem 0.75rem', borderTop:'3px solid '+color, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                                                    <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.04em' }}>{stage}</span>
-                                                    <span style={{ fontSize:'0.6rem', fontWeight:'700', background:'#e2e8f0', color:'#64748b', borderRadius:'10px', padding:'0.1rem 0.35rem' }}>{colLeads.length}</span>
-                                                </div>
-                                                <div style={{ padding:'0.5rem', display:'flex', flexDirection:'column', gap:'0.375rem', minHeight:'60px' }}>
-                                                    {colLeads.map(lead => (
-                                                        <div key={lead.id} onClick={() => setEditingLead(lead)} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'0.5rem 0.625rem', cursor:'pointer', transition:'all 0.1s' }}
-                                                            onMouseEnter={e => { e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.boxShadow='0 2px 8px rgba(37,99,235,0.1)'; }}
-                                                            onMouseLeave={e => { e.currentTarget.style.borderColor='#e2e8f0'; e.currentTarget.style.boxShadow='none'; }}>
-                                                            <div style={{ fontSize:'0.75rem', fontWeight:'600', color:'#1e293b', marginBottom:'0.15rem' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || '—'}</div>
-                                                            <div style={{ fontSize:'0.625rem', color:'#64748b', marginBottom:'0.25rem' }}>{lead.company || '—'}</div>
-                                                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                                                                <span style={{ fontSize:'0.6rem', background:'#f1f5f9', color:'#64748b', padding:'0.1rem 0.3rem', borderRadius:'3px', fontWeight:'600' }}>{lead.source || '—'}</span>
-                                                                <div style={{ width:'20px', height:'20px', borderRadius:'50%', background:scoreBg(lead.score||0), color:scoreColor(lead.score||0), display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.5rem', fontWeight:'800' }}>{lead.score||0}</div>
-                                                            </div>
-                                                            {canSeeAll && lead.assignedTo && <div style={{ fontSize:'0.6rem', color:'#94a3b8', marginTop:'0.2rem' }}>{lead.assignedTo}</div>}
-                                                        </div>
-                                                    ))}
-                                                    {colLeads.length === 0 && <div style={{ fontSize:'0.6875rem', color:'#cbd5e1', textAlign:'center', padding:'0.75rem 0', fontStyle:'italic' }}>Empty</div>}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
                             </div>
                         </div>
-                    )}{/* end leadView kanban */}
+                        )}
 
-                    {/* BULK ACTION BAR */}
-                    {canSeeAll && selectedLeads.length > 0 && (
-                        <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.625rem 1rem', background:'#eff6ff', borderTop:'1px solid #bfdbfe' }}>
-                            <span style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1d4ed8' }}>{selectedLeads.length} selected</span>
-                            <div style={{ width:'1px', height:'16px', background:'#bfdbfe' }}></div>
-                            <span style={{ fontSize:'0.75rem', color:'#64748b', fontWeight:'600' }}>Assign to:</span>
-                            <select value={assignTarget} onChange={e => setAssignTarget(e.target.value)} style={{ fontSize:'0.75rem', border:'1px solid #bfdbfe', borderRadius:'6px', padding:'0.2rem 0.5rem', background:'#fff', color:'#1e293b', fontFamily:'inherit' }}>
-                                <option value="">— pick rep —</option>
-                                {allReps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
-                            </select>
-                            <button onClick={bulkAssign} style={{ padding:'0.25rem 0.625rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>Assign</button>
-                            <button onClick={() => { setSelectedLeads([]); setAssignTarget(''); }} style={{ marginLeft:'auto', background:'none', border:'none', color:'#64748b', fontSize:'0.75rem', cursor:'pointer', fontWeight:'600', fontFamily:'inherit' }}>Clear ✕</button>
+                        {/* KANBAN VIEW */}
+                        {leadView === 'kanban' && (
+                        <div style={{ padding:'0.75rem' }}>
+                            <div style={{ display:'flex', flexWrap:'wrap', gap:'0.625rem' }}>
+                                {Object.entries(stageColors).map(([stage, color]) => {
+                                    const colLeads = filtered.filter(l => (l.status || 'New') === stage);
+                                    return (
+                                        <div key={stage} style={{ width:'190px', flexShrink:0, flexGrow:1, minWidth:'160px', maxWidth:'220px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+                                            <div style={{ padding:'0.5rem 0.75rem', borderTop:'3px solid '+color, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                                <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.04em' }}>{stage}</span>
+                                                <span style={{ fontSize:'0.6rem', fontWeight:'700', background:'#e2e8f0', color:'#64748b', borderRadius:'10px', padding:'0.1rem 0.35rem' }}>{colLeads.length}</span>
+                                            </div>
+                                            <div style={{ padding:'0.5rem', display:'flex', flexDirection:'column', gap:'0.375rem', minHeight:'60px' }}>
+                                                {colLeads.map(lead => (
+                                                    <div key={lead.id} onClick={() => setEditingLead(lead)} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'0.5rem 0.625rem', cursor:'pointer', transition:'all 0.1s' }}
+                                                        onMouseEnter={e => { e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.boxShadow='0 2px 8px rgba(37,99,235,0.1)'; }}
+                                                        onMouseLeave={e => { e.currentTarget.style.borderColor='#e2e8f0'; e.currentTarget.style.boxShadow='none'; }}>
+                                                        <div style={{ fontSize:'0.75rem', fontWeight:'600', color:'#1e293b', marginBottom:'0.15rem' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || '—'}</div>
+                                                        <div style={{ fontSize:'0.625rem', color:'#64748b', marginBottom:'0.25rem' }}>{lead.company || '—'}</div>
+                                                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                                            <span style={{ fontSize:'0.6rem', background:'#f1f5f9', color:'#64748b', padding:'0.1rem 0.3rem', borderRadius:'3px', fontWeight:'600' }}>{lead.source || '—'}</span>
+                                                            <div style={{ width:'20px', height:'20px', borderRadius:'50%', background:scoreBg(lead.score||0), color:scoreColor(lead.score||0), display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.5rem', fontWeight:'800' }}>{lead.score||0}</div>
+                                                        </div>
+                                                        {canSeeAll && lead.assignedTo && <div style={{ fontSize:'0.6rem', color:'#94a3b8', marginTop:'0.2rem' }}>{lead.assignedTo}</div>}
+                                                    </div>
+                                                ))}
+                                                {colLeads.length === 0 && <div style={{ fontSize:'0.6875rem', color:'#cbd5e1', textAlign:'center', padding:'0.75rem 0', fontStyle:'italic' }}>Empty</div>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
-                    )}
-                </div>
-                </div>
+                        )}
+
+                        {/* FUNNEL VIEW */}
+                        {leadView === 'funnel' && (
+                        <div style={{ padding:'0.75rem 1rem' }}>
+                            {Object.entries(stageColors).map(([stage, color]) => {
+                                const stageLeads = filtered.filter(l => (l.status || 'New') === stage);
+                                const pct = filtered.length > 0 ? Math.round((stageLeads.length / filtered.length) * 100) : 0;
+                                const isExp = leadFunnelExpanded === stage;
+                                return (
+                                    <div key={stage} style={{ marginBottom:'0.5rem' }}>
+                                        <div onClick={() => setLeadFunnelExpanded(isExp ? null : stage)}
+                                            style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.5rem 0.75rem', borderRadius:'8px', background:'#f8fafc', border:'1px solid #e2e8f0', cursor:'pointer', transition:'all 0.15s' }}
+                                            onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'}
+                                            onMouseLeave={e => e.currentTarget.style.background='#f8fafc'}>
+                                            <div style={{ width:'10px', height:'10px', borderRadius:'50%', background:color, flexShrink:0 }} />
+                                            <span style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1e293b', width:'90px', flexShrink:0 }}>{stage}</span>
+                                            <div style={{ flex:1, height:'10px', background:'#e2e8f0', borderRadius:'5px', overflow:'hidden' }}>
+                                                <div style={{ height:'100%', width:pct+'%', background:color, borderRadius:'5px', transition:'width 0.4s ease' }} />
+                                            </div>
+                                            <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#475569', minWidth:'28px', textAlign:'right' }}>{stageLeads.length}</span>
+                                            <span style={{ fontSize:'0.6875rem', color:'#94a3b8', minWidth:'32px', textAlign:'right' }}>{pct}%</span>
+                                            <span style={{ fontSize:'0.75rem', color:'#94a3b8', transition:'transform 0.2s', display:'inline-block', transform: isExp ? 'rotate(180deg)' : 'none' }}>▼</span>
+                                        </div>
+                                        {isExp && stageLeads.length > 0 && (
+                                            <div style={{ marginTop:'3px', marginLeft:'1rem', display:'flex', flexDirection:'column', gap:'3px' }}>
+                                                {stageLeads.map(lead => (
+                                                    <div key={lead.id} onClick={() => setEditingLead(lead)}
+                                                        style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.75rem', background:'#fff', border:'1px solid #f1f5f9', borderRadius:'6px', cursor:'pointer', fontSize:'0.75rem', color:'#1e293b' }}
+                                                        onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
+                                                        onMouseLeave={e => e.currentTarget.style.background='#fff'}>
+                                                        <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:color, flexShrink:0 }} />
+                                                        <span style={{ fontWeight:'600' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || '—'}</span>
+                                                        {lead.company && <span style={{ color:'#94a3b8' }}>· {lead.company}</span>}
+                                                        {lead.assignedTo && <span style={{ marginLeft:'auto', color:'#94a3b8', fontSize:'0.6875rem' }}>{lead.assignedTo}</span>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        )}
+
+                    </div>{/* end always-visible card */}
+                </div>{/* end LEFT panel */}
 
                 {/* RIGHT PANEL — managers/admins only */}
                 {canSeeAll && (
@@ -455,8 +466,11 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                     </div>
                 )}
             </div>
+        </div>
     );
 }
+
+
 
 
 function FunnelView({ stages, pipelineFilteredOpps, funnelExpandedStage, setFunnelExpandedStage, settings, handleEdit, handleDelete }) {
@@ -1295,7 +1309,8 @@ function App() {
     const [reportOppSortField, setReportOppSortField] = useState('closeDate');
     const [reportOppSortDir, setReportOppSortDir] = useState('asc');
     const [pipelineStageFilter, setPipelineStageFilter] = useState([]);
-    const [oppTabView, setOppTabView] = useState('list'); // 'list' | 'kanban'
+    const [oppTabView, setOppTabView] = useState('list'); // 'list' | 'kanban' | 'funnel'
+    const [oppTabFunnelExpanded, setOppTabFunnelExpanded] = useState(null);
     const [oppQuarterFilter, setOppQuarterFilter] = useState([]);
     const [oppStageFilter, setOppStageFilter] = useState([]);
     const [oppRepFilter, setOppRepFilter] = useState([]);
@@ -3057,32 +3072,43 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
             <header className="header">
                 <div className="header-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0 }}>
-                        {settings.logoUrl && (
-                            <img 
-                                src={settings.logoUrl} 
-                                alt="Company Logo" 
-                                className="header-logo"
-                                style={{ 
-                                    height: '75px', 
-                                    width: 'auto',
-                                    maxWidth: '225px',
-                                    objectFit: 'contain'
-                                }} 
-                            />
+                        {settings.logoUrl ? (
+                            <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', gap:'0.25rem' }}>
+                                <img 
+                                    src={settings.logoUrl} 
+                                    alt="Company Logo" 
+                                    className="header-logo"
+                                    style={{ 
+                                        height: '86px', 
+                                        width: 'auto',
+                                        maxWidth: '259px',
+                                        objectFit: 'contain'
+                                    }} 
+                                />
+                                <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap', paddingLeft:'2px' }}>
+                                    <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>
+                                        {new Date().toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}
+                                    </span>
+                                    <span style={{ color:'#cbd5e1', fontSize:'0.75rem' }}>·</span>
+                                    <span style={{ fontSize:'0.6rem', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', background:'#eff6ff', color:'#2563eb', padding:'0.15rem 0.5rem', borderRadius:'999px', border:'1px solid #bfdbfe', lineHeight:'1.4' }}>
+                                        {(() => { const q = getQuarter(new Date().toISOString()); return getQuarterLabel(q, new Date().toISOString()); })()}
+                                    </span>
+                                </div>
+                            </div>
+                        ) : (
+                            <div>
+                                <h1>Sales Pipeline Tracker</h1>
+                                <p style={{ display:'flex', alignItems:'center', gap:'0.625rem', flexWrap:'wrap' }}>
+                                    <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>
+                                        {new Date().toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}
+                                    </span>
+                                    <span style={{ color:'#cbd5e1' }}>·</span>
+                                    <span style={{ fontSize:'0.6rem', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', background:'#eff6ff', color:'#2563eb', padding:'0.15rem 0.5rem', borderRadius:'999px', border:'1px solid #bfdbfe', lineHeight:'1.4' }}>
+                                        {(() => { const q = getQuarter(new Date().toISOString()); return getQuarterLabel(q, new Date().toISOString()); })()}
+                                    </span>
+                                </p>
+                            </div>
                         )}
-                        <div>
-                            <h1>Sales Pipeline Tracker</h1>
-                            <p style={{ display:'flex', alignItems:'center', gap:'0.625rem', flexWrap:'wrap' }}>
-                                <span>Real-time opportunity tracking and analytics</span>
-                                <span style={{ color:'#cbd5e1' }}>·</span>
-                                <span style={{ fontSize:'0.75rem', color:'#64748b' }}>
-                                    {new Date().toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}
-                                </span>
-                                <span style={{ fontSize:'0.6rem', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', background:'#eff6ff', color:'#2563eb', padding:'0.15rem 0.5rem', borderRadius:'999px', border:'1px solid #bfdbfe', lineHeight:'1.4' }}>
-                                    {(() => { const q = getQuarter(new Date().toISOString()); return getQuarterLabel(q, new Date().toISOString()); })()}
-                                </span>
-                            </p>
-                        </div>
                     </div>
                     <div className="header-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.375rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -5445,9 +5471,9 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
 
                             {/* Right side: view toggle + count + CSV + New */}
                             <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginLeft:'auto', flexShrink:0 }}>
-                                {/* List / Kanban toggle */}
+                                {/* List / Kanban / Funnel toggle */}
                                 <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
-                                    {[{v:'list',label:'☰ List'},{v:'kanban',label:'⬛ Kanban'}].map(({v,label}) => (
+                                    {[{v:'list',label:'☰ List'},{v:'kanban',label:'⬛ Kanban'},{v:'funnel',label:'🔻 Funnel'}].map(({v,label}) => (
                                         <button key={v} onClick={() => setOppTabView(v)}
                                             style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
                                                 background: oppTabView===v ? '#fff' : 'transparent',
@@ -5929,6 +5955,53 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 </div>
                             </div>
                             )}{/* end oppTabView kanban */}
+
+                            {/* ── FUNNEL VIEW ── */}
+                            {oppTabView === 'funnel' && (
+                            <div style={{ padding:'0.75rem 1rem' }}>
+                                {stages.map((stage, idx) => {
+                                    const stageOpps = oppFilteredOpps.filter(o => o.stage === stage);
+                                    const stageARR = stageOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+                                    const maxCount = Math.max(...stages.map(s2 => oppFilteredOpps.filter(o => o.stage === s2).length), 1);
+                                    const pct = stageOpps.length === 0 ? 0 : Math.max(4, Math.round((stageOpps.length / maxCount) * 100));
+                                    const sc = getStageColor(stage);
+                                    const isExp = oppTabFunnelExpanded === stage;
+                                    return (
+                                        <div key={stage} style={{ marginBottom:'0.5rem' }}>
+                                            <div onClick={() => setOppTabFunnelExpanded(isExp ? null : stage)}
+                                                style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.5rem 0.75rem', borderRadius:'8px', background:'#f8fafc', border:'1px solid #e2e8f0', cursor:'pointer', transition:'all 0.15s' }}
+                                                onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'}
+                                                onMouseLeave={e => e.currentTarget.style.background='#f8fafc'}>
+                                                <div style={{ width:'10px', height:'10px', borderRadius:'50%', background:sc.text, flexShrink:0 }} />
+                                                <span style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1e293b', width:'130px', flexShrink:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{stage}</span>
+                                                <div style={{ flex:1, height:'10px', background:'#e2e8f0', borderRadius:'5px', overflow:'hidden' }}>
+                                                    <div style={{ height:'100%', width:pct+'%', background:sc.text, opacity:0.75, borderRadius:'5px', transition:'width 0.4s ease' }} />
+                                                </div>
+                                                <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#475569', minWidth:'28px', textAlign:'right' }}>{stageOpps.length}</span>
+                                                <span style={{ fontSize:'0.6875rem', color:'#94a3b8', minWidth:'70px', textAlign:'right' }}>${stageARR >= 1000 ? Math.round(stageARR/1000)+'K' : stageARR.toLocaleString()}</span>
+                                                <span style={{ fontSize:'0.75rem', color:'#94a3b8', transition:'transform 0.2s', transform: isExp ? 'rotate(180deg)' : 'none' }}>▼</span>
+                                            </div>
+                                            {isExp && stageOpps.length > 0 && (
+                                                <div style={{ marginTop:'3px', marginLeft:'1rem', display:'flex', flexDirection:'column', gap:'3px' }}>
+                                                    {stageOpps.map(opp => (
+                                                        <div key={opp.id} onClick={() => { setEditingOpp(opp); setShowModal(true); }}
+                                                            style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.75rem', background:'#fff', border:'1px solid #f1f5f9', borderRadius:'6px', cursor:'pointer', fontSize:'0.75rem', color:'#1e293b' }}
+                                                            onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
+                                                            onMouseLeave={e => e.currentTarget.style.background='#fff'}>
+                                                            <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:sc.text, flexShrink:0 }} />
+                                                            <span style={{ fontWeight:'600', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{opp.opportunityName || opp.account || '—'}</span>
+                                                            {opp.account && opp.opportunityName && <span style={{ color:'#94a3b8', flexShrink:0 }}>{opp.account}</span>}
+                                                            <span style={{ fontWeight:'700', color:'#1e293b', flexShrink:0 }}>${(parseFloat(opp.arr)||0).toLocaleString()}</span>
+                                                            {opp.salesRep && <span style={{ color:'#94a3b8', fontSize:'0.6875rem', flexShrink:0 }}>{opp.salesRep}</span>}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            )}{/* end oppTabView funnel */}
 
                             {oppTabView === 'list' && oppFilteredOpps.length === 0 && (
                                 <div style={{ textAlign:'center', padding:'4rem 2rem', display:'flex', flexDirection:'column', alignItems:'center', gap:'1rem' }}>
@@ -7733,26 +7806,7 @@ ${bodyHtml}
                           </div>
                         </div>
 
-                        {/* ── KPI summary strip (always visible) ── */}
-                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'0.75rem', padding:'1rem 1.25rem 0' }}>
-                          {[
-                            { label:'Won Revenue',    value:'$'+totalWonRevenue.toLocaleString(),         sub: wonOpps.length+' deals',                          accent:'accent-green' },
-                            { label:'Pipeline Value', value:'$'+totalPipelineValue.toLocaleString(),       sub: openOpps.length+' open',                          accent:'accent-blue' },
-                            { label:'Win Rate',       value: winRate.toFixed(1)+'%',                       sub: wonOpps.length+' won / '+lostOpps.length+' lost', accent:'accent-purple' },
-                            { label:'Avg Deal Size',  value:'$'+Math.round(avgDealSize).toLocaleString(),  sub:'closed won',                                      accent:'accent-amber' },
-                          ].map(k => (
-                            <div key={k.label} className={`kpi-card ${k.accent}`} style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.875rem 1.25rem' }}>
-                              <div style={labelStyle}>{k.label}</div>
-                              <div style={valueStyle}>{k.value}</div>
-                              <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.125rem' }}>{k.sub}</div>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* ════════════════════════════════════════════
-                             TAB: PIPELINE
-                            ════════════════════════════════════════════ */}
-                        {/* ── Sticky floating period filter bar (pipeline/performance/revenue) ── */}
+                        {/* ── Sticky floating period filter bar — above KPI strip ── */}
                         {['pipeline','performance','revenue'].includes(reportSubTab) && (() => {
                             const now = new Date();
                             const fy = now.getFullYear();
@@ -7785,6 +7839,22 @@ ${bodyHtml}
                                 </div>
                             );
                         })()}
+
+                        {/* ── KPI summary strip (always visible, below period filter) ── */}
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'0.75rem', padding:'0.75rem 1.25rem' }}>
+                          {[
+                            { label:'Won Revenue',    value:'$'+totalWonRevenue.toLocaleString(),         sub: wonOpps.length+' deals',                          accent:'accent-green' },
+                            { label:'Pipeline Value', value:'$'+totalPipelineValue.toLocaleString(),       sub: openOpps.length+' open',                          accent:'accent-blue' },
+                            { label:'Win Rate',       value: winRate.toFixed(1)+'%',                       sub: wonOpps.length+' won / '+lostOpps.length+' lost', accent:'accent-purple' },
+                            { label:'Avg Deal Size',  value:'$'+Math.round(avgDealSize).toLocaleString(),  sub:'closed won',                                      accent:'accent-amber' },
+                          ].map(k => (
+                            <div key={k.label} className={`kpi-card ${k.accent}`} style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.875rem 1.25rem' }}>
+                              <div style={labelStyle}>{k.label}</div>
+                              <div style={valueStyle}>{k.value}</div>
+                              <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.125rem' }}>{k.sub}</div>
+                            </div>
+                          ))}
+                        </div>
 
                         {reportSubTab === 'pipeline' && (
                         <div style={{ padding:'1rem 1.25rem 1.5rem' }}>
