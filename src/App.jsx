@@ -1356,6 +1356,7 @@ function App() {
     // Meeting prep panel state
     const [meetingPrepEvent, setMeetingPrepEvent] = useState(null); // the calendar event being prepped
     const [meetingPrepOpen, setMeetingPrepOpen] = useState(false);
+    const [meetingPrepOppId, setMeetingPrepOppId] = useState(null); // optional forced opp ID (e.g. from task)
 
     // Loading states for import/export operations
     const [exportingCSV, setExportingCSV] = useState(null); // tracks which CSV is exporting by key
@@ -5944,6 +5945,10 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                                                             {calendarAddingTaskId === task.id ? '…' : calendarAddFeedback[task.id] === 'success' ? '✓ Added' : calendarAddFeedback[task.id] === 'error' ? '✕ Failed' : '📅'}
                                                                                         </button>
                                                                                     )}
+                                                                                    {task.opportunityId && (
+                                                                                        <button onClick={e => { e.stopPropagation(); setMeetingPrepEvent({ summary: task.title, start: { date: task.dueDate }, attendeeCount: 0 }); setMeetingPrepOppId(task.opportunityId); setMeetingPrepOpen(true); }}
+                                                                                            style={{ padding: '4px 8px', borderRadius: '999px', border: '0.5px solid #7c3aed', background: '#f5f3ff', color: '#6d28d9', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Prep</button>
+                                                                                    )}
                                                                                     <button onClick={e => { e.stopPropagation(); handleEditTask(task); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
                                                                                     <button onClick={e => { e.stopPropagation(); handleDeleteTask(task.id); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                                                 </div>
@@ -10148,12 +10153,20 @@ ${bodyHtml}
                 const evTime = ev.start?.dateTime ? new Date(ev.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'All day';
                 const evEnd = ev.end?.dateTime ? new Date(ev.end.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : null;
 
-                // Try to match event to an opportunity by title keywords
+                // Use forced opp ID if provided (e.g. from task), otherwise fuzzy-match by title
                 const titleWords = evTitle.toLowerCase().split(/[\s\-–—,]+/).filter(w => w.length > 2);
-                const matchedOpp = (opportunities || []).find(o => {
-                    const haystack = ((o.opportunityName || '') + ' ' + (o.account || '')).toLowerCase();
-                    return titleWords.some(w => haystack.includes(w));
-                });
+                const matchedOpp = meetingPrepOppId
+                    ? (opportunities || []).find(o => o.id === meetingPrepOppId)
+                    : (opportunities || []).find(o => {
+                        const haystack = ((o.opportunityName || '') + ' ' + (o.account || '')).toLowerCase();
+                        return titleWords.some(w => haystack.includes(w));
+                    });
+
+                // Get contacts linked to this account
+                const matchedContacts = matchedOpp
+                    ? (contacts || []).filter(c => c.company?.toLowerCase() === (matchedOpp.account || '').toLowerCase() || c.accountId === (matchedOpp.accountId || ''))
+                        .slice(0, 5)
+                    : [];
 
                 // Get account
                 const matchedAccount = matchedOpp
@@ -10182,7 +10195,7 @@ ${bodyHtml}
                 return (
                     <>
                         {/* Backdrop */}
-                        <div onClick={() => setMeetingPrepOpen(false)}
+                        <div onClick={() => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }}
                             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 9000 }} />
 
                         {/* Slide-in panel */}
@@ -10255,6 +10268,31 @@ ${bodyHtml}
                                                 </div>
                                             ))}
                                         </div>
+                                    </div>
+                                )}
+
+                                {/* Contacts */}
+                                {matchedOpp && (
+                                    <div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Contacts</div>
+                                        {matchedContacts.length === 0 ? (
+                                            <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic' }}>No contacts found for this account</div>
+                                        ) : (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                                                {matchedContacts.map(c => (
+                                                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.5rem 0.75rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                                                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: '700', color: '#2563eb', flexShrink: 0 }}>
+                                                            {(c.firstName?.[0] || '') + (c.lastName?.[0] || '')}
+                                                        </div>
+                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{c.firstName} {c.lastName}</div>
+                                                            <div style={{ fontSize: '0.6875rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[c.title, c.email].filter(Boolean).join(' · ')}</div>
+                                                        </div>
+                                                        {c.phone && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', flexShrink: 0 }}>{c.phone}</div>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
