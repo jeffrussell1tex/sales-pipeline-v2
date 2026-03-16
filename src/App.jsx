@@ -1342,6 +1342,17 @@ function App() {
     const [calendarError, setCalendarError] = useState(null);
     const [calendarConnected, setCalendarConnected] = useState(false);
 
+    // Log from Calendar state
+    const [logFromCalOpen, setLogFromCalOpen] = useState(false);
+    const [logFromCalDateFrom, setLogFromCalDateFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0]; });
+    const [logFromCalDateTo, setLogFromCalDateTo] = useState(() => new Date().toISOString().split('T')[0]);
+    const [logFromCalEvents, setLogFromCalEvents] = useState([]);
+    const [logFromCalLoading, setLogFromCalLoading] = useState(false);
+    const [logFromCalError, setLogFromCalError] = useState(null);
+    const [loggedCalendarIds, setLoggedCalendarIds] = useState(new Set());
+    const [logFromCalLinkingId, setLogFromCalLinkingId] = useState(null);
+    const [logFromCalOppMap, setLogFromCalOppMap] = useState({});
+
     // Loading states for import/export operations
     const [exportingCSV, setExportingCSV] = useState(null); // tracks which CSV is exporting by key
     const [exportingBackup, setExportingBackup] = useState(false);
@@ -2531,6 +2542,40 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
         setQuickLogOpen(false);
         setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });
         setQuickLogContactResults([]);
+    };
+
+    // Log from Calendar handlers
+    const fetchLogFromCalEvents = async () => {
+        setLogFromCalLoading(true);
+        setLogFromCalError(null);
+        try {
+            const res = await fetch('/.netlify/functions/calendar-events?timeMin=' + logFromCalDateFrom + 'T00:00:00Z&timeMax=' + logFromCalDateTo + 'T23:59:59Z');
+            if (!res.ok) throw new Error('Failed to load calendar events');
+            const data = await res.json();
+            setLogFromCalEvents(data.events || []);
+            setLogFromCalOpen(true);
+        } catch (err) {
+            setLogFromCalError(err.message);
+        } finally {
+            setLogFromCalLoading(false);
+        }
+    };
+
+    const handleLogFromCalendar = async (ev, opportunityId) => {
+        const eventDate = ev.start?.date || (ev.start?.dateTime ? ev.start.dateTime.split('T')[0] : new Date().toISOString().split('T')[0]);
+        const relatedOpp = opportunityId ? (opportunities || []).find(o => o.id === opportunityId) : null;
+        const activityData = {
+            type: 'Meeting',
+            date: eventDate,
+            notes: [ev.summary || '', ev.description || ''].filter(Boolean).join('\n'),
+            opportunityId: opportunityId || '',
+            companyName: relatedOpp?.account || '',
+            addToCalendar: false,
+        };
+        await handleSaveActivity(activityData);
+        setLoggedCalendarIds(prev => new Set([...prev, ev.id]));
+        setLogFromCalOppMap(prev => ({ ...prev, [ev.id]: opportunityId || '' }));
+        setLogFromCalLinkingId(null);
     };
 
     // Deal Health Calculation
@@ -3927,6 +3972,72 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                             </div>
                         );
                     })()}
+
+                    {/* ── LOG FROM CALENDAR (Dashboard) ── */}
+                    <div className="table-container" style={{ marginBottom: '1.5rem' }}>
+                        <div className="table-header">
+                            <h2>📋 LOG FROM CALENDAR</h2>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <input type="date" value={logFromCalDateFrom} onChange={e => setLogFromCalDateFrom(e.target.value)}
+                                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontFamily: 'inherit', color: '#1e293b' }} />
+                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>to</span>
+                                <input type="date" value={logFromCalDateTo} onChange={e => setLogFromCalDateTo(e.target.value)}
+                                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontFamily: 'inherit', color: '#1e293b' }} />
+                                <button className="btn" onClick={fetchLogFromCalEvents} disabled={logFromCalLoading}
+                                    style={{ fontSize: '0.75rem' }}>
+                                    {logFromCalLoading ? 'Loading…' : 'Fetch Meetings'}
+                                </button>
+                            </div>
+                        </div>
+                        <div style={{ padding: '1rem 1.25rem' }}>
+                            {logFromCalError && (
+                                <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8', fontSize: '0.8125rem' }}>
+                                    <div style={{ marginBottom: '0.5rem' }}>Could not load calendar events. Make sure Google Calendar is connected.</div>
+                                    <button className="btn" onClick={fetchLogFromCalEvents}>Try Again</button>
+                                </div>
+                            )}
+                            {!logFromCalError && logFromCalEvents.length === 0 && (
+                                <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8', fontSize: '0.8125rem' }}>
+                                    Set a date range and click Fetch Meetings to see past calendar events
+                                </div>
+                            )}
+                            {logFromCalEvents.length > 0 && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                    {logFromCalEvents.map(ev => {
+                                        const isLogged = loggedCalendarIds.has(ev.id);
+                                        const isLinking = logFromCalLinkingId === ev.id;
+                                        const evDate = ev.start?.date || (ev.start?.dateTime ? ev.start.dateTime.split('T')[0] : '');
+                                        const evTime = ev.start?.dateTime ? new Date(ev.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'All day';
+                                        return (
+                                            <div key={ev.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0.875rem', border: '1px solid ' + (isLogged ? '#bbf7d0' : '#e2e8f0'), borderRadius: '8px', background: isLogged ? '#f0fdf4' : '#fff', gap: '1rem' }}>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ fontWeight: '600', fontSize: '0.875rem', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.summary || 'Untitled Event'}</div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.1rem' }}>{evDate} · {evTime}{ev.attendeeCount > 0 ? ` · ${ev.attendeeCount} attendees` : ''}</div>
+                                                </div>
+                                                {isLogged ? (
+                                                    <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#059669', background: '#dcfce7', padding: '0.2rem 0.625rem', borderRadius: '999px', whiteSpace: 'nowrap', flexShrink: 0 }}>✓ Logged</span>
+                                                ) : isLinking ? (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                                                        <select onChange={e => handleLogFromCalendar(ev, e.target.value)}
+                                                            style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', border: '1px solid #2563eb', borderRadius: '6px', fontFamily: 'inherit', color: '#1e293b', maxWidth: '180px' }}>
+                                                            <option value="">— No opportunity —</option>
+                                                            {(opportunities || []).filter(o => !['Closed Won','Closed Lost'].includes(o.stage)).map(o => (
+                                                                <option key={o.id} value={o.id}>{o.opportunityName || o.account}</option>
+                                                            ))}
+                                                        </select>
+                                                        <button onClick={() => handleLogFromCalendar(ev, '')} style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem', border: 'none', borderRadius: '6px', background: '#2563eb', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Save</button>
+                                                        <button onClick={() => setLogFromCalLinkingId(null)} style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#f8fafc', color: '#64748b', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                                                    </div>
+                                                ) : (
+                                                    <button onClick={() => setLogFromCalLinkingId(ev.id)} style={{ fontSize: '0.75rem', padding: '0.25rem 0.75rem', border: '1px solid #2563eb', borderRadius: '6px', background: '#eff6ff', color: '#1d4ed8', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>Log this</button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
 
                     <div className="table-container">
                         <div className="table-header">
@@ -5548,6 +5659,12 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 {tasksSubView === 'tasks' && canEdit && <button className="btn" onClick={handleAddTask}>+ ADD TASK</button>}
                                 {tasksSubView === 'activities' && <button className="btn" onClick={() => handleAddActivity()}>+ LOG ACTIVITY</button>}
+                                {tasksSubView === 'activities' && (
+                                    <button className="btn" onClick={fetchLogFromCalEvents} disabled={logFromCalLoading}
+                                        style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}>
+                                        {logFromCalLoading ? 'Loading…' : '📋 Log from Calendar'}
+                                    </button>
+                                )}
                             </div>
                         </div>
 
@@ -5853,6 +5970,60 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                         )}
                     </div>
                     )}
+
+                    {tasksSubView === 'activities' && logFromCalEvents.length > 0 && (
+                        <div style={{ margin: '0 1.25rem 1rem', border: '1px solid #bfdbfe', borderRadius: '10px', overflow: 'hidden', background: '#f0f9ff' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 1rem', borderBottom: '1px solid #bfdbfe', background: '#dbeafe' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                    <span style={{ fontWeight: '700', fontSize: '0.75rem', color: '#1e40af' }}>📋 LOG FROM CALENDAR</span>
+                                    <input type="date" value={logFromCalDateFrom} onChange={e => setLogFromCalDateFrom(e.target.value)}
+                                        style={{ fontSize: '0.7rem', padding: '0.2rem 0.4rem', border: '1px solid #93c5fd', borderRadius: '4px', fontFamily: 'inherit', color: '#1e293b' }} />
+                                    <span style={{ fontSize: '0.7rem', color: '#64748b' }}>to</span>
+                                    <input type="date" value={logFromCalDateTo} onChange={e => setLogFromCalDateTo(e.target.value)}
+                                        style={{ fontSize: '0.7rem', padding: '0.2rem 0.4rem', border: '1px solid #93c5fd', borderRadius: '4px', fontFamily: 'inherit', color: '#1e293b' }} />
+                                    <button onClick={fetchLogFromCalEvents} disabled={logFromCalLoading}
+                                        style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', border: 'none', borderRadius: '4px', background: '#2563eb', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                        {logFromCalLoading ? '…' : 'Refresh'}
+                                    </button>
+                                </div>
+                                <button onClick={() => setLogFromCalEvents([])} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>✕</button>
+                            </div>
+                            <div style={{ padding: '0.625rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                                {logFromCalEvents.map(ev => {
+                                    const isLogged = loggedCalendarIds.has(ev.id);
+                                    const isLinking = logFromCalLinkingId === ev.id;
+                                    const evDate = ev.start?.date || (ev.start?.dateTime ? ev.start.dateTime.split('T')[0] : '');
+                                    const evTime = ev.start?.dateTime ? new Date(ev.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'All day';
+                                    return (
+                                        <div key={ev.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0.75rem', border: '1px solid ' + (isLogged ? '#bbf7d0' : '#bfdbfe'), borderRadius: '6px', background: isLogged ? '#f0fdf4' : '#fff', gap: '1rem' }}>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontWeight: '600', fontSize: '0.8125rem', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.summary || 'Untitled Event'}</div>
+                                                <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>{evDate} · {evTime}{ev.attendeeCount > 0 ? ` · ${ev.attendeeCount} attendees` : ''}</div>
+                                            </div>
+                                            {isLogged ? (
+                                                <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#059669', background: '#dcfce7', padding: '0.15rem 0.5rem', borderRadius: '999px', whiteSpace: 'nowrap', flexShrink: 0 }}>✓ Logged</span>
+                                            ) : isLinking ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', flexShrink: 0 }}>
+                                                    <select onChange={e => handleLogFromCalendar(ev, e.target.value)}
+                                                        style={{ fontSize: '0.7rem', padding: '0.2rem 0.4rem', border: '1px solid #2563eb', borderRadius: '4px', fontFamily: 'inherit', color: '#1e293b', maxWidth: '160px' }}>
+                                                        <option value="">— No opportunity —</option>
+                                                        {(opportunities || []).filter(o => !['Closed Won','Closed Lost'].includes(o.stage)).map(o => (
+                                                            <option key={o.id} value={o.id}>{o.opportunityName || o.account}</option>
+                                                        ))}
+                                                    </select>
+                                                    <button onClick={() => handleLogFromCalendar(ev, '')} style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', border: 'none', borderRadius: '4px', background: '#2563eb', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+                                                    <button onClick={() => setLogFromCalLinkingId(null)} style={{ fontSize: '0.7rem', padding: '0.2rem 0.4rem', border: '1px solid #e2e8f0', borderRadius: '4px', background: '#f8fafc', color: '#64748b', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
+                                                </div>
+                                            ) : (
+                                                <button onClick={() => setLogFromCalLinkingId(ev.id)} style={{ fontSize: '0.6875rem', padding: '0.2rem 0.625rem', border: '1px solid #2563eb', borderRadius: '4px', background: '#eff6ff', color: '#1d4ed8', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>Log this</button>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
 
                     {tasksSubView === 'activities' && (
                     <div style={{ padding: '1.5rem' }}>
