@@ -8726,13 +8726,13 @@ ${bodyHtml}
 
                                 {/* ── Column headers ── */}
                                 {visibleReps.length > 0 && (
-                                    <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 200px 100px', gap:'0', padding:'6px 1.5rem', background:'#f8fafc', borderBottom:'1px solid #f1f5f9' }}>
+                                    <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:'0', padding:'6px 1.5rem', background:'#f8fafc', borderBottom:'1px solid #f1f5f9' }}>
                                         <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em' }}>Rep</div>
                                         <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em' }}>
                                             {quotaMode === 'annual' ? 'Annual quota' : 'Total quota'}
                                         </div>
                                         <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em' }}>Attainment</div>
-                                        <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', textAlign:'right' }}>Closed won</div>
+
                                     </div>
                                 )}
 
@@ -8757,13 +8757,13 @@ ${bodyHtml}
                                                 <div key={terr}>
                                                     {/* Territory section header — only shown in all-view */}
                                                     {viewerIsAdmin && terrFilter === 'all' && (
-                                                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 1.5rem', background:'#f8fafc', borderBottom:'1px solid #f1f5f9' }}>
-                                                            <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-                                                                <div style={{ width:'3px', height:'14px', borderRadius:'2px', background: dotBg === '#e2e8f0' ? '#94a3b8' : dotTxt }} />
-                                                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#475569', textTransform:'uppercase', letterSpacing:'0.06em' }}>{terr}</span>
+                                                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'7px 1.5rem', background:dotBg, borderBottom:'1px solid '+dotBg, borderTop:'1px solid '+dotBg }}>
+                                                            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                                                                <div style={{ width:'4px', height:'16px', borderRadius:'2px', background:dotTxt }} />
+                                                                <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:dotTxt, textTransform:'uppercase', letterSpacing:'0.08em' }}>{terr}</span>
                                                             </div>
-                                                            <span style={{ fontSize:'0.6875rem', color:'#94a3b8' }}>
-                                                                {terrReps.length} rep{terrReps.length !== 1 ? 's' : ''} · <strong style={{ color:'#1e293b' }}>${terrTotal.toLocaleString()}</strong>
+                                                            <span style={{ fontSize:'0.6875rem', color:dotTxt, opacity:0.8 }}>
+                                                                {terrReps.length} rep{terrReps.length !== 1 ? 's' : ''} · <strong>${terrTotal.toLocaleString()}</strong>
                                                             </span>
                                                         </div>
                                                     )}
@@ -8777,7 +8777,7 @@ ${bodyHtml}
                                                         const initials = (u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
                                                         const isLast = ui === terrReps.length - 1;
                                                         return (
-                                                            <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 200px 100px', gap:'0', padding:'10px 1.5rem', borderBottom: isLast && terrFilter !== 'all' ? 'none' : '1px solid #f1f5f9', alignItems:'center', transition:'background 0.1s' }}
+                                                            <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:'0', padding:'10px 1.5rem', borderBottom: isLast && terrFilter !== 'all' ? 'none' : '1px solid #f1f5f9', alignItems:'center', transition:'background 0.1s' }}
                                                                 onMouseEnter={e => e.currentTarget.style.background='#fafafa'}
                                                                 onMouseLeave={e => e.currentTarget.style.background='transparent'}>
                                                                 {/* Rep name + avatar */}
@@ -8807,10 +8807,7 @@ ${bodyHtml}
                                                                         {quota > 0 ? attainPct.toFixed(1)+'%' : '—'}
                                                                     </span>
                                                                 </div>
-                                                                {/* Closed won */}
-                                                                <div style={{ textAlign:'right', fontSize:'0.8125rem', color:'#64748b', fontWeight:'500' }}>
-                                                                    {repWon > 0 ? '$'+repWon.toLocaleString() : '—'}
-                                                                </div>
+
                                                             </div>
                                                         );
                                                     })}
@@ -8832,7 +8829,7 @@ ${bodyHtml}
                                                     const attainColor = attainPct >= 100 ? '#10b981' : attainPct >= 75 ? '#f59e0b' : attainPct >= 40 ? '#185FA5' : '#94a3b8';
                                                     const initials = (u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
                                                     return (
-                                                        <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 200px 100px', gap:'0', padding:'10px 1.5rem', borderBottom: ui < arr.length-1 ? '1px solid #f1f5f9' : 'none', alignItems:'center' }}
+                                                        <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:'0', padding:'10px 1.5rem', borderBottom: ui < arr.length-1 ? '1px solid #f1f5f9' : 'none', alignItems:'center' }}
                                                             onMouseEnter={e => e.currentTarget.style.background='#fafafa'}
                                                             onMouseLeave={e => e.currentTarget.style.background='transparent'}>
                                                             <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
@@ -8844,7 +8841,7 @@ ${bodyHtml}
                                                                 <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}><div style={{ height:'100%', width:attainPct+'%', background:attainColor, borderRadius:'3px' }} /></div>
                                                                 <span style={{ fontSize:'0.75rem', fontWeight:'700', color:attainColor, minWidth:'36px', textAlign:'right' }}>{quota > 0 ? attainPct.toFixed(1)+'%' : '—'}</span>
                                                             </div>
-                                                            <div style={{ textAlign:'right', fontSize:'0.8125rem', color:'#64748b' }}>{repWon > 0 ? '$'+repWon.toLocaleString() : '—'}</div>
+
                                                         </div>
                                                     );
                                                 })}
@@ -8855,18 +8852,13 @@ ${bodyHtml}
 
                                 {/* ── Footer total ── */}
                                 {filteredReps.length > 0 && (
-                                    <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 200px 100px', padding:'10px 1.5rem', background:'#f8fafc', borderTop:'1px solid #e2e8f0', alignItems:'center' }}>
+                                    <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 1.5rem', background:'#f8fafc', borderTop:'1px solid #e2e8f0', alignItems:'center' }}>
                                         <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em' }}>
                                             {viewerIsAdmin && terrFilter !== 'all' ? `${terrFilter} total` : 'Total assigned'}
                                         </div>
                                         <div style={{ fontSize:'1rem', fontWeight:'700', color:'#1e293b' }}>${filteredTotal.toLocaleString()}</div>
                                         <div />
-                                        <div style={{ textAlign:'right', fontSize:'0.8125rem', fontWeight:'600', color:'#10b981' }}>
-                                            ${filteredReps.reduce((s,u) => {
-                                                return s + (opportunities||[]).filter(o => o.stage === 'Closed Won' && (o.salesRep === u.name || o.assignedTo === u.name))
-                                                    .reduce((ss,o) => ss+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0), 0);
-                                            }, 0).toLocaleString()}
-                                        </div>
+
                                     </div>
                                 )}
                             </div>
