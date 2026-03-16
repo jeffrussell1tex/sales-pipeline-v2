@@ -371,8 +371,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                     })}
                                 </div>
                             </div>
-                            )}
-                        </div>
+                            )}{/* end leadView kanban */}
 
                         {/* BULK ACTION BAR */}
                         {canSeeAll && selectedLeads.length > 0 && (
