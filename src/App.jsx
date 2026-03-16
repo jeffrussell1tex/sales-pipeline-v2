@@ -387,8 +387,6 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                 <button onClick={() => { setSelectedLeads([]); setAssignTarget(''); }} style={{ marginLeft:'auto', background:'none', border:'none', color:'#64748b', fontSize:'0.75rem', cursor:'pointer', fontWeight:'600', fontFamily:'inherit' }}>Clear ✕</button>
                             </div>
                         )}
-                        </div>
-                        )}
                     </div>
                 </div>
 
