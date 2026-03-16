@@ -5212,17 +5212,14 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             <td style={{ whiteSpace: 'nowrap' }}>
                                                 {new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                             </td>
-                                            <td style={{ whiteSpace: 'nowrap' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                                    <div style={{ display: 'flex', gap: '3px' }}>
-                                                        <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedPipelineOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color: '#fff', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
-                                                        <button onClick={() => handleEdit(opp)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                                    </div>
-                                                    <div style={{ display: 'flex', gap: '3px' }}>
-                                                        <button onClick={() => { setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Activity</button>
-                                                        <button onClick={() => { setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Task</button>
-                                                        <button onClick={() => handleDelete(opp.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
-                                                    </div>
+                                            <td style={{ whiteSpace: 'nowrap' }}
+                                                onMouseEnter={e => { const btns = e.currentTarget.querySelector('.pipeline-hover-actions'); if (btns) btns.style.opacity='1'; }}
+                                                onMouseLeave={e => { const btns = e.currentTarget.querySelector('.pipeline-hover-actions'); if (btns && selectedPipelineOpp?.id !== opp.id) btns.style.opacity='0'; }}>
+                                                <div className="pipeline-hover-actions" style={{ display:'flex', alignItems:'center', gap:'4px', opacity: selectedPipelineOpp?.id === opp.id ? '1' : '0', transition:'opacity 0.15s' }}>
+                                                    <button onClick={e => { e.stopPropagation(); handleEdit(opp); }} title="Edit opportunity" style={{ padding:'3px 9px', borderRadius:'6px', border:'0.5px solid #cbd5e1', background:'#fff', color:'#475569', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>Edit</button>
+                                                    <button onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }} title="Log activity" style={{ padding:'3px 9px', borderRadius:'6px', border:'0.5px solid #cbd5e1', background:'#fff', color:'#475569', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>+ Act</button>
+                                                    <button onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }} title="Add task" style={{ padding:'3px 9px', borderRadius:'6px', border:'0.5px solid #cbd5e1', background:'#fff', color:'#475569', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>+ Task</button>
+                                                    <button onClick={e => { e.stopPropagation(); handleDelete(opp.id); }} title="Delete" style={{ padding:'3px 7px', borderRadius:'6px', border:'0.5px solid #fca5a5', background:'#fff', color:'#dc2626', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit' }}>✕</button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -7775,6 +7772,7 @@ ${bodyHtml}
   .kpi-label { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
   .kpi-value { font-size: 20px; font-weight: 800; color: #1e293b; line-height: 1.1; }
   .opp-hover-actions button:hover { background: #f8fafc !important; }
+  .pipeline-hover-actions button:hover { background: #f8fafc !important; }
   .kpi-sub { font-size: 9px; color: #64748b; margin-top: 3px; }
 
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
