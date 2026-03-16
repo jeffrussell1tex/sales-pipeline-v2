@@ -1353,6 +1353,10 @@ function App() {
     const [logFromCalLinkingId, setLogFromCalLinkingId] = useState(null);
     const [logFromCalOppMap, setLogFromCalOppMap] = useState({});
 
+    // Meeting prep panel state
+    const [meetingPrepEvent, setMeetingPrepEvent] = useState(null); // the calendar event being prepped
+    const [meetingPrepOpen, setMeetingPrepOpen] = useState(false);
+
     // Loading states for import/export operations
     const [exportingCSV, setExportingCSV] = useState(null); // tracks which CSV is exporting by key
     const [exportingBackup, setExportingBackup] = useState(false);
@@ -3927,13 +3931,14 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                                 <div style={{ fontSize: '0.6rem', color: '#e2e8f0', textAlign: 'center', padding: '0.5rem 0', userSelect: 'none' }}>—</div>
                                                             ) : (
                                                                 events.slice(0, 4).map((ev, ei) => (
-                                                                    <div key={ev.id || ei} title={ev.summary}
+                                                                    <div key={ev.id || ei} title={ev.summary + ' — click to prep'}
+                                                                        onClick={() => { setMeetingPrepEvent(ev); setMeetingPrepOpen(true); }}
                                                                         style={{
                                                                             background: getEventColor(ei) + '14',
                                                                             borderLeft: '2px solid ' + getEventColor(ei),
                                                                             borderRadius: '3px',
                                                                             padding: '0.2rem 0.3rem',
-                                                                            cursor: 'default'
+                                                                            cursor: 'pointer'
                                                                         }}>
                                                                         {ev.start?.dateTime && (
                                                                             <div style={{ fontSize: '0.575rem', fontWeight: '700', color: getEventColor(ei), lineHeight: 1 }}>
@@ -3943,6 +3948,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                                         <div style={{ fontSize: '0.625rem', fontWeight: '600', color: '#1e293b', lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                                                                             {ev.summary || 'Untitled'}
                                                                         </div>
+                                                                        <div style={{ fontSize: '0.525rem', color: getEventColor(ei), marginTop: '0.15rem', fontWeight: '700', letterSpacing: '0.03em' }}>PREP →</div>
                                                                     </div>
                                                                 ))
                                                             )}
@@ -4029,7 +4035,10 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                         <button onClick={() => setLogFromCalLinkingId(null)} style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#f8fafc', color: '#64748b', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
                                                     </div>
                                                 ) : (
-                                                    <button onClick={() => setLogFromCalLinkingId(ev.id)} style={{ fontSize: '0.75rem', padding: '0.25rem 0.75rem', border: '1px solid #2563eb', borderRadius: '6px', background: '#eff6ff', color: '#1d4ed8', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>Log this</button>
+                                                    <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
+                                                        <button onClick={() => { setMeetingPrepEvent(ev); setMeetingPrepOpen(true); }} style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem', border: '1px solid #7c3aed', borderRadius: '6px', background: '#f5f3ff', color: '#6d28d9', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Prep</button>
+                                                        <button onClick={() => setLogFromCalLinkingId(ev.id)} style={{ fontSize: '0.75rem', padding: '0.25rem 0.75rem', border: '1px solid #2563eb', borderRadius: '6px', background: '#eff6ff', color: '#1d4ed8', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Log this</button>
+                                                    </div>
                                                 )}
                                             </div>
                                         );
@@ -6015,7 +6024,10 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                     <button onClick={() => setLogFromCalLinkingId(null)} style={{ fontSize: '0.7rem', padding: '0.2rem 0.4rem', border: '1px solid #e2e8f0', borderRadius: '4px', background: '#f8fafc', color: '#64748b', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
                                                 </div>
                                             ) : (
-                                                <button onClick={() => setLogFromCalLinkingId(ev.id)} style={{ fontSize: '0.6875rem', padding: '0.2rem 0.625rem', border: '1px solid #2563eb', borderRadius: '4px', background: '#eff6ff', color: '#1d4ed8', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>Log this</button>
+                                                <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
+                                                    <button onClick={() => { setMeetingPrepEvent(ev); setMeetingPrepOpen(true); }} style={{ fontSize: '0.6875rem', padding: '0.2rem 0.5rem', border: '1px solid #7c3aed', borderRadius: '4px', background: '#f5f3ff', color: '#6d28d9', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Prep</button>
+                                                    <button onClick={() => setLogFromCalLinkingId(ev.id)} style={{ fontSize: '0.6875rem', padding: '0.2rem 0.625rem', border: '1px solid #2563eb', borderRadius: '4px', background: '#eff6ff', color: '#1d4ed8', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Log this</button>
+                                                </div>
                                             )}
                                         </div>
                                     );
@@ -10127,6 +10139,186 @@ ${bodyHtml}
                 </>
                 </div>
             )}
+
+            {/* ════ MEETING PREP PANEL ════ */}
+            {meetingPrepOpen && meetingPrepEvent && (() => {
+                const ev = meetingPrepEvent;
+                const evTitle = ev.summary || 'Untitled Event';
+                const evDate = ev.start?.date || (ev.start?.dateTime ? ev.start.dateTime.split('T')[0] : '');
+                const evTime = ev.start?.dateTime ? new Date(ev.start.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'All day';
+                const evEnd = ev.end?.dateTime ? new Date(ev.end.dateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : null;
+
+                // Try to match event to an opportunity by title keywords
+                const titleWords = evTitle.toLowerCase().split(/[\s\-–—,]+/).filter(w => w.length > 2);
+                const matchedOpp = (opportunities || []).find(o => {
+                    const haystack = ((o.opportunityName || '') + ' ' + (o.account || '')).toLowerCase();
+                    return titleWords.some(w => haystack.includes(w));
+                });
+
+                // Get account
+                const matchedAccount = matchedOpp
+                    ? (accounts || []).find(a => a.name?.toLowerCase() === (matchedOpp.account || '').toLowerCase())
+                    : null;
+
+                // Get recent activities
+                const recentActivities = matchedOpp
+                    ? (activities || []).filter(a => a.opportunityId === matchedOpp.id)
+                        .sort((a, b) => new Date(b.date) - new Date(a.date))
+                        .slice(0, 5)
+                    : [];
+
+                // Get open tasks
+                const openTasks = matchedOpp
+                    ? (tasks || []).filter(t => t.opportunityId === matchedOpp.id && (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed')
+                        .sort((a, b) => new Date(a.dueDate || '9999') - new Date(b.dueDate || '9999'))
+                        .slice(0, 5)
+                    : [];
+
+                // Deal health
+                const health = matchedOpp ? calculateDealHealth(matchedOpp) : null;
+                const healthColor = health ? (health.score >= 70 ? '#10b981' : health.score >= 40 ? '#f59e0b' : '#ef4444') : '#94a3b8';
+                const healthBg = health ? (health.score >= 70 ? '#d1fae5' : health.score >= 40 ? '#fef3c7' : '#fee2e2') : '#f1f5f9';
+
+                return (
+                    <>
+                        {/* Backdrop */}
+                        <div onClick={() => setMeetingPrepOpen(false)}
+                            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 9000 }} />
+
+                        {/* Slide-in panel */}
+                        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '420px', background: '#fff', zIndex: 9001, boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+
+                            {/* Header */}
+                            <div style={{ background: 'linear-gradient(135deg, #1e40af, #2563eb)', padding: '1.25rem 1.5rem', color: '#fff', flexShrink: 0 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#93c5fd', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.375rem' }}>Meeting Prep</div>
+                                    <button onClick={() => setMeetingPrepOpen(false)}
+                                        style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+                                </div>
+                                <div style={{ fontWeight: '800', fontSize: '1rem', lineHeight: 1.3, marginBottom: '0.375rem' }}>{evTitle}</div>
+                                <div style={{ fontSize: '0.8125rem', color: '#bfdbfe' }}>
+                                    {evDate} · {evTime}{evEnd ? ' – ' + evEnd : ''}{ev.attendeeCount > 0 ? ` · ${ev.attendeeCount} attendees` : ''}
+                                </div>
+                            </div>
+
+                            <div style={{ flex: 1, padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto' }}>
+
+                                {/* Opportunity match */}
+                                {matchedOpp ? (
+                                    <div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Linked Opportunity</div>
+                                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem 1rem' }}>
+                                            <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1e293b', marginBottom: '0.25rem' }}>{matchedOpp.opportunityName || matchedOpp.account}</div>
+                                            <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>{matchedOpp.account} · {matchedOpp.stage}</div>
+                                            <div style={{ fontWeight: '700', fontSize: '0.875rem', color: '#2563eb', marginTop: '0.25rem' }}>${(matchedOpp.arr || 0).toLocaleString()} ARR</div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '0.75rem 1rem', fontSize: '0.8125rem', color: '#92400e' }}>
+                                        No matching opportunity found. Link this event to a deal by logging it as an activity.
+                                    </div>
+                                )}
+
+                                {/* Deal Health */}
+                                {health && (
+                                    <div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Deal Health</div>
+                                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem 1rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                                                <span style={{ fontWeight: '800', fontSize: '1.5rem', color: healthColor }}>{health.score}</span>
+                                                <span style={{ background: healthBg, color: healthColor, fontSize: '0.75rem', fontWeight: '700', padding: '0.2rem 0.625rem', borderRadius: '999px' }}>{health.score >= 70 ? 'Healthy' : health.score >= 40 ? 'At Risk' : 'Critical'}</span>
+                                            </div>
+                                            <div style={{ height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden', marginBottom: '0.5rem' }}>
+                                                <div style={{ height: '100%', width: health.score + '%', background: healthColor, borderRadius: '3px', transition: 'width 0.4s ease' }} />
+                                            </div>
+                                            {health.reasons.slice(0, 2).map((r, i) => (
+                                                <div key={i} style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.25rem' }}>· {r}</div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Account details */}
+                                {matchedAccount && (
+                                    <div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Account</div>
+                                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem 1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                            {[
+                                                ['Industry', matchedAccount.industry],
+                                                ['Owner', matchedAccount.accountOwner],
+                                                ['Size', matchedAccount.employeeCount ? matchedAccount.employeeCount + ' employees' : null],
+                                                ['Website', matchedAccount.website],
+                                            ].filter(([, v]) => v).map(([label, value]) => (
+                                                <div key={label}>
+                                                    <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
+                                                    <div style={{ fontSize: '0.8125rem', color: '#1e293b', fontWeight: '500', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Recent Activities */}
+                                {matchedOpp && (
+                                    <div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Recent Activities</div>
+                                        {recentActivities.length === 0 ? (
+                                            <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic' }}>No activities logged yet</div>
+                                        ) : (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                                                {recentActivities.map(a => (
+                                                    <div key={a.id} style={{ display: 'flex', gap: '0.625rem', alignItems: 'flex-start', padding: '0.5rem 0.75rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                                                        <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#2563eb', background: '#eff6ff', padding: '0.15rem 0.375rem', borderRadius: '4px', whiteSpace: 'nowrap', flexShrink: 0 }}>{a.type}</div>
+                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                            <div style={{ fontSize: '0.75rem', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.notes || '—'}</div>
+                                                            <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '0.1rem' }}>{a.date}</div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Open Tasks */}
+                                {matchedOpp && (
+                                    <div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Open Tasks</div>
+                                        {openTasks.length === 0 ? (
+                                            <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic' }}>No open tasks</div>
+                                        ) : (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                                                {openTasks.map(t => (
+                                                    <div key={t.id} style={{ display: 'flex', gap: '0.625rem', alignItems: 'center', padding: '0.5rem 0.75rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                                                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: t.priority === 'High' ? '#ef4444' : t.priority === 'Low' ? '#10b981' : '#f59e0b', flexShrink: 0 }} />
+                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
+                                                            <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>Due {t.dueDate || '—'}</div>
+                                                        </div>
+                                                        <span style={{ fontSize: '0.6875rem', color: '#64748b', background: '#e2e8f0', padding: '0.1rem 0.375rem', borderRadius: '4px', flexShrink: 0 }}>{t.type}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Footer actions */}
+                            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                                <button onClick={() => { setMeetingPrepOpen(false); handleAddActivity(matchedOpp?.id || null); }}
+                                    style={{ flex: 1, padding: '0.5rem', border: 'none', borderRadius: '8px', background: '#2563eb', color: '#fff', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                    + Log Activity
+                                </button>
+                                <button onClick={() => { setMeetingPrepOpen(false); setEditingTask({ opportunityId: matchedOpp?.id || '', relatedTo: matchedOpp?.id || '' }); setShowTaskModal(true); }}
+                                    style={{ flex: 1, padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#f8fafc', color: '#475569', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                    + Add Task
+                                </button>
+                            </div>
+                        </div>
+                    </>
+                );
+            })()}
 
             {showModal && (
                 <OpportunityModal
