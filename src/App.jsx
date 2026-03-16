@@ -7445,6 +7445,66 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                     });
                 })();
 
+                // Apply period filter to activities (by date field)
+                const reportsTimedActivities = (() => {
+                    const allActs = activities || [];
+                    if (reportTimePeriod === 'all') return allActs;
+                    const now = new Date();
+                    const fy = now.getFullYear();
+                    const qRanges = {
+                        Q1: [`${fy}-01-01`, `${fy}-03-31`],
+                        Q2: [`${fy}-04-01`, `${fy}-06-30`],
+                        Q3: [`${fy}-07-01`, `${fy}-09-30`],
+                        Q4: [`${fy}-10-01`, `${fy}-12-31`],
+                        FY: [`${fy}-01-01`, `${fy}-12-31`],
+                    };
+                    if (reportTimePeriod === 'custom') {
+                        return allActs.filter(a => {
+                            const d = (a.date || a.createdAt || '').slice(0, 10);
+                            if (!d) return false;
+                            if (reportDateFrom && d < reportDateFrom) return false;
+                            if (reportDateTo && d > reportDateTo) return false;
+                            return true;
+                        });
+                    }
+                    const [from, to] = qRanges[reportTimePeriod] || [];
+                    if (!from) return allActs;
+                    return allActs.filter(a => {
+                        const d = (a.date || a.createdAt || '').slice(0, 10);
+                        return d >= from && d <= to;
+                    });
+                })();
+
+                // Apply period filter to leads (by createdAt)
+                const reportsTimedLeads = (() => {
+                    const allL = leads || [];
+                    if (reportTimePeriod === 'all') return allL;
+                    const now = new Date();
+                    const fy = now.getFullYear();
+                    const qRanges = {
+                        Q1: [`${fy}-01-01`, `${fy}-03-31`],
+                        Q2: [`${fy}-04-01`, `${fy}-06-30`],
+                        Q3: [`${fy}-07-01`, `${fy}-09-30`],
+                        Q4: [`${fy}-10-01`, `${fy}-12-31`],
+                        FY: [`${fy}-01-01`, `${fy}-12-31`],
+                    };
+                    if (reportTimePeriod === 'custom') {
+                        return allL.filter(l => {
+                            const d = (l.createdAt || '').slice(0, 10);
+                            if (!d) return false;
+                            if (reportDateFrom && d < reportDateFrom) return false;
+                            if (reportDateTo && d > reportDateTo) return false;
+                            return true;
+                        });
+                    }
+                    const [from, to] = qRanges[reportTimePeriod] || [];
+                    if (!from) return allL;
+                    return allL.filter(l => {
+                        const d = (l.createdAt || '').slice(0, 10);
+                        return d >= from && d <= to;
+                    });
+                })();
+
                 const wonOpps = reportsTimedOpps.filter(o => o.stage === 'Closed Won');
                 const lostOpps = reportsTimedOpps.filter(o => o.stage === 'Closed Lost');
                 const openOpps = reportsTimedOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
@@ -7787,6 +7847,33 @@ ${bodyHtml}
                                 )}
                               </div>
                             )}
+                            {/* Period filter — always visible for all subtabs */}
+                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap' }}>
+                                <div style={{ width:'1px', height:'16px', background:'#e2e8f0', flexShrink:0 }} />
+                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Period:</span>
+                                {(() => { const now = new Date(); const fy = now.getFullYear(); return (
+                                <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
+                                    {['all','Q1','Q2','Q3','Q4','FY','custom'].map(p => (
+                                        <button key={p} onClick={() => setReportTimePeriod(p)}
+                                            style={{ padding:'3px 12px', borderRadius:'999px', border:'1px solid', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'600', transition:'all 0.15s',
+                                                background: reportTimePeriod === p ? '#2563eb' : '#f8fafc',
+                                                color:      reportTimePeriod === p ? '#fff' : '#475569',
+                                                borderColor: reportTimePeriod === p ? '#2563eb' : '#e2e8f0' }}>
+                                            {p === 'all' ? 'All time' : p === 'FY' ? `FY ${fy}` : p === 'custom' ? 'Custom' : p}
+                                        </button>
+                                    ))}
+                                    {reportTimePeriod === 'custom' && (
+                                        <div style={{ display:'flex', alignItems:'center', gap:'0.375rem' }}>
+                                            <input type="date" value={reportDateFrom} onChange={e => setReportDateFrom(e.target.value)}
+                                                style={{ padding:'3px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.6875rem', fontFamily:'inherit', color:'#1e293b' }} />
+                                            <span style={{ fontSize:'0.6875rem', color:'#94a3b8' }}>to</span>
+                                            <input type="date" value={reportDateTo} onChange={e => setReportDateTo(e.target.value)}
+                                                style={{ padding:'3px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.6875rem', fontFamily:'inherit', color:'#1e293b' }} />
+                                        </div>
+                                    )}
+                                </div>
+                                ); })()}
+                            </div>
                           </div>
 
                           {/* ── Sub-navigation tabs ── */}
@@ -7809,40 +7896,6 @@ ${bodyHtml}
                             ))}
                           </div>
                         </div>
-
-                        {/* ── Sticky floating period filter bar — above KPI strip ── */}
-                        {['pipeline','performance','revenue'].includes(reportSubTab) && (() => {
-                            const now = new Date();
-                            const fy = now.getFullYear();
-                            return (
-                                <div style={{ position:'sticky', top:'0', zIndex:50, background:'rgba(255,255,255,0.97)', borderBottom:'1px solid #e2e8f0', padding:'0.5rem 1.25rem', display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap', backdropFilter:'blur(4px)' }}>
-                                    <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', flexShrink:0 }}>Period:</span>
-                                    {['all','Q1','Q2','Q3','Q4','FY','custom'].map(p => (
-                                        <button key={p} onClick={() => setReportTimePeriod(p)}
-                                            style={{ padding:'3px 12px', borderRadius:'999px', border:'1px solid', cursor:'pointer', fontFamily:'inherit', fontSize:'0.75rem', fontWeight:'600', transition:'all 0.15s',
-                                                background: reportTimePeriod === p ? '#2563eb' : 'transparent',
-                                                color:      reportTimePeriod === p ? '#fff' : '#475569',
-                                                borderColor: reportTimePeriod === p ? '#2563eb' : '#d1d5db' }}>
-                                            {p === 'all' ? 'All time' : p === 'FY' ? `FY ${fy}` : p === 'custom' ? 'Custom' : p}
-                                        </button>
-                                    ))}
-                                    {reportTimePeriod === 'custom' && (
-                                        <div style={{ display:'flex', alignItems:'center', gap:'0.375rem' }}>
-                                            <input type="date" value={reportDateFrom} onChange={e => setReportDateFrom(e.target.value)}
-                                                style={{ padding:'3px 8px', border:'1px solid #d1d5db', borderRadius:'6px', fontSize:'0.75rem', fontFamily:'inherit', color:'#1e293b' }} />
-                                            <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>to</span>
-                                            <input type="date" value={reportDateTo} onChange={e => setReportDateTo(e.target.value)}
-                                                style={{ padding:'3px 8px', border:'1px solid #d1d5db', borderRadius:'6px', fontSize:'0.75rem', fontFamily:'inherit', color:'#1e293b' }} />
-                                        </div>
-                                    )}
-                                    {reportTimePeriod !== 'all' && (
-                                        <span style={{ fontSize:'0.6875rem', color:'#64748b', marginLeft:'4px' }}>
-                                            {reportsTimedOpps.length} of {reportsOpps.length} opportunities
-                                        </span>
-                                    )}
-                                </div>
-                            );
-                        })()}
 
                         {/* ── KPI summary strip (always visible, below period filter) ── */}
                         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'0.75rem', padding:'0.75rem 1.25rem' }}>
@@ -8347,7 +8400,7 @@ ${bodyHtml}
                             const periodDays = { 'Last 7 Days':7, 'Last 30 Days':30, 'Last 90 Days':90, 'All Time': Infinity };
                             const days = periodDays[actPeriod];
                             const cutoff = days === Infinity ? new Date(0) : new Date(now - days*86400000);
-                            const filtActs = (activities||[]).filter(a => new Date(a.date||a.createdAt||0) >= cutoff);
+                            const filtActs = reportsTimedActivities.filter(a => new Date(a.date||a.createdAt||0) >= cutoff);
                             const byType = filtActs.reduce((acc,a)=>{ const t=a.type||'Other'; acc[t]=(acc[t]||0)+1; return acc; },{});
                             const typeRows = Object.entries(byType).sort((a,b)=>b[1]-a[1]);
                             const maxTypeCount = Math.max(...typeRows.map(([,c])=>c),1);
@@ -8538,7 +8591,7 @@ ${bodyHtml}
                             ════════════════════════════════════════════ */}
                         {reportSubTab === 'leads' && (() => {
                             const stageColors = { 'New':'#94a3b8','Contacted':'#0ea5e9','Qualified':'#8b5cf6','Working':'#f59e0b','Converted':'#10b981','Dead':'#ef4444' };
-                            const allLeads = leads || [];
+                            const allLeads = reportsTimedLeads;
                             const openLeads = allLeads.filter(l => l.status !== 'Converted' && l.status !== 'Dead');
                             const hotLeads = allLeads.filter(l => (l.score||0) >= 70);
                             const convertedLeads = allLeads.filter(l => l.status === 'Converted');
