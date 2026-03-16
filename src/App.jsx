@@ -3686,26 +3686,130 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                         isAdmin={isAdmin}
                     />
                     <div className="kpi-grid">
-                        {(() => { const kc = getKpiColor('totalPipelineARR', totalARR); return (
-                        <div className={`kpi-card home-style accent-blue ${kc.className}`} style={kc.toleranceColor ? { borderLeftColor: kc.toleranceColor } : {}}>
-                            <div className="kpi-label">Total Pipeline ARR</div>
-                            <div className="kpi-value">${totalARR.toLocaleString()}</div>
-                        </div>); })()}
-                        {(() => { const kc = getKpiColor('activeOpps', activeOpps); return (
-                        <div className={`kpi-card home-style accent-purple ${kc.className}`} style={kc.toleranceColor ? { borderLeftColor: kc.toleranceColor } : {}}>
-                            <div className="kpi-label">Active Opportunities</div>
-                            <div className="kpi-value">{activeOpps}</div>
-                        </div>); })()}
-                        {(() => { const openCount = visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed').length; const kc = getKpiColor('openTasks', openCount); return (
-                        <div className={`kpi-card home-style accent-amber ${kc.className}`} style={kc.toleranceColor ? { borderLeftColor: kc.toleranceColor } : {}}>
-                            <div className="kpi-label">Open Tasks</div>
-                            <div className="kpi-value">{openCount}</div>
-                        </div>); })()}
-                        {(() => { const fv = nextQuarter ? nextQuarter[1] : 0; const kc = getKpiColor('nextQForecast', fv); return (
-                        <div className={`kpi-card home-style accent-green ${kc.className}`} style={kc.toleranceColor ? { borderLeftColor: kc.toleranceColor } : {}}>
-                            <div className="kpi-label">{nextQuarter ? nextQuarter[0] : 'Next Quarter'} Forecast</div>
-                            <div className="kpi-value">${nextQuarter ? nextQuarter[1].toLocaleString() : '0'}</div>
-                        </div>); })()}
+                        {(() => {
+                            const kc = getKpiColor('totalPipelineARR', totalARR);
+                            // Sparkline: ARR by stage as 8 data points (cumulative stage totals)
+                            const stageList = (settings.funnelStages || []).map(s => s.name);
+                            const sparkPts = stageList.map(s => visibleOpportunities.filter(o => o.stage === s).reduce((sum,o)=>sum+(parseFloat(o.arr)||0),0));
+                            const sparkMax = Math.max(...sparkPts, 1);
+                            const pts = sparkPts.map((v,i) => `${i===0?0:Math.round((i/(sparkPts.length-1||1))*110)},${Math.round(28-(v/sparkMax)*24)}`).join(' ');
+                            const polyFill = pts + ` 110,28 0,28`;
+                            // Trend: compare current active pipeline ARR to closed won this quarter
+                            const closedWonARR = visibleOpportunities.filter(o=>o.stage==='Closed Won').reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                            const trendPct = totalARR > 0 ? Math.round((closedWonARR/totalARR)*100) : 0;
+                            const arrDisplay = totalARR >= 1000000 ? '$'+(totalARR/1000000).toFixed(1)+'M' : totalARR >= 1000 ? '$'+Math.round(totalARR/1000)+'K' : '$'+totalARR.toLocaleString();
+                            return (
+                            <div className={`kpi-card home-style accent-blue ${kc.className}`} style={{ ...(kc.toleranceColor ? { borderLeftColor: kc.toleranceColor } : {}), paddingBottom: '8px' }}>
+                                <div className="kpi-label">Total Pipeline ARR</div>
+                                <div className="kpi-value">{arrDisplay}</div>
+                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'6px' }}>
+                                    <span style={{ fontSize:'10px', fontWeight:'600', background:'#dbeafe', color:'#1e40af', padding:'2px 7px', borderRadius:'999px' }}>{activeOpps} active deals</span>
+                                    <span style={{ fontSize:'10px', color:'#94a3b8' }}>{trendPct}% converted</span>
+                                </div>
+                                <svg width="100%" height="28" viewBox="0 0 110 28" preserveAspectRatio="none" style={{ display:'block', marginTop:'8px' }}>
+                                    <polyline fill="#2563eb" fillOpacity="0.10" stroke="none" points={polyFill} />
+                                    <polyline fill="none" stroke="#2563eb" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" points={pts} opacity="0.7" />
+                                </svg>
+                            </div>); })()}
+                        {(() => {
+                            const kc = getKpiColor('activeOpps', activeOpps);
+                            // Trend: opps added in last 30 days
+                            const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-30);
+                            const recentOpps = visibleOpportunities.filter(o => o.createdDate && new Date(o.createdDate) > thirtyDaysAgo).length;
+                            // Sparkline: opp count per stage
+                            const stageList = (settings.funnelStages || []).map(s => s.name);
+                            const sparkPts = stageList.map(s => visibleOpportunities.filter(o=>o.stage===s).length);
+                            const sparkMax = Math.max(...sparkPts, 1);
+                            const pts = sparkPts.map((v,i) => `${i===0?0:Math.round((i/(sparkPts.length-1||1))*110)},${Math.round(28-(v/sparkMax)*24)}`).join(' ');
+                            const polyFill = pts + ` 110,28 0,28`;
+                            return (
+                            <div className={`kpi-card home-style accent-purple ${kc.className}`} style={{ ...(kc.toleranceColor ? { borderLeftColor: kc.toleranceColor } : {}), paddingBottom: '8px' }}>
+                                <div className="kpi-label">Active Opportunities</div>
+                                <div className="kpi-value">{activeOpps}</div>
+                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'6px' }}>
+                                    {recentOpps > 0
+                                        ? <span style={{ fontSize:'10px', fontWeight:'600', background:'#ede9fe', color:'#6d28d9', padding:'2px 7px', borderRadius:'999px' }}>▲ {recentOpps} added (30d)</span>
+                                        : <span style={{ fontSize:'10px', color:'#94a3b8' }}>No new (30d)</span>}
+                                    <span style={{ fontSize:'10px', color:'#94a3b8' }}>${Math.round(avgARR/1000)||0}K avg</span>
+                                </div>
+                                <svg width="100%" height="28" viewBox="0 0 110 28" preserveAspectRatio="none" style={{ display:'block', marginTop:'8px' }}>
+                                    <polyline fill="#9333ea" fillOpacity="0.09" stroke="none" points={polyFill} />
+                                    <polyline fill="none" stroke="#9333ea" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" points={pts} opacity="0.7" />
+                                </svg>
+                            </div>); })()}
+                        {(() => {
+                            const openCount = visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed').length;
+                            const overdueCount = visibleTasks.filter(t => {
+                                const notDone = (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed';
+                                const due = t.dueDate || t.due;
+                                return notDone && due && new Date(due) < new Date();
+                            }).length;
+                            const dueTodayCount = visibleTasks.filter(t => {
+                                const notDone = (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed';
+                                const due = t.dueDate || t.due;
+                                if (!notDone || !due) return false;
+                                const d = new Date(due); const today = new Date();
+                                return d.toDateString() === today.toDateString();
+                            }).length;
+                            const kc = getKpiColor('openTasks', openCount);
+                            return (
+                            <div className={`kpi-card home-style accent-amber ${kc.className}`} style={{ ...(kc.toleranceColor ? { borderLeftColor: kc.toleranceColor } : {}), paddingBottom: '8px' }}>
+                                <div className="kpi-label">Open Tasks</div>
+                                <div className="kpi-value">{openCount}</div>
+                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'6px' }}>
+                                    {overdueCount > 0
+                                        ? <span style={{ fontSize:'10px', fontWeight:'600', background:'#fee2e2', color:'#dc2626', padding:'2px 7px', borderRadius:'999px' }}>▼ {overdueCount} overdue</span>
+                                        : <span style={{ fontSize:'10px', fontWeight:'600', background:'#d1fae5', color:'#065f46', padding:'2px 7px', borderRadius:'999px' }}>All on track</span>}
+                                    {dueTodayCount > 0 && <span style={{ fontSize:'10px', color:'#94a3b8' }}>{dueTodayCount} due today</span>}
+                                </div>
+                                {/* Mini bar chart: completed vs open */}
+                                {(() => {
+                                    const completedCount = visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) === 'Completed').length;
+                                    const total = openCount + completedCount;
+                                    const donePct = total > 0 ? Math.round((completedCount/total)*100) : 0;
+                                    return (
+                                        <div style={{ marginTop:'10px' }}>
+                                            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
+                                                <span style={{ fontSize:'9px', color:'#94a3b8' }}>Completion rate</span>
+                                                <span style={{ fontSize:'9px', fontWeight:'700', color:'#475569' }}>{donePct}%</span>
+                                            </div>
+                                            <div style={{ height:'4px', background:'#f1f5f9', borderRadius:'99px', overflow:'hidden' }}>
+                                                <div style={{ height:'100%', width: donePct+'%', background:'#f59e0b', borderRadius:'99px', transition:'width 0.4s' }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>); })()}
+                        {(() => {
+                            const fv = nextQuarter ? nextQuarter[1] : 0;
+                            const kc = getKpiColor('nextQForecast', fv);
+                            // Quota attainment: sum quota for visible reps
+                            const quotaMode = (settings.users||[]).find(u=>u.quotaType)?.quotaType || 'annual';
+                            const totalQuota = (settings.users||[]).filter(u => u.userType !== 'ReadOnly' && isRepVisible(u.name)).reduce((s,u) => {
+                                if ((u.quotaType||quotaMode) === 'annual') return s+(u.annualQuota||0)/4;
+                                return s+(u.q1Quota||u.q2Quota||u.q3Quota||u.q4Quota||0);
+                            }, 0);
+                            const closedWonTotal = visibleOpportunities.filter(o=>o.stage==='Closed Won').reduce((s,o)=>s+(parseFloat(o.arr)||0)+(o.implementationCost||0),0);
+                            const attainPct = totalQuota > 0 ? Math.min(100, Math.round((closedWonTotal/totalQuota)*100)) : null;
+                            const fvDisplay = fv >= 1000000 ? '$'+(fv/1000000).toFixed(1)+'M' : fv >= 1000 ? '$'+Math.round(fv/1000)+'K' : '$'+fv.toLocaleString();
+                            return (
+                            <div className={`kpi-card home-style accent-green ${kc.className}`} style={{ ...(kc.toleranceColor ? { borderLeftColor: kc.toleranceColor } : {}), paddingBottom: '8px' }}>
+                                <div className="kpi-label">{nextQuarter ? nextQuarter[0] : 'Next Quarter'} Forecast</div>
+                                <div className="kpi-value">{fvDisplay}</div>
+                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'6px' }}>
+                                    {attainPct !== null
+                                        ? <span style={{ fontSize:'10px', fontWeight:'600', background: attainPct>=75?'#d1fae5':attainPct>=40?'#fef3c7':'#fee2e2', color: attainPct>=75?'#065f46':attainPct>=40?'#92400e':'#dc2626', padding:'2px 7px', borderRadius:'999px' }}>{attainPct}% of quota</span>
+                                        : <span style={{ fontSize:'10px', color:'#94a3b8' }}>No quota set</span>}
+                                    {closedWonTotal > 0 && <span style={{ fontSize:'10px', color:'#94a3b8' }}>${Math.round(closedWonTotal/1000)}K won</span>}
+                                </div>
+                                {attainPct !== null && (
+                                    <div style={{ marginTop:'10px' }}>
+                                        <div style={{ height:'4px', background:'#f1f5f9', borderRadius:'99px', overflow:'hidden' }}>
+                                            <div style={{ height:'100%', width: attainPct+'%', background: attainPct>=75?'#16a34a':attainPct>=40?'#f59e0b':'#ef4444', borderRadius:'99px', transition:'width 0.4s' }} />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>); })()}
                     </div>
 
                     {/* ── CROSS-PIPELINE SUMMARY (only when multiple pipelines) ── */}
@@ -5799,17 +5903,14 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 )}
                                             </td>
 
-                                            <td style={{ whiteSpace:'nowrap' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                                    <div style={{ display: 'flex', gap: '3px' }}>
-                                                        <button onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedOppTabOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color: '#fff', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
-                                                        <button onClick={() => handleEdit(opp)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                                    </div>
-                                                    <div style={{ display: 'flex', gap: '3px' }}>
-                                                        <button onClick={() => { setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName||opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Activity</button>
-                                                        <button onClick={() => { setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Task</button>
-                                                        <button onClick={() => handleDelete(opp.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
-                                                    </div>
+                                            <td style={{ whiteSpace:'nowrap' }}
+                                                onMouseEnter={e => { const btns = e.currentTarget.querySelector('.opp-hover-actions'); if (btns) btns.style.opacity='1'; }}
+                                                onMouseLeave={e => { const btns = e.currentTarget.querySelector('.opp-hover-actions'); if (btns && selectedOppTabOpp?.id !== opp.id) btns.style.opacity='0'; }}>
+                                                <div className="opp-hover-actions" style={{ display:'flex', alignItems:'center', gap:'4px', opacity: selectedOppTabOpp?.id === opp.id ? '1' : '0', transition:'opacity 0.15s' }}>
+                                                    <button onClick={e => { e.stopPropagation(); handleEdit(opp); }} title="Edit opportunity" style={{ padding:'3px 9px', borderRadius:'6px', border:'0.5px solid #cbd5e1', background:'#fff', color:'#475569', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>Edit</button>
+                                                    <button onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName||opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }} title="Log activity" style={{ padding:'3px 9px', borderRadius:'6px', border:'0.5px solid #cbd5e1', background:'#fff', color:'#475569', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>+ Act</button>
+                                                    <button onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }} title="Add task" style={{ padding:'3px 9px', borderRadius:'6px', border:'0.5px solid #cbd5e1', background:'#fff', color:'#475569', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>+ Task</button>
+                                                    <button onClick={e => { e.stopPropagation(); handleDelete(opp.id); }} title="Delete" style={{ padding:'3px 7px', borderRadius:'6px', border:'0.5px solid #fca5a5', background:'#fff', color:'#dc2626', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit' }}>✕</button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -7673,6 +7774,7 @@ ${bodyHtml}
   .kpi-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; }
   .kpi-label { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
   .kpi-value { font-size: 20px; font-weight: 800; color: #1e293b; line-height: 1.1; }
+  .opp-hover-actions button:hover { background: #f8fafc !important; }
   .kpi-sub { font-size: 9px; color: #64748b; margin-top: 3px; }
 
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
