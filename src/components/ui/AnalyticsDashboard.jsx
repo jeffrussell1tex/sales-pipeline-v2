@@ -1,12 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { stages } from '../../utils/constants';
-import { SliceDropdown } from './ViewingBar';
 
 export default function AnalyticsDashboard({ opportunities, settings, quotaData, accounts, users }) {
     const [analyticsExpanded, setAnalyticsExpanded] = useState({ forecast: true, metrics: true, stage: true, product: true, funnel: true, dealsByAccount: true, byTeam: true, byTerritory: true });
-    const [analyticsRep, setAnalyticsRep] = useState(null);
-    const [analyticsTeam, setAnalyticsTeam] = useState(null);
-    const [analyticsTerritory, setAnalyticsTerritory] = useState(null);
 
     const generateReport = (title, contentFn) => {
         const content = contentFn();
@@ -57,22 +53,9 @@ export default function AnalyticsDashboard({ opportunities, settings, quotaData,
         ...users.filter(u => u.name).map(u => u.name),
         ...opportunities.filter(o => o.salesRep).map(o => o.salesRep)
     ])].sort();
-    const hasSlicing = allRepNames.length > 1 || allTeams.length > 0 || allTerritories.length > 0;
 
     // Derive sliced opportunities — rep > team > territory priority; all filters ANDed
-    const slicedOpportunities = React.useMemo(() => {
-        let opps = opportunities;
-        if (analyticsRep) {
-            opps = opps.filter(o => o.salesRep === analyticsRep || o.assignedTo === analyticsRep);
-        } else if (analyticsTeam) {
-            const names = new Set(users.filter(u => u.team === analyticsTeam).map(u => u.name));
-            opps = opps.filter(o => names.has(o.salesRep) || names.has(o.assignedTo));
-        } else if (analyticsTerritory) {
-            const names = new Set(users.filter(u => u.territory === analyticsTerritory).map(u => u.name));
-            opps = opps.filter(o => names.has(o.salesRep) || names.has(o.assignedTo));
-        }
-        return opps;
-    }, [opportunities, users, analyticsRep, analyticsTeam, analyticsTerritory]);
+    const slicedOpportunities = opportunities;
 
     // Helper: get pipeline/won for a rep or group
     const getGroupStats = (opps) => {
@@ -250,35 +233,6 @@ export default function AnalyticsDashboard({ opportunities, settings, quotaData,
 
     return (
         <>
-            {/* Slice selector — Reps / Teams / Territories */}
-            {hasSlicing && (
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.75rem 1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0, marginRight: '0.25rem' }}>Viewing:</span>
-                {allRepNames.length > 1 && (
-                    <SliceDropdown label="Rep" icon="👤" options={allRepNames} selected={analyticsRep}
-                        onSelect={v => { setAnalyticsRep(v); if (v) { setAnalyticsTeam(null); setAnalyticsTerritory(null); } }} />
-                )}
-                {allTeams.length > 0 && (
-                    <SliceDropdown label="Team" icon="👥" options={allTeams} selected={analyticsTeam}
-                        onSelect={v => { setAnalyticsTeam(v); if (v) { setAnalyticsRep(null); setAnalyticsTerritory(null); } }} />
-                )}
-                {allTerritories.length > 0 && (
-                    <SliceDropdown label="Territory" icon="📍" options={allTerritories} selected={analyticsTerritory}
-                        onSelect={v => { setAnalyticsTerritory(v); if (v) { setAnalyticsRep(null); setAnalyticsTeam(null); } }} />
-                )}
-                {(analyticsRep || analyticsTeam || analyticsTerritory) && (
-                    <>
-                        <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>
-                            {slicedOpportunities.length} of {opportunities.length} opportunities
-                        </span>
-                        <button onClick={() => { setAnalyticsRep(null); setAnalyticsTeam(null); setAnalyticsTerritory(null); }}
-                            style={{ marginLeft: 'auto', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid #e2e8f0', background: '#fff', color: '#94a3b8', fontSize: '0.625rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
-                            ✕ Clear
-                        </button>
-                    </>
-                )}
-            </div>
-            )}
 
             <div className="kpi-grid" style={{ marginBottom: '1.5rem' }}>
                 <div className="kpi-card neutral" style={{ background: '#ecfdf5', borderColor: '#a7f3d0' }}>

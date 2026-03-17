@@ -1415,6 +1415,8 @@ function App() {
     const [taskStatusFilter, setTaskStatusFilter] = useState([]);
     const [newPainPointInput, setNewPainPointInput] = useState('');
     const [newVerticalMarketInput, setNewVerticalMarketInput] = useState('');
+    const [newSubIndustryInput, setNewSubIndustryInput] = useState('');
+    const [expandedIndustry, setExpandedIndustry] = useState(null);
     
     // Activity Timeline & History
     const [activities, setActivities] = useState([]);
@@ -10085,117 +10087,129 @@ ${bodyHtml}
                                 <h2>INDUSTRIES</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
-                                <div style={{ marginBottom: '2rem' }}>
-                                    <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>
-                                        Add New Industry
-                                    </h3>
-                                    <div style={{ display: 'flex', gap: '0.5rem', maxWidth: '500px' }}>
-                                        <input
-                                            type="text"
-                                            value={newVerticalMarketInput}
-                                            onChange={(e) => setNewVerticalMarketInput(e.target.value)}
-                                            placeholder="Enter new industry..."
-                                            style={{
-                                                flex: 1,
-                                                background: '#f8f9fa',
-                                                border: '1px solid #e2e8f0',
-                                                borderRadius: '6px',
-                                                padding: '0.625rem 0.75rem',
-                                                color: '#1e293b',
-                                                fontSize: '0.875rem'
-                                            }}
-                                            onKeyPress={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    const value = newVerticalMarketInput.trim();
-                                                    if (value && !(settings.verticalMarkets || []).includes(value)) {
-                                                        setSettings(prev => ({
-                                                            ...prev,
-                                                            verticalMarkets: [...(prev.verticalMarkets || []), value]
-                                                        }));
-                                                        setNewVerticalMarketInput('');
-                                                    }
-                                                }
-                                            }}
-                                        />
-                                        <button
-                                            className="btn"
-                                            onClick={() => {
-                                                const value = newVerticalMarketInput.trim();
-                                                if (value) {
-                                                    const current = settings.verticalMarkets || [];
-                                                    if (!current.includes(value)) {
-                                                        setSettings(prev => ({
-                                                            ...prev,
-                                                            verticalMarkets: [...current, value]
-                                                        }));
-                                                        setNewVerticalMarketInput('');
-                                                    }
-                                                }
-                                            }}
-                                        >
-                                            + ADD
-                                        </button>
-                                    </div>
-                                </div>
+                                {/* Helper: normalize verticalMarkets to object array */}
+                                {(() => {
+                                    const rawList = settings.verticalMarkets || [];
+                                    const industries = rawList.map(m => typeof m === 'string' ? { name: m, subs: [] } : m);
+                                    const saveIndustries = (updated) => setSettings(prev => ({ ...prev, verticalMarkets: updated }));
 
-                                <div>
-                                    <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>
-                                        Industries ({(settings.verticalMarkets || []).length})
-                                    </h3>
-                                    {(settings.verticalMarkets || []).length === 0 ? (
-                                        <div style={{ 
-                                            textAlign: 'center', 
-                                            padding: '3rem', 
-                                            color: '#64748b',
-                                            background: '#f1f3f5',
-                                            borderRadius: '8px'
-                                        }}>
-                                            No vertical markets yet. Add one above to get started.
+                                    return (
+                                        <>
+                                        {/* Add primary industry */}
+                                        <div style={{ marginBottom: '2rem' }}>
+                                            <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>Add Primary Industry</h3>
+                                            <div style={{ display: 'flex', gap: '0.5rem', maxWidth: '500px' }}>
+                                                <input type="text" value={newVerticalMarketInput}
+                                                    onChange={e => setNewVerticalMarketInput(e.target.value)}
+                                                    placeholder="e.g. Oil & Gas, Manufacturing..."
+                                                    style={{ flex: 1, background: '#f8f9fa', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.625rem 0.75rem', color: '#1e293b', fontSize: '0.875rem' }}
+                                                    onKeyPress={e => {
+                                                        if (e.key === 'Enter') {
+                                                            const v = newVerticalMarketInput.trim();
+                                                            if (v && !industries.some(i => i.name.toLowerCase() === v.toLowerCase())) {
+                                                                saveIndustries([...industries, { name: v, subs: [] }]);
+                                                                setNewVerticalMarketInput('');
+                                                            }
+                                                        }
+                                                    }}
+                                                />
+                                                <button className="btn" onClick={() => {
+                                                    const v = newVerticalMarketInput.trim();
+                                                    if (v && !industries.some(i => i.name.toLowerCase() === v.toLowerCase())) {
+                                                        saveIndustries([...industries, { name: v, subs: [] }]);
+                                                        setNewVerticalMarketInput('');
+                                                    }
+                                                }}>+ Add</button>
+                                            </div>
                                         </div>
-                                    ) : (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                            {[...(settings.verticalMarkets || [])].sort((a, b) => a.localeCompare(b)).map((market, idx) => (
-                                                <div key={idx} style={{
-                                                    background: '#ffffff',
-                                                    padding: '0.625rem 1rem',
-                                                    borderRadius: '6px',
-                                                    fontSize: '0.875rem',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'space-between',
-                                                    border: '1px solid #e2e8f0'
-                                                }}>
-                                                    <span style={{ fontWeight: '500' }}>{market}</span>
-                                                    <button
-                                                        onClick={() => {
-                                                            showConfirm(`Remove "${market}" from vertical markets?`, () => {
-                                                                setSettings(prev => ({
-                                                                    ...prev,
-                                                                    verticalMarkets: prev.verticalMarkets.filter((_, i) => i !== idx)
-                                                                }));
-                                                            });
-                                                        }}
-                                                        style={{
-                                                            background: '#ef4444',
-                                                            border: 'none',
-                                                            color: 'white',
-                                                            cursor: 'pointer',
-                                                            fontSize: '1.2rem',
-                                                            padding: '0.125rem 0.375rem',
-                                                            lineHeight: 1,
-                                                            borderRadius: '4px',
-                                                            transition: 'opacity 0.2s'
-                                                        }}
-                                                        onMouseEnter={e => e.target.style.opacity = '0.8'}
-                                                        onMouseLeave={e => e.target.style.opacity = '1'}
-                                                    >
-                                                        ×
-                                                    </button>
+
+                                        {/* Industry list */}
+                                        <div>
+                                            <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>
+                                                Industries ({industries.length})
+                                            </h3>
+                                            {industries.length === 0 ? (
+                                                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b', background: '#f1f3f5', borderRadius: '8px' }}>
+                                                    No industries yet. Add one above to get started.
                                                 </div>
-                                            ))}
+                                            ) : (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                    {[...industries].sort((a, b) => a.name.localeCompare(b.name)).map((industry, idx) => {
+                                                        const realIdx = industries.findIndex(i => i.name === industry.name);
+                                                        const isExpanded = expandedIndustry === industry.name;
+                                                        return (
+                                                            <div key={industry.name} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                                                                {/* Primary row */}
+                                                                <div style={{ display: 'flex', alignItems: 'center', padding: '0.625rem 1rem', gap: '0.5rem' }}>
+                                                                    <button onClick={() => setExpandedIndustry(isExpanded ? null : industry.name)}
+                                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#2563eb', padding: '0', width: '16px', flexShrink: 0 }}>
+                                                                        {isExpanded ? '▼' : '▶'}
+                                                                    </button>
+                                                                    <span style={{ fontWeight: '600', fontSize: '0.875rem', flex: 1 }}>{industry.name}</span>
+                                                                    {industry.subs.length > 0 && (
+                                                                        <span style={{ fontSize: '0.6875rem', color: '#94a3b8', background: '#f1f5f9', padding: '1px 6px', borderRadius: '999px' }}>{industry.subs.length} sub{industry.subs.length > 1 ? 's' : ''}</span>
+                                                                    )}
+                                                                    <button onClick={() => setExpandedIndustry(isExpanded ? null : industry.name)}
+                                                                        style={{ fontSize: '0.6875rem', fontWeight: '600', color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                                                                        + Sub-industry
+                                                                    </button>
+                                                                    <button onClick={() => showConfirm(`Remove "${industry.name}" and all its sub-industries?`, () => {
+                                                                        saveIndustries(industries.filter((_, i) => i !== realIdx));
+                                                                        if (expandedIndustry === industry.name) setExpandedIndustry(null);
+                                                                    })} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '1rem', padding: '0 0 0 4px', lineHeight: 1 }}>×</button>
+                                                                </div>
+
+                                                                {/* Sub-industries + add row */}
+                                                                {isExpanded && (
+                                                                    <div style={{ borderTop: '1px solid #f1f5f9', background: '#f8fafc', padding: '0.625rem 1rem 0.625rem 2.5rem' }}>
+                                                                        {industry.subs.length > 0 && (
+                                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '0.5rem' }}>
+                                                                                {industry.subs.map((sub, si) => (
+                                                                                    <div key={si} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8125rem' }}>
+                                                                                        <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>↳</span>
+                                                                                        <span style={{ flex: 1, color: '#475569' }}>{sub}</span>
+                                                                                        <button onClick={() => {
+                                                                                            const updated = industries.map((ind, i) => i === realIdx ? { ...ind, subs: ind.subs.filter((_, j) => j !== si) } : ind);
+                                                                                            saveIndustries(updated);
+                                                                                        }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.875rem', padding: '0', lineHeight: 1 }}>×</button>
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                        <div style={{ display: 'flex', gap: '0.375rem' }}>
+                                                                            <input type="text" value={newSubIndustryInput}
+                                                                                onChange={e => setNewSubIndustryInput(e.target.value)}
+                                                                                placeholder={`Add sub-industry under ${industry.name}...`}
+                                                                                style={{ flex: 1, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '5px', padding: '0.375rem 0.625rem', fontSize: '0.8125rem', color: '#1e293b' }}
+                                                                                onKeyPress={e => {
+                                                                                    if (e.key === 'Enter') {
+                                                                                        const v = newSubIndustryInput.trim();
+                                                                                        if (v && !industry.subs.includes(v)) {
+                                                                                            saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind));
+                                                                                            setNewSubIndustryInput('');
+                                                                                        }
+                                                                                    }
+                                                                                }}
+                                                                            />
+                                                                            <button onClick={() => {
+                                                                                const v = newSubIndustryInput.trim();
+                                                                                if (v && !industry.subs.includes(v)) {
+                                                                                    saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind));
+                                                                                    setNewSubIndustryInput('');
+                                                                                }
+                                                                            }} style={{ padding: '0.375rem 0.75rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '5px', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Add</button>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
-                                </div>
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
                     )}

@@ -73,7 +73,19 @@ export default function AccountModal({ account, isSubAccount, settings, onClose,
         onSave(saveData);
     };
 
-    const verticalMarkets = settings?.verticalMarkets || [];
+    const verticalMarkets = React.useMemo(() => {
+        const raw = settings?.verticalMarkets || [];
+        const options = [];
+        raw.forEach(m => {
+            if (typeof m === 'string') {
+                options.push(m);
+            } else {
+                options.push(m.name);
+                (m.subs || []).forEach(s => options.push(s));
+            }
+        });
+        return options.sort((a, b) => a.localeCompare(b));
+    }, [settings?.verticalMarkets]);
 
     return (
         <>
@@ -228,26 +240,47 @@ export default function AccountModal({ account, isSubAccount, settings, onClose,
                                 <div style={{
                                     position: 'absolute', top: '100%', left: 0, right: 0,
                                     background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '6px',
-                                    marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto',
+                                    marginTop: '0.25rem', maxHeight: '220px', overflowY: 'auto',
                                     zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                                 }}>
-                                    {verticalMarkets
-                                        .filter(m => m.toLowerCase().includes(verticalSearch.toLowerCase()))
-                                        .map((market, idx) => (
-                                            <div key={idx}
-                                                onClick={() => { setVerticalSearch(market); setShowVerticalSuggestions(false); }}
-                                                style={{ padding: '0.75rem', cursor: 'pointer', borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }}
-                                                onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
-                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                            >
-                                                {market}
-                                            </div>
-                                        ))}
-                                    {verticalMarkets.length === 0 && (
-                                        <div style={{ padding: '0.75rem', color: '#94a3b8', fontSize: '0.8125rem' }}>
-                                            No industries defined yet — add them in Settings → Industries.
-                                        </div>
-                                    )}
+                                    {(() => {
+                                        const raw = settings?.verticalMarkets || [];
+                                        const q = verticalSearch.toLowerCase();
+                                        const rows = [];
+                                        raw.forEach((m, mi) => {
+                                            const name = typeof m === 'string' ? m : m.name;
+                                            const subs = typeof m === 'string' ? [] : (m.subs || []);
+                                            const nameMatch = name.toLowerCase().includes(q);
+                                            const matchingSubs = subs.filter(s => s.toLowerCase().includes(q));
+                                            if (!nameMatch && matchingSubs.length === 0) return;
+                                            rows.push(
+                                                <div key={'p-'+mi}
+                                                    onClick={() => { setVerticalSearch(name); setShowVerticalSuggestions(false); }}
+                                                    style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '6px', transition: 'background 0.15s' }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                    <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{name}</span>
+                                                    {subs.length > 0 && <span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>{subs.length} sub{subs.length > 1 ? 's' : ''}</span>}
+                                                </div>
+                                            );
+                                            (nameMatch ? subs : matchingSubs).forEach((sub, si) => {
+                                                rows.push(
+                                                    <div key={'s-'+mi+'-'+si}
+                                                        onClick={() => { setVerticalSearch(sub); setShowVerticalSuggestions(false); }}
+                                                        style={{ padding: '0.4rem 0.75rem 0.4rem 1.5rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '6px', transition: 'background 0.15s' }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                        <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>↳</span>
+                                                        <span style={{ fontSize: '0.8125rem', color: '#475569' }}>{sub}</span>
+                                                    </div>
+                                                );
+                                            });
+                                        });
+                                        if (rows.length === 0) {
+                                            return <div style={{ padding: '0.75rem', color: '#94a3b8', fontSize: '0.8125rem' }}>No industries defined yet — add them in Settings → Industries.</div>;
+                                        }
+                                        return rows;
+                                    })()}
                                 </div>
                             )}
                         </div>
