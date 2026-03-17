@@ -1258,6 +1258,11 @@ function App() {
         };
     });
     const [showModal, setShowModal] = useState(false);
+    const [showSpiffClaimModal, setShowSpiffClaimModal] = useState(false);
+    const [spiffClaimContext, setSpiffClaimContext] = useState(null); // { opp }
+    const [spiffClaims, setSpiffClaims] = useState(() => {
+        try { return JSON.parse(safeStorage.getItem('spiffClaims') || '[]'); } catch { return []; }
+    });
     const [showAccountModal, setShowAccountModal] = useState(false);
     const [showUserModal, setShowUserModal] = useState(false);
     const [showTaskModal, setShowTaskModal] = useState(false);
@@ -1722,6 +1727,10 @@ dbFetch('/.netlify/functions/users?me=true')
         body: JSON.stringify(settingsToSave)
     }).catch(err => console.error('Failed to save settings:', err));
 }, [settings]);
+
+    useEffect(() => {
+        try { safeStorage.setItem('spiffClaims', JSON.stringify(spiffClaims)); } catch(e) {}
+    }, [spiffClaims]);
 
 
 
@@ -5384,6 +5393,10 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }}>+ Log Activity</button>
                                             <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
                                                 onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Add Task</button>
+                                            {opp.stage === 'Closed Won' && (settings.spiffs||[]).filter(s=>s.active).length > 0 && (
+                                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%', borderColor: '#7c3aed', color: '#7c3aed' }}
+                                                    onClick={e => { e.stopPropagation(); setSpiffClaimContext({ opp }); setShowSpiffClaimModal(true); }}>⚡ Claim SPIFF</button>
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -6015,6 +6028,10 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }}>+ Log Activity</button>
                                             <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
                                                 onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Add Task</button>
+                                            {opp.stage === 'Closed Won' && (settings.spiffs||[]).filter(s=>s.active).length > 0 && (
+                                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%', borderColor: '#7c3aed', color: '#7c3aed' }}
+                                                    onClick={e => { e.stopPropagation(); setSpiffClaimContext({ opp }); setShowSpiffClaimModal(true); }}>⚡ Claim SPIFF</button>
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -8531,6 +8548,51 @@ ${bodyHtml}
                               win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Commissions — ${periodLabel}</title><style>body{font-family:system-ui,sans-serif;padding:2rem;color:#1e293b}h1{font-size:1.25rem;font-weight:800}table{width:100%;border-collapse:collapse;margin-top:1rem}th,td{padding:.5rem .75rem;border:1px solid #e2e8f0;font-size:.875rem}th{background:#f8fafc;font-weight:700}tfoot td{font-weight:700;background:#f1f5f9}</style></head><body><h1>Commissions Report — ${periodLabel}</h1><p style="color:#64748b;font-size:.875rem">Generated ${meta} · Sales Pipeline Tracker</p><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td>Total</td><td></td><td style="text-align:right">$${totals.rev.toLocaleString()}</td><td></td><td></td><td style="text-align:right">$${Math.round(totals.commission).toLocaleString()}</td>${hasSpiffs?`<td style="text-align:right">$${Math.round(totals.spiff).toLocaleString()}</td><td style="text-align:right">$${Math.round(totals.total).toLocaleString()}</td>`:''}</tr></tfoot></table></body></html>`);
                               win.document.close(); setTimeout(()=>win.print(),500);
                             };
+                            const exportCommissionsCSV = () => {
+                              const csvHeaders = ['Rep','Opportunity','Account','Close Date','ARR','Impl Cost','Total Revenue','Commission Rate','Commission',...(hasSpiffs?['SPIFFs','Total Earnings']:[])];
+                              const csvRows = [];
+                              repRows2.forEach(r => {
+                                const rw = periodOpps.filter(o => (o.salesRep||o.assignedTo) === r.name);
+                                const quot = r.quot;
+                                const rate = (() => { const plan = settings.commissionPlan || { tiers:[{threshold:0,rate:0.05}] }; const tiers = plan.tiers || [{threshold:0,rate:0.05}]; const attain = quot > 0 ? r.rev/quot : 0; const tier = [...tiers].reverse().find(t=>(t.threshold||0)/100<=attain) || tiers[0]; return tier?.rate || 0.05; })();
+                                if (rw.length === 0) {
+                                  csvRows.push([r.name,'—','—','—','0','0','0',(rate*100).toFixed(1)+'%','0',...(hasSpiffs?[Math.round(r.spiff),Math.round(r.total)]:[])]);
+                                } else {
+                                  rw.forEach((o, oi) => {
+                                    const oArr = parseFloat(o.arr)||0;
+                                    const oImpl = parseFloat(o.implementationCost)||0;
+                                    const oRev = oArr + oImpl;
+                                    const oDealComm = oRev * rate;
+                                    csvRows.push([
+                                      oi === 0 ? r.name : '',
+                                      o.opportunityName || o.account || '—',
+                                      o.account || '—',
+                                      o.forecastedCloseDate || o.closeDate || '—',
+                                      oArr, oImpl, oRev,
+                                      (rate*100).toFixed(1)+'%',
+                                      Math.round(oDealComm),
+                                      ...(hasSpiffs ? [oi === 0 ? Math.round(r.spiff) : '', oi === 0 ? Math.round(r.total) : ''] : [])
+                                    ]);
+                                  });
+                                  // Rep subtotal row
+                                  csvRows.push([
+                                    `${r.name} SUBTOTAL`, '', '', '',
+                                    rw.reduce((s,o)=>s+(parseFloat(o.arr)||0),0),
+                                    rw.reduce((s,o)=>s+(parseFloat(o.implementationCost)||0),0),
+                                    r.rev, '', Math.round(r.comm),
+                                    ...(hasSpiffs ? [Math.round(r.spiff), Math.round(r.total)] : [])
+                                  ]);
+                                  csvRows.push(['','','','','','','','','','','']); // blank row between reps
+                                }
+                              });
+                              const esc = v => `"${String(v).replace(/"/g,'""')}"`;
+                              const csv = [csvHeaders.map(esc).join(','), ...csvRows.map(r => r.map(esc).join(','))].join('\n');
+                              const blob = new Blob([csv], { type:'text/csv' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url; a.download = `commissions-detail-${periodLabel.replace(/\s+/g,'-').toLowerCase()}.csv`;
+                              a.click(); URL.revokeObjectURL(url);
+                            };
                             return (
                             <div style={cardStyle}>
                               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem', flexWrap:'wrap', gap:'0.5rem' }}>
@@ -8542,6 +8604,7 @@ ${bodyHtml}
                                     ))}
                                   </div>
                                   <button onClick={printCommissions} style={printBtnStyle} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>🖨️ Print</button>
+                                  <button onClick={exportCommissionsCSV} style={printBtnStyle} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>📤 Export CSV</button>
                                 </div>
                               </div>
                               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:'0.75rem', marginBottom:'1rem' }}>
@@ -9431,7 +9494,33 @@ ${bodyHtml}
 
                                 {/* Commission Preview by rep */}
                                 <div style={smCard}>
-                                    <div style={smHdr}><div style={smTitle}>Commission Preview by Rep</div></div>
+                                    <div style={smHdr}>
+                                        <div style={smTitle}>Commission Preview by Rep</div>
+                                        <button onClick={() => {
+                                            const smActiveSpiffs2 = (settings.spiffs||[]).filter(s => s.active);
+                                            const hasSmSpiffs2 = smActiveSpiffs2.length > 0;
+                                            const hdrs = ['Rep','Territory','Quota','50%','75%','100%','125%','150%',...(hasSmSpiffs2?['+SPIFFs (est @100%)']:[])];
+                                            const rows = allReps.filter(u => getRepTotal(u) > 0).map(u => {
+                                                const tq = getRepTotal(u);
+                                                const spiffEst = smActiveSpiffs2.reduce((tot,s) => {
+                                                    const amt = parseFloat(s.amount)||0;
+                                                    if (s.type==='flat') return tot+amt;
+                                                    if (s.type==='pct') return tot+tq*amt/100;
+                                                    if (s.type==='multiplier') return tot+calcCommission(tq,tq)*(amt-1);
+                                                    return tot;
+                                                },0);
+                                                return [u.name, u.territory||'—', tq,
+                                                    ...[50,75,100,125,150].map(p=>Math.round(calcCommission((p/100)*tq,tq))),
+                                                    ...(hasSmSpiffs2?[Math.round(spiffEst)]:[])];
+                                            });
+                                            const esc = v => `"${String(v).replace(/"/g,'""')}"`;
+                                            const csv = [hdrs.map(esc).join(','), ...rows.map(r=>r.map(esc).join(','))].join('\n');
+                                            const blob = new Blob([csv],{type:'text/csv'});
+                                            const url = URL.createObjectURL(blob);
+                                            const a = document.createElement('a');
+                                            a.href=url; a.download='commission-preview.csv'; a.click(); URL.revokeObjectURL(url);
+                                        }} style={printBtnStyle} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>📤 Export CSV</button>
+                                    </div>
                                     <div style={{ padding:'1.25rem 1.5rem' }}>
                                         {(() => {
                                             const smActiveSpiffs = (settings.spiffs||[]).filter(s => s.active);
@@ -9503,6 +9592,77 @@ ${bodyHtml}
                                             <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.5rem' }}>* SPIFF column shows estimated bonus at 100% attainment</div>
                                         )}
                                     </div>
+                                </div>
+                            </div>
+
+                            {/* ── SPIFF Claims ── */}
+                            <div style={smCard}>
+                                <div style={smHdr}>
+                                    <div>
+                                        <div style={smTitle}>SPIFF Claims</div>
+                                        <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'0.125rem' }}>Review and approve SPIFF claims submitted by reps</div>
+                                    </div>
+                                    <div style={{ display:'flex', gap:'0.375rem' }}>
+                                        {['all','pending','approved','rejected','paid'].map(s => (
+                                            <button key={s} onClick={() => setSettings(prev => ({ ...prev, _spiffClaimFilter: s }))}
+                                                style={{ padding:'0.2rem 0.5rem', borderRadius:'999px', border:'none', cursor:'pointer', fontSize:'0.625rem', fontWeight:'700', fontFamily:'inherit',
+                                                    background: (settings._spiffClaimFilter||'pending') === s ? '#2563eb' : '#e2e8f0',
+                                                    color: (settings._spiffClaimFilter||'pending') === s ? '#fff' : '#64748b' }}>
+                                                {s.charAt(0).toUpperCase()+s.slice(1)}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div style={{ padding:'1.25rem 1.5rem' }}>
+                                    {(() => {
+                                        const filter = settings._spiffClaimFilter || 'pending';
+                                        const filtered = spiffClaims.filter(c => filter === 'all' || c.status === filter)
+                                            .sort((a,b) => new Date(b.claimedAt) - new Date(a.claimedAt));
+                                        if (filtered.length === 0) return (
+                                            <div style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.8125rem', background:'#f8fafc', borderRadius:'8px', border:'1.5px dashed #e2e8f0' }}>
+                                                No {filter === 'all' ? '' : filter} SPIFF claims yet.
+                                            </div>
+                                        );
+                                        return (
+                                            <div style={{ display:'flex', flexDirection:'column', gap:'0' }}>
+                                                {filtered.map((claim, ci) => (
+                                                    <div key={claim.id} style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.625rem 0', borderBottom: ci < filtered.length-1 ? '1px solid #f1f5f9' : 'none', flexWrap:'wrap' }}>
+                                                        <div style={{ flex:1, minWidth:0 }}>
+                                                            <div style={{ fontWeight:'600', fontSize:'0.8125rem', color:'#1e293b' }}>{claim.spiffName}</div>
+                                                            <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'1px' }}>
+                                                                {claim.repName} · {claim.opportunityName} · {claim.account}
+                                                                <span style={{ marginLeft:'0.5rem' }}>{new Date(claim.claimedAt).toLocaleDateString()}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ fontWeight:'700', color: claim.spiffType==='multiplier'?'#7c3aed':'#059669', fontSize:'0.875rem', flexShrink:0 }}>
+                                                            {claim.spiffType==='multiplier' ? `${claim.multiplier}×` : `$${claim.amount.toLocaleString()}`}
+                                                        </div>
+                                                        <span style={{ fontSize:'0.625rem', padding:'2px 7px', borderRadius:'999px', fontWeight:'700', flexShrink:0,
+                                                            background: claim.status==='approved'?'#d1fae5':claim.status==='rejected'?'#fee2e2':claim.status==='paid'?'#dbeafe':'#fef3c7',
+                                                            color: claim.status==='approved'?'#065f46':claim.status==='rejected'?'#dc2626':claim.status==='paid'?'#1e40af':'#92400e' }}>
+                                                            {claim.status.toUpperCase()}
+                                                        </span>
+                                                        {claim.status === 'pending' && (
+                                                            <div style={{ display:'flex', gap:'0.25rem', flexShrink:0 }}>
+                                                                <button onClick={() => setSpiffClaims(prev => prev.map(c => c.id===claim.id ? {...c, status:'approved', approvedAt:new Date().toISOString(), approvedBy:currentUser} : c))}
+                                                                    style={{ padding:'0.2rem 0.625rem', background:'#10b981', color:'#fff', border:'none', borderRadius:'5px', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>✓ Approve</button>
+                                                                <button onClick={() => setSpiffClaims(prev => prev.map(c => c.id===claim.id ? {...c, status:'rejected', approvedAt:new Date().toISOString(), approvedBy:currentUser} : c))}
+                                                                    style={{ padding:'0.2rem 0.625rem', background:'#ef4444', color:'#fff', border:'none', borderRadius:'5px', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>✕ Reject</button>
+                                                            </div>
+                                                        )}
+                                                        {claim.status === 'approved' && (
+                                                            <button onClick={() => setSpiffClaims(prev => prev.map(c => c.id===claim.id ? {...c, status:'paid', paidAt:new Date().toISOString()} : c))}
+                                                                style={{ padding:'0.2rem 0.625rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'5px', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>💳 Mark Paid</button>
+                                                        )}
+                                                        {(claim.status === 'rejected' || claim.status === 'paid') && (
+                                                            <button onClick={() => { if (window.confirm('Remove this claim?')) setSpiffClaims(prev => prev.filter(c => c.id !== claim.id)); }}
+                                                                style={{ background:'none', border:'none', color:'#94a3b8', cursor:'pointer', fontSize:'0.875rem', padding:'0', lineHeight:1, flexShrink:0 }}>×</button>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
 
@@ -12637,6 +12797,113 @@ ${bodyHtml}
                     </div>
                 </div>
             )}
+
+            {/* ════ SPIFF CLAIM MODAL ════ */}
+            {showSpiffClaimModal && spiffClaimContext && (() => {
+                const { opp } = spiffClaimContext;
+                const activeSpiffsList = (settings.spiffs||[]).filter(s => s.active);
+                const existingClaims = spiffClaims.filter(c => c.opportunityId === opp.id);
+                const claimedSpiffIds = new Set(existingClaims.map(c => c.spiffId));
+                const claimableSpiffs = activeSpiffsList.filter(s => !claimedSpiffIds.has(s.id));
+                const dealArr = parseFloat(opp.arr) || 0;
+                const calcClaimAmt = (spiff) => {
+                    const amt = parseFloat(spiff.amount) || 0;
+                    if (spiff.type === 'flat') return amt;
+                    if (spiff.type === 'pct') return dealArr * amt / 100;
+                    return 0; // multiplier shown separately
+                };
+                return (
+                <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:10100, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}
+                    onClick={() => setShowSpiffClaimModal(false)}>
+                    <div style={{ background:'#fff', borderRadius:'14px', padding:'1.5rem', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}
+                        onClick={e => e.stopPropagation()}>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'1rem' }}>
+                            <div>
+                                <div style={{ fontWeight:'800', fontSize:'1rem', color:'#1e293b' }}>⚡ Claim SPIFF</div>
+                                <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:'2px' }}>{opp.opportunityName || opp.account} · ${dealArr.toLocaleString()} ARR</div>
+                            </div>
+                            <button onClick={() => setShowSpiffClaimModal(false)} style={{ background:'none', border:'none', fontSize:'1.25rem', color:'#94a3b8', cursor:'pointer', lineHeight:1 }}>×</button>
+                        </div>
+
+                        {existingClaims.length > 0 && (
+                            <div style={{ marginBottom:'1rem' }}>
+                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.375rem' }}>Already Claimed</div>
+                                {existingClaims.map(c => {
+                                    const sp = activeSpiffsList.find(s => s.id === c.spiffId) || {};
+                                    return (
+                                        <div key={c.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0.75rem', background:'#f8fafc', borderRadius:'6px', marginBottom:'4px', fontSize:'0.8125rem' }}>
+                                            <span style={{ fontWeight:'600', color:'#1e293b' }}>{sp.name || 'SPIFF'}</span>
+                                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                                                <span style={{ fontWeight:'700', color:'#059669' }}>${Math.round(c.amount).toLocaleString()}</span>
+                                                <span style={{ fontSize:'0.625rem', padding:'2px 6px', borderRadius:'999px', fontWeight:'700',
+                                                    background: c.status==='approved'?'#d1fae5':c.status==='rejected'?'#fee2e2':c.status==='paid'?'#dbeafe':'#fef3c7',
+                                                    color: c.status==='approved'?'#065f46':c.status==='rejected'?'#dc2626':c.status==='paid'?'#1e40af':'#92400e' }}>
+                                                    {c.status.toUpperCase()}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {claimableSpiffs.length === 0 ? (
+                            <div style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.875rem', background:'#f8fafc', borderRadius:'8px' }}>
+                                All active SPIFFs have already been claimed for this deal.
+                            </div>
+                        ) : (
+                            <div>
+                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'0.5rem' }}>Select SPIFFs to Claim</div>
+                                <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem', maxHeight:'300px', overflowY:'auto' }}>
+                                    {claimableSpiffs.map(spiff => {
+                                        const estAmt = calcClaimAmt(spiff);
+                                        return (
+                                            <div key={spiff.id} style={{ border:'1px solid #e2e8f0', borderRadius:'8px', padding:'0.75rem', background:'#fff' }}>
+                                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'0.375rem' }}>
+                                                    <div style={{ fontWeight:'600', fontSize:'0.875rem', color:'#1e293b' }}>{spiff.name || 'Unnamed SPIFF'}</div>
+                                                    <div style={{ fontWeight:'700', color:'#7c3aed', fontSize:'0.875rem' }}>
+                                                        {spiff.type === 'multiplier' ? `${spiff.amount}× multiplier` : `$${Math.round(estAmt).toLocaleString()}`}
+                                                    </div>
+                                                </div>
+                                                <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginBottom:'0.625rem' }}>
+                                                    {spiff.type==='flat'?`$${parseFloat(spiff.amount||0).toLocaleString()} flat bonus`:spiff.type==='pct'?`${spiff.amount}% of deal ARR`:`Commission multiplier ${spiff.amount}×`}
+                                                    {spiff.condition && <span> · {spiff.condition}</span>}
+                                                </div>
+                                                <button onClick={() => {
+                                                    const newClaim = {
+                                                        id: 'claim_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+                                                        spiffId: spiff.id,
+                                                        spiffName: spiff.name || 'Unnamed SPIFF',
+                                                        opportunityId: opp.id,
+                                                        opportunityName: opp.opportunityName || opp.account,
+                                                        account: opp.account,
+                                                        repName: opp.salesRep || opp.assignedTo || currentUser,
+                                                        amount: spiff.type === 'multiplier' ? 0 : Math.round(estAmt),
+                                                        multiplier: spiff.type === 'multiplier' ? parseFloat(spiff.amount)||1 : null,
+                                                        spiffType: spiff.type,
+                                                        dealArr,
+                                                        status: 'pending',
+                                                        claimedAt: new Date().toISOString(),
+                                                        approvedAt: null,
+                                                        approvedBy: null,
+                                                        paidAt: null,
+                                                        note: '',
+                                                    };
+                                                    setSpiffClaims(prev => [...prev, newClaim]);
+                                                }}
+                                                style={{ width:'100%', padding:'0.375rem', background:'#7c3aed', color:'#fff', border:'none', borderRadius:'6px', fontSize:'0.75rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                                                    Submit Claim
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                );
+            })()}
 
             {/* ════ QUICK-LOG FLOATING BUTTON (home, pipeline, opportunities tabs) ════ */}
             {(activeTab === 'pipeline' || activeTab === 'home' || activeTab === 'opportunities') && (
