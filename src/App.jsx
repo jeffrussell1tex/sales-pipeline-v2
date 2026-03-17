@@ -215,7 +215,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                             <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
                                 {/* View toggle */}
                                 <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
-                                    {[{v:'list',label:'☰ List'},{v:'kanban',label:'⬛ Kanban'},{v:'funnel',label:'🔻 Funnel'}].map(({v,label}) => (
+                                    {[{v:'funnel',label:'🔻 Funnel'},{v:'kanban',label:'⬛ Kanban'},{v:'list',label:'☰ List'}].map(({v,label}) => (
                                         <button key={v} onClick={() => setLeadView(v)}
                                             style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
                                                 background: leadView===v ? '#fff' : 'transparent',
@@ -1415,8 +1415,6 @@ function App() {
     const [taskStatusFilter, setTaskStatusFilter] = useState([]);
     const [newPainPointInput, setNewPainPointInput] = useState('');
     const [newVerticalMarketInput, setNewVerticalMarketInput] = useState('');
-    const [newSubIndustryInput, setNewSubIndustryInput] = useState('');
-    const [expandedIndustry, setExpandedIndustry] = useState(null);
     
     // Activity Timeline & History
     const [activities, setActivities] = useState([]);
@@ -3076,7 +3074,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
     return (
         <div className="app-container">
             <header className="header">
-                <div className="header-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', position: 'relative' }}>
+                <div className="header-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0 }}>
                         {settings.logoUrl ? (
                             <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', gap:'0.25rem' }}>
@@ -3519,35 +3517,27 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                         )}
                     </div>
                     </div>
-                    {/* Global Search - centered command bar */}
-                    <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '999px', border: '1px solid #e2e8f0', padding: '0.35rem 1rem', gap: '0.5rem', width: '340px', transition: 'box-shadow 0.15s, border-color 0.15s' }}
-                            onFocusCapture={e => { e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.background = '#fff'; }}
-                            onBlurCapture={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f1f5f9'; }}>
-                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#94a3b8" strokeWidth="1.5" style={{ flexShrink: 0 }}><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13" strokeLinecap="round"/></svg>
+                    {/* Global Search - second row */}
+                    <div style={{ position: 'relative' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', background: '#f1f3f5', borderRadius: '20px', border: '1px solid #e2e8f0', padding: '0.3rem 0.75rem', gap: '0.375rem' }}>
+                            <span style={{ color: '#94a3b8', fontSize: '0.8125rem', flexShrink: 0 }}>🔍</span>
                             <input
-                                className="global-search-input"
                                 type="text"
                                 placeholder="Search accounts, contacts, deals..."
                                 value={globalSearch}
                                 onChange={e => { setGlobalSearch(e.target.value); setShowSearchResults(e.target.value.length > 0); }}
                                 onFocus={() => { if (globalSearch.length > 0) setShowSearchResults(true); }}
-                                style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.8125rem', color: '#1e293b', flex: 1, padding: 0, fontFamily: 'inherit' }}
+                                style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.8125rem', color: '#1e293b', width: '220px', padding: '0.125rem 0', fontFamily: 'inherit' }}
                             />
-                            {globalSearch ? (
+                            {globalSearch && (
                                 <button onClick={() => { setGlobalSearch(''); setShowSearchResults(false); }}
-                                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8125rem', padding: 0, lineHeight: 1, flexShrink: 0 }}>✕</button>
-                            ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
-                                    <span style={{ fontSize: '0.625rem', color: '#94a3b8', background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: '3px', padding: '1px 4px', lineHeight: 1.4 }}>⌘</span>
-                                    <span style={{ fontSize: '0.625rem', color: '#94a3b8', background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: '3px', padding: '1px 4px', lineHeight: 1.4 }}>K</span>
-                                </div>
+                                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8125rem', padding: 0, lineHeight: 1 }}>✕</button>
                             )}
                         </div>
                         {showSearchResults && globalSearch.length > 0 && (
                             <>
                             <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} onClick={() => setShowSearchResults(false)} />
-                            <div className="spt-search-results" style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '0.375rem', width: '400px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 1000 }} onClick={e => e.stopPropagation()}>
+                            <div className="spt-search-results" style={{ position: 'absolute', top: '100%', right: 0, marginTop: '0.375rem', width: '380px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 1000 }} onClick={e => e.stopPropagation()}>
                                 {(() => {
                                     const q = globalSearch.toLowerCase();
                                     const matchedAccounts = accounts.filter(a => (a.name || '').toLowerCase().includes(q) || (a.accountOwner || '').toLowerCase().includes(q)).slice(0, 5);
@@ -3558,10 +3548,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     return (<>
                                         {matchedAccounts.length > 0 && (<div>
                                             <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.625rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#f8fafc', borderBottom: '1px solid #f1f3f5' }}>Accounts</div>
-                                            {matchedAccounts.map(a => {
-                                                const openDeals = opportunities.filter(o => (o.account||'').toLowerCase() === (a.name||'').toLowerCase() && o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length;
-                                                return (<div key={'sa-'+a.id} style={{ padding: '0.4rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); setTimeout(() => setViewingAccount(a), 100); }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='transparent'}><div><div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{a.name}</div>{a.accountOwner && <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{a.accountOwner}{openDeals > 0 ? ` · ${openDeals} open deal${openDeals>1?'s':''}` : ''}</div>}</div><span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>Account</span></div>);
-                                            })}
+                                            {matchedAccounts.map(a => (<div key={'sa-'+a.id} style={{ padding: '0.4rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); setTimeout(() => setViewingAccount(a), 100); }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='transparent'}><div><div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{a.name}</div>{a.accountOwner && <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{a.accountOwner}</div>}</div><span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>Account</span></div>))}
                                         </div>)}
                                         {matchedContacts.length > 0 && (<div>
                                             <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.625rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#f8fafc', borderBottom: '1px solid #f1f3f5' }}>Contacts</div>
@@ -3698,132 +3685,101 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                         visibleCount={visibleOpportunities.length} totalCount={(opportunities||[]).filter(o => (o.pipelineId||'default') === activePipeline.id).length} countLabel="opportunities"
                         isAdmin={isAdmin}
                     />
-                    <div className="kpi-grid">
-                        {(() => {
-                            const kc = getKpiColor('totalPipelineARR', totalARR);
-                            // Sparkline: ARR by stage as 8 data points (cumulative stage totals)
-                            const stageList = (settings.funnelStages || []).map(s => s.name);
-                            const sparkPts = stageList.map(s => visibleOpportunities.filter(o => o.stage === s).reduce((sum,o)=>sum+(parseFloat(o.arr)||0),0));
-                            const sparkMax = Math.max(...sparkPts, 1);
-                            const pts = sparkPts.map((v,i) => `${i===0?0:Math.round((i/(sparkPts.length-1||1))*110)},${Math.round(28-(v/sparkMax)*24)}`).join(' ');
-                            const polyFill = pts + ` 110,28 0,28`;
-                            // Trend: compare current active pipeline ARR to closed won this quarter
-                            const closedWonARR = visibleOpportunities.filter(o=>o.stage==='Closed Won').reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-                            const trendPct = totalARR > 0 ? Math.round((closedWonARR/totalARR)*100) : 0;
-                            const arrDisplay = totalARR >= 1000000 ? '$'+(totalARR/1000000).toFixed(1)+'M' : totalARR >= 1000 ? '$'+Math.round(totalARR/1000)+'K' : '$'+totalARR.toLocaleString();
-                            return (
-                            <div className={`kpi-card home-style accent-blue ${kc.className}`} style={{ ...(kc.toleranceColor ? { borderLeftColor: kc.toleranceColor } : {}), paddingBottom: '8px' }}>
+                    {(() => {
+                        const trendMode = settings.kpiTrendMode || 'stage-distribution';
+                        const _now = new Date();
+                        const getSparkPoints = (valuesFn) => {
+                            let buckets = [];
+                            if (trendMode === 'stage-distribution') {
+                                const sl = (settings.funnelStages || []).map(s => s.name);
+                                buckets = sl.map(s => valuesFn(visibleOpportunities.filter(o => o.stage === s)));
+                            } else if (trendMode === 'month-over-month') {
+                                for (let i = 5; i >= 0; i--) { const d = new Date(_now.getFullYear(), _now.getMonth()-i, 1), nx = new Date(_now.getFullYear(), _now.getMonth()-i+1, 1); buckets.push(valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate) : null; return c && c >= d && c < nx; }))); }
+                            } else if (trendMode === 'quarter-over-quarter') {
+                                for (let i = 3; i >= 0; i--) { const qm = _now.getMonth()-(i*3), fy = _now.getFullYear()+Math.floor(qm/12), fm = ((qm%12)+12)%12; const s = new Date(fy,fm,1), e = new Date(fy,fm+3,1); buckets.push(valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate) : null; return c && c >= s && c < e; }))); }
+                            } else if (trendMode === 'year-to-date') {
+                                for (let m = 0; m <= _now.getMonth(); m++) { const s = new Date(_now.getFullYear(),m,1), e = new Date(_now.getFullYear(),m+1,1); buckets.push(valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate) : null; return c && c >= s && c < e; }))); }
+                            } else if (trendMode === 'year-over-year') {
+                                for (let m = 0; m < 12; m++) { const sT = new Date(_now.getFullYear(),m,1), eT = new Date(_now.getFullYear(),m+1,1), sL = new Date(_now.getFullYear()-1,m,1), eL = new Date(_now.getFullYear()-1,m+1,1); const tv = valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate) : null; return c && c >= sT && c < eT; })), lv = valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate) : null; return c && c >= sL && c < eL; })); buckets.push(tv - lv); }
+                            }
+                            if (buckets.length < 2) return { pts: '0,28 110,28', polyFill: '0,28 110,28 110,28 0,28' };
+                            const mx = Math.max(...buckets.map(Math.abs), 1), n = buckets.length;
+                            const coords = buckets.map((v,i) => `${Math.round((i/(n-1))*110)},${Math.round(28-Math.max(0,v/mx)*24)}`).join(' ');
+                            return { pts: coords, polyFill: coords + ' 110,28 0,28' };
+                        };
+                        const sparkLine = (pts, polyFill, color) => (
+                            <svg width="100%" height="26" viewBox="0 0 110 28" preserveAspectRatio="none" style={{ display:'block', marginTop:'6px' }}>
+                                <polyline fill={color} fillOpacity="0.09" stroke="none" points={polyFill} />
+                                <polyline fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" points={pts} opacity="0.75" />
+                            </svg>
+                        );
+                        const openCount = visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed').length;
+                        const overdueCount = visibleTasks.filter(t => { const s = t.status || (t.completed ? 'Completed' : 'Open'); const due = t.dueDate || t.due; return s !== 'Completed' && due && new Date(due) < new Date(); }).length;
+                        const completedCount = visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) === 'Completed').length;
+                        const donePct = (openCount + completedCount) > 0 ? Math.round((completedCount / (openCount + completedCount)) * 100) : 0;
+                        const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                        const recentOpps = visibleOpportunities.filter(o => o.createdDate && new Date(o.createdDate) > thirtyDaysAgo).length;
+                        const closedWonARR = visibleOpportunities.filter(o => o.stage === 'Closed Won').reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
+                        const fv = nextQuarter ? nextQuarter[1] : 0;
+                        const quotaMode = (settings.users || []).find(u => u.quotaType)?.quotaType || 'annual';
+                        const totalQuota = (settings.users || []).filter(u => u.userType !== 'ReadOnly' && isRepVisible(u.name)).reduce((s, u) => { if ((u.quotaType || quotaMode) === 'annual') return s + (u.annualQuota || 0) / 4; return s + (u.q1Quota || u.q2Quota || u.q3Quota || u.q4Quota || 0); }, 0);
+                        const attainPct = totalQuota > 0 ? Math.min(100, Math.round((closedWonARR / totalQuota) * 100)) : null;
+                        const arrDisplay = totalARR >= 1000000 ? '$' + (totalARR / 1000000).toFixed(1) + 'M' : totalARR >= 1000 ? '$' + Math.round(totalARR / 1000) + 'K' : '$' + totalARR.toLocaleString();
+                        const fvDisplay = fv >= 1000000 ? '$' + (fv / 1000000).toFixed(1) + 'M' : fv >= 1000 ? '$' + Math.round(fv / 1000) + 'K' : '$' + fv.toLocaleString();
+                        const { pts: sp1, polyFill: pf1 } = getSparkPoints(opps => opps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0));
+                        const { pts: sp2, polyFill: pf2 } = getSparkPoints(opps => opps.length);
+                        const kc1 = getKpiColor('totalPipelineARR', totalARR), kc2 = getKpiColor('activeOpps', activeOpps), kc3 = getKpiColor('openTasks', openCount), kc4 = getKpiColor('nextQForecast', fv);
+                        return (
+                        <div className="kpi-grid">
+                            <div className={`kpi-card home-style accent-blue ${kc1.className}`} style={{ ...(kc1.toleranceColor ? { borderLeftColor: kc1.toleranceColor } : {}), paddingBottom: '8px' }}>
                                 <div className="kpi-label">Total Pipeline ARR</div>
                                 <div className="kpi-value">{arrDisplay}</div>
-                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'6px' }}>
-                                    <span style={{ fontSize:'10px', fontWeight:'600', background:'#dbeafe', color:'#1e40af', padding:'2px 7px', borderRadius:'999px' }}>{activeOpps} active deals</span>
-                                    <span style={{ fontSize:'10px', color:'#94a3b8' }}>{trendPct}% converted</span>
+                                <div style={{ display:'flex', justifyContent:'space-between', marginTop:'5px' }}>
+                                    <span style={{ fontSize:'10px', fontWeight:'600', background:'#dbeafe', color:'#1e40af', padding:'2px 6px', borderRadius:'999px' }}>{activeOpps} active</span>
+                                    <span style={{ fontSize:'10px', color:'#94a3b8' }}>{totalARR > 0 ? Math.round((closedWonARR/totalARR)*100) : 0}% converted</span>
                                 </div>
-                                <svg width="100%" height="28" viewBox="0 0 110 28" preserveAspectRatio="none" style={{ display:'block', marginTop:'8px' }}>
-                                    <polyline fill="#2563eb" fillOpacity="0.10" stroke="none" points={polyFill} />
-                                    <polyline fill="none" stroke="#2563eb" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" points={pts} opacity="0.7" />
-                                </svg>
-                            </div>); })()}
-                        {(() => {
-                            const kc = getKpiColor('activeOpps', activeOpps);
-                            // Trend: opps added in last 30 days
-                            const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-30);
-                            const recentOpps = visibleOpportunities.filter(o => o.createdDate && new Date(o.createdDate) > thirtyDaysAgo).length;
-                            // Sparkline: opp count per stage
-                            const stageList = (settings.funnelStages || []).map(s => s.name);
-                            const sparkPts = stageList.map(s => visibleOpportunities.filter(o=>o.stage===s).length);
-                            const sparkMax = Math.max(...sparkPts, 1);
-                            const pts = sparkPts.map((v,i) => `${i===0?0:Math.round((i/(sparkPts.length-1||1))*110)},${Math.round(28-(v/sparkMax)*24)}`).join(' ');
-                            const polyFill = pts + ` 110,28 0,28`;
-                            return (
-                            <div className={`kpi-card home-style accent-purple ${kc.className}`} style={{ ...(kc.toleranceColor ? { borderLeftColor: kc.toleranceColor } : {}), paddingBottom: '8px' }}>
+                                {sparkLine(sp1, pf1, '#2563eb')}
+                            </div>
+                            <div className={`kpi-card home-style accent-purple ${kc2.className}`} style={{ ...(kc2.toleranceColor ? { borderLeftColor: kc2.toleranceColor } : {}), paddingBottom: '8px' }}>
                                 <div className="kpi-label">Active Opportunities</div>
                                 <div className="kpi-value">{activeOpps}</div>
-                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'6px' }}>
-                                    {recentOpps > 0
-                                        ? <span style={{ fontSize:'10px', fontWeight:'600', background:'#ede9fe', color:'#6d28d9', padding:'2px 7px', borderRadius:'999px' }}>▲ {recentOpps} added (30d)</span>
-                                        : <span style={{ fontSize:'10px', color:'#94a3b8' }}>No new (30d)</span>}
-                                    <span style={{ fontSize:'10px', color:'#94a3b8' }}>${Math.round(avgARR/1000)||0}K avg</span>
+                                <div style={{ display:'flex', justifyContent:'space-between', marginTop:'5px' }}>
+                                    {recentOpps > 0 ? <span style={{ fontSize:'10px', fontWeight:'600', background:'#ede9fe', color:'#6d28d9', padding:'2px 6px', borderRadius:'999px' }}>▲ {recentOpps} new (30d)</span> : <span style={{ fontSize:'10px', color:'#94a3b8' }}>No new (30d)</span>}
+                                    <span style={{ fontSize:'10px', color:'#94a3b8' }}>${Math.round(avgARR / 1000) || 0}K avg</span>
                                 </div>
-                                <svg width="100%" height="28" viewBox="0 0 110 28" preserveAspectRatio="none" style={{ display:'block', marginTop:'8px' }}>
-                                    <polyline fill="#9333ea" fillOpacity="0.09" stroke="none" points={polyFill} />
-                                    <polyline fill="none" stroke="#9333ea" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" points={pts} opacity="0.7" />
-                                </svg>
-                            </div>); })()}
-                        {(() => {
-                            const openCount = visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed').length;
-                            const overdueCount = visibleTasks.filter(t => {
-                                const notDone = (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed';
-                                const due = t.dueDate || t.due;
-                                return notDone && due && new Date(due) < new Date();
-                            }).length;
-                            const dueTodayCount = visibleTasks.filter(t => {
-                                const notDone = (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed';
-                                const due = t.dueDate || t.due;
-                                if (!notDone || !due) return false;
-                                const d = new Date(due); const today = new Date();
-                                return d.toDateString() === today.toDateString();
-                            }).length;
-                            const kc = getKpiColor('openTasks', openCount);
-                            return (
-                            <div className={`kpi-card home-style accent-amber ${kc.className}`} style={{ ...(kc.toleranceColor ? { borderLeftColor: kc.toleranceColor } : {}), paddingBottom: '8px' }}>
+                                {sparkLine(sp2, pf2, '#9333ea')}
+                            </div>
+                            <div className={`kpi-card home-style accent-amber ${kc3.className}`} style={{ ...(kc3.toleranceColor ? { borderLeftColor: kc3.toleranceColor } : {}), paddingBottom: '8px' }}>
                                 <div className="kpi-label">Open Tasks</div>
                                 <div className="kpi-value">{openCount}</div>
-                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'6px' }}>
-                                    {overdueCount > 0
-                                        ? <span style={{ fontSize:'10px', fontWeight:'600', background:'#fee2e2', color:'#dc2626', padding:'2px 7px', borderRadius:'999px' }}>▼ {overdueCount} overdue</span>
-                                        : <span style={{ fontSize:'10px', fontWeight:'600', background:'#d1fae5', color:'#065f46', padding:'2px 7px', borderRadius:'999px' }}>All on track</span>}
-                                    {dueTodayCount > 0 && <span style={{ fontSize:'10px', color:'#94a3b8' }}>{dueTodayCount} due today</span>}
+                                <div style={{ display:'flex', justifyContent:'space-between', marginTop:'5px' }}>
+                                    {overdueCount > 0 ? <span style={{ fontSize:'10px', fontWeight:'600', background:'#fee2e2', color:'#dc2626', padding:'2px 6px', borderRadius:'999px' }}>▼ {overdueCount} overdue</span> : <span style={{ fontSize:'10px', fontWeight:'600', background:'#d1fae5', color:'#065f46', padding:'2px 6px', borderRadius:'999px' }}>All on track</span>}
+                                    <span style={{ fontSize:'10px', color:'#94a3b8' }}>{donePct}% done</span>
                                 </div>
-                                {/* Mini bar chart: completed vs open */}
-                                {(() => {
-                                    const completedCount = visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) === 'Completed').length;
-                                    const total = openCount + completedCount;
-                                    const donePct = total > 0 ? Math.round((completedCount/total)*100) : 0;
-                                    return (
-                                        <div style={{ marginTop:'10px' }}>
-                                            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
-                                                <span style={{ fontSize:'9px', color:'#94a3b8' }}>Completion rate</span>
-                                                <span style={{ fontSize:'9px', fontWeight:'700', color:'#475569' }}>{donePct}%</span>
-                                            </div>
-                                            <div style={{ height:'4px', background:'#f1f5f9', borderRadius:'99px', overflow:'hidden' }}>
-                                                <div style={{ height:'100%', width: donePct+'%', background:'#f59e0b', borderRadius:'99px', transition:'width 0.4s' }} />
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-                            </div>); })()}
-                        {(() => {
-                            const fv = nextQuarter ? nextQuarter[1] : 0;
-                            const kc = getKpiColor('nextQForecast', fv);
-                            // Quota attainment: sum quota for visible reps
-                            const quotaMode = (settings.users||[]).find(u=>u.quotaType)?.quotaType || 'annual';
-                            const totalQuota = (settings.users||[]).filter(u => u.userType !== 'ReadOnly' && isRepVisible(u.name)).reduce((s,u) => {
-                                if ((u.quotaType||quotaMode) === 'annual') return s+(u.annualQuota||0)/4;
-                                return s+(u.q1Quota||u.q2Quota||u.q3Quota||u.q4Quota||0);
-                            }, 0);
-                            const closedWonTotal = visibleOpportunities.filter(o=>o.stage==='Closed Won').reduce((s,o)=>s+(parseFloat(o.arr)||0)+(o.implementationCost||0),0);
-                            const attainPct = totalQuota > 0 ? Math.min(100, Math.round((closedWonTotal/totalQuota)*100)) : null;
-                            const fvDisplay = fv >= 1000000 ? '$'+(fv/1000000).toFixed(1)+'M' : fv >= 1000 ? '$'+Math.round(fv/1000)+'K' : '$'+fv.toLocaleString();
-                            return (
-                            <div className={`kpi-card home-style accent-green ${kc.className}`} style={{ ...(kc.toleranceColor ? { borderLeftColor: kc.toleranceColor } : {}), paddingBottom: '8px' }}>
+                                <div style={{ marginTop:'8px' }}>
+                                    <div style={{ height:'4px', background:'#f1f5f9', borderRadius:'99px', overflow:'hidden' }}>
+                                        <div style={{ height:'100%', width: donePct + '%', background:'#f59e0b', borderRadius:'99px', transition:'width 0.4s' }} />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className={`kpi-card home-style accent-green ${kc4.className}`} style={{ ...(kc4.toleranceColor ? { borderLeftColor: kc4.toleranceColor } : {}), paddingBottom: '8px' }}>
                                 <div className="kpi-label">{nextQuarter ? nextQuarter[0] : 'Next Quarter'} Forecast</div>
                                 <div className="kpi-value">{fvDisplay}</div>
-                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'6px' }}>
-                                    {attainPct !== null
-                                        ? <span style={{ fontSize:'10px', fontWeight:'600', background: attainPct>=75?'#d1fae5':attainPct>=40?'#fef3c7':'#fee2e2', color: attainPct>=75?'#065f46':attainPct>=40?'#92400e':'#dc2626', padding:'2px 7px', borderRadius:'999px' }}>{attainPct}% of quota</span>
-                                        : <span style={{ fontSize:'10px', color:'#94a3b8' }}>No quota set</span>}
-                                    {closedWonTotal > 0 && <span style={{ fontSize:'10px', color:'#94a3b8' }}>${Math.round(closedWonTotal/1000)}K won</span>}
+                                <div style={{ display:'flex', justifyContent:'space-between', marginTop:'5px' }}>
+                                    {attainPct !== null ? <span style={{ fontSize:'10px', fontWeight:'600', background: attainPct>=75?'#d1fae5':attainPct>=40?'#fef3c7':'#fee2e2', color: attainPct>=75?'#065f46':attainPct>=40?'#92400e':'#dc2626', padding:'2px 6px', borderRadius:'999px' }}>{attainPct}% of quota</span> : <span style={{ fontSize:'10px', color:'#94a3b8' }}>No quota set</span>}
+                                    {closedWonARR > 0 && <span style={{ fontSize:'10px', color:'#94a3b8' }}>${Math.round(closedWonARR/1000)}K won</span>}
                                 </div>
                                 {attainPct !== null && (
-                                    <div style={{ marginTop:'10px' }}>
+                                    <div style={{ marginTop:'8px' }}>
                                         <div style={{ height:'4px', background:'#f1f5f9', borderRadius:'99px', overflow:'hidden' }}>
-                                            <div style={{ height:'100%', width: attainPct+'%', background: attainPct>=75?'#16a34a':attainPct>=40?'#f59e0b':'#ef4444', borderRadius:'99px', transition:'width 0.4s' }} />
+                                            <div style={{ height:'100%', width: attainPct + '%', background: attainPct>=75?'#16a34a':attainPct>=40?'#f59e0b':'#ef4444', borderRadius:'99px', transition:'width 0.4s' }} />
                                         </div>
                                     </div>
                                 )}
-                            </div>); })()}
-                    </div>
+                            </div>
+                        </div>
+                        );
+                    })()}
 
                     {/* ── CROSS-PIPELINE SUMMARY (only when multiple pipelines) ── */}
                     {allPipelines.length > 1 && (() => {
@@ -4693,6 +4649,21 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                         }}>
                                             <div style={{ fontSize: '0.575rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.3rem' }}>{label}</div>
                                             <div style={{ fontSize: '1.125rem', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.02em', lineHeight: 1 }}>{value}</div>
+                                            {(() => {
+                                                const tMode = settings.kpiTrendMode || 'stage-distribution';
+                                                const _n = new Date();
+                                                let bkts = [];
+                                                const oppVal = o => kpiId === 'totalPipelineARR' || kpiId === 'avgARR' ? (parseFloat(o.arr)||0) : 1;
+                                                if (tMode === 'stage-distribution') { const sl = (settings.funnelStages||[]).map(s=>s.name); bkts = sl.map(s => pipelineFilteredOpps.filter(o=>o.stage===s).reduce((a,o)=>a+oppVal(o),0)); }
+                                                else if (tMode === 'month-over-month') { for(let i=5;i>=0;i--){const d=new Date(_n.getFullYear(),_n.getMonth()-i,1),nx=new Date(_n.getFullYear(),_n.getMonth()-i+1,1); bkts.push(pipelineFilteredOpps.filter(o=>{const c=o.forecastedCloseDate?new Date(o.forecastedCloseDate):null;return c&&c>=d&&c<nx;}).reduce((a,o)=>a+oppVal(o),0));} }
+                                                else if (tMode === 'quarter-over-quarter') { for(let i=3;i>=0;i--){const qm=_n.getMonth()-(i*3),fy=_n.getFullYear()+Math.floor(qm/12),fm=((qm%12)+12)%12;const s=new Date(fy,fm,1),e=new Date(fy,fm+3,1); bkts.push(pipelineFilteredOpps.filter(o=>{const c=o.forecastedCloseDate?new Date(o.forecastedCloseDate):null;return c&&c>=s&&c<e;}).reduce((a,o)=>a+oppVal(o),0));} }
+                                                else { bkts = [rawVal*0.6, rawVal*0.75, rawVal*0.85, rawVal]; }
+                                                if (bkts.length < 2) return null;
+                                                const mx = Math.max(...bkts, 1), n = bkts.length;
+                                                const pts = bkts.map((v,i)=>`${Math.round((i/(n-1))*90)},${Math.round(18-Math.max(0,v/mx)*14)}`).join(' ');
+                                                const pf = pts + ' 90,18 0,18';
+                                                return (<svg width="100%" height="18" viewBox="0 0 90 18" preserveAspectRatio="none" style={{ display:'block', marginTop:'4px' }}><polyline fill={borderColor} fillOpacity="0.10" stroke="none" points={pf}/><polyline fill="none" stroke={borderColor} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" points={pts} opacity="0.8"/></svg>);
+                                            })()}
                                         </div>
                                     );
                                 })}
@@ -4794,7 +4765,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                     {/* ════ VIEW TOGGLE ════ */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
                         <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.25rem' }}>View:</span>
-                        {[{key:'funnel',label:'🔻 Funnel'},{key:'kanban',label:'🗂 Kanban'},{key:'table',label:'☰ Table'}].map(v => (
+                        {[{key:'funnel',label:'🔻 Funnel'},{key:'kanban',label:'🗂 Kanban'},{key:'table',label:'☰ List'}].map(v => (
                             <button key={v.key} onClick={() => { setPipelineView(v.key); localStorage.setItem('pipelineView', v.key); setFunnelExpandedStage(null); }}
                                 style={{ padding: '0.3rem 0.75rem', border: '1px solid ' + (pipelineView === v.key ? '#2563eb' : '#e2e8f0'), borderRadius: '6px', background: pipelineView === v.key ? '#2563eb' : '#fff', color: pipelineView === v.key ? '#fff' : '#64748b', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
                                 {v.label}
@@ -5225,14 +5196,17 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             <td style={{ whiteSpace: 'nowrap' }}>
                                                 {new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                             </td>
-                                            <td style={{ whiteSpace: 'nowrap' }}
-                                                onMouseEnter={e => { const btns = e.currentTarget.querySelector('.pipeline-hover-actions'); if (btns) btns.style.opacity='1'; }}
-                                                onMouseLeave={e => { const btns = e.currentTarget.querySelector('.pipeline-hover-actions'); if (btns && selectedPipelineOpp?.id !== opp.id) btns.style.opacity='0'; }}>
-                                                <div className="pipeline-hover-actions" style={{ display:'flex', alignItems:'center', gap:'4px', opacity: selectedPipelineOpp?.id === opp.id ? '1' : '0', transition:'opacity 0.15s' }}>
-                                                    <button onClick={e => { e.stopPropagation(); handleEdit(opp); }} title="Edit opportunity" style={{ padding:'3px 9px', borderRadius:'6px', border:'0.5px solid #cbd5e1', background:'#fff', color:'#475569', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>Edit</button>
-                                                    <button onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }} title="Log activity" style={{ padding:'3px 9px', borderRadius:'6px', border:'0.5px solid #cbd5e1', background:'#fff', color:'#475569', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>+ Act</button>
-                                                    <button onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }} title="Add task" style={{ padding:'3px 9px', borderRadius:'6px', border:'0.5px solid #cbd5e1', background:'#fff', color:'#475569', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>+ Task</button>
-                                                    <button onClick={e => { e.stopPropagation(); handleDelete(opp.id); }} title="Delete" style={{ padding:'3px 7px', borderRadius:'6px', border:'0.5px solid #fca5a5', background:'#fff', color:'#dc2626', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit' }}>✕</button>
+                                            <td style={{ whiteSpace: 'nowrap' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                    <div style={{ display: 'flex', gap: '3px' }}>
+                                                        <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedPipelineOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color: '#fff', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
+                                                        <button onClick={() => handleEdit(opp)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '3px' }}>
+                                                        <button onClick={() => { setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Activity</button>
+                                                        <button onClick={() => { setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Task</button>
+                                                        <button onClick={() => handleDelete(opp.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
+                                                    </div>
                                                 </div>
                                             </td>
                                         </tr>
@@ -5591,7 +5565,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                             <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginLeft:'auto', flexShrink:0 }}>
                                 {/* List / Kanban / Funnel toggle */}
                                 <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
-                                    {[{v:'list',label:'☰ List'},{v:'kanban',label:'⬛ Kanban'},{v:'funnel',label:'🔻 Funnel'}].map(({v,label}) => (
+                                    {[{v:'funnel',label:'🔻 Funnel'},{v:'kanban',label:'⬛ Kanban'},{v:'list',label:'☰ List'}].map(({v,label}) => (
                                         <button key={v} onClick={() => setOppTabView(v)}
                                             style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
                                                 background: oppTabView===v ? '#fff' : 'transparent',
@@ -5913,14 +5887,17 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 )}
                                             </td>
 
-                                            <td style={{ whiteSpace:'nowrap' }}
-                                                onMouseEnter={e => { const btns = e.currentTarget.querySelector('.opp-hover-actions'); if (btns) btns.style.opacity='1'; }}
-                                                onMouseLeave={e => { const btns = e.currentTarget.querySelector('.opp-hover-actions'); if (btns && selectedOppTabOpp?.id !== opp.id) btns.style.opacity='0'; }}>
-                                                <div className="opp-hover-actions" style={{ display:'flex', alignItems:'center', gap:'4px', opacity: selectedOppTabOpp?.id === opp.id ? '1' : '0', transition:'opacity 0.15s' }}>
-                                                    <button onClick={e => { e.stopPropagation(); handleEdit(opp); }} title="Edit opportunity" style={{ padding:'3px 9px', borderRadius:'6px', border:'0.5px solid #cbd5e1', background:'#fff', color:'#475569', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>Edit</button>
-                                                    <button onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName||opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }} title="Log activity" style={{ padding:'3px 9px', borderRadius:'6px', border:'0.5px solid #cbd5e1', background:'#fff', color:'#475569', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>+ Act</button>
-                                                    <button onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }} title="Add task" style={{ padding:'3px 9px', borderRadius:'6px', border:'0.5px solid #cbd5e1', background:'#fff', color:'#475569', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>+ Task</button>
-                                                    <button onClick={e => { e.stopPropagation(); handleDelete(opp.id); }} title="Delete" style={{ padding:'3px 7px', borderRadius:'6px', border:'0.5px solid #fca5a5', background:'#fff', color:'#dc2626', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit' }}>✕</button>
+                                            <td style={{ whiteSpace:'nowrap' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                    <div style={{ display: 'flex', gap: '3px' }}>
+                                                        <button onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedOppTabOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color: '#fff', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
+                                                        <button onClick={() => handleEdit(opp)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '3px' }}>
+                                                        <button onClick={() => { setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName||opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Activity</button>
+                                                        <button onClick={() => { setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Task</button>
+                                                        <button onClick={() => handleDelete(opp.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
+                                                    </div>
                                                 </div>
                                             </td>
                                         </tr>
@@ -6820,11 +6797,13 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     let anchorId = null;
                                     if (firstChar !== lastLetter) { lastLetter = firstChar; anchorId = 'account-letter-' + firstChar; }
                                     return (
-                                <div key={account.id} id={anchorId}
-                                    onMouseEnter={e => { const a = e.currentTarget.querySelector('.acct-hover-actions'); if(a) a.style.opacity='1'; if (!selectedAccounts.includes(account.id)) e.currentTarget.style.background='#f8fafc'; }}
-                                    onMouseLeave={e => { const a = e.currentTarget.querySelector('.acct-hover-actions'); if(a) a.style.opacity='0'; if (!selectedAccounts.includes(account.id)) e.currentTarget.style.background=idx%2===0?'#ffffff':'#f8fafc'; }}
-                                    style={{ border: selectedAccounts.includes(account.id) ? '1px solid #93c5fd' : '1px solid #edf0f3', borderBottom: 'none', borderRadius: '0', background: selectedAccounts.includes(account.id) ? '#eff6ff' : (idx % 2 === 0 ? '#ffffff' : '#f8fafc'), transition: 'background 0.15s', overflow: 'hidden' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', padding: '0.5rem 0.75rem', gap: '10px' }}>
+                                <div key={account.id} id={anchorId} style={{
+                                    border: selectedAccounts.includes(account.id) ? '1px solid #93c5fd' : '1px solid #edf0f3',
+                                    borderBottom: 'none', borderRadius: '0',
+                                    background: selectedAccounts.includes(account.id) ? '#eff6ff' : (idx % 2 === 0 ? '#ffffff' : '#f8fafc'),
+                                    transition: 'all 0.15s ease', overflow: 'hidden'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', padding: '0.25rem 0.75rem' }}>
                                         <div style={{ width: '36px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                                             <input type="checkbox" checked={selectedAccounts.includes(account.id)}
                                                 onChange={e => { if (e.target.checked) setSelectedAccounts([...selectedAccounts, account.id]); else setSelectedAccounts(selectedAccounts.filter(id => id !== account.id)); }}
@@ -6836,35 +6815,23 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 </button>
                                             ) : <span style={{ width: '12px' }} />}
                                         </div>
-                                        {(() => {
-                                            const initials = (account.name || '??').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
-                                            const colorPairs = [['#dbeafe','#1e40af'],['#fce7f3','#9d174d'],['#d1fae5','#065f46'],['#ede9fe','#5b21b6'],['#fef3c7','#92400e'],['#fee2e2','#991b1b'],['#e0f2fe','#0369a1']];
-                                            const [bg, fg] = colorPairs[(account.name||'').charCodeAt(0) % colorPairs.length];
-                                            return <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: bg, color: fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '600', flexShrink: 0 }}>{initials}</div>;
-                                        })()}
-                                        <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setViewingAccount(account)}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                                <span style={{ fontWeight: '600', fontSize: '0.8125rem', color: '#2563eb' }}>{account.name}</span>
-                                                {account.verticalMarket && <span style={{ fontSize: '0.625rem', fontWeight: '600', background: '#ede9fe', color: '#5b21b6', padding: '1px 6px', borderRadius: '999px' }}>{account.verticalMarket}</span>}
-                                                {getSubAccounts(account.id).length > 0 && <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.5rem', fontWeight: '700', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>{getSubAccounts(account.id).length} sub</span>}
-                                            </div>
-                                            <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '2px' }}>{account.accountOwner || '—'}{account.billingAddress ? ' · ' + account.billingAddress.split(',').slice(-2).join(',').trim() : ''}</div>
+                                        <div style={{ width: '280px', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
+                                            onClick={() => setViewingAccount(account)}>
+                                            <span style={{ fontWeight: '700', fontSize: '0.75rem', color: '#2563eb' }}>{account.name}</span>
+                                            {getSubAccounts(account.id).length > 0 && (
+                                                <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.5rem', fontWeight: '700', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>{getSubAccounts(account.id).length} sub</span>
+                                            )}
+                                            {getSubAccounts(account.id).length > 0 && (() => {
+                                                const rollup = getAccountRollup(account);
+                                                if (rollup.pipeline === 0) return null;
+                                                return <span style={{ fontSize: '0.5625rem', color: '#b45309', fontWeight: '700', background: '#fef3c7', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>${rollup.pipeline >= 1000 ? Math.round(rollup.pipeline/1000)+'K' : rollup.pipeline.toLocaleString()}</span>;
+                                            })()}
                                         </div>
-                                        {(() => {
-                                            const accName = (account.name || '').toLowerCase();
-                                            const accOpps = opportunities.filter(o => (o.account||'').toLowerCase() === accName);
-                                            const openCount = accOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length;
-                                            const pipeline = accOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-                                            const wonCount = accOpps.filter(o => o.stage === 'Closed Won').length;
-                                            const contactCount = contacts.filter(c => (c.company||'').toLowerCase() === accName).length;
-                                            const fmt = v => v >= 1000000 ? '$'+(v/1000000).toFixed(1)+'M' : v >= 1000 ? '$'+Math.round(v/1000)+'K' : v > 0 ? '$'+v : '—';
-                                            const tile = (val, lbl, color) => (<div style={{ background: '#f8fafc', border: '0.5px solid #e2e8f0', borderRadius: '6px', padding: '4px 8px', textAlign: 'center', minWidth: '50px' }}><div style={{ fontSize: '12px', fontWeight: '600', color: color || '#1e293b', lineHeight: 1 }}>{val}</div><div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '.04em' }}>{lbl}</div></div>);
-                                            return (<div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>{tile(openCount,'Open','#1e293b')}{tile(fmt(pipeline),'Pipeline',pipeline>0?'#2563eb':'#94a3b8')}{tile(wonCount,'Won',wonCount>0?'#15803d':'#94a3b8')}{tile(contactCount,'Contacts','#1e293b')}</div>);
-                                        })()}
-                                        <div className="acct-hover-actions" style={{ display: 'flex', gap: '4px', flexShrink: 0, opacity: 0, transition: 'opacity 0.15s' }}>
-                                            <button onClick={() => handleEditAccount(account)} style={{ padding: '3px 9px', borderRadius: '6px', border: '0.5px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                            <button onClick={() => handleAddSubAccount(account)} style={{ padding: '3px 9px', borderRadius: '6px', border: '0.5px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Sub</button>
-                                            <button onClick={() => handleDeleteAccount(account.id)} style={{ padding: '3px 7px', borderRadius: '6px', border: '0.5px solid #fca5a5', background: '#fff', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
+                                        <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: '500', flex: 1, textAlign: 'center' }}>{account.accountOwner || '—'}</span>
+                                        <div style={{ flexShrink: 0, textAlign: 'right', display: 'flex', gap: '4px' }}>
+                                            <button onClick={() => handleEditAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                            <button onClick={() => handleAddSubAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Sub</button>
+                                            <button onClick={() => handleDeleteAccount(account.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                         </div>
                                     </div>
                                     {expandedAccounts[account.id] && getSubAccounts(account.id).length > 0 && (
@@ -6873,8 +6840,8 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 <div key={sub.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.2rem 0', fontSize: '0.75rem' }}>
                                                     <span style={{ cursor: 'pointer', color: '#1e293b', fontWeight: '500' }} onClick={() => setViewingAccount(sub)}>↳ {sub.name}</span>
                                                     <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
-                                                        <button onClick={() => handleEditAccount(sub, true)} style={{ padding: '3px 9px', borderRadius: '6px', border: '0.5px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                                        <button onClick={() => handleDeleteSubAccount(account.id, sub.id)} style={{ padding: '3px 7px', borderRadius: '6px', border: '0.5px solid #fca5a5', background: '#fff', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
+                                                        <button onClick={() => handleEditAccount(sub, true)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                                        <button onClick={() => handleDeleteSubAccount(account.id, sub.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -7364,9 +7331,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                         </div>
                                     </div>
                                     {/* Desktop row - hidden on mobile */}
-                                    <div className="contacts-desktop-row" style={{ display: 'flex', alignItems: 'center', padding: '0.4rem 0.625rem', gap: '8px' }}
-                                        onMouseEnter={e => { const a = e.currentTarget.querySelector('.con-hover-actions'); if(a) a.style.opacity='1'; }}
-                                        onMouseLeave={e => { const a = e.currentTarget.querySelector('.con-hover-actions'); if(a) a.style.opacity='0'; }}>
+                                    <div className="contacts-desktop-row" style={{ display: 'flex', alignItems: 'center', padding: '0.25rem 0.625rem', gap: '0.375rem' }}>
                                         <input type="checkbox"
                                             checked={selectedContacts.includes(contact.id)}
                                             onChange={e => {
@@ -7375,35 +7340,58 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             }}
                                             style={{ width: '13px', height: '13px', cursor: 'pointer', accentColor: '#2563eb', flexShrink: 0 }}
                                         />
-                                        {(() => {
-                                            const initials = ((contact.firstName||'?')[0]+(contact.lastName||'?')[0]).toUpperCase();
-                                            const colorPairs = [['#dbeafe','#1e40af'],['#fce7f3','#9d174d'],['#d1fae5','#065f46'],['#ede9fe','#5b21b6'],['#fef3c7','#92400e'],['#fee2e2','#991b1b'],['#e0f2fe','#0369a1']];
-                                            const [bg, fg] = colorPairs[((contact.lastName||'A').charCodeAt(0)) % colorPairs.length];
-                                            return <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: bg, color: fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: '600', flexShrink: 0 }}>{initials}</div>;
-                                        })()}
-                                        <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setViewingContact(contact)}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                                <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#2563eb' }}>{contact.firstName} {contact.lastName}</span>
-                                                {(() => {
-                                                    const linkedOppCount = opportunities.filter(o =>
-                                                        (o.contactIds && o.contactIds.includes(contact.id)) ||
-                                                        (o.contacts && o.contacts.split(',').map(s => s.trim().toLowerCase()).some(n => n.startsWith((contact.firstName + ' ' + contact.lastName).toLowerCase())))
-                                                    ).length;
-                                                    if (!linkedOppCount) return null;
-                                                    return <span style={{ fontSize: '0.5625rem', fontWeight: '700', background: '#dbeafe', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.05rem 0.35rem', borderRadius: '999px', lineHeight: '1.4', flexShrink: 0 }}>{linkedOppCount} opp{linkedOppCount > 1 ? 's' : ''}</span>;
-                                                })()}
+                                        <div style={{ 
+                                            flex: 1,
+                                            display: 'grid',
+                                            gridTemplateColumns: '2fr 2fr 2fr 2fr 3fr',
+                                            gap: '0.375rem',
+                                            alignItems: 'center'
+                                        }}>
+                                            <div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                                                    <div 
+                                                        style={{ fontSize: '0.75rem', fontWeight: '700', color: '#2563eb', cursor: 'pointer', lineHeight: '1.2' }}
+                                                        onClick={() => setViewingContact(contact)}
+                                                        onMouseEnter={e => e.target.style.textDecoration = 'underline'}
+                                                        onMouseLeave={e => e.target.style.textDecoration = 'none'}
+                                                    >
+                                                        {contact.firstName} {contact.lastName}
+                                                    </div>
+                                                    {(() => {
+                                                        const linkedOppCount = opportunities.filter(o =>
+                                                            (o.contactIds && o.contactIds.includes(contact.id)) ||
+                                                            (o.contacts && o.contacts.split(',').map(s => s.trim().toLowerCase()).some(n => n.startsWith((contact.firstName + ' ' + contact.lastName).toLowerCase())))
+                                                        ).length;
+                                                        if (!linkedOppCount) return null;
+                                                        return (
+                                                            <span title={`${linkedOppCount} linked opportunity${linkedOppCount > 1 ? 's' : ''}`}
+                                                                style={{ fontSize: '0.5625rem', fontWeight: '700', background: '#dbeafe', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.05rem 0.35rem', borderRadius: '999px', lineHeight: '1.4', flexShrink: 0 }}>
+                                                                {linkedOppCount} opp{linkedOppCount > 1 ? 's' : ''}
+                                                            </span>
+                                                        );
+                                                    })()}
+                                                </div>
                                             </div>
-                                            <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                                {contact.title && <span>{contact.title}</span>}
-                                                {contact.title && contact.company && <span style={{ color: '#cbd5e1' }}>·</span>}
-                                                {contact.company && <span>{contact.company}</span>}
-                                                {contact.email && <><span style={{ color: '#cbd5e1' }}>·</span><span style={{ color: '#2563eb' }}>{contact.email}</span></>}
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {contact.company || '-'}
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {contact.title || '-'}
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                                {contact.phone || '-'}
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem' }}>
+                                                {contact.email ? (
+                                                    <a href={`mailto:${contact.email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>
+                                                        {contact.email}
+                                                    </a>
+                                                ) : '-'}
                                             </div>
                                         </div>
-                                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', flexShrink: 0 }}>{contact.phone || ''}</div>
-                                        <div className="con-hover-actions" style={{ display: 'flex', gap: '4px', flexShrink: 0, opacity: 0, transition: 'opacity 0.15s' }}>
-                                            <button onClick={() => handleEditContact(contact)} style={{ padding: '3px 9px', borderRadius: '6px', border: '0.5px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                            <button onClick={() => handleDeleteContact(contact.id)} style={{ padding: '3px 7px', borderRadius: '6px', border: '0.5px solid #fca5a5', background: '#fff', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
+                                        <div style={{ marginLeft: '0.375rem', display: 'flex', gap: '4px' }}>
+                                            <button onClick={() => handleEditContact(contact)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                            <button onClick={() => handleDeleteContact(contact.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                         </div>
                                     </div>
                                     {/* end contacts-desktop-row */}
@@ -7773,10 +7761,6 @@ ${bodyHtml}
   .kpi-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; }
   .kpi-label { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
   .kpi-value { font-size: 20px; font-weight: 800; color: #1e293b; line-height: 1.1; }
-  .opp-hover-actions button:hover { background: #f8fafc !important; }
-  .pipeline-hover-actions button:hover { background: #f8fafc !important; }
-  .acct-hover-actions button:hover { background: #f8fafc !important; }
-  .con-hover-actions button:hover { background: #f8fafc !important; }
   .kpi-sub { font-size: 9px; color: #64748b; margin-top: 3px; }
 
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -7957,13 +7941,13 @@ ${bodyHtml}
                                 <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Period:</span>
                                 {(() => { const now = new Date(); const fy = now.getFullYear(); return (
                                 <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
-                                    {['all','Q1','Q2','Q3','Q4','FY','custom'].map(p => (
+                                    {['FY','Q1','Q2','Q3','Q4','all','custom'].map(p => (
                                         <button key={p} onClick={() => setReportTimePeriod(p)}
                                             style={{ padding:'3px 12px', borderRadius:'999px', border:'1px solid', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'600', transition:'all 0.15s',
                                                 background: reportTimePeriod === p ? '#2563eb' : '#f8fafc',
                                                 color:      reportTimePeriod === p ? '#fff' : '#475569',
                                                 borderColor: reportTimePeriod === p ? '#2563eb' : '#e2e8f0' }}>
-                                            {p === 'all' ? 'All time' : p === 'FY' ? `FY ${fy}` : p === 'custom' ? 'Custom' : p}
+                                            {p === 'all' ? 'All Time' : p === 'FY' ? `FY ${fy}` : p === 'custom' ? 'Custom' : p}
                                         </button>
                                     ))}
                                     {reportTimePeriod === 'custom' && (
@@ -9358,6 +9342,67 @@ ${bodyHtml}
                                     </div>
                                 </div>
                             </div>
+
+                            {/* ── SPIFF Board ── */}
+                            <div style={smCard}>
+                                <div style={smHdr}>
+                                    <div>
+                                        <div style={smTitle}>SPIFF Board</div>
+                                        <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'0.125rem' }}>One-time incentive bonuses for specific deals, products, or behaviors</div>
+                                    </div>
+                                    <button onClick={() => setSettings(prev => ({ ...prev, spiffs: [...(prev.spiffs||[]), { id: 'spiff_'+Date.now(), name: '', amount: '', type: 'flat', condition: '', active: true }] }))}
+                                        style={{ padding:'0.3rem 0.75rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'6px', fontSize:'0.75rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>+ Add SPIFF</button>
+                                </div>
+                                <div style={{ padding:'1.25rem 1.5rem' }}>
+                                    {(settings.spiffs||[]).length === 0 ? (
+                                        <div style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.8125rem', background:'#f8fafc', borderRadius:'8px', border:'1.5px dashed #e2e8f0' }}>
+                                            No SPIFFs defined yet. Click + Add SPIFF to create your first incentive.
+                                        </div>
+                                    ) : (
+                                        <div style={{ display:'flex', flexDirection:'column', gap:'0.625rem' }}>
+                                            {(settings.spiffs||[]).map((spiff, si) => (
+                                                <div key={spiff.id} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'0.75rem 1rem', display:'flex', flexDirection:'column', gap:'0.5rem' }}>
+                                                    <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', flexWrap:'wrap' }}>
+                                                        <input type="text" value={spiff.name} placeholder="SPIFF name (e.g. Q1 New Logo Bonus)"
+                                                            onChange={e => setSettings(prev => ({ ...prev, spiffs: (prev.spiffs||[]).map((s,i) => i===si ? {...s, name: e.target.value} : s) }))}
+                                                            style={{ flex: 2, minWidth:'160px', padding:'0.375rem 0.625rem', border:'1.5px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', background:'#fff', outline:'none' }}
+                                                            onFocus={e=>e.target.style.borderColor='#2563eb'} onBlur={e=>e.target.style.borderColor='#e2e8f0'} />
+                                                        <select value={spiff.type}
+                                                            onChange={e => setSettings(prev => ({ ...prev, spiffs: (prev.spiffs||[]).map((s,i) => i===si ? {...s, type: e.target.value} : s) }))}
+                                                            style={{ padding:'0.375rem 0.5rem', border:'1.5px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', background:'#fff', cursor:'pointer', outline:'none' }}>
+                                                            <option value="flat">Flat $ bonus</option>
+                                                            <option value="pct">% of deal ARR</option>
+                                                            <option value="multiplier">Commission multiplier</option>
+                                                        </select>
+                                                        <input type="number" value={spiff.amount} placeholder={spiff.type==='multiplier'?'e.g. 1.5':spiff.type==='pct'?'e.g. 5':'e.g. 500'}
+                                                            onChange={e => setSettings(prev => ({ ...prev, spiffs: (prev.spiffs||[]).map((s,i) => i===si ? {...s, amount: e.target.value} : s) }))}
+                                                            style={{ width:'90px', padding:'0.375rem 0.5rem', border:'1.5px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', background:'#fff', textAlign:'right', outline:'none' }}
+                                                            onFocus={e=>e.target.style.borderColor='#2563eb'} onBlur={e=>e.target.style.borderColor='#e2e8f0'} />
+                                                        <span style={{ fontSize:'0.75rem', color:'#94a3b8', flexShrink:0 }}>{spiff.type==='flat'?'$':spiff.type==='pct'?'%':'×'}</span>
+                                                        <label style={{ display:'flex', alignItems:'center', gap:'4px', cursor:'pointer', flexShrink:0 }}>
+                                                            <input type="checkbox" checked={!!spiff.active} onChange={e => setSettings(prev => ({ ...prev, spiffs: (prev.spiffs||[]).map((s,i) => i===si ? {...s, active: e.target.checked} : s) }))} style={{ accentColor:'#2563eb' }} />
+                                                            <span style={{ fontSize:'0.75rem', color:'#64748b' }}>Active</span>
+                                                        </label>
+                                                        <button onClick={() => showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`, () => setSettings(prev => ({ ...prev, spiffs: (prev.spiffs||[]).filter((_,i)=>i!==si) })))}
+                                                            style={{ background:'none', border:'none', color:'#ef4444', cursor:'pointer', fontSize:'1rem', padding:'0', lineHeight:1, marginLeft:'auto' }}>×</button>
+                                                    </div>
+                                                    <div style={{ display:'flex', alignItems:'center', gap:'0.375rem' }}>
+                                                        <span style={{ fontSize:'0.6875rem', color:'#94a3b8', flexShrink:0 }}>Condition:</span>
+                                                        <input type="text" value={spiff.condition} placeholder="e.g. New logo deal, Product X included, Deal > $50K..."
+                                                            onChange={e => setSettings(prev => ({ ...prev, spiffs: (prev.spiffs||[]).map((s,i) => i===si ? {...s, condition: e.target.value} : s) }))}
+                                                            style={{ flex:1, padding:'0.3rem 0.625rem', border:'1.5px solid #e2e8f0', borderRadius:'6px', fontSize:'0.75rem', fontFamily:'inherit', background:'#fff', outline:'none' }}
+                                                            onFocus={e=>e.target.style.borderColor='#2563eb'} onBlur={e=>e.target.style.borderColor='#e2e8f0'} />
+                                                    </div>
+                                                    <div style={{ fontSize:'0.6875rem', color:'#2563eb', background:'#eff6ff', padding:'4px 8px', borderRadius:'4px', display:'inline-block' }}>
+                                                        {spiff.type==='flat' ? `Pays $${parseFloat(spiff.amount||0).toLocaleString()} per qualifying deal` : spiff.type==='pct' ? `Pays ${spiff.amount||0}% of deal ARR` : `Multiplies commission by ${spiff.amount||1}×`}
+                                                        {!spiff.active && <span style={{ color:'#94a3b8', marginLeft:'6px' }}>(inactive)</span>}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                             </>
                         );
                     })()}
@@ -10087,117 +10132,57 @@ ${bodyHtml}
                                 <h2>INDUSTRIES</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
-                                {/* Helper: normalize verticalMarkets to object array */}
                                 {(() => {
                                     const rawList = settings.verticalMarkets || [];
                                     const industries = rawList.map(m => typeof m === 'string' ? { name: m, subs: [] } : m);
                                     const saveIndustries = (updated) => setSettings(prev => ({ ...prev, verticalMarkets: updated }));
-
                                     return (
                                         <>
-                                        {/* Add primary industry */}
                                         <div style={{ marginBottom: '2rem' }}>
                                             <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>Add Primary Industry</h3>
                                             <div style={{ display: 'flex', gap: '0.5rem', maxWidth: '500px' }}>
-                                                <input type="text" value={newVerticalMarketInput}
-                                                    onChange={e => setNewVerticalMarketInput(e.target.value)}
-                                                    placeholder="e.g. Oil & Gas, Manufacturing..."
+                                                <input type="text" value={newVerticalMarketInput} onChange={e => setNewVerticalMarketInput(e.target.value)} placeholder="e.g. Oil & Gas, Manufacturing..."
                                                     style={{ flex: 1, background: '#f8f9fa', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.625rem 0.75rem', color: '#1e293b', fontSize: '0.875rem' }}
-                                                    onKeyPress={e => {
-                                                        if (e.key === 'Enter') {
-                                                            const v = newVerticalMarketInput.trim();
-                                                            if (v && !industries.some(i => i.name.toLowerCase() === v.toLowerCase())) {
-                                                                saveIndustries([...industries, { name: v, subs: [] }]);
-                                                                setNewVerticalMarketInput('');
-                                                            }
-                                                        }
-                                                    }}
-                                                />
-                                                <button className="btn" onClick={() => {
-                                                    const v = newVerticalMarketInput.trim();
-                                                    if (v && !industries.some(i => i.name.toLowerCase() === v.toLowerCase())) {
-                                                        saveIndustries([...industries, { name: v, subs: [] }]);
-                                                        setNewVerticalMarketInput('');
-                                                    }
-                                                }}>+ Add</button>
+                                                    onKeyPress={e => { if (e.key === 'Enter') { const v = newVerticalMarketInput.trim(); if (v && !industries.some(i => i.name.toLowerCase() === v.toLowerCase())) { saveIndustries([...industries, { name: v, subs: [] }]); setNewVerticalMarketInput(''); } } }} />
+                                                <button className="btn" onClick={() => { const v = newVerticalMarketInput.trim(); if (v && !industries.some(i => i.name.toLowerCase() === v.toLowerCase())) { saveIndustries([...industries, { name: v, subs: [] }]); setNewVerticalMarketInput(''); } }}>+ Add</button>
                                             </div>
                                         </div>
-
-                                        {/* Industry list */}
                                         <div>
-                                            <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>
-                                                Industries ({industries.length})
-                                            </h3>
+                                            <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>Industries ({industries.length})</h3>
                                             {industries.length === 0 ? (
-                                                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b', background: '#f1f3f5', borderRadius: '8px' }}>
-                                                    No industries yet. Add one above to get started.
-                                                </div>
+                                                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b', background: '#f1f3f5', borderRadius: '8px' }}>No industries yet. Add one above to get started.</div>
                                             ) : (
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                    {[...industries].sort((a, b) => a.name.localeCompare(b.name)).map((industry, idx) => {
+                                                    {[...industries].sort((a, b) => a.name.localeCompare(b.name)).map((industry) => {
                                                         const realIdx = industries.findIndex(i => i.name === industry.name);
                                                         const isExpanded = expandedIndustry === industry.name;
                                                         return (
                                                             <div key={industry.name} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
-                                                                {/* Primary row */}
                                                                 <div style={{ display: 'flex', alignItems: 'center', padding: '0.625rem 1rem', gap: '0.5rem' }}>
-                                                                    <button onClick={() => setExpandedIndustry(isExpanded ? null : industry.name)}
-                                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#2563eb', padding: '0', width: '16px', flexShrink: 0 }}>
-                                                                        {isExpanded ? '▼' : '▶'}
-                                                                    </button>
+                                                                    <button onClick={() => setExpandedIndustry(isExpanded ? null : industry.name)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#2563eb', padding: '0', width: '16px', flexShrink: 0 }}>{isExpanded ? '▼' : '▶'}</button>
                                                                     <span style={{ fontWeight: '600', fontSize: '0.875rem', flex: 1 }}>{industry.name}</span>
-                                                                    {industry.subs.length > 0 && (
-                                                                        <span style={{ fontSize: '0.6875rem', color: '#94a3b8', background: '#f1f5f9', padding: '1px 6px', borderRadius: '999px' }}>{industry.subs.length} sub{industry.subs.length > 1 ? 's' : ''}</span>
-                                                                    )}
-                                                                    <button onClick={() => setExpandedIndustry(isExpanded ? null : industry.name)}
-                                                                        style={{ fontSize: '0.6875rem', fontWeight: '600', color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                                                                        + Sub-industry
-                                                                    </button>
-                                                                    <button onClick={() => showConfirm(`Remove "${industry.name}" and all its sub-industries?`, () => {
-                                                                        saveIndustries(industries.filter((_, i) => i !== realIdx));
-                                                                        if (expandedIndustry === industry.name) setExpandedIndustry(null);
-                                                                    })} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '1rem', padding: '0 0 0 4px', lineHeight: 1 }}>×</button>
+                                                                    {industry.subs.length > 0 && <span style={{ fontSize: '0.6875rem', color: '#94a3b8', background: '#f1f5f9', padding: '1px 6px', borderRadius: '999px' }}>{industry.subs.length} sub{industry.subs.length > 1 ? 's' : ''}</span>}
+                                                                    <button onClick={() => setExpandedIndustry(isExpanded ? null : industry.name)} style={{ fontSize: '0.6875rem', fontWeight: '600', color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer', fontFamily: 'inherit' }}>+ Sub</button>
+                                                                    <button onClick={() => showConfirm(`Remove "${industry.name}" and all its sub-industries?`, () => { saveIndustries(industries.filter((_, i) => i !== realIdx)); if (expandedIndustry === industry.name) setExpandedIndustry(null); })} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '1rem', padding: '0 0 0 4px', lineHeight: 1 }}>×</button>
                                                                 </div>
-
-                                                                {/* Sub-industries + add row */}
                                                                 {isExpanded && (
                                                                     <div style={{ borderTop: '1px solid #f1f5f9', background: '#f8fafc', padding: '0.625rem 1rem 0.625rem 2.5rem' }}>
                                                                         {industry.subs.length > 0 && (
                                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '0.5rem' }}>
                                                                                 {industry.subs.map((sub, si) => (
                                                                                     <div key={si} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8125rem' }}>
-                                                                                        <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>↳</span>
+                                                                                        <span style={{ color: '#94a3b8' }}>↳</span>
                                                                                         <span style={{ flex: 1, color: '#475569' }}>{sub}</span>
-                                                                                        <button onClick={() => {
-                                                                                            const updated = industries.map((ind, i) => i === realIdx ? { ...ind, subs: ind.subs.filter((_, j) => j !== si) } : ind);
-                                                                                            saveIndustries(updated);
-                                                                                        }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.875rem', padding: '0', lineHeight: 1 }}>×</button>
+                                                                                        <button onClick={() => { const updated = industries.map((ind, i) => i === realIdx ? { ...ind, subs: ind.subs.filter((_, j) => j !== si) } : ind); saveIndustries(updated); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.875rem', padding: '0', lineHeight: 1 }}>×</button>
                                                                                     </div>
                                                                                 ))}
                                                                             </div>
                                                                         )}
                                                                         <div style={{ display: 'flex', gap: '0.375rem' }}>
-                                                                            <input type="text" value={newSubIndustryInput}
-                                                                                onChange={e => setNewSubIndustryInput(e.target.value)}
-                                                                                placeholder={`Add sub-industry under ${industry.name}...`}
+                                                                            <input type="text" value={newSubIndustryInput} onChange={e => setNewSubIndustryInput(e.target.value)} placeholder={`Add sub-industry under ${industry.name}...`}
                                                                                 style={{ flex: 1, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '5px', padding: '0.375rem 0.625rem', fontSize: '0.8125rem', color: '#1e293b' }}
-                                                                                onKeyPress={e => {
-                                                                                    if (e.key === 'Enter') {
-                                                                                        const v = newSubIndustryInput.trim();
-                                                                                        if (v && !industry.subs.includes(v)) {
-                                                                                            saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind));
-                                                                                            setNewSubIndustryInput('');
-                                                                                        }
-                                                                                    }
-                                                                                }}
-                                                                            />
-                                                                            <button onClick={() => {
-                                                                                const v = newSubIndustryInput.trim();
-                                                                                if (v && !industry.subs.includes(v)) {
-                                                                                    saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind));
-                                                                                    setNewSubIndustryInput('');
-                                                                                }
-                                                                            }} style={{ padding: '0.375rem 0.75rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '5px', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Add</button>
+                                                                                onKeyPress={e => { if (e.key === 'Enter') { const v = newSubIndustryInput.trim(); if (v && !industry.subs.includes(v)) { saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind)); setNewSubIndustryInput(''); } } }} />
+                                                                            <button onClick={() => { const v = newSubIndustryInput.trim(); if (v && !industry.subs.includes(v)) { saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind)); setNewSubIndustryInput(''); } }} style={{ padding: '0.375rem 0.75rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '5px', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Add</button>
                                                                         </div>
                                                                     </div>
                                                                 )}
@@ -10311,6 +10296,30 @@ ${bodyHtml}
                                 <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
                                     Configure your KPI cards. Set color indicators and tolerance thresholds to visually track performance.
                                 </p>
+
+                                {/* KPI Trend Mode */}
+                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
+                                    <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1e293b', marginBottom: '0.375rem' }}>Sparkline Trend Mode</div>
+                                    <div style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '1rem' }}>Controls what the sparklines on KPI cards visualize.</div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                        {[
+                                            { value: 'stage-distribution', label: 'Stage Distribution', desc: 'ARR/count across funnel stages' },
+                                            { value: 'month-over-month', label: 'Month over Month', desc: 'Last 6 months of close dates' },
+                                            { value: 'quarter-over-quarter', label: 'Quarter over Quarter', desc: 'Last 4 quarters' },
+                                            { value: 'year-to-date', label: 'Year to Date', desc: 'Monthly buckets since Jan 1' },
+                                            { value: 'year-over-year', label: 'Year over Year', desc: 'This year vs last year delta' },
+                                        ].map(opt => {
+                                            const active = (settings.kpiTrendMode || 'stage-distribution') === opt.value;
+                                            return (
+                                                <div key={opt.value} onClick={() => setSettings(prev => ({ ...prev, kpiTrendMode: opt.value }))}
+                                                    style={{ padding: '0.625rem 1rem', borderRadius: '8px', border: active ? '2px solid #2563eb' : '1px solid #e2e8f0', background: active ? '#eff6ff' : '#fff', cursor: 'pointer', minWidth: '160px', transition: 'all 0.15s' }}>
+                                                    <div style={{ fontWeight: '600', fontSize: '0.8125rem', color: active ? '#2563eb' : '#1e293b' }}>{opt.label}</div>
+                                                    <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '2px' }}>{opt.desc}</div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
 
                                 {(settings.kpiConfig || []).map((kpi, kIdx) => {
                                     const colorOptions = [
@@ -11430,6 +11439,7 @@ ${bodyHtml}
                                     </div>
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                                    <button className="btn btn-secondary" onClick={() => { setActivityInitialContext({ companyName: acc.name }); setEditingActivity(null); setShowActivityModal(true); }}>+ Log Activity</button>
                                     <button className="btn" onClick={() => { setViewingAccount(null); handleEditAccount(acc); }}>Edit Account</button>
                                 </div>
                             </div>
@@ -11699,6 +11709,7 @@ ${bodyHtml}
                                     </div>
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                                    <button className="btn btn-secondary" onClick={() => { setActivityInitialContext({ companyName: ct.company || '', contactName: ctFullName }); setEditingActivity(null); setShowActivityModal(true); }}>+ Log Activity</button>
                                     <button className="btn" onClick={() => { setViewingContact(null); handleEditContact(ct); }}>Edit Contact</button>
                                 </div>
                             </div>
