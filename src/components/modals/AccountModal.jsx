@@ -212,7 +212,7 @@ export default function AccountModal({ account, isSubAccount, settings, onClose,
                             />
                         </div>
                         <div className="form-group" style={{ position: 'relative' }}>
-                            <label>Vertical Market</label>
+                            <label>Industry</label>
                             <input
                                 type="text"
                                 value={verticalSearch}
@@ -243,14 +243,9 @@ export default function AccountModal({ account, isSubAccount, settings, onClose,
                                                 {market}
                                             </div>
                                         ))}
-                                    {verticalSearch.trim() && !verticalMarkets.some(m => m.toLowerCase() === verticalSearch.trim().toLowerCase()) && (
-                                        <div
-                                            onClick={() => { setShowVerticalSuggestions(false); }}
-                                            style={{ padding: '0.75rem', cursor: 'pointer', color: '#2563eb', fontWeight: '600', borderTop: '1px solid #e2e8f0', transition: 'background 0.2s' }}
-                                            onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
-                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                        >
-                                            + Add "{verticalSearch.trim()}" as new vertical market
+                                    {verticalMarkets.length === 0 && (
+                                        <div style={{ padding: '0.75rem', color: '#94a3b8', fontSize: '0.8125rem' }}>
+                                            No industries defined yet — add them in Settings → Industries.
                                         </div>
                                     )}
                                 </div>

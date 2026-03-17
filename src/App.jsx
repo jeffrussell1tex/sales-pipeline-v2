@@ -6843,7 +6843,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                         <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setViewingAccount(account)}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                                                 <span style={{ fontWeight: '600', fontSize: '0.8125rem', color: '#2563eb' }}>{account.name}</span>
-                                                {account.industry && <span style={{ fontSize: '0.625rem', fontWeight: '600', background: '#ede9fe', color: '#5b21b6', padding: '1px 6px', borderRadius: '999px' }}>{account.industry}</span>}
+                                                {account.verticalMarket && <span style={{ fontSize: '0.625rem', fontWeight: '600', background: '#ede9fe', color: '#5b21b6', padding: '1px 6px', borderRadius: '999px' }}>{account.verticalMarket}</span>}
                                                 {getSubAccounts(account.id).length > 0 && <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.5rem', fontWeight: '700', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>{getSubAccounts(account.id).length} sub</span>}
                                             </div>
                                             <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '2px' }}>{account.accountOwner || '—'}{account.billingAddress ? ' · ' + account.billingAddress.split(',').slice(-2).join(',').trim() : ''}</div>
@@ -9389,7 +9389,7 @@ ${bodyHtml}
                                         { view: 'fiscal-year', icon: '📅', title: 'Fiscal Year Settings', desc: 'Configure fiscal year start month and quarter calculations' },
                                         { view: 'logo', icon: '🖼️', title: 'Company Logo', desc: 'Upload and manage your company logo' },
                                         { view: 'pain-points', icon: '⚠️', title: 'Pain Points Library', desc: 'Create and manage customer pain points for opportunities' },
-                                        { view: 'vertical-markets', icon: '🏢', title: 'Vertical Markets', desc: 'Create and manage industry vertical markets for accounts' },
+                                        { view: 'vertical-markets', icon: '🏢', title: 'Industries', desc: 'Create and manage industry types for accounts' },
                                         { view: 'funnel-stages', icon: '🔻', title: 'Sales Funnel Stages', desc: 'Configure funnel stages and win probability weightings' },
                                         { view: 'kpi-settings', icon: '📊', title: 'KPI Settings', desc: 'Configure KPIs, set tolerance thresholds, and assign indicator colors' },
                                         { view: 'data-storage', icon: '🗄️', title: 'Data Storage', desc: 'Configure where your pipeline data is stored and managed' },
@@ -10082,19 +10082,19 @@ ${bodyHtml}
                                 >
                                     ← Back
                                 </button>
-                                <h2>VERTICAL MARKETS</h2>
+                                <h2>INDUSTRIES</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
                                 <div style={{ marginBottom: '2rem' }}>
                                     <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>
-                                        Add New Vertical Market
+                                        Add New Industry
                                     </h3>
                                     <div style={{ display: 'flex', gap: '0.5rem', maxWidth: '500px' }}>
                                         <input
                                             type="text"
                                             value={newVerticalMarketInput}
                                             onChange={(e) => setNewVerticalMarketInput(e.target.value)}
-                                            placeholder="Enter new vertical market..."
+                                            placeholder="Enter new industry..."
                                             style={{
                                                 flex: 1,
                                                 background: '#f8f9fa',
@@ -10140,7 +10140,7 @@ ${bodyHtml}
 
                                 <div>
                                     <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>
-                                        Existing Vertical Markets ({(settings.verticalMarkets || []).length})
+                                        Industries ({(settings.verticalMarkets || []).length})
                                     </h3>
                                     {(settings.verticalMarkets || []).length === 0 ? (
                                         <div style={{ 
