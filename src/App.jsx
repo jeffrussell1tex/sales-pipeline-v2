@@ -212,8 +212,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                     {f.label} <span style={{ opacity:0.75 }}>{f.count}</span>
                                 </button>
                             ))}
-                            <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
-                                {/* View toggle */}
+                                {/* View toggle - left aligned */}
                                 <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
                                     {[{v:'funnel',label:'🔻 Funnel'},{v:'kanban',label:'⬛ Kanban'},{v:'list',label:'☰ List'}].map(({v,label}) => (
                                         <button key={v} onClick={() => setLeadView(v)}
@@ -225,6 +224,7 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                         </button>
                                     ))}
                                 </div>
+                            <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
                                 {canSeeAll && <button onClick={onImportClick} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#10b981', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>}
                                 <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
                             </div>
@@ -9426,34 +9426,49 @@ ${bodyHtml}
                                 <h2>SETTINGS</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
-                                <div style={{ display: 'grid', gap: '1rem', maxWidth: '600px' }}>
+                                <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', maxWidth: '560px' }}>
                                     {[
-                                        { view: 'users', icon: '👥', title: 'Manage Users', desc: 'Add, edit, and manage team members, roles, and permissions' },
-                                        { view: 'team-builder', icon: '🏗️', title: 'Team Builder', desc: 'Define sales teams, assign managers, territories, and reps' },
-                                        { view: 'territories', icon: '📍', title: 'Territories', desc: 'Define sales territories available for assignment to teams and reps' },
-                                        { view: 'verticals', icon: '🏭', title: 'Verticals', desc: 'Define sales verticals available for assignment to teams and reps' },
-                                        { view: 'pipelines', icon: '🔀', title: 'Pipelines', desc: 'Create and manage multiple sales pipelines (new business, renewals, product lines)' },
-                                        { view: 'fiscal-year', icon: '📅', title: 'Fiscal Year Settings', desc: 'Configure fiscal year start month and quarter calculations' },
-                                        { view: 'logo', icon: '🖼️', title: 'Company Logo', desc: 'Upload and manage your company logo' },
-                                        { view: 'pain-points', icon: '⚠️', title: 'Pain Points Library', desc: 'Create and manage customer pain points for opportunities' },
-                                        { view: 'vertical-markets', icon: '🏢', title: 'Industries', desc: 'Create and manage industry types for accounts' },
-                                        { view: 'funnel-stages', icon: '🔻', title: 'Sales Funnel Stages', desc: 'Configure funnel stages and win probability weightings' },
-                                        { view: 'kpi-settings', icon: '📊', title: 'KPI Settings', desc: 'Configure KPIs, set tolerance thresholds, and assign indicator colors' },
-                                        { view: 'data-storage', icon: '🗄️', title: 'Data Storage', desc: 'Configure where your pipeline data is stored and managed' },
-                                        { view: 'data-management', icon: '💾', title: 'Data Management', desc: 'Export, import, and back up all your pipeline data' },
-                                        { view: 'audit-log', icon: '📋', title: 'Audit Log', desc: 'See who changed what and when across all records' },
-                                        { view: 'field-visibility', icon: '🔒', title: 'Field Visibility', desc: 'Control which roles can see sensitive fields like ARR, cost, and notes' }
-                                    ].map(item => (
-                                        <div key={item.view}
-                                            onClick={() => setSettingsView(item.view)}
-                                            style={{ padding: '1.5rem', border: '1px solid #d1d5db', borderRadius: '8px', background: '#ffffff', cursor: 'pointer', transition: 'all 0.2s' }}
-                                            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)'; e.currentTarget.style.borderColor = '#2563eb'; }}
-                                            onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
-                                        >
-                                            <h3 style={{ fontSize: '1.125rem', fontWeight: '700', marginBottom: '0.5rem' }}>{item.icon} {item.title}</h3>
-                                            <p style={{ color: '#64748b', fontSize: '0.875rem' }}>{item.desc}</p>
-                                        </div>
-                                    ))}
+                                        { group: 'Team' },
+                                        { view: 'users',          icon: '👥', title: 'Manage Users',       desc: 'Roles & permissions' },
+                                        { view: 'team-builder',   icon: '🏗️', title: 'Team Builder',       desc: 'Teams & managers' },
+                                        { view: 'territories',    icon: '📍', title: 'Territories',         desc: 'Sales territory definitions' },
+                                        { group: 'Configuration' },
+                                        { view: 'vertical-markets', icon: '🏢', title: 'Industries',        desc: 'Primary & sub-industry types' },
+                                        { view: 'verticals',      icon: '🏭', title: 'Verticals',           desc: 'Sales vertical assignments' },
+                                        { view: 'funnel-stages',  icon: '🔻', title: 'Funnel Stages',       desc: 'Stages & win probability' },
+                                        { view: 'pipelines',      icon: '🔀', title: 'Pipelines',           desc: 'Multiple pipeline management' },
+                                        { view: 'kpi-settings',   icon: '📊', title: 'KPI Settings',        desc: 'Thresholds, colors & sparklines' },
+                                        { view: 'fiscal-year',    icon: '📅', title: 'Fiscal Year',         desc: 'Quarter & fiscal year start' },
+                                        { view: 'logo',           icon: '🖼️', title: 'Company Logo',        desc: 'Upload company logo' },
+                                        { view: 'pain-points',    icon: '⚠️', title: 'Pain Points Library', desc: 'Customer pain point templates' },
+                                        { group: 'Security & Data' },
+                                        { view: 'field-visibility', icon: '🔒', title: 'Field Visibility',  desc: 'Role-based field access control' },
+                                        { view: 'data-storage',   icon: '🗄️', title: 'Data Storage',        desc: 'Storage configuration' },
+                                        { view: 'data-management', icon: '💾', title: 'Data Management',    desc: 'Export, import & backup' },
+                                        { view: 'audit-log',      icon: '📋', title: 'Audit Log',           desc: 'Change history across all records' },
+                                    ].map((item, idx, arr) => {
+                                        if (item.group) return (
+                                            <div key={item.group} style={{ padding: '6px 16px 4px', fontSize: '0.625rem', fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', color: '#94a3b8', background: '#f8fafc', borderBottom: '0.5px solid #e2e8f0', borderTop: idx > 0 ? '0.5px solid #e2e8f0' : 'none' }}>
+                                                {item.group}
+                                            </div>
+                                        );
+                                        const isLast = idx === arr.length - 1 || arr[idx + 1]?.group;
+                                        return (
+                                            <div key={item.view}
+                                                onClick={() => setSettingsView(item.view)}
+                                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 16px 9px 24px', borderBottom: isLast ? 'none' : '0.5px solid #f1f5f9', cursor: 'pointer', transition: 'background 0.1s' }}
+                                                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                            >
+                                                <div style={{ width: '24px', height: '24px', borderRadius: '5px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>{item.icon}</div>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{item.title}</div>
+                                                    {item.desc && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{item.desc}</div>}
+                                                </div>
+                                                <span style={{ fontSize: '0.875rem', color: '#cbd5e1', flexShrink: 0 }}>›</span>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>
@@ -11439,7 +11454,7 @@ ${bodyHtml}
                                     </div>
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                                    <button className="btn btn-secondary" onClick={() => { setActivityInitialContext({ companyName: acc.name }); setEditingActivity(null); setShowActivityModal(true); }}>+ Log Activity</button>
+                                    <button onClick={() => { setActivityInitialContext({ companyName: acc.name }); setEditingActivity(null); setShowActivityModal(true); }} style={{ width:'40px', height:'40px', borderRadius:'50%', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', boxShadow:'0 2px 10px rgba(37,99,235,0.4)', fontSize:'1.1rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }} title="Quick log activity">⚡</button>
                                     <button className="btn" onClick={() => { setViewingAccount(null); handleEditAccount(acc); }}>Edit Account</button>
                                 </div>
                             </div>
@@ -11709,7 +11724,7 @@ ${bodyHtml}
                                     </div>
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                                    <button className="btn btn-secondary" onClick={() => { setActivityInitialContext({ companyName: ct.company || '', contactName: ctFullName }); setEditingActivity(null); setShowActivityModal(true); }}>+ Log Activity</button>
+                                    <button onClick={() => { setActivityInitialContext({ companyName: ct.company || '', contactName: ctFullName }); setEditingActivity(null); setShowActivityModal(true); }} style={{ width:'40px', height:'40px', borderRadius:'50%', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', boxShadow:'0 2px 10px rgba(37,99,235,0.4)', fontSize:'1.1rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }} title="Quick log activity">⚡</button>
                                     <button className="btn" onClick={() => { setViewingContact(null); handleEditContact(ct); }}>Edit Contact</button>
                                 </div>
                             </div>
