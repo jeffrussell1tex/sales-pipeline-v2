@@ -1405,6 +1405,26 @@ function App() {
     const [settingsView, setSettingsView] = useState('menu'); // menu, fiscal-year, logo, users, pain-points, vertical-markets
     const [auditEntries, setAuditEntries] = useState([]);
     const [auditLoading, setAuditLoading] = useState(false);
+    React.useEffect(() => {
+        if (settingsView !== 'audit-log') return;
+        setAuditLoading(true);
+        dbFetch('/.netlify/functions/audit-log')
+            .then(r => r.json())
+            .then(data => {
+                const normalized = (data.entries || []).map(e => ({
+                    id:     e.id,
+                    ts:     e.timestamp,
+                    user:   e.userName || 'Unknown',
+                    action: e.action,
+                    entity: e.entityType,
+                    label:  e.entityName || '',
+                    detail: e.detail || '',
+                }));
+                setAuditEntries(normalized);
+            })
+            .catch(err => console.error('Failed to load audit log:', err))
+            .finally(() => setAuditLoading(false));
+    }, [settingsView]);
     const [tasksExpandedSections, setTasksExpandedSections] = useState({
         inProcess: false,
         today: true,
@@ -9658,25 +9678,6 @@ ${bodyHtml}
                     })()}
 
                     {settingsView === 'audit-log' && (() => {
-                        React.useEffect(() => {
-                            setAuditLoading(true);
-                            dbFetch('/.netlify/functions/audit-log')
-                                .then(r => r.json())
-                                .then(data => {
-                                    const normalized = (data.entries || []).map(e => ({
-                                        id:     e.id,
-                                        ts:     e.timestamp,
-                                        user:   e.userName || 'Unknown',
-                                        action: e.action,
-                                        entity: e.entityType,
-                                        label:  e.entityName || '',
-                                        detail: e.detail || '',
-                                    }));
-                                    setAuditEntries(normalized);
-                                })
-                                .catch(err => console.error('Failed to load audit log:', err))
-                                .finally(() => setAuditLoading(false));
-                        }, []);
                         const actionColor = { create: '#10b981', update: '#3b82f6', delete: '#ef4444' };
                         const actionLabel = { create: '+ Created', update: '✎ Updated', delete: '🗑 Deleted' };
                         const entityIcon = { opportunity: '🤝', account: '🏢', contact: '👤', task: '✅' };
