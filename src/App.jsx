@@ -3105,7 +3105,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
     return (
         <div className="app-container">
             <header className="header">
-                <div className="header-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div className="header-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', position: 'relative' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0 }}>
                         {settings.logoUrl ? (
                             <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', gap:'0.25rem' }}>
@@ -3114,9 +3114,9 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     alt="Company Logo" 
                                     className="header-logo"
                                     style={{ 
-                                        height: '86px', 
+                                        height: '52px', 
                                         width: 'auto',
-                                        maxWidth: '259px',
+                                        maxWidth: '200px',
                                         objectFit: 'contain'
                                     }} 
                                 />
@@ -3548,27 +3548,35 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                         )}
                     </div>
                     </div>
-                    {/* Global Search - second row */}
-                    <div style={{ position: 'relative' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', background: '#f1f3f5', borderRadius: '20px', border: '1px solid #e2e8f0', padding: '0.3rem 0.75rem', gap: '0.375rem' }}>
-                            <span style={{ color: '#94a3b8', fontSize: '0.8125rem', flexShrink: 0 }}>🔍</span>
+                    {/* Global Search - centered command bar */}
+                    <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '999px', border: '1px solid #e2e8f0', padding: '0.35rem 1rem', gap: '0.5rem', width: '340px', transition: 'box-shadow 0.15s, border-color 0.15s' }}
+                            onFocusCapture={e => { e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.background = '#fff'; }}
+                            onBlurCapture={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f1f5f9'; }}>
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#94a3b8" strokeWidth="1.5" style={{ flexShrink: 0 }}><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13" strokeLinecap="round"/></svg>
                             <input
+                                className="global-search-input"
                                 type="text"
                                 placeholder="Search accounts, contacts, deals..."
                                 value={globalSearch}
                                 onChange={e => { setGlobalSearch(e.target.value); setShowSearchResults(e.target.value.length > 0); }}
                                 onFocus={() => { if (globalSearch.length > 0) setShowSearchResults(true); }}
-                                style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.8125rem', color: '#1e293b', width: '220px', padding: '0.125rem 0', fontFamily: 'inherit' }}
+                                style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.8125rem', color: '#1e293b', flex: 1, padding: 0, fontFamily: 'inherit' }}
                             />
-                            {globalSearch && (
+                            {globalSearch ? (
                                 <button onClick={() => { setGlobalSearch(''); setShowSearchResults(false); }}
-                                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8125rem', padding: 0, lineHeight: 1 }}>✕</button>
+                                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8125rem', padding: 0, lineHeight: 1, flexShrink: 0 }}>✕</button>
+                            ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                                    <span style={{ fontSize: '0.625rem', color: '#94a3b8', background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: '3px', padding: '1px 4px', lineHeight: 1.4 }}>⌘</span>
+                                    <span style={{ fontSize: '0.625rem', color: '#94a3b8', background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: '3px', padding: '1px 4px', lineHeight: 1.4 }}>K</span>
+                                </div>
                             )}
                         </div>
                         {showSearchResults && globalSearch.length > 0 && (
                             <>
                             <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} onClick={() => setShowSearchResults(false)} />
-                            <div className="spt-search-results" style={{ position: 'absolute', top: '100%', right: 0, marginTop: '0.375rem', width: '380px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 1000 }} onClick={e => e.stopPropagation()}>
+                            <div className="spt-search-results" style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '0.375rem', width: '400px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 1000 }} onClick={e => e.stopPropagation()}>
                                 {(() => {
                                     const q = globalSearch.toLowerCase();
                                     const matchedAccounts = accounts.filter(a => (a.name || '').toLowerCase().includes(q) || (a.accountOwner || '').toLowerCase().includes(q)).slice(0, 5);
@@ -3579,7 +3587,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     return (<>
                                         {matchedAccounts.length > 0 && (<div>
                                             <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.625rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#f8fafc', borderBottom: '1px solid #f1f3f5' }}>Accounts</div>
-                                            {matchedAccounts.map(a => (<div key={'sa-'+a.id} style={{ padding: '0.4rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); setTimeout(() => setViewingAccount(a), 100); }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='transparent'}><div><div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{a.name}</div>{a.accountOwner && <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{a.accountOwner}</div>}</div><span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>Account</span></div>))}
+                                            {matchedAccounts.map(a => { const openDeals = opportunities.filter(o => (o.account||'').toLowerCase() === (a.name||'').toLowerCase() && o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length; return (<div key={'sa-'+a.id} style={{ padding: '0.4rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); setTimeout(() => setViewingAccount(a), 100); }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='transparent'}><div><div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{a.name}</div>{a.accountOwner && <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{a.accountOwner}{openDeals > 0 ? ` · ${openDeals} open deal${openDeals>1?'s':''}` : ''}</div>}</div><span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>Account</span></div>); })}
                                         </div>)}
                                         {matchedContacts.length > 0 && (<div>
                                             <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.625rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#f8fafc', borderBottom: '1px solid #f1f3f5' }}>Contacts</div>
@@ -5386,18 +5394,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             )}
                                         </div>
                                         {/* Action buttons */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.25rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
-                                            <button className="btn" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
-                                                onClick={e => { e.stopPropagation(); handleEdit(opp); }}>✏️ Edit Opportunity</button>
-                                            <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
-                                                onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }}>+ Log Activity</button>
-                                            <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
-                                                onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Add Task</button>
-                                            {opp.stage === 'Closed Won' && (settings.spiffs||[]).filter(s=>s.active).length > 0 && (
-                                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%', borderColor: '#7c3aed', color: '#7c3aed' }}
-                                                    onClick={e => { e.stopPropagation(); setSpiffClaimContext({ opp }); setShowSpiffClaimModal(true); }}>⚡ Claim SPIFF</button>
-                                            )}
-                                        </div>
+
                                     </div>
                                 );
                             })()}
@@ -5923,17 +5920,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             </td>
 
                                             <td style={{ whiteSpace:'nowrap' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                                    <div style={{ display: 'flex', gap: '3px' }}>
-                                                        <button onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedOppTabOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color: '#fff', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
-                                                        <button onClick={() => handleEdit(opp)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                                    </div>
-                                                    <div style={{ display: 'flex', gap: '3px' }}>
-                                                        <button onClick={() => { setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName||opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Activity</button>
-                                                        <button onClick={() => { setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Task</button>
-                                                        <button onClick={() => handleDelete(opp.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
-                                                    </div>
-                                                </div>
+                                                <button onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedOppTabOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color: '#fff', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
                                             </td>
                                         </tr>
                                         {!selectedOppTabOpp && expandedOppActivities[opp.id] === true && (() => {
@@ -5991,11 +5978,36 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             </div>
                                             <button onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1.1rem', lineHeight: 1, padding: '0', flexShrink: 0 }}>×</button>
                                         </div>
+                                        {/* Action buttons - above deal details */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                            <button className="btn" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
+                                                onClick={e => { e.stopPropagation(); handleEdit(opp); }}>✏️ Edit Opportunity</button>
+                                            <div style={{ display:'flex', gap:'0.35rem' }}>
+                                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0', flex:1 }}
+                                                    onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }}>+ Activity</button>
+                                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0', flex:1 }}
+                                                    onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Task</button>
+                                            </div>
+                                            {opp.stage === 'Closed Won' && (settings.spiffs||[]).filter(s=>s.active).length > 0 && (
+                                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%', borderColor: '#7c3aed', color: '#7c3aed' }}
+                                                    onClick={e => { e.stopPropagation(); setSpiffClaimContext({ opp }); setShowSpiffClaimModal(true); }}>⚡ Claim SPIFF</button>
+                                            )}
+                                            {!isAdmin && <button onClick={e => { e.stopPropagation(); if(window.confirm('Delete this opportunity?')) handleDelete(opp.id); }} style={{ fontSize:'0.6875rem', color:'#dc2626', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', padding:'0.1rem 0', textAlign:'left' }}>Delete…</button>}
+                                        </div>
+                                        {/* Health / Won indicator */}
+                                        {opp.stage === 'Closed Won' ? (
+                                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 0.75rem', background:'#d1fae5', borderRadius:'6px', border:'1px solid #6ee7b7' }}>
+                                                <span style={{ fontSize:'1rem' }}>✅</span>
+                                                <span style={{ fontSize:'0.8rem', fontWeight:'700', color:'#065f46' }}>Closed Won</span>
+                                                {opp.forecastedCloseDate && <span style={{ fontSize:'0.75rem', color:'#059669', marginLeft:'auto' }}>{new Date(opp.forecastedCloseDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
+                                            </div>
+                                        ) : (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                                             <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: health.color, flexShrink: 0 }} />
                                             <span style={{ fontSize: '0.8rem', fontWeight: '600', color: health.color }}>{health.status}</span>
                                             <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: 'auto' }}>{health.score}/100</span>
                                         </div>
+                                        )}
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                             {[
                                                 { label: 'Stage', value: <span style={{ background: getStageColor(opp.stage).text + '22', color: getStageColor(opp.stage).text, padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600' }}>{opp.stage}</span> },
@@ -6021,18 +6033,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 </div>
                                             ))}
                                         </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.25rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
-                                            <button className="btn" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
-                                                onClick={e => { e.stopPropagation(); handleEdit(opp); }}>✏️ Edit Opportunity</button>
-                                            <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
-                                                onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }}>+ Log Activity</button>
-                                            <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
-                                                onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Add Task</button>
-                                            {opp.stage === 'Closed Won' && (settings.spiffs||[]).filter(s=>s.active).length > 0 && (
-                                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%', borderColor: '#7c3aed', color: '#7c3aed' }}
-                                                    onClick={e => { e.stopPropagation(); setSpiffClaimContext({ opp }); setShowSpiffClaimModal(true); }}>⚡ Claim SPIFF</button>
-                                            )}
-                                        </div>
+
                                     </div>
                                 );
                             })()}
@@ -6115,10 +6116,10 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             {isExp && stageOpps.length > 0 && (
                                                 <div style={{ marginTop:'3px', marginLeft:'1rem', display:'flex', flexDirection:'column', gap:'3px' }}>
                                                     {stageOpps.map(opp => (
-                                                        <div key={opp.id} onClick={() => { setEditingOpp(opp); setShowModal(true); }}
-                                                            style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.75rem', background:'#fff', border:'1px solid #f1f5f9', borderRadius:'6px', cursor:'pointer', fontSize:'0.75rem', color:'#1e293b' }}
-                                                            onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
-                                                            onMouseLeave={e => e.currentTarget.style.background='#fff'}>
+                                                        <div key={opp.id} onClick={() => setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp)}
+                                                            style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.75rem', background: selectedOppTabOpp?.id === opp.id ? '#eff6ff' : '#fff', border: selectedOppTabOpp?.id === opp.id ? '1px solid #93c5fd' : '1px solid #f1f5f9', borderRadius:'6px', cursor:'pointer', fontSize:'0.75rem', color:'#1e293b' }}
+                                                            onMouseEnter={e => { if (selectedOppTabOpp?.id !== opp.id) e.currentTarget.style.background='#f8fafc'; }}
+                                                            onMouseLeave={e => { if (selectedOppTabOpp?.id !== opp.id) e.currentTarget.style.background='#fff'; }}>
                                                             <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:sc.text, flexShrink:0 }} />
                                                             <span style={{ fontWeight:'600', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{opp.opportunityName || opp.account || '—'}</span>
                                                             {opp.account && opp.opportunityName && <span style={{ color:'#94a3b8', flexShrink:0 }}>{opp.account}</span>}
