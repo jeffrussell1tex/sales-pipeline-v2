@@ -4857,8 +4857,8 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                         {isExp && stageOpps.length > 0 && (
                                             <div style={{ marginTop:'3px', marginLeft:'1rem', display:'flex', flexDirection:'column', gap:'3px' }}>
                                                 {stageOpps.map(opp => (
-                                                    <div key={opp.id} onClick={() => setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp)}
-                                                        style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.75rem', background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : '#fff', border: selectedPipelineOpp?.id === opp.id ? '1px solid #93c5fd' : '1px solid #f1f5f9', borderRadius:'6px', cursor:'pointer', fontSize:'0.75rem', color:'#1e293b' }}
+                                                    <div key={opp.id}
+                                                        style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.75rem', background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : '#fff', border: selectedPipelineOpp?.id === opp.id ? '1px solid #93c5fd' : '1px solid #f1f5f9', borderRadius:'6px', fontSize:'0.75rem', color:'#1e293b' }}
                                                         onMouseEnter={e => { if (selectedPipelineOpp?.id !== opp.id) e.currentTarget.style.background='#f8fafc'; }}
                                                         onMouseLeave={e => { if (selectedPipelineOpp?.id !== opp.id) e.currentTarget.style.background='#fff'; }}>
                                                         <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:sc.text, flexShrink:0 }} />
@@ -4867,6 +4867,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                         <span style={{ fontWeight:'700', color:'#2563eb', flexShrink:0 }}>${(parseFloat(opp.arr)||0).toLocaleString()}</span>
                                                         {opp.salesRep && <span style={{ color:'#94a3b8', fontSize:'0.6875rem', flexShrink:0 }}>{opp.salesRep}</span>}
                                                         {opp.forecastedCloseDate && <span style={{ color:'#94a3b8', fontSize:'0.6875rem', flexShrink:0 }}>{new Date(opp.forecastedCloseDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>}
+                                                        <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ padding:'2px 10px', borderRadius:'999px', border:'none', background: selectedPipelineOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color:'#fff', fontWeight:'600', fontSize:'0.6rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', flexShrink:0 }}>Details</button>
                                                     </div>
                                                 ))}
                                             </div>
@@ -6186,8 +6187,8 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             {isExp && stageOpps.length > 0 && (
                                                 <div style={{ marginTop:'3px', marginLeft:'1rem', display:'flex', flexDirection:'column', gap:'3px' }}>
                                                     {stageOpps.map(opp => (
-                                                        <div key={opp.id} onClick={() => setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp)}
-                                                            style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.75rem', background: selectedOppTabOpp?.id === opp.id ? '#eff6ff' : '#fff', border: selectedOppTabOpp?.id === opp.id ? '1px solid #93c5fd' : '1px solid #f1f5f9', borderRadius:'6px', cursor:'pointer', fontSize:'0.75rem', color:'#1e293b' }}
+                                                        <div key={opp.id}
+                                                            style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.75rem', background: selectedOppTabOpp?.id === opp.id ? '#eff6ff' : '#fff', border: selectedOppTabOpp?.id === opp.id ? '1px solid #93c5fd' : '1px solid #f1f5f9', borderRadius:'6px', fontSize:'0.75rem', color:'#1e293b' }}
                                                             onMouseEnter={e => { if (selectedOppTabOpp?.id !== opp.id) e.currentTarget.style.background='#f8fafc'; }}
                                                             onMouseLeave={e => { if (selectedOppTabOpp?.id !== opp.id) e.currentTarget.style.background='#fff'; }}>
                                                             <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:sc.text, flexShrink:0 }} />
@@ -6195,6 +6196,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                             {opp.account && opp.opportunityName && <span style={{ color:'#94a3b8', flexShrink:0 }}>{opp.account}</span>}
                                                             <span style={{ fontWeight:'700', color:'#1e293b', flexShrink:0 }}>${(parseFloat(opp.arr)||0).toLocaleString()}</span>
                                                             {opp.salesRep && <span style={{ color:'#94a3b8', fontSize:'0.6875rem', flexShrink:0 }}>{opp.salesRep}</span>}
+                                                            <button onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp); }} style={{ padding:'2px 10px', borderRadius:'999px', border:'none', background: selectedOppTabOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color:'#fff', fontWeight:'600', fontSize:'0.6rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', flexShrink:0 }}>Details</button>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -7619,13 +7621,21 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                     if (reportTimePeriod === 'all') return reportsOpps;
                     const now = new Date();
                     const fy = now.getFullYear();
-                    const qRanges = {
-                        Q1: [`${fy}-01-01`, `${fy}-03-31`],
-                        Q2: [`${fy}-04-01`, `${fy}-06-30`],
-                        Q3: [`${fy}-07-01`, `${fy}-09-30`],
-                        Q4: [`${fy}-10-01`, `${fy}-12-31`],
-                        FY: [`${fy}-01-01`, `${fy}-12-31`],
+                    const fiscalStart = settings.fiscalYearStart || 10;
+                    const getFiscalQRanges = (baseYear) => {
+                        const qs = {};
+                        ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
+                            const rawMonth = fiscalStart - 1 + qi * 3;
+                            const startMonth = (rawMonth % 12) + 1;
+                            const startYear = rawMonth >= 12 ? baseYear + 1 : baseYear;
+                            const endRaw = new Date(startYear, startMonth - 1 + 3, 0);
+                            qs[q] = [`${startYear}-${String(startMonth).padStart(2,'0')}-01`,
+                                     `${endRaw.getFullYear()}-${String(endRaw.getMonth()+1).padStart(2,'0')}-${String(endRaw.getDate()).padStart(2,'0')}`];
+                        });
+                        qs['FY'] = [qs['Q1'][0], qs['Q4'][1]];
+                        return qs;
                     };
+                    const qRanges = getFiscalQRanges(fy);
                     if (reportTimePeriod === 'custom') {
                         return reportsOpps.filter(o => {
                             const d = o.forecastedCloseDate || o.createdDate || '';
@@ -7649,13 +7659,21 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                     if (reportTimePeriod === 'all') return allActs;
                     const now = new Date();
                     const fy = now.getFullYear();
-                    const qRanges = {
-                        Q1: [`${fy}-01-01`, `${fy}-03-31`],
-                        Q2: [`${fy}-04-01`, `${fy}-06-30`],
-                        Q3: [`${fy}-07-01`, `${fy}-09-30`],
-                        Q4: [`${fy}-10-01`, `${fy}-12-31`],
-                        FY: [`${fy}-01-01`, `${fy}-12-31`],
+                    const fiscalStart = settings.fiscalYearStart || 10;
+                    const getFiscalQRanges = (baseYear) => {
+                        const qs = {};
+                        ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
+                            const rawMonth = fiscalStart - 1 + qi * 3;
+                            const startMonth = (rawMonth % 12) + 1;
+                            const startYear = rawMonth >= 12 ? baseYear + 1 : baseYear;
+                            const endRaw = new Date(startYear, startMonth - 1 + 3, 0);
+                            qs[q] = [`${startYear}-${String(startMonth).padStart(2,'0')}-01`,
+                                     `${endRaw.getFullYear()}-${String(endRaw.getMonth()+1).padStart(2,'0')}-${String(endRaw.getDate()).padStart(2,'0')}`];
+                        });
+                        qs['FY'] = [qs['Q1'][0], qs['Q4'][1]];
+                        return qs;
                     };
+                    const qRanges = getFiscalQRanges(fy);
                     if (reportTimePeriod === 'custom') {
                         return allActs.filter(a => {
                             const d = (a.date || a.createdAt || '').slice(0, 10);
@@ -7679,13 +7697,21 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                     if (reportTimePeriod === 'all') return allL;
                     const now = new Date();
                     const fy = now.getFullYear();
-                    const qRanges = {
-                        Q1: [`${fy}-01-01`, `${fy}-03-31`],
-                        Q2: [`${fy}-04-01`, `${fy}-06-30`],
-                        Q3: [`${fy}-07-01`, `${fy}-09-30`],
-                        Q4: [`${fy}-10-01`, `${fy}-12-31`],
-                        FY: [`${fy}-01-01`, `${fy}-12-31`],
+                    const fiscalStart = settings.fiscalYearStart || 10;
+                    const getFiscalQRanges = (baseYear) => {
+                        const qs = {};
+                        ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
+                            const rawMonth = fiscalStart - 1 + qi * 3;
+                            const startMonth = (rawMonth % 12) + 1;
+                            const startYear = rawMonth >= 12 ? baseYear + 1 : baseYear;
+                            const endRaw = new Date(startYear, startMonth - 1 + 3, 0);
+                            qs[q] = [`${startYear}-${String(startMonth).padStart(2,'0')}-01`,
+                                     `${endRaw.getFullYear()}-${String(endRaw.getMonth()+1).padStart(2,'0')}-${String(endRaw.getDate()).padStart(2,'0')}`];
+                        });
+                        qs['FY'] = [qs['Q1'][0], qs['Q4'][1]];
+                        return qs;
                     };
+                    const qRanges = getFiscalQRanges(fy);
                     if (reportTimePeriod === 'custom') {
                         return allL.filter(l => {
                             const d = (l.createdAt || '').slice(0, 10);
@@ -8099,6 +8125,19 @@ ${bodyHtml}
                         {(() => {
                             const _now = new Date();
                             const fy = _now.getFullYear();
+                            const fiscalStart = settings.fiscalYearStart || 10;
+                            const getFiscalQRanges = (baseYear) => {
+                                const qs = {};
+                                ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
+                                    const rawMonth = fiscalStart - 1 + qi * 3;
+                                    const sm = (rawMonth % 12) + 1;
+                                    const sy = rawMonth >= 12 ? baseYear + 1 : baseYear;
+                                    const endRaw = new Date(sy, sm - 1 + 3, 0);
+                                    qs[q] = { start: new Date(`${sy}-${String(sm).padStart(2,'0')}-01`), end: endRaw };
+                                });
+                                qs['FY'] = { start: qs['Q1'].start, end: qs['Q4'].end };
+                                return qs;
+                            };
                             // Build time buckets that match the selected period filter
                             const buildBuckets = () => {
                                 if (reportTimePeriod === 'all') {
@@ -8108,17 +8147,19 @@ ${bodyHtml}
                                         return { start: d, end: new Date(d.getFullYear(), d.getMonth() + 1, 1) };
                                     });
                                 } else if (reportTimePeriod === 'FY') {
-                                    // Each quarter of the fiscal year
-                                    return ['Q1','Q2','Q3','Q4'].map(q => {
-                                        const [from, to] = { Q1:[`${fy}-01-01`,`${fy}-03-31`], Q2:[`${fy}-04-01`,`${fy}-06-30`], Q3:[`${fy}-07-01`,`${fy}-09-30`], Q4:[`${fy}-10-01`,`${fy}-12-31`] }[q];
-                                        return { start: new Date(from), end: new Date(new Date(to).getTime() + 86400000) };
-                                    });
+                                    // Each fiscal quarter of the fiscal year
+                                    const fsRanges = getFiscalQRanges(fy);
+                                    return ['Q1','Q2','Q3','Q4'].map(q => ({
+                                        start: fsRanges[q].start,
+                                        end: new Date(fsRanges[q].end.getTime() + 86400000)
+                                    }));
                                 } else if (['Q1','Q2','Q3','Q4'].includes(reportTimePeriod)) {
-                                    // Each month of the quarter
-                                    const qStart = { Q1:0, Q2:3, Q3:6, Q4:9 }[reportTimePeriod];
+                                    // Each month within the fiscal quarter
+                                    const fsRanges = getFiscalQRanges(fy);
+                                    const qStart = fsRanges[reportTimePeriod].start;
                                     return Array.from({ length: 3 }, (_, i) => {
-                                        const d = new Date(fy, qStart + i, 1);
-                                        return { start: d, end: new Date(fy, qStart + i + 1, 1) };
+                                        const d = new Date(qStart.getFullYear(), qStart.getMonth() + i, 1);
+                                        return { start: d, end: new Date(qStart.getFullYear(), qStart.getMonth() + i + 1, 1) };
                                     });
                                 } else if (reportTimePeriod === 'custom' && reportDateFrom && reportDateTo) {
                                     // Split custom range into 6 equal segments
@@ -8575,14 +8616,41 @@ ${bodyHtml}
                             const commissionReportPeriods = ['This Quarter', 'Last Quarter', 'This Year', 'Last Year', 'All Time'];
                             const getCommissionPeriodOpps = (period) => {
                               const now = new Date();
-                              const yr = now.getFullYear(); const mo = now.getMonth();
-                              const curQ = Math.floor(mo/3);
-                              const qStart = (q,y) => new Date(y, q*3, 1);
-                              const qEnd   = (q,y) => new Date(y, q*3+3, 0);
-                              if (period==='This Quarter') return wonOpps.filter(o=>{ const d=new Date(o.forecastedCloseDate||o.closeDate); return d>=qStart(curQ,yr)&&d<=qEnd(curQ,yr); });
-                              if (period==='Last Quarter') { const lq=curQ===0?3:curQ-1; const ly=curQ===0?yr-1:yr; return wonOpps.filter(o=>{ const d=new Date(o.forecastedCloseDate||o.closeDate); return d>=qStart(lq,ly)&&d<=qEnd(lq,ly); }); }
-                              if (period==='This Year') return wonOpps.filter(o=>new Date(o.forecastedCloseDate||o.closeDate).getFullYear()===yr);
-                              if (period==='Last Year') return wonOpps.filter(o=>new Date(o.forecastedCloseDate||o.closeDate).getFullYear()===yr-1);
+                              const yr = now.getFullYear();
+                              const fiscalStart = settings.fiscalYearStart || 10;
+                              // Build fiscal quarter ranges for this year and last year
+                              const getFQR = (baseYear) => {
+                                const qs = {};
+                                ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
+                                    const rawMonth = fiscalStart - 1 + qi * 3;
+                                    const sm = (rawMonth % 12) + 1;
+                                    const sy = rawMonth >= 12 ? baseYear + 1 : baseYear;
+                                    const endRaw = new Date(sy, sm - 1 + 3, 0);
+                                    qs[q] = { start: new Date(`${sy}-${String(sm).padStart(2,'0')}-01`), end: endRaw };
+                                });
+                                return qs;
+                              };
+                              // Determine current fiscal quarter
+                              const thisYearRanges = getFQR(yr);
+                              const lastYearRanges = getFQR(yr - 1);
+                              const today = now;
+                              let curQKey = 'Q4';
+                              for (const [qk, range] of Object.entries(thisYearRanges)) {
+                                if (today >= range.start && today <= range.end) { curQKey = qk; break; }
+                              }
+                              // Find last quarter key
+                              const qKeys = ['Q1','Q2','Q3','Q4'];
+                              const curQIdx = qKeys.indexOf(curQKey);
+                              const lastQKey = curQIdx === 0 ? 'Q4' : qKeys[curQIdx - 1];
+                              const lastQRanges = curQIdx === 0 ? lastYearRanges : thisYearRanges;
+                              const fyStart = new Date(thisYearRanges['Q1'].start);
+                              const fyEnd = new Date(thisYearRanges['Q4'].end);
+                              const lastFyStart = new Date(lastYearRanges['Q1'].start);
+                              const lastFyEnd = new Date(lastYearRanges['Q4'].end);
+                              if (period==='This Quarter') return wonOpps.filter(o=>{ const d=new Date(o.forecastedCloseDate||o.closeDate); return d>=thisYearRanges[curQKey].start&&d<=thisYearRanges[curQKey].end; });
+                              if (period==='Last Quarter') return wonOpps.filter(o=>{ const d=new Date(o.forecastedCloseDate||o.closeDate); return d>=lastQRanges[lastQKey].start&&d<=lastQRanges[lastQKey].end; });
+                              if (period==='This Year') return wonOpps.filter(o=>{ const d=new Date(o.forecastedCloseDate||o.closeDate); return d>=fyStart&&d<=fyEnd; });
+                              if (period==='Last Year') return wonOpps.filter(o=>{ const d=new Date(o.forecastedCloseDate||o.closeDate); return d>=lastFyStart&&d<=lastFyEnd; });
                               return wonOpps;
                             };
                             const periodOpps = getCommissionPeriodOpps(commissionReportFilter||'This Quarter');
@@ -9842,9 +9910,15 @@ ${bodyHtml}
                                         { view: 'audit-log',      icon: '📋', title: 'Audit Log',           desc: 'Change history across all records' },
                                     ].map((item, idx, arr) => {
                                         if (item.group) return (
-                                            <div key={item.group} style={{ padding: '6px 16px 4px', fontSize: '0.625rem', fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', color: '#94a3b8', background: '#f8fafc', borderBottom: '0.5px solid #e2e8f0', borderTop: idx > 0 ? '0.5px solid #e2e8f0' : 'none' }}>
-                                                {item.group}
-                                            </div>
+                                            {(() => {
+                                                const gc = { 'Team': { bg:'#eff6ff', border:'#bfdbfe', color:'#1d4ed8', dot:'#2563eb' }, 'Configuration': { bg:'#f5f3ff', border:'#ddd6fe', color:'#6d28d9', dot:'#7c3aed' }, 'Security & Data': { bg:'#fff7ed', border:'#fed7aa', color:'#c2410c', dot:'#ea580c' } }[item.group] || { bg:'#f8fafc', border:'#e2e8f0', color:'#64748b', dot:'#94a3b8' };
+                                                return (
+                                                    <div key={item.group} style={{ display:'flex', alignItems:'center', gap:'6px', padding: '6px 16px 5px', fontSize: '0.625rem', fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', color: gc.color, background: gc.bg, borderBottom: '0.5px solid ' + gc.border, borderTop: idx > 0 ? '0.5px solid ' + gc.border : 'none' }}>
+                                                        <div style={{ width:'6px', height:'6px', borderRadius:'50%', background: gc.dot, flexShrink:0 }} />
+                                                        {item.group}
+                                                    </div>
+                                                );
+                                            })()}
                                         );
                                         const isLast = idx === arr.length - 1 || arr[idx + 1]?.group;
                                         return (
@@ -9854,7 +9928,7 @@ ${bodyHtml}
                                                 onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                             >
-                                                <div style={{ width: '24px', height: '24px', borderRadius: '5px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>{item.icon}</div>
+                                                <div style={{ width: '24px', height: '24px', borderRadius: '5px', background: ['users','team-builder','territories'].includes(item.view) ? '#dbeafe' : ['vertical-markets','verticals','funnel-stages','pipelines','kpi-settings','fiscal-year','logo','pain-points'].includes(item.view) ? '#ede9fe' : '#ffedd5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>{item.icon}</div>
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                     <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{item.title}</div>
                                                     {item.desc && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{item.desc}</div>}
