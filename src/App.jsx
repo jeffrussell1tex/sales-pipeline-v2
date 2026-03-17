@@ -9909,8 +9909,7 @@ ${bodyHtml}
                                         { view: 'data-management', icon: '💾', title: 'Data Management',    desc: 'Export, import & backup' },
                                         { view: 'audit-log',      icon: '📋', title: 'Audit Log',           desc: 'Change history across all records' },
                                     ].map((item, idx, arr) => {
-                                        if (item.group) return (
-                                            {(() => {
+                                        if (item.group) return (() => {
                                                 const gc = { 'Team': { bg:'#eff6ff', border:'#bfdbfe', color:'#1d4ed8', dot:'#2563eb' }, 'Configuration': { bg:'#f5f3ff', border:'#ddd6fe', color:'#6d28d9', dot:'#7c3aed' }, 'Security & Data': { bg:'#fff7ed', border:'#fed7aa', color:'#c2410c', dot:'#ea580c' } }[item.group] || { bg:'#f8fafc', border:'#e2e8f0', color:'#64748b', dot:'#94a3b8' };
                                                 return (
                                                     <div key={item.group} style={{ display:'flex', alignItems:'center', gap:'6px', padding: '6px 16px 5px', fontSize: '0.625rem', fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', color: gc.color, background: gc.bg, borderBottom: '0.5px solid ' + gc.border, borderTop: idx > 0 ? '0.5px solid ' + gc.border : 'none' }}>
@@ -9918,8 +9917,7 @@ ${bodyHtml}
                                                         {item.group}
                                                     </div>
                                                 );
-                                            })()}
-                                        );
+                                            })();
                                         const isLast = idx === arr.length - 1 || arr[idx + 1]?.group;
                                         return (
                                             <div key={item.view}
