@@ -1696,15 +1696,22 @@ dbFetch('/.netlify/functions/users?me=true')
                 case '2':
                     e.preventDefault(); setActiveTab('pipeline'); break;
                 case '3':
-                    e.preventDefault(); setActiveTab('tasks'); break;
+                    e.preventDefault(); setActiveTab('opportunities'); break;
                 case '4':
-                    e.preventDefault(); setActiveTab('accounts'); break;
+                    e.preventDefault(); setActiveTab('tasks'); break;
                 case '5':
-                    e.preventDefault(); setActiveTab('contacts'); break;
+                    e.preventDefault(); setActiveTab('accounts'); break;
                 case '6':
-                    e.preventDefault(); setActiveTab('analytics'); break;
+                    e.preventDefault(); setActiveTab('contacts'); break;
                 case '7':
+                    e.preventDefault(); setActiveTab('leads'); break;
+                case '8':
                     e.preventDefault(); setActiveTab('reports'); break;
+                case 'o': case 'O':
+                    if (!['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) {
+                        e.preventDefault(); setActiveTab('pipeline'); setTimeout(() => { setEditingOpp(null); setShowModal(true); }, 100);
+                    }
+                    break;
                 case '/':
                     if (!e.metaKey && !e.ctrlKey && !['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) {
                         e.preventDefault();
@@ -3419,13 +3426,16 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                         </div>
                         <button
                             onClick={() => setShowShortcuts(v => !v)}
-                            title="Keyboard shortcuts (?)"
-                            style={{ background: '#f1f3f5', color: '#64748b', border: 'none', borderRadius: '50%',
+                            title="Keyboard shortcuts"
+                            style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '50%',
                                 width: '40px', height: '40px', cursor: 'pointer', fontSize: '1rem', fontWeight: '800',
-                                transition: 'all 0.2s ease', fontFamily: 'inherit' }}
-                            onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.transform = 'scale(1.1)'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = '#f1f3f5'; e.currentTarget.style.transform = 'scale(1)'; }}>
-                            ?
+                                transition: 'all 0.2s ease', fontFamily: 'inherit', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}
+                            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.25)'; e.currentTarget.style.transform = 'scale(1.1)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.transform = 'scale(1)'; }}>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                                <rect x="2" y="6" width="20" height="13" rx="2"/>
+                                <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M10 14h4"/>
+                            </svg>
                         </button>
                         <div style={{ position: 'relative' }}>
                         <button
@@ -4810,6 +4820,8 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
 
                     {/* ════ FUNNEL VIEW ════ */}
                     {pipelineView === 'funnel' && (
+                        <div style={{ display:'flex' }}>
+                        <div style={{ flex:1, minWidth:0, borderRight: selectedPipelineOpp ? '1px solid #e2e8f0' : 'none' }}>
                         <div style={{ padding:'0.75rem 1rem' }}>
                             {stages.map((stage) => {
                                 const stageOpps = pipelineFilteredOpps.filter(o => o.stage === stage);
@@ -4857,6 +4869,72 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 );
                             })}
                         </div>
+                        </div>{/* end funnel content */}
+                        {selectedPipelineOpp && (() => {
+                            const opp = selectedPipelineOpp;
+                            const health = calculateDealHealth(opp);
+                            const stageDefault = (settings.funnelStages || []).find(s => s.name === opp.stage);
+                            const defaultProb = stageDefault ? stageDefault.weight : null;
+                            const effectiveProb = (opp.probability !== null && opp.probability !== undefined) ? opp.probability : defaultProb;
+                            const isOverridden = opp.probability !== null && opp.probability !== undefined && opp.probability !== defaultProb;
+                            const probNum = (opp.probability !== null && opp.probability !== undefined) ? opp.probability / 100 : (stageDefault ? stageDefault.weight / 100 : 0.3);
+                            const totalVal = (parseFloat(opp.arr) || 0) + (opp.implementationCost || 0);
+                            const weighted = Math.round(totalVal * probNum);
+                            const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+                            const daysSinceAct = oppActs[0] ? Math.floor((new Date() - new Date(oppActs[0].date)) / 86400000) : null;
+                            const dealAgeDays = opp.createdDate ? Math.floor((new Date() - new Date(opp.createdDate)) / 86400000) : null;
+                            const timeInStageDays = opp.stageChangedDate ? Math.floor((new Date() - new Date(opp.stageChangedDate)) / 86400000) : null;
+                            return (
+                                <div style={{ width:'300px', flexShrink:0, background:'#f8fafc', overflowY:'auto', padding:'1rem', display:'flex', flexDirection:'column', gap:'0.75rem', maxHeight:'70vh', position:'sticky', top:0, borderLeft:'1px solid #e2e8f0' }}>
+                                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'0.5rem' }}>
+                                        <div>
+                                            <div style={{ fontSize:'0.875rem', fontWeight:'700', color:'#0f172a', lineHeight:1.3 }}>{opp.opportunityName || opp.account}</div>
+                                            <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:'0.2rem' }}>{opp.account}</div>
+                                        </div>
+                                        <button onClick={() => setSelectedPipelineOpp(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'1.1rem', lineHeight:1, padding:'0', flexShrink:0 }}>×</button>
+                                    </div>
+                                    <div style={{ display:'flex', flexDirection:'column', gap:'0.35rem' }}>
+                                        <button className="btn" style={{ fontSize:'0.75rem', padding:'0.4rem 0.75rem', width:'100%' }} onClick={e => { e.stopPropagation(); handleEdit(opp); }}>✏️ Edit Opportunity</button>
+                                        <div style={{ display:'flex', gap:'0.35rem' }}>
+                                            <button className="btn btn-secondary" style={{ fontSize:'0.75rem', padding:'0.4rem 0', flex:1 }} onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }}>+ Activity</button>
+                                            <button className="btn btn-secondary" style={{ fontSize:'0.75rem', padding:'0.4rem 0', flex:1 }} onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Task</button>
+                                        </div>
+                                        <button onClick={e => { e.stopPropagation(); showConfirm('Delete this opportunity?', () => handleDelete(opp.id)); }} style={{ fontSize:'0.6875rem', color:'#dc2626', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', padding:'0.1rem 0', textAlign:'left' }}>Delete…</button>
+                                    </div>
+                                    {opp.stage === 'Closed Won' ? (
+                                        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 0.75rem', background:'#d1fae5', borderRadius:'6px', border:'1px solid #6ee7b7' }}>
+                                            <span>✅</span><span style={{ fontSize:'0.8rem', fontWeight:'700', color:'#065f46' }}>Closed Won</span>
+                                        </div>
+                                    ) : (
+                                        <div style={{ display:'flex', alignItems:'center', gap:'0.4rem', padding:'0.5rem 0.75rem', background:'#fff', borderRadius:'6px', border:'1px solid #e2e8f0' }}>
+                                            <div style={{ width:'10px', height:'10px', borderRadius:'50%', background:health.color, flexShrink:0 }} />
+                                            <span style={{ fontSize:'0.8rem', fontWeight:'600', color:health.color }}>{health.status}</span>
+                                            <span style={{ fontSize:'0.75rem', color:'#94a3b8', marginLeft:'auto' }}>{health.score}/100</span>
+                                        </div>
+                                    )}
+                                    <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem' }}>
+                                        {[
+                                            { label:'Stage', value: <span style={{ background:getStageColor(opp.stage).text+'22', color:getStageColor(opp.stage).text, padding:'0.15rem 0.5rem', borderRadius:'999px', fontSize:'0.75rem', fontWeight:'600' }}>{opp.stage}</span> },
+                                            canViewField('arr') && { label:'ARR', value:'$'+(opp.arr||0).toLocaleString() },
+                                            canViewField('probability') && { label:'Probability', value:<span style={{ fontWeight:'600', color:isOverridden?'#f59e0b':'#475569' }}>{effectiveProb !== null ? effectiveProb+'%' : '—'}{isOverridden?' ✎':''}</span> },
+                                            canViewField('weightedValue') && { label:'Weighted', value:'$'+weighted.toLocaleString() },
+                                            { label:'Sales Rep', value:opp.salesRep||'—' },
+                                            { label:'Close Date', value:opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—' },
+                                            canViewField('dealAge') && dealAgeDays !== null && { label:'Deal Age', value:<span style={{ color:dealAgeDays>90?'#ef4444':dealAgeDays>60?'#f59e0b':'#475569', fontWeight:'600' }}>{dealAgeDays}d</span> },
+                                            canViewField('activities') && { label:'Activities', value:<span>{oppActs.length}{daysSinceAct !== null && <span style={{ fontSize:'0.7rem', color:daysSinceAct>14?'#ef4444':'#94a3b8', marginLeft:'0.35rem' }}>{daysSinceAct}d ago</span>}</span> },
+                                            opp.nextSteps && { label:'Next Steps', value:opp.nextSteps },
+                                            opp.notes && { label:'Notes', value:opp.notes },
+                                        ].filter(Boolean).map((row, ri) => (
+                                            <div key={ri} style={{ display:'flex', flexDirection:'column', gap:'0.15rem' }}>
+                                                <span style={{ fontSize:'0.65rem', textTransform:'uppercase', letterSpacing:'0.05em', color:'#94a3b8', fontWeight:'600' }}>{row.label}</span>
+                                                <span style={{ fontSize:'0.8rem', color:'#1e293b' }}>{row.value}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                        </div>{/* end pipeline funnel split */}
                     )}
 
                     {/* ════ KANBAN VIEW ════ */}
@@ -6142,6 +6220,8 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
 
                             {/* ── FUNNEL VIEW ── */}
                             {oppTabView === 'funnel' && (
+                            <div style={{ display:'flex' }}>
+                            <div style={{ flex:1, minWidth:0, borderRight: selectedOppTabOpp ? '1px solid #e2e8f0' : 'none' }}>
                             <div style={{ padding:'0.75rem 1rem' }}>
                                 {stages.map((stage, idx) => {
                                     const stageOpps = oppFilteredOpps.filter(o => o.stage === stage);
@@ -6186,6 +6266,74 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     );
                                 })}
                             </div>
+                            </div>{/* end funnel content */}
+                            {selectedOppTabOpp && (() => {
+                                const opp = selectedOppTabOpp;
+                                const health = calculateDealHealth(opp);
+                                const stageDefault = (settings.funnelStages || []).find(s => s.name === opp.stage);
+                                const effectiveProb = (opp.probability !== null && opp.probability !== undefined) ? opp.probability : (stageDefault ? stageDefault.weight : null);
+                                const isOverridden = opp.probability !== null && opp.probability !== undefined && opp.probability !== (stageDefault ? stageDefault.weight : null);
+                                const probNum = effectiveProb !== null ? effectiveProb / 100 : 0.3;
+                                const weighted = Math.round(((parseFloat(opp.arr)||0) + (opp.implementationCost||0)) * probNum);
+                                const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+                                const daysSinceAct = oppActs[0] ? Math.floor((new Date() - new Date(oppActs[0].date)) / 86400000) : null;
+                                const dealAgeDays = opp.createdDate ? Math.floor((new Date() - new Date(opp.createdDate)) / 86400000) : null;
+                                return (
+                                    <div style={{ width:'300px', flexShrink:0, background:'#f8fafc', overflowY:'auto', padding:'1rem', display:'flex', flexDirection:'column', gap:'0.75rem', maxHeight:'70vh', position:'sticky', top:0, borderLeft:'1px solid #e2e8f0' }}>
+                                        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'0.5rem' }}>
+                                            <div>
+                                                <div style={{ fontSize:'0.875rem', fontWeight:'700', color:'#0f172a', lineHeight:1.3 }}>{opp.opportunityName || opp.account}</div>
+                                                <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:'0.2rem' }}>{opp.account}</div>
+                                            </div>
+                                            <button onClick={() => setSelectedOppTabOpp(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'1.1rem', lineHeight:1, padding:'0', flexShrink:0 }}>×</button>
+                                        </div>
+                                        <div style={{ display:'flex', flexDirection:'column', gap:'0.35rem' }}>
+                                            <button className="btn" style={{ fontSize:'0.75rem', padding:'0.4rem 0.75rem', width:'100%' }} onClick={e => { e.stopPropagation(); handleEdit(opp); }}>✏️ Edit Opportunity</button>
+                                            <div style={{ display:'flex', gap:'0.35rem' }}>
+                                                <button className="btn btn-secondary" style={{ fontSize:'0.75rem', padding:'0.4rem 0', flex:1 }} onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }}>+ Activity</button>
+                                                <button className="btn btn-secondary" style={{ fontSize:'0.75rem', padding:'0.4rem 0', flex:1 }} onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Task</button>
+                                            </div>
+                                            {opp.stage === 'Closed Won' && (settings.spiffs||[]).filter(s=>s.active).length > 0 && (
+                                                <button className="btn btn-secondary" style={{ fontSize:'0.75rem', padding:'0.4rem 0.75rem', width:'100%', borderColor:'#7c3aed', color:'#7c3aed' }} onClick={e => { e.stopPropagation(); setSpiffClaimContext({ opp }); setShowSpiffClaimModal(true); }}>⚡ Claim SPIFF</button>
+                                            )}
+                                            <button onClick={e => { e.stopPropagation(); showConfirm('Delete this opportunity?', () => handleDelete(opp.id)); }} style={{ fontSize:'0.6875rem', color:'#dc2626', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', padding:'0.1rem 0', textAlign:'left' }}>Delete…</button>
+                                        </div>
+                                        {opp.stage === 'Closed Won' ? (
+                                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 0.75rem', background:'#d1fae5', borderRadius:'6px', border:'1px solid #6ee7b7' }}>
+                                                <span>✅</span><span style={{ fontSize:'0.8rem', fontWeight:'700', color:'#065f46' }}>Closed Won</span>
+                                                {opp.forecastedCloseDate && <span style={{ fontSize:'0.75rem', color:'#059669', marginLeft:'auto' }}>{new Date(opp.forecastedCloseDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
+                                            </div>
+                                        ) : (
+                                            <div style={{ display:'flex', alignItems:'center', gap:'0.4rem', padding:'0.5rem 0.75rem', background:'#fff', borderRadius:'6px', border:'1px solid #e2e8f0' }}>
+                                                <div style={{ width:'10px', height:'10px', borderRadius:'50%', background:health.color, flexShrink:0 }} />
+                                                <span style={{ fontSize:'0.8rem', fontWeight:'600', color:health.color }}>{health.status}</span>
+                                                <span style={{ fontSize:'0.75rem', color:'#94a3b8', marginLeft:'auto' }}>{health.score}/100</span>
+                                            </div>
+                                        )}
+                                        <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem' }}>
+                                            {[
+                                                { label:'Stage', value:<span style={{ background:getStageColor(opp.stage).text+'22', color:getStageColor(opp.stage).text, padding:'0.15rem 0.5rem', borderRadius:'999px', fontSize:'0.75rem', fontWeight:'600' }}>{opp.stage}</span> },
+                                                canViewField('arr') && { label:'ARR', value:'$'+(opp.arr||0).toLocaleString() },
+                                                canViewField('probability') && { label:'Probability', value:<span style={{ fontWeight:'600', color:isOverridden?'#f59e0b':'#475569' }}>{effectiveProb !== null ? effectiveProb+'%' : '—'}{isOverridden?' ✎':''}</span> },
+                                                canViewField('weightedValue') && { label:'Weighted', value:'$'+weighted.toLocaleString() },
+                                                { label:'Sales Rep', value:opp.salesRep||'—' },
+                                                { label:'Close Date', value:opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—' },
+                                                canViewField('dealAge') && dealAgeDays !== null && { label:'Deal Age', value:<span style={{ color:dealAgeDays>90?'#ef4444':dealAgeDays>60?'#f59e0b':'#475569', fontWeight:'600' }}>{dealAgeDays}d</span> },
+                                                canViewField('activities') && { label:'Activities', value:<span>{oppActs.length}{daysSinceAct !== null && <span style={{ fontSize:'0.7rem', color:daysSinceAct>14?'#ef4444':'#94a3b8', marginLeft:'0.35rem' }}>{daysSinceAct}d ago</span>}</span> },
+                                                opp.nextSteps && { label:'Next Steps', value:opp.nextSteps },
+                                                opp.notes && { label:'Notes', value:opp.notes },
+                                                (opp.stage === 'Closed Lost' && opp.lostCategory) && { label:'Loss Reason', value:<span style={{ color:'#b91c1c', fontWeight:'600' }}>{opp.lostCategory}{opp.lostReason?' — '+opp.lostReason:''}</span> },
+                                            ].filter(Boolean).map((row, ri) => (
+                                                <div key={ri} style={{ display:'flex', flexDirection:'column', gap:'0.15rem' }}>
+                                                    <span style={{ fontSize:'0.65rem', textTransform:'uppercase', letterSpacing:'0.05em', color:'#94a3b8', fontWeight:'600' }}>{row.label}</span>
+                                                    <span style={{ fontSize:'0.8rem', color:'#1e293b' }}>{row.value}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                            </div>{/* end opps funnel split */}
                             )}{/* end oppTabView funnel */}
 
                             {oppTabView === 'list' && oppFilteredOpps.length === 0 && (
@@ -12375,24 +12523,24 @@ ${bodyHtml}
                         {/* Sections */}
                         {[
                             { section: 'Navigation', icon: '🧭', shortcuts: [
-                                { keys: ['1'], desc: 'Go to Home / Dashboard' },
-                                { keys: ['2'], desc: 'Go to Pipeline' },
-                                { keys: ['3'], desc: 'Go to Tasks' },
-                                { keys: ['4'], desc: 'Go to Accounts' },
-                                { keys: ['5'], desc: 'Go to Contacts' },
-                                { keys: ['6'], desc: 'Go to Analytics' },
-                                { keys: ['7'], desc: 'Go to Reports' },
+                                { keys: ['1'], desc: 'Home' },
+                                { keys: ['2'], desc: 'Pipeline' },
+                                { keys: ['3'], desc: 'Opportunities' },
+                                { keys: ['4'], desc: 'Tasks' },
+                                { keys: ['5'], desc: 'Accounts' },
+                                { keys: ['6'], desc: 'Contacts' },
+                                { keys: ['7'], desc: 'Leads' },
+                                { keys: ['8'], desc: 'Reports' },
                             ]},
                             { section: 'Create', icon: '✏️', shortcuts: [
-                                { keys: ['N'], desc: 'New Opportunity' },
+                                { keys: ['O'], desc: 'New Opportunity' },
                                 { keys: ['A'], desc: 'New Account' },
                                 { keys: ['C'], desc: 'New Contact' },
                                 { keys: ['T'], desc: 'New Task' },
                             ]},
                             { section: 'Search & UI', icon: '🔍', shortcuts: [
-                                { keys: ['F'], desc: 'Focus global search' },
-                                { keys: ['?'], desc: 'Show / hide this panel' },
-                                { keys: ['Esc'], desc: 'Close modal, popover, or toast' },
+                                { keys: ['/'], desc: 'Focus search bar' },
+                                { keys: ['Esc'], desc: 'Close modal or popover' },
                             ]},
                         ].map(group => (
                             <div key={group.section} style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #f8fafc' }}>
