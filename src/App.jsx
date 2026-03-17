@@ -6879,7 +6879,6 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                         </div>
                                     )}
                                 </div>
-                            );                                </div>
                             );
                             });
                             })()}
