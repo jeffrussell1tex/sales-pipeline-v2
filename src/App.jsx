@@ -1695,11 +1695,18 @@ dbFetch('/.netlify/functions/users?me=true')
                     e.preventDefault(); setActiveTab('analytics'); break;
                 case '7':
                     e.preventDefault(); setActiveTab('reports'); break;
+                case 'k': case 'K':
+                    if (e.metaKey || e.ctrlKey) {
+                        e.preventDefault();
+                        setShowSearchResults(false);
+                        setTimeout(() => { const el = document.querySelector('.global-search-input'); if (el) { el.focus(); el.select(); } }, 50);
+                    }
+                    break;
                 case 'f': case 'F':
                     if (e.metaKey || e.ctrlKey) return; // let browser search through
                     e.preventDefault();
-                    setShowSearchResults(true);
-                    setTimeout(() => document.querySelector('.global-search-input')?.focus(), 50);
+                    setShowSearchResults(false);
+                    setTimeout(() => { const el = document.querySelector('.global-search-input'); if (el) { el.focus(); el.select(); } }, 50);
                     break;
                 default: break;
             }
@@ -3114,18 +3121,19 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     alt="Company Logo" 
                                     className="header-logo"
                                     style={{ 
-                                        height: '52px', 
+                                        height: '64px', 
                                         width: 'auto',
-                                        maxWidth: '200px',
-                                        objectFit: 'contain'
+                                        maxWidth: '220px',
+                                        objectFit: 'contain',
+                                        filter: 'brightness(0) invert(1)',
                                     }} 
                                 />
                                 <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap', paddingLeft:'2px' }}>
-                                    <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>
+                                    <span style={{ fontSize:'0.75rem', color:'rgba(255,255,255,0.65)' }}>
                                         {new Date().toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}
                                     </span>
-                                    <span style={{ color:'#cbd5e1', fontSize:'0.75rem' }}>·</span>
-                                    <span style={{ fontSize:'0.6rem', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', background:'#eff6ff', color:'#2563eb', padding:'0.15rem 0.5rem', borderRadius:'999px', border:'1px solid #bfdbfe', lineHeight:'1.4' }}>
+                                    <span style={{ color:'rgba(255,255,255,0.35)', fontSize:'0.75rem' }}>·</span>
+                                    <span style={{ fontSize:'0.6rem', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', background:'rgba(255,255,255,0.15)', color:'#fff', padding:'0.15rem 0.5rem', borderRadius:'999px', border:'1px solid rgba(255,255,255,0.25)', lineHeight:'1.4' }}>
                                         {(() => { const q = getQuarter(new Date().toISOString()); return getQuarterLabel(q, new Date().toISOString()); })()}
                                     </span>
                                 </div>
@@ -3134,11 +3142,11 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                             <div>
                                 <h1>Sales Pipeline Tracker</h1>
                                 <p style={{ display:'flex', alignItems:'center', gap:'0.625rem', flexWrap:'wrap' }}>
-                                    <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>
+                                    <span style={{ fontSize:'0.75rem', color:'rgba(255,255,255,0.65)' }}>
                                         {new Date().toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}
                                     </span>
-                                    <span style={{ color:'#cbd5e1' }}>·</span>
-                                    <span style={{ fontSize:'0.6rem', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', background:'#eff6ff', color:'#2563eb', padding:'0.15rem 0.5rem', borderRadius:'999px', border:'1px solid #bfdbfe', lineHeight:'1.4' }}>
+                                    <span style={{ color:'rgba(255,255,255,0.35)' }}>·</span>
+                                    <span style={{ fontSize:'0.6rem', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', background:'rgba(255,255,255,0.15)', color:'#fff', padding:'0.15rem 0.5rem', borderRadius:'999px', border:'1px solid rgba(255,255,255,0.25)', lineHeight:'1.4' }}>
                                         {(() => { const q = getQuarter(new Date().toISOString()); return getQuarterLabel(q, new Date().toISOString()); })()}
                                     </span>
                                 </p>
@@ -3168,9 +3176,9 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                             alignItems: 'center', 
                             gap: '0.5rem',
                             padding: '0.375rem 0.5rem 0.375rem 0.875rem',
-                            background: showProfilePanel ? '#e0e7ff' : '#f1f3f5',
+                            background: showProfilePanel ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.12)',
                             borderRadius: '20px',
-                            border: showProfilePanel ? '1px solid #a5b4fc' : '1px solid #e2e8f0',
+                            border: showProfilePanel ? '1px solid rgba(255,255,255,0.4)' : '1px solid rgba(255,255,255,0.2)',
                             cursor: 'pointer',
                             transition: 'all 0.15s',
                         }}>
@@ -3189,8 +3197,8 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 {currentUser.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                             </div>
                             <div style={{ lineHeight: 1.2 }}>
-                                <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{currentUser}</div>
-                                <div style={{ fontSize: '0.625rem', color: isAdmin ? '#7c3aed' : isManager ? '#059669' : isReadOnly ? '#94a3b8' : '#2563eb', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#fff' }}>{currentUser}</div>
+                                <div style={{ fontSize: '0.625rem', color: isAdmin ? '#c4b5fd' : isManager ? '#6ee7b7' : isReadOnly ? '#cbd5e1' : '#93c5fd', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                     {userRole === 'User' ? 'Sales Rep' : userRole === 'ReadOnly' ? 'Read-Only' : userRole}
                                 </div>
                             </div>
@@ -3199,8 +3207,8 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 title="Sign out"
                                 style={{
                                     background: 'none',
-                                    border: '1px solid #e2e8f0',
-                                    color: '#64748b',
+                                    border: '1px solid rgba(255,255,255,0.25)',
+                                    color: 'rgba(255,255,255,0.7)',
                                     cursor: 'pointer',
                                     fontSize: '0.6875rem',
                                     fontWeight: '600',
@@ -3211,7 +3219,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     transition: 'all 0.2s'
                                 }}
                                 onMouseEnter={e => { e.target.style.background = '#ef4444'; e.target.style.color = 'white'; e.target.style.borderColor = '#ef4444'; }}
-                                onMouseLeave={e => { e.target.style.background = 'none'; e.target.style.color = '#64748b'; e.target.style.borderColor = '#e2e8f0'; }}
+                                onMouseLeave={e => { e.target.style.background = 'none'; e.target.style.color = 'rgba(255,255,255,0.7)'; e.target.style.borderColor = 'rgba(255,255,255,0.25)'; }}
                             >
                                 Logout
                             </button>
@@ -3549,7 +3557,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                     </div>
                     </div>
                     {/* Global Search - centered command bar */}
-                    <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 10 }}>
+                    <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 200 }}>
                         <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '999px', border: '1px solid #e2e8f0', padding: '0.35rem 1rem', gap: '0.5rem', width: '340px', transition: 'box-shadow 0.15s, border-color 0.15s' }}
                             onFocusCapture={e => { e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.background = '#fff'; }}
                             onBlurCapture={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f1f5f9'; }}>
@@ -3576,7 +3584,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                         {showSearchResults && globalSearch.length > 0 && (
                             <>
                             <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} onClick={() => setShowSearchResults(false)} />
-                            <div className="spt-search-results" style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '0.375rem', width: '400px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 1000 }} onClick={e => e.stopPropagation()}>
+                            <div className="spt-search-results" style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '0.375rem', width: '400px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 9999 }} onClick={e => e.stopPropagation()}>
                                 {(() => {
                                     const q = globalSearch.toLowerCase();
                                     const matchedAccounts = accounts.filter(a => (a.name || '').toLowerCase().includes(q) || (a.accountOwner || '').toLowerCase().includes(q)).slice(0, 5);
@@ -10568,7 +10576,7 @@ ${bodyHtml}
                                     </tbody>
                                 </table>
                                 <button onClick={() => setSettings(prev => ({ ...prev, funnelStages: [...(prev.funnelStages || []), { name: '', weight: 0 }] }))}
-                                    style={{ background: '#f1f3f5', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: '600', color: '#2563eb', fontFamily: 'inherit' }}>
+                                    style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px', padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: '600', color: '#2563eb', fontFamily: 'inherit' }}>
                                     + Add Stage
                                 </button>
                                 <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>

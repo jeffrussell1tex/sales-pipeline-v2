@@ -48,10 +48,12 @@
             text-align: left;
             margin-bottom: 1.5rem;
             padding-bottom: 1rem;
-            border-bottom: 1px solid #c6e8d3;
-            background: #f0f9f4;
+            border-bottom: 1px solid #145230;
+            background: #1a5c38;
             border-radius: 12px;
             padding: 0.875rem 1.25rem 0.875rem;
+            position: relative;
+            z-index: 150;
         }
 
         .header h1 {
@@ -566,7 +568,7 @@
             .app-container { padding: 0.5rem; }
             .header h1 { font-size: 1rem; }
             .header p { display: none; }
-            .header { padding: 0.625rem 0.875rem; background: #f0f9f4; border-bottom: 1px solid #c6e8d3; }
+            .header { padding: 0.625rem 0.875rem; background: #1a5c38; border-bottom: 1px solid #145230; }
             .header-logo { height: 40px !important; max-width: 120px !important; }
             .header-actions { width: 100%; justify-content: space-between; }
             .kpi-grid { grid-template-columns: 1fr 1fr; gap: 0.375rem; }
