@@ -21,6 +21,7 @@ export async function verifyAuth(event) {
             authorizedParties: [
                 'https://salespipelinetracker.com',
                 'https://sales-pipeline-v2.netlify.app',
+                'https://accelerep.netlify.app',
                 'http://localhost:5173',
                 'http://localhost:8888',
             ]
