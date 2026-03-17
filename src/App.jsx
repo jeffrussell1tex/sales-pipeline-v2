@@ -212,18 +212,20 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                     {f.label} <span style={{ opacity:0.75 }}>{f.count}</span>
                                 </button>
                             ))}
-                                {/* View toggle - left aligned */}
-                                <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
-                                    {[{v:'funnel',label:'🔻 Funnel'},{v:'kanban',label:'⬛ Kanban'},{v:'list',label:'☰ List'}].map(({v,label}) => (
-                                        <button key={v} onClick={() => setLeadView(v)}
-                                            style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
-                                                background: leadView===v ? '#fff' : 'transparent',
-                                                color: leadView===v ? '#1e293b' : '#64748b',
-                                                boxShadow: leadView===v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
+                        {/* VIEW TOGGLE ROW — below filter pills, flush left */}
+                        <div style={{ display:'flex', alignItems:'center', padding:'0.375rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
+                            <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
+                                {[{v:'funnel',label:'🔻 Funnel'},{v:'kanban',label:'⬛ Kanban'},{v:'list',label:'☰ List'}].map(({v,label}) => (
+                                    <button key={v} onClick={() => setLeadView(v)}
+                                        style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
+                                            background: leadView===v ? '#fff' : 'transparent',
+                                            color: leadView===v ? '#1e293b' : '#64748b',
+                                            boxShadow: leadView===v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                             <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
                                 {canSeeAll && <button onClick={onImportClick} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#10b981', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>}
                                 <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
@@ -7986,20 +7988,102 @@ ${bodyHtml}
                         </div>
 
                         {/* ── KPI summary strip (always visible, below period filter) ── */}
-                        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'0.75rem', padding:'0.75rem 1.25rem' }}>
-                          {[
-                            { label:'Won Revenue',    value:'$'+totalWonRevenue.toLocaleString(),         sub: wonOpps.length+' deals',                          accent:'accent-green' },
-                            { label:'Pipeline Value', value:'$'+totalPipelineValue.toLocaleString(),       sub: openOpps.length+' open',                          accent:'accent-blue' },
-                            { label:'Win Rate',       value: winRate.toFixed(1)+'%',                       sub: wonOpps.length+' won / '+lostOpps.length+' lost', accent:'accent-purple' },
-                            { label:'Avg Deal Size',  value:'$'+Math.round(avgDealSize).toLocaleString(),  sub:'closed won',                                      accent:'accent-amber' },
-                          ].map(k => (
-                            <div key={k.label} className={`kpi-card ${k.accent}`} style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.875rem 1.25rem' }}>
-                              <div style={labelStyle}>{k.label}</div>
-                              <div style={valueStyle}>{k.value}</div>
-                              <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.125rem' }}>{k.sub}</div>
+                        {(() => {
+                            const _now = new Date();
+                            const fy = _now.getFullYear();
+                            // Build time buckets that match the selected period filter
+                            const buildBuckets = () => {
+                                if (reportTimePeriod === 'all') {
+                                    // Last 6 months
+                                    return Array.from({ length: 6 }, (_, i) => {
+                                        const d = new Date(fy, _now.getMonth() - (5 - i), 1);
+                                        return { start: d, end: new Date(d.getFullYear(), d.getMonth() + 1, 1) };
+                                    });
+                                } else if (reportTimePeriod === 'FY') {
+                                    // Each quarter of the fiscal year
+                                    return ['Q1','Q2','Q3','Q4'].map(q => {
+                                        const [from, to] = { Q1:[`${fy}-01-01`,`${fy}-03-31`], Q2:[`${fy}-04-01`,`${fy}-06-30`], Q3:[`${fy}-07-01`,`${fy}-09-30`], Q4:[`${fy}-10-01`,`${fy}-12-31`] }[q];
+                                        return { start: new Date(from), end: new Date(new Date(to).getTime() + 86400000) };
+                                    });
+                                } else if (['Q1','Q2','Q3','Q4'].includes(reportTimePeriod)) {
+                                    // Each month of the quarter
+                                    const qStart = { Q1:0, Q2:3, Q3:6, Q4:9 }[reportTimePeriod];
+                                    return Array.from({ length: 3 }, (_, i) => {
+                                        const d = new Date(fy, qStart + i, 1);
+                                        return { start: d, end: new Date(fy, qStart + i + 1, 1) };
+                                    });
+                                } else if (reportTimePeriod === 'custom' && reportDateFrom && reportDateTo) {
+                                    // Split custom range into 6 equal segments
+                                    const start = new Date(reportDateFrom).getTime();
+                                    const end = new Date(reportDateTo).getTime() + 86400000;
+                                    const seg = (end - start) / 6;
+                                    return Array.from({ length: 6 }, (_, i) => ({
+                                        start: new Date(start + i * seg),
+                                        end: new Date(start + (i + 1) * seg)
+                                    }));
+                                }
+                                // Fallback: last 6 months
+                                return Array.from({ length: 6 }, (_, i) => {
+                                    const d = new Date(fy, _now.getMonth() - (5 - i), 1);
+                                    return { start: d, end: new Date(d.getFullYear(), d.getMonth() + 1, 1) };
+                                });
+                            };
+                            const monthBuckets = buildBuckets().map(({ start, end }) => {
+                                const bucketOpps = reportsTimedOpps.filter(o => {
+                                    const c = o.forecastedCloseDate || o.closeDate;
+                                    if (!c) return false;
+                                    const cd = new Date(c);
+                                    return cd >= start && cd < end;
+                                });
+                                const bucketWon = bucketOpps.filter(o => o.stage === 'Closed Won');
+                                const bucketLost = bucketOpps.filter(o => o.stage === 'Closed Lost');
+                                const wonRev = bucketWon.reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
+                                const pipelineVal = bucketOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
+                                const wr = (bucketWon.length + bucketLost.length) > 0 ? (bucketWon.length / (bucketWon.length + bucketLost.length)) * 100 : 0;
+                                const avg = bucketWon.length > 0 ? wonRev / bucketWon.length : 0;
+                                return { wonRev, pipelineVal, wr, avg };
+                            });
+                            const sparkSvg = (vals, color) => {
+                                const mx = Math.max(...vals, 1);
+                                const n = vals.length;
+                                const pts = vals.map((v, i) => `${Math.round((i/(n-1))*100)},${Math.round(24-Math.max(0,v/mx)*20)}`).join(' ');
+                                const pf = pts + ' 100,24 0,24';
+                                return (
+                                    <svg width="100%" height="24" viewBox="0 0 100 24" preserveAspectRatio="none" style={{ display:'block', marginTop:'6px' }}>
+                                        <polyline fill={color} fillOpacity="0.10" stroke="none" points={pf} />
+                                        <polyline fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" points={pts} opacity="0.8" />
+                                    </svg>
+                                );
+                            };
+                            return (
+                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'0.75rem', padding:'0.75rem 1.25rem' }}>
+                                <div className="kpi-card accent-green" style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.625rem 1.25rem' }}>
+                                    <div style={labelStyle}>Won Revenue</div>
+                                    <div style={valueStyle}>{'$'+totalWonRevenue.toLocaleString()}</div>
+                                    <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.125rem' }}>{wonOpps.length} deals</div>
+                                    {sparkSvg(monthBuckets.map(b => b.wonRev), '#16a34a')}
+                                </div>
+                                <div className="kpi-card accent-blue" style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.625rem 1.25rem' }}>
+                                    <div style={labelStyle}>Pipeline Value</div>
+                                    <div style={valueStyle}>{'$'+totalPipelineValue.toLocaleString()}</div>
+                                    <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.125rem' }}>{openOpps.length} open</div>
+                                    {sparkSvg(monthBuckets.map(b => b.pipelineVal), '#2563eb')}
+                                </div>
+                                <div className="kpi-card accent-purple" style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.625rem 1.25rem' }}>
+                                    <div style={labelStyle}>Win Rate</div>
+                                    <div style={valueStyle}>{winRate.toFixed(1)+'%'}</div>
+                                    <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.125rem' }}>{wonOpps.length} won / {lostOpps.length} lost</div>
+                                    {sparkSvg(monthBuckets.map(b => b.wr), '#9333ea')}
+                                </div>
+                                <div className="kpi-card accent-amber" style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.625rem 1.25rem' }}>
+                                    <div style={labelStyle}>Avg Deal Size</div>
+                                    <div style={valueStyle}>{'$'+Math.round(avgDealSize).toLocaleString()}</div>
+                                    <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.125rem' }}>closed won</div>
+                                    {sparkSvg(monthBuckets.map(b => b.avg), '#f59e0b')}
+                                </div>
                             </div>
-                          ))}
-                        </div>
+                            );
+                        })()}
 
                         {reportSubTab === 'pipeline' && (
                         <div style={{ padding:'1rem 1.25rem 1.5rem' }}>
