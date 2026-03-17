@@ -1695,8 +1695,8 @@ dbFetch('/.netlify/functions/users?me=true')
                     e.preventDefault(); setActiveTab('analytics'); break;
                 case '7':
                     e.preventDefault(); setActiveTab('reports'); break;
-                case 'k': case 'K':
-                    if (e.metaKey || e.ctrlKey) {
+                case '/':
+                    if (!e.metaKey && !e.ctrlKey && !['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) {
                         e.preventDefault();
                         setShowSearchResults(false);
                         setTimeout(() => { const el = document.querySelector('.global-search-input'); if (el) { el.focus(); el.select(); } }, 50);
@@ -3575,10 +3575,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 <button onClick={() => { setGlobalSearch(''); setShowSearchResults(false); }}
                                     style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8125rem', padding: 0, lineHeight: 1, flexShrink: 0 }}>✕</button>
                             ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
-                                    <span style={{ fontSize: '0.625rem', color: '#94a3b8', background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: '3px', padding: '1px 4px', lineHeight: 1.4 }}>⌘</span>
-                                    <span style={{ fontSize: '0.625rem', color: '#94a3b8', background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: '3px', padding: '1px 4px', lineHeight: 1.4 }}>K</span>
-                                </div>
+                                <span style={{ fontSize: '0.625rem', color: '#94a3b8', background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: '3px', padding: '1px 5px', lineHeight: 1.4, flexShrink: 0 }}>/</span>
                             )}
                         </div>
                         {showSearchResults && globalSearch.length > 0 && (
