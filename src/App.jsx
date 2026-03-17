@@ -212,7 +212,12 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                     {f.label} <span style={{ opacity:0.75 }}>{f.count}</span>
                                 </button>
                             ))}
-                        {/* VIEW TOGGLE ROW — below filter pills, flush left */}
+                            <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
+                                {canSeeAll && <button onClick={onImportClick} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#10b981', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>}
+                                <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
+                            </div>
+                        </div>
+                        {/* VIEW TOGGLE ROW — own row below filter pills, flush left */}
                         <div style={{ display:'flex', alignItems:'center', padding:'0.375rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
                             <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
                                 {[{v:'funnel',label:'🔻 Funnel'},{v:'kanban',label:'⬛ Kanban'},{v:'list',label:'☰ List'}].map(({v,label}) => (
@@ -224,11 +229,6 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                         {label}
                                     </button>
                                 ))}
-                            </div>
-                        </div>
-                            <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
-                                {canSeeAll && <button onClick={onImportClick} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#10b981', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>}
-                                <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
                             </div>
                         </div>
 
@@ -4819,15 +4819,52 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
 
                     {/* ════ FUNNEL VIEW ════ */}
                     {pipelineView === 'funnel' && (
-                        <FunnelView
-                            stages={stages}
-                            pipelineFilteredOpps={pipelineFilteredOpps}
-                            funnelExpandedStage={funnelExpandedStage}
-                            setFunnelExpandedStage={setFunnelExpandedStage}
-                            settings={settings}
-                            handleEdit={handleEdit}
-                            handleDelete={handleDelete}
-                        />
+                        <div style={{ padding:'0.75rem 1rem' }}>
+                            {stages.map((stage) => {
+                                const stageOpps = pipelineFilteredOpps.filter(o => o.stage === stage);
+                                const stageARR = stageOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+                                const maxCount = Math.max(...stages.map(s2 => pipelineFilteredOpps.filter(o => o.stage === s2).length), 1);
+                                const pct = stageOpps.length === 0 ? 0 : Math.max(4, Math.round((stageOpps.length / maxCount) * 100));
+                                const sc = getStageColor(stage);
+                                const isExp = funnelExpandedStage === stage;
+                                const stDef = (settings.funnelStages||[]).find(s2 => s2.name === stage);
+                                return (
+                                    <div key={stage} style={{ marginBottom:'0.5rem' }}>
+                                        <div onClick={() => setFunnelExpandedStage(isExp ? null : stage)}
+                                            style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.5rem 0.75rem', borderRadius:'8px', background:'#f8fafc', border:'1px solid #e2e8f0', cursor:'pointer', transition:'all 0.15s' }}
+                                            onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'}
+                                            onMouseLeave={e => e.currentTarget.style.background='#f8fafc'}>
+                                            <div style={{ width:'10px', height:'10px', borderRadius:'50%', background:sc.text, flexShrink:0 }} />
+                                            <span style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1e293b', width:'160px', flexShrink:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{stage}</span>
+                                            <div style={{ flex:1, height:'10px', background:'#e2e8f0', borderRadius:'5px', overflow:'hidden' }}>
+                                                <div style={{ height:'100%', width:pct+'%', background:sc.text, opacity:0.75, borderRadius:'5px', transition:'width 0.4s ease' }} />
+                                            </div>
+                                            <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#475569', minWidth:'28px', textAlign:'right' }}>{stageOpps.length}</span>
+                                            <span style={{ fontSize:'0.6875rem', color:'#94a3b8', minWidth:'75px', textAlign:'right' }}>${stageARR >= 1000 ? Math.round(stageARR/1000)+'K' : stageARR.toLocaleString()}</span>
+                                            {stDef && <span style={{ fontSize:'0.625rem', color:'#94a3b8', minWidth:'48px', textAlign:'right' }}>{stDef.weight}%</span>}
+                                            <span style={{ fontSize:'0.75rem', color:'#94a3b8', transition:'transform 0.2s', transform: isExp ? 'rotate(180deg)' : 'none' }}>▼</span>
+                                        </div>
+                                        {isExp && stageOpps.length > 0 && (
+                                            <div style={{ marginTop:'3px', marginLeft:'1rem', display:'flex', flexDirection:'column', gap:'3px' }}>
+                                                {stageOpps.map(opp => (
+                                                    <div key={opp.id} onClick={() => setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp)}
+                                                        style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.75rem', background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : '#fff', border: selectedPipelineOpp?.id === opp.id ? '1px solid #93c5fd' : '1px solid #f1f5f9', borderRadius:'6px', cursor:'pointer', fontSize:'0.75rem', color:'#1e293b' }}
+                                                        onMouseEnter={e => { if (selectedPipelineOpp?.id !== opp.id) e.currentTarget.style.background='#f8fafc'; }}
+                                                        onMouseLeave={e => { if (selectedPipelineOpp?.id !== opp.id) e.currentTarget.style.background='#fff'; }}>
+                                                        <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:sc.text, flexShrink:0 }} />
+                                                        <span style={{ fontWeight:'600', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>{opp.opportunityName || opp.account || '—'}</span>
+                                                        {opp.account && opp.opportunityName && <span style={{ color:'#94a3b8', flexShrink:0, fontSize:'0.6875rem' }}>{opp.account}</span>}
+                                                        <span style={{ fontWeight:'700', color:'#2563eb', flexShrink:0 }}>${(parseFloat(opp.arr)||0).toLocaleString()}</span>
+                                                        {opp.salesRep && <span style={{ color:'#94a3b8', fontSize:'0.6875rem', flexShrink:0 }}>{opp.salesRep}</span>}
+                                                        {opp.forecastedCloseDate && <span style={{ color:'#94a3b8', fontSize:'0.6875rem', flexShrink:0 }}>{new Date(opp.forecastedCloseDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     )}
 
                     {/* ════ KANBAN VIEW ════ */}
@@ -5598,20 +5635,8 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 </button>
                             )}
 
-                            {/* Right side: view toggle + count + CSV + New */}
+                            {/* Right side: count + CSV + New */}
                             <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginLeft:'auto', flexShrink:0 }}>
-                                {/* List / Kanban / Funnel toggle */}
-                                <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
-                                    {[{v:'funnel',label:'🔻 Funnel'},{v:'kanban',label:'⬛ Kanban'},{v:'list',label:'☰ List'}].map(({v,label}) => (
-                                        <button key={v} onClick={() => setOppTabView(v)}
-                                            style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
-                                                background: oppTabView===v ? '#fff' : 'transparent',
-                                                color: oppTabView===v ? '#1e293b' : '#64748b',
-                                                boxShadow: oppTabView===v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
                                 <span style={{ fontSize:'0.6875rem', color:'#94a3b8', fontWeight:'600' }}>{oppFilteredOpps.length} deals</span>
                                 <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} disabled={exportingCSV === 'opps'} onClick={() => {
                                     exportToCSV(
@@ -5722,6 +5747,20 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                         </div>
                                     );
                                 })}
+                            </div>
+                            {/* VIEW TOGGLE ROW — flush left below pipeline filters */}
+                            <div style={{ display:'flex', alignItems:'center', padding:'0.375rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
+                                <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
+                                    {[{v:'funnel',label:'🔻 Funnel'},{v:'kanban',label:'⬛ Kanban'},{v:'list',label:'☰ List'}].map(({v,label}) => (
+                                        <button key={v} onClick={() => setOppTabView(v)}
+                                            style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
+                                                background: oppTabView===v ? '#fff' : 'transparent',
+                                                color: oppTabView===v ? '#1e293b' : '#64748b',
+                                                boxShadow: oppTabView===v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                             {/* Desktop table — list view */}
                             {oppTabView === 'list' && (
