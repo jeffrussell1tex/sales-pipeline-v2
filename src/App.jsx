@@ -335,16 +335,21 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                             </div>
                                             <div style={{ padding:'0.5rem', display:'flex', flexDirection:'column', gap:'0.375rem', minHeight:'60px' }}>
                                                 {colLeads.map(lead => (
-                                                    <div key={lead.id} onClick={() => setEditingLead(lead)} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'0.5rem 0.625rem', cursor:'pointer', transition:'all 0.1s' }}
+                                                    <div key={lead.id} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'0.5rem 0.625rem', transition:'all 0.1s' }}
                                                         onMouseEnter={e => { e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.boxShadow='0 2px 8px rgba(37,99,235,0.1)'; }}
                                                         onMouseLeave={e => { e.currentTarget.style.borderColor='#e2e8f0'; e.currentTarget.style.boxShadow='none'; }}>
-                                                        <div style={{ fontSize:'0.75rem', fontWeight:'600', color:'#1e293b', marginBottom:'0.15rem' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || '—'}</div>
+                                                        <div style={{ fontSize:'0.75rem', fontWeight:'600', color:'#1e293b', marginBottom:'0.15rem', cursor:'pointer' }} onClick={() => setEditingLead(lead)}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || '—'}</div>
                                                         <div style={{ fontSize:'0.625rem', color:'#64748b', marginBottom:'0.25rem' }}>{lead.company || '—'}</div>
-                                                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'0.25rem' }}>
                                                             <span style={{ fontSize:'0.6rem', background:'#f1f5f9', color:'#64748b', padding:'0.1rem 0.3rem', borderRadius:'3px', fontWeight:'600' }}>{lead.source || '—'}</span>
                                                             <div style={{ width:'20px', height:'20px', borderRadius:'50%', background:scoreBg(lead.score||0), color:scoreColor(lead.score||0), display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.5rem', fontWeight:'800' }}>{lead.score||0}</div>
                                                         </div>
-                                                        {canSeeAll && lead.assignedTo && <div style={{ fontSize:'0.6rem', color:'#94a3b8', marginTop:'0.2rem' }}>{lead.assignedTo}</div>}
+                                                        {canSeeAll && lead.assignedTo && <div style={{ fontSize:'0.6rem', color:'#94a3b8', marginBottom:'0.2rem' }}>{lead.assignedTo}</div>}
+                                                        <div style={{ display:'flex', gap:'0.25rem', marginTop:'0.25rem' }}>
+                                                            <button className="action-btn" onClick={() => setEditingLead(lead)} style={{ flex:1, padding:'0.15rem 0', fontSize:'0.6rem', textAlign:'center' }}>Edit</button>
+                                                            {lead.status !== 'Converted' && <button className="action-btn" onClick={() => convertLead(lead)} style={{ flex:1, padding:'0.15rem 0', fontSize:'0.6rem', textAlign:'center', color:'#059669', borderColor:'#6ee7b7' }}>→ Opp</button>}
+                                                            <button className="action-btn delete" onClick={() => deleteLead(lead.id)} style={{ flex:1, padding:'0.15rem 0', fontSize:'0.6rem', textAlign:'center' }}>Del</button>
+                                                        </div>
                                                     </div>
                                                 ))}
                                                 {colLeads.length === 0 && <div style={{ fontSize:'0.6875rem', color:'#cbd5e1', textAlign:'center', padding:'0.75rem 0', fontStyle:'italic' }}>Empty</div>}
@@ -381,14 +386,19 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                         {isExp && stageLeads.length > 0 && (
                                             <div style={{ marginTop:'3px', marginLeft:'1rem', display:'flex', flexDirection:'column', gap:'3px' }}>
                                                 {stageLeads.map(lead => (
-                                                    <div key={lead.id} onClick={() => setEditingLead(lead)}
-                                                        style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.75rem', background:'#fff', border:'1px solid #f1f5f9', borderRadius:'6px', cursor:'pointer', fontSize:'0.75rem', color:'#1e293b' }}
+                                                    <div key={lead.id}
+                                                        style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.75rem', background:'#fff', border:'1px solid #f1f5f9', borderRadius:'6px', fontSize:'0.75rem', color:'#1e293b' }}
                                                         onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
                                                         onMouseLeave={e => e.currentTarget.style.background='#fff'}>
                                                         <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:color, flexShrink:0 }} />
-                                                        <span style={{ fontWeight:'600' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || '—'}</span>
-                                                        {lead.company && <span style={{ color:'#94a3b8' }}>· {lead.company}</span>}
-                                                        {lead.assignedTo && <span style={{ marginLeft:'auto', color:'#94a3b8', fontSize:'0.6875rem' }}>{lead.assignedTo}</span>}
+                                                        <span style={{ fontWeight:'600', cursor:'pointer', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} onClick={() => setEditingLead(lead)}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || '—'}</span>
+                                                        {lead.company && <span style={{ color:'#94a3b8', flexShrink:0 }}>· {lead.company}</span>}
+                                                        {lead.assignedTo && <span style={{ color:'#94a3b8', fontSize:'0.6875rem', flexShrink:0 }}>{lead.assignedTo}</span>}
+                                                        <div style={{ display:'flex', gap:'3px', flexShrink:0, marginLeft:'auto' }}>
+                                                            <button onClick={() => setEditingLead(lead)} style={{ padding:'2px 7px', borderRadius:'999px', border:'0.5px solid #94a3b8', background:'transparent', color:'#475569', fontWeight:'500', fontSize:'0.6rem', cursor:'pointer', fontFamily:'inherit' }}>Edit</button>
+                                                            {lead.status !== 'Converted' && <button onClick={() => convertLead(lead)} style={{ padding:'2px 7px', borderRadius:'999px', border:'0.5px solid #6ee7b7', background:'transparent', color:'#059669', fontWeight:'500', fontSize:'0.6rem', cursor:'pointer', fontFamily:'inherit' }}>→ Opp</button>}
+                                                            <button onClick={() => deleteLead(lead.id)} style={{ padding:'2px 7px', borderRadius:'999px', border:'0.5px solid #fca5a5', background:'transparent', color:'#dc2626', fontWeight:'500', fontSize:'0.6rem', cursor:'pointer', fontFamily:'inherit' }}>Del</button>
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>
@@ -5278,17 +5288,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 {new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                             </td>
                                             <td style={{ whiteSpace: 'nowrap' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                                    <div style={{ display: 'flex', gap: '3px' }}>
-                                                        <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedPipelineOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color: '#fff', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
-                                                        <button onClick={() => handleEdit(opp)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                                    </div>
-                                                    <div style={{ display: 'flex', gap: '3px' }}>
-                                                        <button onClick={() => { setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Activity</button>
-                                                        <button onClick={() => { setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Task</button>
-                                                        <button onClick={() => handleDelete(opp.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
-                                                    </div>
-                                                </div>
+                                                <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedPipelineOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color: '#fff', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
                                             </td>
                                         </tr>
                                         {/* Activity log expand panel */}
@@ -5355,12 +5355,36 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(null); }}
                                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1.1rem', lineHeight: 1, padding: '0', flexShrink: 0 }}>×</button>
                                         </div>
+                                        {/* Action buttons */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                            <button className="btn" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
+                                                onClick={e => { e.stopPropagation(); handleEdit(opp); }}>✏️ Edit Opportunity</button>
+                                            <div style={{ display:'flex', gap:'0.35rem' }}>
+                                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0', flex:1 }}
+                                                    onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }}>+ Activity</button>
+                                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0', flex:1 }}
+                                                    onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Task</button>
+                                            </div>
+                                            {opp.stage === 'Closed Won' && (settings.spiffs||[]).filter(s=>s.active).length > 0 && (
+                                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%', borderColor: '#7c3aed', color: '#7c3aed' }}
+                                                    onClick={e => { e.stopPropagation(); setSpiffClaimContext({ opp }); setShowSpiffClaimModal(true); }}>⚡ Claim SPIFF</button>
+                                            )}
+                                            <button onClick={e => { e.stopPropagation(); showConfirm('Delete this opportunity?', () => handleDelete(opp.id)); }} style={{ fontSize:'0.6875rem', color:'#dc2626', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', padding:'0.1rem 0', textAlign:'left' }}>Delete…</button>
+                                        </div>
                                         {/* Health */}
+                                        {opp.stage === 'Closed Won' ? (
+                                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 0.75rem', background:'#d1fae5', borderRadius:'6px', border:'1px solid #6ee7b7' }}>
+                                                <span style={{ fontSize:'1rem' }}>✅</span>
+                                                <span style={{ fontSize:'0.8rem', fontWeight:'700', color:'#065f46' }}>Closed Won</span>
+                                                {opp.forecastedCloseDate && <span style={{ fontSize:'0.75rem', color:'#059669', marginLeft:'auto' }}>{new Date(opp.forecastedCloseDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
+                                            </div>
+                                        ) : (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                                             <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: health.color, flexShrink: 0 }} />
                                             <span style={{ fontSize: '0.8rem', fontWeight: '600', color: health.color }}>{health.status}</span>
                                             <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: 'auto' }}>{health.score}/100</span>
                                         </div>
+                                        )}
                                         {/* Stage */}
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                             {[
@@ -5435,8 +5459,6 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 </div>
                                             )}
                                         </div>
-                                        {/* Action buttons */}
-
                                     </div>
                                 );
                             })()}
@@ -6106,10 +6128,10 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                         const health = calculateDealHealth(opp);
                                                         return (
                                                             <div key={opp.id}
-                                                                onClick={() => { setEditingOpp(opp); setShowModal(true); }}
-                                                                style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'0.5rem 0.625rem', cursor:'pointer', transition:'all 0.1s' }}
-                                                                onMouseEnter={e => { e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.boxShadow='0 2px 8px rgba(37,99,235,0.1)'; }}
-                                                                onMouseLeave={e => { e.currentTarget.style.borderColor='#e2e8f0'; e.currentTarget.style.boxShadow='none'; }}>
+                                                                onClick={() => setSelectedOppTabOpp(selectedOppTabOpp?.id === opp.id ? null : opp)}
+                                                                style={{ background: selectedOppTabOpp?.id === opp.id ? '#eff6ff' : '#fff', border: selectedOppTabOpp?.id === opp.id ? '1px solid #93c5fd' : '1px solid #e2e8f0', borderRadius:'6px', padding:'0.5rem 0.625rem', cursor:'pointer', transition:'all 0.1s' }}
+                                                                onMouseEnter={e => { if(selectedOppTabOpp?.id !== opp.id) { e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.boxShadow='0 2px 8px rgba(37,99,235,0.1)'; }}}
+                                                                onMouseLeave={e => { if(selectedOppTabOpp?.id !== opp.id) { e.currentTarget.style.borderColor='#e2e8f0'; e.currentTarget.style.boxShadow='none'; }}}>
                                                                 <div style={{ fontSize:'0.75rem', fontWeight:'700', color:'#1e293b', marginBottom:'0.2rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                                                                     {opp.opportunityName || opp.account || '—'}
                                                                 </div>
@@ -6119,7 +6141,11 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                                     <div style={{ width:'20px', height:'20px', borderRadius:'50%', background: health.score >= 70 ? '#dcfce7' : health.score >= 40 ? '#fef3c7' : '#fee2e2', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.5rem', fontWeight:'800', color: health.score >= 70 ? '#16a34a' : health.score >= 40 ? '#d97706' : '#dc2626', flexShrink:0 }}>{health.score}</div>
                                                                 </div>
                                                                 {opp.forecastedCloseDate && <div style={{ fontSize:'0.575rem', color:'#94a3b8', marginTop:'0.15rem' }}>Close: {new Date(opp.forecastedCloseDate).toLocaleDateString()}</div>}
-                                                                {opp.salesRep && <div style={{ fontSize:'0.575rem', color:'#94a3b8' }}>{opp.salesRep}</div>}
+                                                                {opp.salesRep && <div style={{ fontSize:'0.575rem', color:'#94a3b8', marginBottom:'0.2rem' }}>{opp.salesRep}</div>}
+                                                                <div style={{ display:'flex', gap:'0.25rem', marginTop:'0.375rem' }} onClick={e => e.stopPropagation()}>
+                                                                    <button className="action-btn" onClick={() => handleEdit(opp)} style={{ flex:1, padding:'0.15rem 0', fontSize:'0.6rem', textAlign:'center' }}>Edit</button>
+                                                                    <button className="action-btn delete" onClick={() => handleDelete(opp.id)} style={{ flex:1, padding:'0.15rem 0', fontSize:'0.6rem', textAlign:'center' }}>Del</button>
+                                                                </div>
                                                             </div>
                                                         );
                                                     })}
