@@ -8506,15 +8506,29 @@ ${bodyHtml}
                               const tier = [...tiers].reverse().find(t=>(t.threshold||0)/100<=attain) || tiers[0];
                               return revenue * ((tier?.rate||0.05));
                             };
+                            // SPIFF calculation
+                            const activeSpiffs = (settings.spiffs||[]).filter(s => s.active);
+                            const calcSpiff = (repOpps, baseComm) => {
+                                return activeSpiffs.reduce((total, spiff) => {
+                                    const amt = parseFloat(spiff.amount) || 0;
+                                    if (!amt) return total;
+                                    if (spiff.type === 'flat') return total + repOpps.length * amt;
+                                    if (spiff.type === 'pct') return total + repOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0)*amt/100, 0);
+                                    if (spiff.type === 'multiplier') return total + baseComm * (amt - 1); // additive delta
+                                    return total;
+                                }, 0);
+                            };
                             const reps2 = (settings.users||[]).filter(u=>u.role==='User'||u.role==='Rep');
                             const getRepTotal = u => { const qd=settings.quotaData||{}; return qd.type==='annual'?(qd.annualQuota||0)/4:(qd.q1Quota||0); };
-                            const repRows2 = reps2.map(u=>{ const rw=periodOpps.filter(o=>(o.salesRep||o.assignedTo)===u.name); const rev=rw.reduce((s,o)=>s+(o.arr||0)+(o.implementationCost||0),0); const quot=getRepTotal(u); const attain=quot>0?(rev/quot*100):null; const comm=calcCommission(rev,quot); return { name:u.name, deals:rw.length, rev, quot, attain, comm }; }).sort((a,b)=>b.rev-a.rev);
-                            const totals = repRows2.reduce((s,r)=>({rev:s.rev+r.rev,commission:s.commission+r.comm}),{rev:0,commission:0});
+                            const repRows2 = reps2.map(u=>{ const rw=periodOpps.filter(o=>(o.salesRep||o.assignedTo)===u.name); const rev=rw.reduce((s,o)=>s+(o.arr||0)+(o.implementationCost||0),0); const quot=getRepTotal(u); const attain=quot>0?(rev/quot*100):null; const comm=calcCommission(rev,quot); const spiff=activeSpiffs.length>0?calcSpiff(rw,comm):0; return { name:u.name, deals:rw.length, rev, quot, attain, comm, spiff, total:comm+spiff }; }).sort((a,b)=>b.rev-a.rev);
+                            const totals = repRows2.reduce((s,r)=>({rev:s.rev+r.rev,commission:s.commission+r.comm,spiff:s.spiff+r.spiff,total:s.total+r.total}),{rev:0,commission:0,spiff:0,total:0});
+                            const hasSpiffs = activeSpiffs.length > 0;
                             const printCommissions = () => {
                               const meta = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
                               const win = window.open('','_blank','width=820,height=600');
-                              const rows = repRows2.map(r=>`<tr><td>${r.name}</td><td style="text-align:center">${r.deals}</td><td style="text-align:right">$${r.rev.toLocaleString()}</td><td style="text-align:right">${r.quot>0?'$'+r.quot.toLocaleString():'—'}</td><td style="text-align:right">${r.attain!=null?r.attain.toFixed(1)+'%':'—'}</td><td style="text-align:right;font-weight:700;color:#059669">$${Math.round(r.comm).toLocaleString()}</td></tr>`).join('');
-                              win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Commissions — ${periodLabel}</title><style>body{font-family:system-ui,sans-serif;padding:2rem;color:#1e293b}h1{font-size:1.25rem;font-weight:800}table{width:100%;border-collapse:collapse;margin-top:1rem}th,td{padding:.5rem .75rem;border:1px solid #e2e8f0;font-size:.875rem}th{background:#f8fafc;font-weight:700}tfoot td{font-weight:700;background:#f1f5f9}</style></head><body><h1>Commissions Report — ${periodLabel}</h1><p style="color:#64748b;font-size:.875rem">Generated ${meta} · Sales Pipeline Tracker</p><table><thead><tr><th>Rep</th><th style="text-align:center">Deals Won</th><th style="text-align:right">Won Revenue</th><th style="text-align:right">Quota</th><th style="text-align:right">Attainment</th><th style="text-align:right">Commission</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><td>Total</td><td></td><td style="text-align:right">$${totals.rev.toLocaleString()}</td><td></td><td></td><td style="text-align:right">$${Math.round(totals.commission).toLocaleString()}</td></tr></tfoot></table></body></html>`);
+                              const headers = hasSpiffs ? '<th>Rep</th><th style="text-align:center">Deals Won</th><th style="text-align:right">Won Revenue</th><th style="text-align:right">Quota</th><th style="text-align:right">Attainment</th><th style="text-align:right">Commission</th><th style="text-align:right">SPIFFs</th><th style="text-align:right">Total</th>' : '<th>Rep</th><th style="text-align:center">Deals Won</th><th style="text-align:right">Won Revenue</th><th style="text-align:right">Quota</th><th style="text-align:right">Attainment</th><th style="text-align:right">Commission</th>';
+                              const rows = repRows2.map(r=>hasSpiffs?`<tr><td>${r.name}</td><td style="text-align:center">${r.deals}</td><td style="text-align:right">$${r.rev.toLocaleString()}</td><td style="text-align:right">${r.quot>0?'$'+r.quot.toLocaleString():'—'}</td><td style="text-align:right">${r.attain!=null?r.attain.toFixed(1)+'%':'—'}</td><td style="text-align:right;font-weight:700;color:#059669">$${Math.round(r.comm).toLocaleString()}</td><td style="text-align:right;color:#7c3aed">$${Math.round(r.spiff).toLocaleString()}</td><td style="text-align:right;font-weight:800">$${Math.round(r.total).toLocaleString()}</td></tr>`:`<tr><td>${r.name}</td><td style="text-align:center">${r.deals}</td><td style="text-align:right">$${r.rev.toLocaleString()}</td><td style="text-align:right">${r.quot>0?'$'+r.quot.toLocaleString():'—'}</td><td style="text-align:right">${r.attain!=null?r.attain.toFixed(1)+'%':'—'}</td><td style="text-align:right;font-weight:700;color:#059669">$${Math.round(r.comm).toLocaleString()}</td></tr>`).join('');
+                              win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Commissions — ${periodLabel}</title><style>body{font-family:system-ui,sans-serif;padding:2rem;color:#1e293b}h1{font-size:1.25rem;font-weight:800}table{width:100%;border-collapse:collapse;margin-top:1rem}th,td{padding:.5rem .75rem;border:1px solid #e2e8f0;font-size:.875rem}th{background:#f8fafc;font-weight:700}tfoot td{font-weight:700;background:#f1f5f9}</style></head><body><h1>Commissions Report — ${periodLabel}</h1><p style="color:#64748b;font-size:.875rem">Generated ${meta} · Sales Pipeline Tracker</p><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td>Total</td><td></td><td style="text-align:right">$${totals.rev.toLocaleString()}</td><td></td><td></td><td style="text-align:right">$${Math.round(totals.commission).toLocaleString()}</td>${hasSpiffs?`<td style="text-align:right">$${Math.round(totals.spiff).toLocaleString()}</td><td style="text-align:right">$${Math.round(totals.total).toLocaleString()}</td>`:''}</tr></tfoot></table></body></html>`);
                               win.document.close(); setTimeout(()=>win.print(),500);
                             };
                             return (
@@ -8532,22 +8546,39 @@ ${bodyHtml}
                               </div>
                               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:'0.75rem', marginBottom:'1rem' }}>
                                 {[
-                                  { label:'Deals Won',         value: periodOpps.length },
-                                  { label:'Won Revenue',       value: '$'+periodOpps.reduce((s,o)=>s+(o.arr||0)+(o.implementationCost||0),0).toLocaleString() },
-                                  { label:'Total Commissions', value: '$'+Math.round(totals.commission).toLocaleString() },
+                                  { label:'Deals Won',        value: periodOpps.length },
+                                  { label:'Won Revenue',      value: '$'+periodOpps.reduce((s,o)=>s+(o.arr||0)+(o.implementationCost||0),0).toLocaleString() },
+                                  { label:'Commissions',      value: '$'+Math.round(totals.commission).toLocaleString() },
+                                  ...(hasSpiffs ? [
+                                    { label:'SPIFFs',         value: '$'+Math.round(totals.spiff).toLocaleString(), color:'#7c3aed' },
+                                    { label:'Total Earnings', value: '$'+Math.round(totals.total).toLocaleString(), color:'#059669' },
+                                  ] : []),
                                 ].map(k=>(
                                   <div key={k.label} style={{ background:'#f8fafc', borderRadius:'8px', padding:'0.625rem 0.875rem', border:'1px solid #e2e8f0' }}>
                                     <div style={labelStyle}>{k.label}</div>
-                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color:'#1e293b' }}>{k.value}</div>
+                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color: k.color || '#1e293b' }}>{k.value}</div>
                                   </div>
                                 ))}
                               </div>
+                              {hasSpiffs && (
+                                <div style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:'8px', padding:'0.625rem 0.875rem', marginBottom:'1rem' }}>
+                                  <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#6d28d9', marginBottom:'0.375rem' }}>⚡ Active SPIFFs ({activeSpiffs.length})</div>
+                                  <div style={{ display:'flex', flexWrap:'wrap', gap:'0.375rem' }}>
+                                    {activeSpiffs.map((s,i) => (
+                                      <span key={i} style={{ fontSize:'0.6875rem', background:'#ede9fe', color:'#5b21b6', padding:'2px 8px', borderRadius:'999px', fontWeight:'600' }}>
+                                        {s.name||'Unnamed'}: {s.type==='flat'?`$${parseFloat(s.amount||0).toLocaleString()} flat`:s.type==='pct'?`${s.amount}% of ARR`:`${s.amount}× multiplier`}
+                                        {s.condition ? ` — ${s.condition}` : ''}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                               {repRows2.length === 0 ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem' }}>No rep data for this period.</div> : (
                               <div style={{ overflowX:'auto' }}>
                                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem' }}>
                                   <thead><tr>
-                                    {['Rep','Deals Won','Won Revenue','Quota','Attainment','Commission'].map(h=>(
-                                      <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign:h==='Rep'?'left':'right', fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', whiteSpace:'nowrap' }}>{h}</th>
+                                    {['Rep','Deals Won','Won Revenue','Quota','Attainment','Commission',...(hasSpiffs?['SPIFFs','Total']:[])].map(h=>(
+                                      <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign:h==='Rep'?'left':'right', fontSize:'0.6875rem', fontWeight:'700', color:h==='SPIFFs'?'#7c3aed':h==='Total'?'#059669':'#94a3b8', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', whiteSpace:'nowrap' }}>{h}</th>
                                     ))}
                                   </tr></thead>
                                   <tbody>
@@ -8559,6 +8590,8 @@ ${bodyHtml}
                                         <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#94a3b8' }}>{r.quot>0?'$'+r.quot.toLocaleString():'—'}</td>
                                         <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color: r.attain!=null?(r.attain>=100?'#10b981':r.attain>=75?'#f59e0b':'#ef4444'):'#94a3b8', fontWeight:'600' }}>{r.attain!=null?r.attain.toFixed(1)+'%':'—'}</td>
                                         <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'700', color:'#059669' }}>${Math.round(r.comm).toLocaleString()}</td>
+                                        {hasSpiffs && <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'600', color:'#7c3aed' }}>${Math.round(r.spiff).toLocaleString()}</td>}
+                                        {hasSpiffs && <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'800', color:'#1e293b' }}>${Math.round(r.total).toLocaleString()}</td>}
                                       </tr>
                                     ))}
                                     <tr style={{ borderTop:'2px solid #1e293b', fontWeight:'800', background:'#f8fafc' }}>
@@ -8567,6 +8600,8 @@ ${bodyHtml}
                                       <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#10b981' }}>${totals.rev.toLocaleString()}</td>
                                       <td/><td/>
                                       <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#059669' }}>${Math.round(totals.commission).toLocaleString()}</td>
+                                      {hasSpiffs && <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#7c3aed' }}>${Math.round(totals.spiff).toLocaleString()}</td>}
+                                      {hasSpiffs && <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#059669' }}>${Math.round(totals.total).toLocaleString()}</td>}
                                     </tr>
                                   </tbody>
                                 </table>
@@ -9398,6 +9433,11 @@ ${bodyHtml}
                                 <div style={smCard}>
                                     <div style={smHdr}><div style={smTitle}>Commission Preview by Rep</div></div>
                                     <div style={{ padding:'1.25rem 1.5rem' }}>
+                                        {(() => {
+                                            const smActiveSpiffs = (settings.spiffs||[]).filter(s => s.active);
+                                            const hasSmSpiffs = smActiveSpiffs.length > 0;
+                                            const colSpanTotal = 2 + 5 + (hasSmSpiffs ? 1 : 0);
+                                            return (
                                         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem' }}>
                                             <thead>
                                                 <tr style={{ borderBottom:'2px solid #e2e8f0' }}>
@@ -9406,6 +9446,7 @@ ${bodyHtml}
                                                     {[50,75,100,125,150].map(p => (
                                                         <th key={p} style={{ textAlign:'right', padding:'0.5rem 0.375rem', fontSize:'0.625rem', fontWeight:'700', color: p===100 ? '#2563eb' : '#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em' }}>{p}%</th>
                                                     ))}
+                                                    {hasSmSpiffs && <th style={{ textAlign:'right', padding:'0.5rem 0.375rem', fontSize:'0.625rem', fontWeight:'700', color:'#7c3aed', textTransform:'uppercase', letterSpacing:'0.04em' }}>+SPIFFs</th>}
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -9414,11 +9455,19 @@ ${bodyHtml}
                                                     .map((u, i, arr) => {
                                                         const tq = getRepTotal(u);
                                                         const showTerrHeader = i === 0 || u.territory !== arr[i-1].territory;
+                                                        // Estimate SPIFF at 100% attainment (1 deal avg)
+                                                        const spiffAt100 = smActiveSpiffs.reduce((tot, s) => {
+                                                            const amt = parseFloat(s.amount)||0;
+                                                            if (s.type === 'flat') return tot + amt;
+                                                            if (s.type === 'pct') return tot + tq * amt / 100;
+                                                            if (s.type === 'multiplier') return tot + calcCommission(tq, tq) * (amt - 1);
+                                                            return tot;
+                                                        }, 0);
                                                         return (
                                                             <React.Fragment key={u.id}>
                                                                 {showTerrHeader && (
                                                                     <tr>
-                                                                        <td colSpan={7} style={{ padding:'0.5rem 0 0.25rem', fontSize:'0.625rem', fontWeight:'800', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.08em', borderTop: i > 0 ? '1px solid #e2e8f0' : 'none' }}>
+                                                                        <td colSpan={colSpanTotal} style={{ padding:'0.5rem 0 0.25rem', fontSize:'0.625rem', fontWeight:'800', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.08em', borderTop: i > 0 ? '1px solid #e2e8f0' : 'none' }}>
                                                                             📍 {u.territory}
                                                                         </td>
                                                                     </tr>
@@ -9434,15 +9483,25 @@ ${bodyHtml}
                                                                             </td>
                                                                         );
                                                                     })}
+                                                                    {hasSmSpiffs && (
+                                                                        <td style={{ textAlign:'right', padding:'0.375rem 0.375rem', fontWeight:'600', color:'#7c3aed', fontSize:'0.75rem' }} title="Estimated SPIFF at 100% attainment">
+                                                                            +${Math.round(spiffAt100).toLocaleString()}
+                                                                        </td>
+                                                                    )}
                                                                 </tr>
                                                             </React.Fragment>
                                                         );
                                                     })}
                                                 {allReps.every(u => getRepTotal(u) === 0) && (
-                                                    <tr><td colSpan={7} style={{ padding:'1.5rem 0', color:'#94a3b8', textAlign:'center' }}>Set quotas to see commission projections.</td></tr>
+                                                    <tr><td colSpan={colSpanTotal} style={{ padding:'1.5rem 0', color:'#94a3b8', textAlign:'center' }}>Set quotas to see commission projections.</td></tr>
                                                 )}
                                             </tbody>
                                         </table>
+                                            );
+                                        })()}
+                                        {(settings.spiffs||[]).filter(s=>s.active).length > 0 && (
+                                            <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.5rem' }}>* SPIFF column shows estimated bonus at 100% attainment</div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
