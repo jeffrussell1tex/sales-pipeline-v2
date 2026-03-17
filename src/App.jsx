@@ -4934,7 +4934,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 </div>
                             );
                         })()}
-                        </div>{/* end pipeline funnel split */}
+                        </div>
                     )}
 
                     {/* ════ KANBAN VIEW ════ */}
@@ -6333,7 +6333,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     </div>
                                 );
                             })()}
-                            </div>{/* end opps funnel split */}
+                            </div>
                             )}{/* end oppTabView funnel */}
 
                             {oppTabView === 'list' && oppFilteredOpps.length === 0 && (
