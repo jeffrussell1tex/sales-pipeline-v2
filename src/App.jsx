@@ -1852,57 +1852,38 @@ dbFetch('/.netlify/functions/users?me=true')
     // Calculate forecasted revenue by quarter
     const getQuarter = (dateString) => {
         const date = new Date(dateString);
-        const month = date.getMonth() + 1;
-        const fiscalStart = settings.fiscalYearStart || 10;
-        
-        // Calculate quarters based on fiscal year start
-        const q1Start = fiscalStart;
-        const q2Start = (fiscalStart + 3) > 12 ? (fiscalStart + 3 - 12) : (fiscalStart + 3);
-        const q3Start = (fiscalStart + 6) > 12 ? (fiscalStart + 6 - 12) : (fiscalStart + 6);
-        const q4Start = (fiscalStart + 9) > 12 ? (fiscalStart + 9 - 12) : (fiscalStart + 9);
-        
-        // Determine quarter
-        if (fiscalStart <= 3) {
-            // Fiscal year starts Q1-Q1 (Jan-Mar)
-            if (month >= fiscalStart && month < q2Start) return 'Q1';
-            if (month >= q2Start && month < q3Start) return 'Q2';
-            if (month >= q3Start && month < q4Start) return 'Q3';
-            return 'Q4';
-        } else if (fiscalStart <= 6) {
-            // Fiscal year starts Q2 (Apr-Jun)
-            if (month >= fiscalStart && month < q2Start) return 'Q1';
-            if (month >= q2Start && month < q3Start) return 'Q2';
-            if (month >= q3Start && month < q4Start) return 'Q3';
-            return 'Q4';
-        } else if (fiscalStart <= 9) {
-            // Fiscal year starts Q3 (Jul-Sep)
-            if (month >= fiscalStart && month < q4Start) return 'Q1';
-            if (month >= q4Start || month < q2Start) return 'Q2';
-            if (month >= q2Start && month < q3Start) return 'Q3';
-            return 'Q4';
-        } else {
-            // Fiscal year starts Q4 (Oct-Dec)
-            if (month >= q1Start || month < q2Start) return 'Q1';
-            if (month >= q2Start && month < q3Start) return 'Q2';
-            if (month >= q3Start && month < q4Start) return 'Q3';
-            return 'Q4';
-        }
+        const month = date.getMonth() + 1; // 1-12
+        const fiscalStart = parseInt(settings.fiscalYearStart) || 10;
+        // How many months into the fiscal year is this date?
+        // monthsIn = 0 means first month of FY, 1 = second, etc.
+        const monthsIn = ((month - fiscalStart + 12) % 12);
+        if (monthsIn < 3) return 'Q1';
+        if (monthsIn < 6) return 'Q2';
+        if (monthsIn < 9) return 'Q3';
+        return 'Q4';
     };
 
     const getQuarterLabel = (quarter, dateString) => {
         const date = new Date(dateString);
-        const year = date.getFullYear();
         const month = date.getMonth() + 1;
-        const fiscalStart = settings.fiscalYearStart || 10;
-        
-        // Determine fiscal year
+        const year = date.getFullYear();
+        const fiscalStart = parseInt(settings.fiscalYearStart) || 10;
+        // Fiscal year number = calendar year of the fiscal year END
+        // If fiscal starts Oct, then Oct 2025 → FY2026, Jan 2026 → FY2026
+        // monthsIn tells how far into the FY we are
+        const monthsIn = ((month - fiscalStart + 12) % 12);
+        // The fiscal year "ends" 12 - fiscalStart months after Jan 1
+        // If monthsIn puts us in the first part of the FY that spans into next cal year:
+        // fiscalStart > 1 means the FY starts partway through the calendar year
+        // months before fiscalStart belong to FY that started in PREVIOUS calendar year
         let fiscalYear;
-        if (month >= fiscalStart) {
-            fiscalYear = year + 1;
+        if (fiscalStart === 1) {
+            fiscalYear = year; // Jan start = simple calendar year
+        } else if (month >= fiscalStart) {
+            fiscalYear = year + 1; // e.g. Oct 2025 → FY2026
         } else {
-            fiscalYear = year;
+            fiscalYear = year; // e.g. Jan 2026 → FY2026 (same year as end)
         }
-        
         return `FY${fiscalYear} ${quarter}`;
     };
 
@@ -7623,13 +7604,17 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                     const fy = now.getFullYear();
                     const fiscalStart = settings.fiscalYearStart || 10;
                     const getFiscalQRanges = (baseYear) => {
+                        // baseYear = the fiscal year NUMBER (e.g. 2026 for FY2026)
+                        // Q1 starts at fiscalStart month; each Q is 3 months
                         const qs = {};
                         ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
-                            const rawMonth = fiscalStart - 1 + qi * 3;
-                            const startMonth = (rawMonth % 12) + 1;
-                            const startYear = rawMonth >= 12 ? baseYear + 1 : baseYear;
-                            const endRaw = new Date(startYear, startMonth - 1 + 3, 0);
-                            qs[q] = [`${startYear}-${String(startMonth).padStart(2,'0')}-01`,
+                            const startMonthOffset = (fiscalStart - 1 + qi * 3);
+                            const startMonth = (startMonthOffset % 12) + 1;
+                            // Calendar year of Q start: if fiscalStart <= 1 then same as baseYear-1 for Q1
+                            // Months before fiscalStart belong to baseYear, months >= fiscalStart belong to baseYear-1 calendar year
+                            const calYear = startMonth >= fiscalStart ? baseYear - 1 : baseYear;
+                            const endRaw = new Date(calYear, startMonth - 1 + 3, 0);
+                            qs[q] = [`${calYear}-${String(startMonth).padStart(2,'0')}-01`,
                                      `${endRaw.getFullYear()}-${String(endRaw.getMonth()+1).padStart(2,'0')}-${String(endRaw.getDate()).padStart(2,'0')}`];
                         });
                         qs['FY'] = [qs['Q1'][0], qs['Q4'][1]];
@@ -7661,13 +7646,17 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                     const fy = now.getFullYear();
                     const fiscalStart = settings.fiscalYearStart || 10;
                     const getFiscalQRanges = (baseYear) => {
+                        // baseYear = the fiscal year NUMBER (e.g. 2026 for FY2026)
+                        // Q1 starts at fiscalStart month; each Q is 3 months
                         const qs = {};
                         ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
-                            const rawMonth = fiscalStart - 1 + qi * 3;
-                            const startMonth = (rawMonth % 12) + 1;
-                            const startYear = rawMonth >= 12 ? baseYear + 1 : baseYear;
-                            const endRaw = new Date(startYear, startMonth - 1 + 3, 0);
-                            qs[q] = [`${startYear}-${String(startMonth).padStart(2,'0')}-01`,
+                            const startMonthOffset = (fiscalStart - 1 + qi * 3);
+                            const startMonth = (startMonthOffset % 12) + 1;
+                            // Calendar year of Q start: if fiscalStart <= 1 then same as baseYear-1 for Q1
+                            // Months before fiscalStart belong to baseYear, months >= fiscalStart belong to baseYear-1 calendar year
+                            const calYear = startMonth >= fiscalStart ? baseYear - 1 : baseYear;
+                            const endRaw = new Date(calYear, startMonth - 1 + 3, 0);
+                            qs[q] = [`${calYear}-${String(startMonth).padStart(2,'0')}-01`,
                                      `${endRaw.getFullYear()}-${String(endRaw.getMonth()+1).padStart(2,'0')}-${String(endRaw.getDate()).padStart(2,'0')}`];
                         });
                         qs['FY'] = [qs['Q1'][0], qs['Q4'][1]];
@@ -7699,13 +7688,17 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                     const fy = now.getFullYear();
                     const fiscalStart = settings.fiscalYearStart || 10;
                     const getFiscalQRanges = (baseYear) => {
+                        // baseYear = the fiscal year NUMBER (e.g. 2026 for FY2026)
+                        // Q1 starts at fiscalStart month; each Q is 3 months
                         const qs = {};
                         ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
-                            const rawMonth = fiscalStart - 1 + qi * 3;
-                            const startMonth = (rawMonth % 12) + 1;
-                            const startYear = rawMonth >= 12 ? baseYear + 1 : baseYear;
-                            const endRaw = new Date(startYear, startMonth - 1 + 3, 0);
-                            qs[q] = [`${startYear}-${String(startMonth).padStart(2,'0')}-01`,
+                            const startMonthOffset = (fiscalStart - 1 + qi * 3);
+                            const startMonth = (startMonthOffset % 12) + 1;
+                            // Calendar year of Q start: if fiscalStart <= 1 then same as baseYear-1 for Q1
+                            // Months before fiscalStart belong to baseYear, months >= fiscalStart belong to baseYear-1 calendar year
+                            const calYear = startMonth >= fiscalStart ? baseYear - 1 : baseYear;
+                            const endRaw = new Date(calYear, startMonth - 1 + 3, 0);
+                            qs[q] = [`${calYear}-${String(startMonth).padStart(2,'0')}-01`,
                                      `${endRaw.getFullYear()}-${String(endRaw.getMonth()+1).padStart(2,'0')}-${String(endRaw.getDate()).padStart(2,'0')}`];
                         });
                         qs['FY'] = [qs['Q1'][0], qs['Q4'][1]];
