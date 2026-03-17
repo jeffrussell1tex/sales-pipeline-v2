@@ -9519,7 +9519,7 @@ ${bodyHtml}
                                             const url = URL.createObjectURL(blob);
                                             const a = document.createElement('a');
                                             a.href=url; a.download='commission-preview.csv'; a.click(); URL.revokeObjectURL(url);
-                                        }} style={printBtnStyle} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>📤 Export CSV</button>
+                                        }} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'0.25rem 0.625rem', fontSize:'0.6875rem', fontWeight:'600', color:'#475569', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', transition:'background 0.15s', flexShrink:0 }} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>📤 Export CSV</button>
                                     </div>
                                     <div style={{ padding:'1.25rem 1.5rem' }}>
                                         {(() => {
