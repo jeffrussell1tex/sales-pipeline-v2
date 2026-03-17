@@ -3074,7 +3074,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
     return (
         <div className="app-container">
             <header className="header">
-                <div className="header-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div className="header-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', position: 'relative' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0 }}>
                         {settings.logoUrl ? (
                             <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', gap:'0.25rem' }}>
@@ -3517,27 +3517,35 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                         )}
                     </div>
                     </div>
-                    {/* Global Search - second row */}
-                    <div style={{ position: 'relative' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', background: '#f1f3f5', borderRadius: '20px', border: '1px solid #e2e8f0', padding: '0.3rem 0.75rem', gap: '0.375rem' }}>
-                            <span style={{ color: '#94a3b8', fontSize: '0.8125rem', flexShrink: 0 }}>🔍</span>
+                    {/* Global Search - centered command bar */}
+                    <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '999px', border: '1px solid #e2e8f0', padding: '0.35rem 1rem', gap: '0.5rem', width: '340px', transition: 'box-shadow 0.15s, border-color 0.15s' }}
+                            onFocusCapture={e => { e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.background = '#fff'; }}
+                            onBlurCapture={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f1f5f9'; }}>
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#94a3b8" strokeWidth="1.5" style={{ flexShrink: 0 }}><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13" strokeLinecap="round"/></svg>
                             <input
+                                className="global-search-input"
                                 type="text"
                                 placeholder="Search accounts, contacts, deals..."
                                 value={globalSearch}
                                 onChange={e => { setGlobalSearch(e.target.value); setShowSearchResults(e.target.value.length > 0); }}
                                 onFocus={() => { if (globalSearch.length > 0) setShowSearchResults(true); }}
-                                style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.8125rem', color: '#1e293b', width: '220px', padding: '0.125rem 0', fontFamily: 'inherit' }}
+                                style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.8125rem', color: '#1e293b', flex: 1, padding: 0, fontFamily: 'inherit' }}
                             />
-                            {globalSearch && (
+                            {globalSearch ? (
                                 <button onClick={() => { setGlobalSearch(''); setShowSearchResults(false); }}
-                                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8125rem', padding: 0, lineHeight: 1 }}>✕</button>
+                                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8125rem', padding: 0, lineHeight: 1, flexShrink: 0 }}>✕</button>
+                            ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                                    <span style={{ fontSize: '0.625rem', color: '#94a3b8', background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: '3px', padding: '1px 4px', lineHeight: 1.4 }}>⌘</span>
+                                    <span style={{ fontSize: '0.625rem', color: '#94a3b8', background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: '3px', padding: '1px 4px', lineHeight: 1.4 }}>K</span>
+                                </div>
                             )}
                         </div>
                         {showSearchResults && globalSearch.length > 0 && (
                             <>
                             <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} onClick={() => setShowSearchResults(false)} />
-                            <div className="spt-search-results" style={{ position: 'absolute', top: '100%', right: 0, marginTop: '0.375rem', width: '380px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 1000 }} onClick={e => e.stopPropagation()}>
+                            <div className="spt-search-results" style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '0.375rem', width: '400px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 1000 }} onClick={e => e.stopPropagation()}>
                                 {(() => {
                                     const q = globalSearch.toLowerCase();
                                     const matchedAccounts = accounts.filter(a => (a.name || '').toLowerCase().includes(q) || (a.accountOwner || '').toLowerCase().includes(q)).slice(0, 5);
@@ -3548,7 +3556,10 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     return (<>
                                         {matchedAccounts.length > 0 && (<div>
                                             <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.625rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#f8fafc', borderBottom: '1px solid #f1f3f5' }}>Accounts</div>
-                                            {matchedAccounts.map(a => (<div key={'sa-'+a.id} style={{ padding: '0.4rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); setTimeout(() => setViewingAccount(a), 100); }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='transparent'}><div><div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{a.name}</div>{a.accountOwner && <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{a.accountOwner}</div>}</div><span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>Account</span></div>))}
+                                            {matchedAccounts.map(a => {
+                                                const openDeals = opportunities.filter(o => (o.account||'').toLowerCase() === (a.name||'').toLowerCase() && o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length;
+                                                return (<div key={'sa-'+a.id} style={{ padding: '0.4rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); setTimeout(() => setViewingAccount(a), 100); }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='transparent'}><div><div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{a.name}</div>{a.accountOwner && <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{a.accountOwner}{openDeals > 0 ? ` · ${openDeals} open deal${openDeals>1?'s':''}` : ''}</div>}</div><span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>Account</span></div>);
+                                            })}
                                         </div>)}
                                         {matchedContacts.length > 0 && (<div>
                                             <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.625rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#f8fafc', borderBottom: '1px solid #f1f3f5' }}>Contacts</div>
@@ -6807,13 +6818,11 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     let anchorId = null;
                                     if (firstChar !== lastLetter) { lastLetter = firstChar; anchorId = 'account-letter-' + firstChar; }
                                     return (
-                                <div key={account.id} id={anchorId} style={{
-                                    border: selectedAccounts.includes(account.id) ? '1px solid #93c5fd' : '1px solid #edf0f3',
-                                    borderBottom: 'none', borderRadius: '0',
-                                    background: selectedAccounts.includes(account.id) ? '#eff6ff' : (idx % 2 === 0 ? '#ffffff' : '#f8fafc'),
-                                    transition: 'all 0.15s ease', overflow: 'hidden'
-                                }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', padding: '0.25rem 0.75rem' }}>
+                                <div key={account.id} id={anchorId}
+                                    onMouseEnter={e => { const a = e.currentTarget.querySelector('.acct-hover-actions'); if(a) a.style.opacity='1'; if (!selectedAccounts.includes(account.id)) e.currentTarget.style.background='#f8fafc'; }}
+                                    onMouseLeave={e => { const a = e.currentTarget.querySelector('.acct-hover-actions'); if(a) a.style.opacity='0'; if (!selectedAccounts.includes(account.id)) e.currentTarget.style.background=idx%2===0?'#ffffff':'#f8fafc'; }}
+                                    style={{ border: selectedAccounts.includes(account.id) ? '1px solid #93c5fd' : '1px solid #edf0f3', borderBottom: 'none', borderRadius: '0', background: selectedAccounts.includes(account.id) ? '#eff6ff' : (idx % 2 === 0 ? '#ffffff' : '#f8fafc'), transition: 'background 0.15s', overflow: 'hidden' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', padding: '0.5rem 0.75rem', gap: '10px' }}>
                                         <div style={{ width: '36px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                                             <input type="checkbox" checked={selectedAccounts.includes(account.id)}
                                                 onChange={e => { if (e.target.checked) setSelectedAccounts([...selectedAccounts, account.id]); else setSelectedAccounts(selectedAccounts.filter(id => id !== account.id)); }}
@@ -6825,23 +6834,35 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 </button>
                                             ) : <span style={{ width: '12px' }} />}
                                         </div>
-                                        <div style={{ width: '280px', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
-                                            onClick={() => setViewingAccount(account)}>
-                                            <span style={{ fontWeight: '700', fontSize: '0.75rem', color: '#2563eb' }}>{account.name}</span>
-                                            {getSubAccounts(account.id).length > 0 && (
-                                                <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.5rem', fontWeight: '700', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>{getSubAccounts(account.id).length} sub</span>
-                                            )}
-                                            {getSubAccounts(account.id).length > 0 && (() => {
-                                                const rollup = getAccountRollup(account);
-                                                if (rollup.pipeline === 0) return null;
-                                                return <span style={{ fontSize: '0.5625rem', color: '#b45309', fontWeight: '700', background: '#fef3c7', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>${rollup.pipeline >= 1000 ? Math.round(rollup.pipeline/1000)+'K' : rollup.pipeline.toLocaleString()}</span>;
-                                            })()}
+                                        {(() => {
+                                            const initials = (account.name || '??').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
+                                            const colorPairs = [['#dbeafe','#1e40af'],['#fce7f3','#9d174d'],['#d1fae5','#065f46'],['#ede9fe','#5b21b6'],['#fef3c7','#92400e'],['#fee2e2','#991b1b'],['#e0f2fe','#0369a1']];
+                                            const [bg, fg] = colorPairs[(account.name||'').charCodeAt(0) % colorPairs.length];
+                                            return <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: bg, color: fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '600', flexShrink: 0 }}>{initials}</div>;
+                                        })()}
+                                        <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setViewingAccount(account)}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                <span style={{ fontWeight: '600', fontSize: '0.8125rem', color: '#2563eb' }}>{account.name}</span>
+                                                {account.industry && <span style={{ fontSize: '0.625rem', fontWeight: '600', background: '#ede9fe', color: '#5b21b6', padding: '1px 6px', borderRadius: '999px' }}>{account.industry}</span>}
+                                                {getSubAccounts(account.id).length > 0 && <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.5rem', fontWeight: '700', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>{getSubAccounts(account.id).length} sub</span>}
+                                            </div>
+                                            <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '2px' }}>{account.accountOwner || '—'}{account.billingAddress ? ' · ' + account.billingAddress.split(',').slice(-2).join(',').trim() : ''}</div>
                                         </div>
-                                        <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: '500', flex: 1, textAlign: 'center' }}>{account.accountOwner || '—'}</span>
-                                        <div style={{ flexShrink: 0, textAlign: 'right', display: 'flex', gap: '4px' }}>
-                                            <button onClick={() => handleEditAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                            <button onClick={() => handleAddSubAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Sub</button>
-                                            <button onClick={() => handleDeleteAccount(account.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
+                                        {(() => {
+                                            const accName = (account.name || '').toLowerCase();
+                                            const accOpps = opportunities.filter(o => (o.account||'').toLowerCase() === accName);
+                                            const openCount = accOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length;
+                                            const pipeline = accOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                                            const wonCount = accOpps.filter(o => o.stage === 'Closed Won').length;
+                                            const contactCount = contacts.filter(c => (c.company||'').toLowerCase() === accName).length;
+                                            const fmt = v => v >= 1000000 ? '$'+(v/1000000).toFixed(1)+'M' : v >= 1000 ? '$'+Math.round(v/1000)+'K' : v > 0 ? '$'+v : '—';
+                                            const tile = (val, lbl, color) => (<div style={{ background: '#f8fafc', border: '0.5px solid #e2e8f0', borderRadius: '6px', padding: '4px 8px', textAlign: 'center', minWidth: '50px' }}><div style={{ fontSize: '12px', fontWeight: '600', color: color || '#1e293b', lineHeight: 1 }}>{val}</div><div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '.04em' }}>{lbl}</div></div>);
+                                            return (<div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>{tile(openCount,'Open','#1e293b')}{tile(fmt(pipeline),'Pipeline',pipeline>0?'#2563eb':'#94a3b8')}{tile(wonCount,'Won',wonCount>0?'#15803d':'#94a3b8')}{tile(contactCount,'Contacts','#1e293b')}</div>);
+                                        })()}
+                                        <div className="acct-hover-actions" style={{ display: 'flex', gap: '4px', flexShrink: 0, opacity: 0, transition: 'opacity 0.15s' }}>
+                                            <button onClick={() => handleEditAccount(account)} style={{ padding: '3px 9px', borderRadius: '6px', border: '0.5px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                            <button onClick={() => handleAddSubAccount(account)} style={{ padding: '3px 9px', borderRadius: '6px', border: '0.5px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Sub</button>
+                                            <button onClick={() => handleDeleteAccount(account.id)} style={{ padding: '3px 7px', borderRadius: '6px', border: '0.5px solid #fca5a5', background: '#fff', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
                                         </div>
                                     </div>
                                     {expandedAccounts[account.id] && getSubAccounts(account.id).length > 0 && (
@@ -6850,14 +6871,15 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 <div key={sub.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.2rem 0', fontSize: '0.75rem' }}>
                                                     <span style={{ cursor: 'pointer', color: '#1e293b', fontWeight: '500' }} onClick={() => setViewingAccount(sub)}>↳ {sub.name}</span>
                                                     <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
-                                                        <button onClick={() => handleEditAccount(sub, true)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                                        <button onClick={() => handleDeleteSubAccount(account.id, sub.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
+                                                        <button onClick={() => handleEditAccount(sub, true)} style={{ padding: '3px 9px', borderRadius: '6px', border: '0.5px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                                        <button onClick={() => handleDeleteSubAccount(account.id, sub.id)} style={{ padding: '3px 7px', borderRadius: '6px', border: '0.5px solid #fca5a5', background: '#fff', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
                                                     </div>
                                                 </div>
                                             ))}
                                         </div>
                                     )}
                                 </div>
+                            );                                </div>
                             );
                             });
                             })()}
@@ -7341,7 +7363,9 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                         </div>
                                     </div>
                                     {/* Desktop row - hidden on mobile */}
-                                    <div className="contacts-desktop-row" style={{ display: 'flex', alignItems: 'center', padding: '0.25rem 0.625rem', gap: '0.375rem' }}>
+                                    <div className="contacts-desktop-row" style={{ display: 'flex', alignItems: 'center', padding: '0.4rem 0.625rem', gap: '8px' }}
+                                        onMouseEnter={e => { const a = e.currentTarget.querySelector('.con-hover-actions'); if(a) a.style.opacity='1'; }}
+                                        onMouseLeave={e => { const a = e.currentTarget.querySelector('.con-hover-actions'); if(a) a.style.opacity='0'; }}>
                                         <input type="checkbox"
                                             checked={selectedContacts.includes(contact.id)}
                                             onChange={e => {
@@ -7350,58 +7374,35 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             }}
                                             style={{ width: '13px', height: '13px', cursor: 'pointer', accentColor: '#2563eb', flexShrink: 0 }}
                                         />
-                                        <div style={{ 
-                                            flex: 1,
-                                            display: 'grid',
-                                            gridTemplateColumns: '2fr 2fr 2fr 2fr 3fr',
-                                            gap: '0.375rem',
-                                            alignItems: 'center'
-                                        }}>
-                                            <div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                                                    <div 
-                                                        style={{ fontSize: '0.75rem', fontWeight: '700', color: '#2563eb', cursor: 'pointer', lineHeight: '1.2' }}
-                                                        onClick={() => setViewingContact(contact)}
-                                                        onMouseEnter={e => e.target.style.textDecoration = 'underline'}
-                                                        onMouseLeave={e => e.target.style.textDecoration = 'none'}
-                                                    >
-                                                        {contact.firstName} {contact.lastName}
-                                                    </div>
-                                                    {(() => {
-                                                        const linkedOppCount = opportunities.filter(o =>
-                                                            (o.contactIds && o.contactIds.includes(contact.id)) ||
-                                                            (o.contacts && o.contacts.split(',').map(s => s.trim().toLowerCase()).some(n => n.startsWith((contact.firstName + ' ' + contact.lastName).toLowerCase())))
-                                                        ).length;
-                                                        if (!linkedOppCount) return null;
-                                                        return (
-                                                            <span title={`${linkedOppCount} linked opportunity${linkedOppCount > 1 ? 's' : ''}`}
-                                                                style={{ fontSize: '0.5625rem', fontWeight: '700', background: '#dbeafe', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.05rem 0.35rem', borderRadius: '999px', lineHeight: '1.4', flexShrink: 0 }}>
-                                                                {linkedOppCount} opp{linkedOppCount > 1 ? 's' : ''}
-                                                            </span>
-                                                        );
-                                                    })()}
-                                                </div>
+                                        {(() => {
+                                            const initials = ((contact.firstName||'?')[0]+(contact.lastName||'?')[0]).toUpperCase();
+                                            const colorPairs = [['#dbeafe','#1e40af'],['#fce7f3','#9d174d'],['#d1fae5','#065f46'],['#ede9fe','#5b21b6'],['#fef3c7','#92400e'],['#fee2e2','#991b1b'],['#e0f2fe','#0369a1']];
+                                            const [bg, fg] = colorPairs[((contact.lastName||'A').charCodeAt(0)) % colorPairs.length];
+                                            return <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: bg, color: fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: '600', flexShrink: 0 }}>{initials}</div>;
+                                        })()}
+                                        <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => setViewingContact(contact)}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#2563eb' }}>{contact.firstName} {contact.lastName}</span>
+                                                {(() => {
+                                                    const linkedOppCount = opportunities.filter(o =>
+                                                        (o.contactIds && o.contactIds.includes(contact.id)) ||
+                                                        (o.contacts && o.contacts.split(',').map(s => s.trim().toLowerCase()).some(n => n.startsWith((contact.firstName + ' ' + contact.lastName).toLowerCase())))
+                                                    ).length;
+                                                    if (!linkedOppCount) return null;
+                                                    return <span style={{ fontSize: '0.5625rem', fontWeight: '700', background: '#dbeafe', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.05rem 0.35rem', borderRadius: '999px', lineHeight: '1.4', flexShrink: 0 }}>{linkedOppCount} opp{linkedOppCount > 1 ? 's' : ''}</span>;
+                                                })()}
                                             </div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                {contact.company || '-'}
-                                            </div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                {contact.title || '-'}
-                                            </div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                                                {contact.phone || '-'}
-                                            </div>
-                                            <div style={{ fontSize: '0.75rem' }}>
-                                                {contact.email ? (
-                                                    <a href={`mailto:${contact.email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>
-                                                        {contact.email}
-                                                    </a>
-                                                ) : '-'}
+                                            <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                {contact.title && <span>{contact.title}</span>}
+                                                {contact.title && contact.company && <span style={{ color: '#cbd5e1' }}>·</span>}
+                                                {contact.company && <span>{contact.company}</span>}
+                                                {contact.email && <><span style={{ color: '#cbd5e1' }}>·</span><span style={{ color: '#2563eb' }}>{contact.email}</span></>}
                                             </div>
                                         </div>
-                                        <div style={{ marginLeft: '0.375rem', display: 'flex', gap: '4px' }}>
-                                            <button onClick={() => handleEditContact(contact)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                            <button onClick={() => handleDeleteContact(contact.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
+                                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', flexShrink: 0 }}>{contact.phone || ''}</div>
+                                        <div className="con-hover-actions" style={{ display: 'flex', gap: '4px', flexShrink: 0, opacity: 0, transition: 'opacity 0.15s' }}>
+                                            <button onClick={() => handleEditContact(contact)} style={{ padding: '3px 9px', borderRadius: '6px', border: '0.5px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                            <button onClick={() => handleDeleteContact(contact.id)} style={{ padding: '3px 7px', borderRadius: '6px', border: '0.5px solid #fca5a5', background: '#fff', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
                                         </div>
                                     </div>
                                     {/* end contacts-desktop-row */}
@@ -7773,6 +7774,8 @@ ${bodyHtml}
   .kpi-value { font-size: 20px; font-weight: 800; color: #1e293b; line-height: 1.1; }
   .opp-hover-actions button:hover { background: #f8fafc !important; }
   .pipeline-hover-actions button:hover { background: #f8fafc !important; }
+  .acct-hover-actions button:hover { background: #f8fafc !important; }
+  .con-hover-actions button:hover { background: #f8fafc !important; }
   .kpi-sub { font-size: 9px; color: #64748b; margin-top: 3px; }
 
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
