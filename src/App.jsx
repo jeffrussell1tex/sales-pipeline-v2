@@ -397,10 +397,15 @@ function App() {
     // overwrites the DB — the #1 cause of data loss / "self-deleting" content.
     // settingsReady managed by useSettings hook
 
-    // Make getToken available to dbFetch utility
+    // Make getToken available to dbFetch utility ONLY when org is active
     // organizationId in getToken ensures Clerk includes org_id in the JWT
     useEffect(() => {
-        window.__getClerkToken = () => getToken({ organizationId: organization?.id });
+        if (!organization?.id) {
+            // Clear token getter so dbFetch won't fire without an org
+            window.__getClerkToken = null;
+            return;
+        }
+        window.__getClerkToken = () => getToken({ organizationId: organization.id });
     }, [getToken, organization]);
     const clerkUserMeta = clerkUser?.publicMetadata || {};
     const currentUser = clerkUser
@@ -699,7 +704,7 @@ function App() {
     // Quota & Commission
 
       useEffect(() => {
-    if (!clerkUser) return; // Don't load until authenticated
+    if (!clerkUser || !organization?.id) return; // Don't load until authenticated + org active
     const loadData = async () => {
 const checkOk = (r) => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r; };
 
@@ -736,7 +741,7 @@ dbFetch('/.netlify/functions/users?me=true')
     .catch(() => {});
     };
     loadData();
-}, [clerkUser]);
+}, [clerkUser, organization]);
 
            
 
