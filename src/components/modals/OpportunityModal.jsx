@@ -26,7 +26,7 @@ export default function OpportunityModal({ opportunity, accounts, contacts, sett
         probability: null,
         arr: 0,
         implementationCost: 0,
-        forecastedCloseDate: new Date().toISOString().split('T')[0],
+        forecastedCloseDate: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
         products: 'Shiftboard',
         unionized: 'No',
         notes: '',
@@ -167,7 +167,7 @@ if (formData.account && formData.account.trim()) {
 
     // Activity log state (inside modal)
     const [showLogActivity, setShowLogActivity] = React.useState(false);
-    const [newActivity, setNewActivity] = React.useState({ type: 'Call', date: new Date().toISOString().split('T')[0], notes: '' });
+    const [newActivity, setNewActivity] = React.useState({ type: 'Call', date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'), notes: '' });
     // Comment thread state
     const [commentDraft, setCommentDraft] = React.useState('');
     const [editingCommentId, setEditingCommentId] = React.useState(null);
@@ -235,15 +235,15 @@ if (formData.account && formData.account.trim()) {
         : [];
     const activityTypes = ['Call', 'Email', 'Meeting', 'Demo', 'Proposal Sent', 'Follow-up', 'Other'];
     const oppActivities = opportunity
-        ? (activities || []).filter(a => a.opportunityId === opportunity.id).sort((a, b) => new Date(b.date) - new Date(a.date))
+        ? (activities || []).filter(a => a.opportunityId === opportunity.id).sort((a, b) => new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00'))
         : [];
     const activityTypeIcon = { Call: '📞', Email: '✉️', Meeting: '🤝', Demo: '🖥️', 'Proposal Sent': '📄', 'Follow-up': '🔄', Other: '📝' };
 
     // Deal age info for header strip
     const dealAgeInfo = opportunity ? (() => {
         const today = new Date();
-        const dealAge = opportunity.createdDate ? Math.floor((today - new Date(opportunity.createdDate)) / 86400000) : null;
-        const timeInStage = opportunity.stageChangedDate ? Math.floor((today - new Date(opportunity.stageChangedDate)) / 86400000) : null;
+        const dealAge = opportunity.createdDate ? Math.floor((today - new Date(opportunity.createdDate + 'T12:00:00')) / 86400000) : null;
+        const timeInStage = opportunity.stageChangedDate ? Math.floor((today - new Date(opportunity.stageChangedDate + 'T12:00:00')) / 86400000) : null;
         return { dealAge, timeInStage };
     })() : null;
 
@@ -307,7 +307,7 @@ if (formData.account && formData.account.trim()) {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                                         <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Last Activity</span>
                                         <span style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#475569' }}>
-                                            {new Date(oppActivities[0].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {oppActivities[0].type}
+                                            {new Date(oppActivities[0].date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {oppActivities[0].type}
                                         </span>
                                     </div>
                                 </>
@@ -332,7 +332,7 @@ if (formData.account && formData.account.trim()) {
                                             {i > 0 && <span style={{ color: '#cbd5e1', fontSize: '0.625rem', margin: '0 0.2rem' }}>→</span>}
                                             <span style={{ fontSize: '0.6875rem', color: '#475569', fontWeight: i === entries.length - 1 ? '700' : '400' }}>
                                                 {e.stage}
-                                                <span style={{ color: '#94a3b8', marginLeft: '0.2rem', fontWeight: '400' }}>({new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})</span>
+                                                <span style={{ color: '#94a3b8', marginLeft: '0.2rem', fontWeight: '400' }}>({new Date(e.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})</span>
                                             </span>
                                         </React.Fragment>
                                     ));
@@ -354,7 +354,7 @@ if (formData.account && formData.account.trim()) {
                             )}
                             {opportunity.lostDate && (
                                 <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                                    {new Date(opportunity.lostDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                    {new Date(opportunity.lostDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                 </span>
                             )}
                         </div>
@@ -1100,7 +1100,7 @@ if (formData.account && formData.account.trim()) {
                                                     opportunityId: opportunity.id,
                                                     companyName: opportunity.account || ''
                                                 });
-                                                setNewActivity({ type: 'Call', date: new Date().toISOString().split('T')[0], notes: '' });
+                                                setNewActivity({ type: 'Call', date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'), notes: '' });
                                                 setShowLogActivity(false);
                                             }}
                                             style={{ padding: '0.4rem 0.875rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -1128,7 +1128,7 @@ if (formData.account && formData.account.trim()) {
                                                     <span style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#1e293b' }}>{act.type}</span>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                         <span style={{ fontSize: '0.6875rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                                                            {new Date(act.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                            {new Date(act.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                                         </span>
                                                         {onDeleteActivity && (
                                                             <button type="button" onClick={() => onDeleteActivity(act.id)}

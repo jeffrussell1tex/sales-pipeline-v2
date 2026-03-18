@@ -6,7 +6,7 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
         title: '',
         description: '',
         type: (taskTypes || ['Call'])[0] || 'Call',
-        dueDate: new Date().toISOString().split('T')[0],
+        dueDate: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
         dueTime: '09:00',
         reminderDate: '',
         reminderTime: '',
@@ -181,7 +181,7 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                                 value={formData.status || 'Open'}
                                 onChange={e => {
                                     const s = e.target.value;
-                                    setFormData({ ...formData, status: s, completed: s === 'Completed', completedDate: s === 'Completed' ? (formData.completedDate || new Date().toISOString().split('T')[0]) : formData.completedDate });
+                                    setFormData({ ...formData, status: s, completed: s === 'Completed', completedDate: s === 'Completed' ? (formData.completedDate || [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-')) : formData.completedDate });
                                 }}
                                 style={{
                                     background: formData.status === 'Completed' ? '#dcfce7' : formData.status === 'In-Process' ? '#fef3c7' : '#dbeafe',

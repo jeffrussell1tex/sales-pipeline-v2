@@ -3,6 +3,12 @@ import { useUser, useClerk, useAuth, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch } from './utils/storage';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import CsvImportModal from './components/modals/CsvImportModal';
+import { useSettings } from './hooks/useSettings';
+import { useOpportunities } from './hooks/useOpportunities';
+import { useAccounts } from './hooks/useAccounts';
+import { useContacts } from './hooks/useContacts';
+import { useTasks } from './hooks/useTasks';
+import { useActivities } from './hooks/useActivities';
 import LeadImportModal from './components/modals/LeadImportModal';
 import OutlookImportModal from './components/modals/OutlookImportModal';
 import PipelinesSettingsPanel from './components/modals/PipelinesSettingsPanel';
@@ -535,7 +541,7 @@ function FunnelView({ stages, pipelineFilteredOpps, funnelExpandedStage, setFunn
                                         <span style={{ fontWeight: '600', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp.opportunityName || opp.account}</span>
                                         <span style={{ color: '#64748b', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp.account}</span>
                                         <span style={{ fontWeight: '700', color: '#2563eb', fontSize: '0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>${(parseFloat(opp.arr)||0).toLocaleString()}</span>
-                                        <span style={{ color: '#94a3b8', fontSize: '0.6875rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}) : '—'}</span>
+                                        <span style={{ color: '#94a3b8', fontSize: '0.6875rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}) : '—'}</span>
                                         <div style={{ display: 'flex', gap: '0.375rem', justifyContent: 'center' }}>
                                             <button className="action-btn" onClick={e => { e.stopPropagation(); handleEdit(opp); }} style={{ padding: '0.15rem 0.5rem', fontSize: '0.6875rem' }}>Edit</button>
                                             <button className="action-btn delete" onClick={e => { e.stopPropagation(); handleDelete(opp.id); }} style={{ padding: '0.15rem 0.5rem', fontSize: '0.6875rem' }}>Del</button>
@@ -561,7 +567,7 @@ function KanbanView({ stages, pipelineFilteredOpps, kanbanDragging, kanbanDragOv
         if (!kanbanDragging || kanbanDragging.fromStage === toStage) {
             setKanbanDragging(null); setKanbanDragOver(null); return;
         }
-        const today = new Date().toISOString().split('T')[0];
+        const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
         const updatedOpp = opportunities.find(o => o.id === kanbanDragging.oppId);
         if (!updatedOpp) return;
         const newOpp = {
@@ -1157,7 +1163,7 @@ function App() {
     // Guard: prevents settings useEffect from writing to DB before DB data has loaded.
     // Without this, the effect fires on mount with localStorage/default values and
     // overwrites the DB — the #1 cause of data loss / "self-deleting" content.
-    const settingsReady = useRef(false);
+    // settingsReady managed by useSettings hook
 
     // Make getToken available to dbFetch utility
     useEffect(() => {
@@ -1196,77 +1202,75 @@ function App() {
         return () => window.removeEventListener('resize', onResize);
     }, []);
 
-    const [opportunities, setOpportunities] = useState([]);
-    const [accounts, setAccounts] = useState([]);
-    const [tasks, setTasks] = useState([]);
-    const [contacts, setContacts] = useState([]);
+    // ── Phase 1: Custom Hooks ─────────────────────────────────────────
+    const {
+        settings, setSettings, settingsReady,
+        loadSettings, handleUpdateFiscalYearStart, handleAddTaskType,
+    } = useSettings();
+
+    // Dependency refs — populated after showConfirm/softDelete/addAudit are defined below
+    const _addAuditRef    = useRef(null);
+    const _showConfirmRef = useRef(null);
+    const _softDeleteRef  = useRef(null);
+    const _setUndoRef     = useRef(null);
+    const _getQuarterRef    = useRef(null);
+    const _getQuarterLabelRef = useRef(null);
+    const _deps = {
+        get addAudit()         { return _addAuditRef.current; },
+        get showConfirm()      { return _showConfirmRef.current; },
+        get softDelete()       { return _softDeleteRef.current; },
+        get setUndoToast()     { return _setUndoRef.current; },
+        get getQuarter()       { return _getQuarterRef.current; },
+        get getQuarterLabel()  { return _getQuarterLabelRef.current; },
+    };
+
+    const {
+        opportunities, setOpportunities,
+        oppModalError, setOppModalError,
+        oppModalSaving, setOppModalSaving,
+        loadOpportunities,
+        handleDelete, handleSave, completeLostSave,
+    } = useOpportunities(_deps);
+
+    const {
+        accounts, setAccounts,
+        accountModalError, setAccountModalError,
+        accountModalSaving,
+        setAccountModalSaving,
+        loadAccounts, getSubAccounts,
+        handleDeleteAccount, handleDeleteSubAccount, handleSaveAccount,
+    } = useAccounts(_deps);
+
+    const {
+        contacts, setContacts,
+        contactModalError, setContactModalError,
+        contactModalSaving,
+        setContactModalSaving,
+        loadContacts,
+        handleDeleteContact, handleSaveContact,
+    } = useContacts(_deps);
+
+    const {
+        tasks, setTasks,
+        taskModalError, setTaskModalError,
+        taskModalSaving,
+        setTaskModalSaving,
+        calendarAddingTaskId, calendarAddFeedback,
+        loadTasks,
+        handleDeleteTask, handleSaveTask,
+        handleCompleteTask, handleAddTaskToCalendar,
+    } = useTasks(_deps);
+
+    const {
+        activities, setActivities,
+        activityModalError, setActivityModalError,
+        activityModalSaving,
+        setActivityModalSaving,
+        loadActivities,
+        handleDeleteActivity, handleSaveActivity,
+    } = useActivities({ showConfirm: (...a) => _showConfirmRef.current?.(...a) });
+
     const [leads, setLeads] = React.useState([]);
-    const [settings, setSettings] = useState(() => {
-        try {
-            const saved = safeStorage.getItem('salesSettings');
-            if (saved) {
-                try { return JSON.parse(saved); } catch(e) {}
-            }
-        } catch(e) {}
-        return {
-            fiscalYearStart: 10,
-            users: [],
-            teams: [],
-            territories: [],
-            verticals: [],
-            logoUrl: '',
-            taskTypes: ['Call', 'Meeting', 'Email'],
-            // auditLog moved to dedicated audit_log DB table
-            quotaData: {
-                type: 'annual',
-                annualQuota: 0,
-                q1Quota: 0, q2Quota: 0, q3Quota: 0, q4Quota: 0,
-                commissionTiers: [
-                    { id: '1', minPercent: 0, maxPercent: 50, rate: 5, label: '0-50%' },
-                    { id: '2', minPercent: 50, maxPercent: 100, rate: 8, label: '50-100%' },
-                    { id: '3', minPercent: 100, maxPercent: 120, rate: 10, label: '100-120%' },
-                    { id: '4', minPercent: 120, maxPercent: 999, rate: 15, label: '120%+' }
-                ]
-            },
-            pipelines: [
-                { id: 'default', name: 'New Business', color: '#2563eb' }
-            ],
-            painPoints: ['High Turnover', 'Scheduling Complexity', 'Compliance Issues', 'Manual Processes', 'Poor Visibility', 'Budget Constraints', 'Integration Challenges'],
-            verticalMarkets: ['Manufacturing', 'Healthcare', 'Energy & Utilities', 'Oil & Gas', 'Transportation', 'Government', 'Retail', 'Hospitality', 'Construction', 'Mining'],
-            funnelStages: [
-                { name: 'Qualification', weight: 10 },
-                { name: 'Discovery', weight: 20 },
-                { name: 'Evaluation (Demo)', weight: 40 },
-                { name: 'Proposal', weight: 60 },
-                { name: 'Negotiation/Review', weight: 75 },
-                { name: 'Contracts', weight: 90 },
-                { name: 'Closed Won', weight: 100 },
-                { name: 'Closed Lost', weight: 0 }
-            ],
-            fieldVisibility: {
-                arr:           { Admin: true, Manager: true, User: true,  ReadOnly: true  },
-                implCost:      { Admin: true, Manager: true, User: true,  ReadOnly: true  },
-                probability:   { Admin: true, Manager: true, User: true,  ReadOnly: true  },
-                weightedValue: { Admin: true, Manager: true, User: true,  ReadOnly: true  },
-                dealAge:       { Admin: true, Manager: true, User: true,  ReadOnly: true  },
-                timeInStage:   { Admin: true, Manager: true, User: true,  ReadOnly: true  },
-                activities:    { Admin: true, Manager: true, User: true,  ReadOnly: true  },
-                notes:         { Admin: true, Manager: true, User: true,  ReadOnly: true  },
-                nextSteps:     { Admin: true, Manager: true, User: true,  ReadOnly: true  },
-                closeDate:     { Admin: true, Manager: true, User: true,  ReadOnly: true  },
-            },
-            kpiConfig: [
-                { id: 'totalPipelineARR', name: 'Total Pipeline ARR', color: 'primary', tolerances: [{ label: 'On Track', min: 100000, color: '#16a34a' }, { label: 'Warning', min: 50000, color: '#f59e0b' }, { label: 'Critical', min: 0, color: '#ef4444' }] },
-                { id: 'activeOpps', name: 'Active Opportunities', color: 'success', tolerances: [{ label: 'Good', min: 10, color: '#16a34a' }, { label: 'Low', min: 5, color: '#f59e0b' }, { label: 'Critical', min: 0, color: '#ef4444' }] },
-                { id: 'avgARR', name: 'Avg ARR', color: 'warning', tolerances: [{ label: 'Strong', min: 50000, color: '#16a34a' }, { label: 'Average', min: 20000, color: '#f59e0b' }, { label: 'Low', min: 0, color: '#ef4444' }] },
-                { id: 'nextQForecast', name: 'Next Quarter Forecast', color: 'info', tolerances: [{ label: 'On Track', min: 100000, color: '#16a34a' }, { label: 'Behind', min: 50000, color: '#f59e0b' }, { label: 'At Risk', min: 0, color: '#ef4444' }] },
-                { id: 'openTasks', name: 'Open Tasks', color: 'primary', tolerances: [] },
-                { id: 'quota', name: 'Annual Quota', color: 'info', tolerances: [] },
-                { id: 'closedWon', name: 'Closed Won', color: 'success', tolerances: [] },
-                { id: 'attainment', name: 'Attainment', color: 'warning', tolerances: [{ label: 'Exceeding', min: 100, color: '#16a34a' }, { label: 'On Track', min: 70, color: '#f59e0b' }, { label: 'Behind', min: 0, color: '#ef4444' }] }
-            ]
-        };
-    });
     const [showModal, setShowModal] = useState(false);
     const [showSpiffClaimModal, setShowSpiffClaimModal] = useState(false);
     const [spiffClaimContext, setSpiffClaimContext] = useState(null); // { opp }
@@ -1294,6 +1298,7 @@ function App() {
     const [pendingOppFormData, setPendingOppFormData] = useState(null);
     const [lastCreatedRepName, setLastCreatedRepName] = useState(null);
     const [expandedAccounts, setExpandedAccounts] = useState({});
+    const [expandedIndustry, setExpandedIndustry] = useState(null);
     const [viewingContact, setViewingContact] = useState(null);
     const [contactShowAllDeals, setContactShowAllDeals] = useState(false);
     useEffect(() => { setContactShowAllDeals(false); }, [viewingContact]);
@@ -1412,6 +1417,13 @@ function App() {
         setUndoToast({ label, restore: restoreFunc, timerId });
     };
 
+    // Populate hook dependency refs now that the functions are defined
+    _addAuditRef.current       = addAudit;
+    _showConfirmRef.current    = showConfirm;
+    _softDeleteRef.current     = softDelete;
+    _setUndoRef.current        = setUndoToast;
+    // Note: getQuarter/getQuarterLabel refs populated below after those functions are defined
+
     // Dynamic stages from settings funnel stages
     const stages = (settings.funnelStages && settings.funnelStages.length > 0)
         ? settings.funnelStages.filter(s => s.name.trim()).map(s => s.name)
@@ -1454,7 +1466,7 @@ function App() {
     const [newVerticalMarketInput, setNewVerticalMarketInput] = useState('');
     
     // Activity Timeline & History
-    const [activities, setActivities] = useState([]);
+    // activities managed by useActivities hook
     const [showActivityModal, setShowActivityModal] = useState(false);
     const [editingActivity, setEditingActivity] = useState(null);
     const [showShortcuts, setShowShortcuts] = useState(false);
@@ -1494,7 +1506,7 @@ function App() {
     // Log from Calendar state
     const [logFromCalOpen, setLogFromCalOpen] = useState(false);
     const [logFromCalDateFrom, setLogFromCalDateFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0]; });
-    const [logFromCalDateTo, setLogFromCalDateTo] = useState(() => new Date().toISOString().split('T')[0]);
+    const [logFromCalDateTo, setLogFromCalDateTo] = useState(() => [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'));
     const [logFromCalEvents, setLogFromCalEvents] = useState([]);
     const [logFromCalLoading, setLogFromCalLoading] = useState(false);
     const [logFromCalError, setLogFromCalError] = useState(null);
@@ -1519,101 +1531,20 @@ function App() {
     const loadData = async () => {
 const checkOk = (r) => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r; };
 
-dbFetch('/.netlify/functions/opportunities')
-.then(checkOk).then(r => r.json())
-.then(data => {
-    const loadedOpps = data.opportunities || [];
-    const updatedOpps = loadedOpps.map(opp => {
-        const normalized = {
-            ...opp,
-            arr: parseFloat(opp.arr) || 0,
-            implementationCost: parseFloat(opp.implementationCost) || 0,
-            probability: opp.probability !== undefined && opp.probability !== '' ? parseFloat(opp.probability) : opp.probability,
-        };
-        if (!normalized.closeQuarter && normalized.forecastedCloseDate) {
-            const quarter = getQuarter(normalized.forecastedCloseDate);
-            const quarterLabel = getQuarterLabel(quarter, normalized.forecastedCloseDate);
-            return { ...normalized, closeQuarter: quarterLabel };
-        }
-        return normalized;
-    });
-    setOpportunities(updatedOpps);
-})
-.catch(err => console.error('Failed to load opportunities:', err));
-
-dbFetch('/.netlify/functions/accounts')
-    .then(checkOk).then(r => r.json())
-    .then(data => setAccounts(data.accounts || []))
-    .catch(err => console.error('Failed to load accounts:', err));
-
-dbFetch('/.netlify/functions/contacts')
-    .then(checkOk).then(r => r.json())
-    .then(data => setContacts(data.contacts || []))
-    .catch(err => console.error('Failed to load contacts:', err));
+// ── Data loading delegated to hooks ──────────────────────────────
+loadOpportunities(setDbOffline);
+loadAccounts(setDbOffline);
+loadContacts(setDbOffline);
+loadTasks(setDbOffline);
+loadActivities(setDbOffline);
 
 dbFetch('/.netlify/functions/leads')
     .then(checkOk).then(r => r.json())
     .then(data => setLeads(data.leads || []))
     .catch(err => console.error('Failed to load leads:', err));
 
-
-dbFetch('/.netlify/functions/tasks')
-    .then(checkOk).then(r => r.json())
-    .then(data => setTasks(data.tasks || []))
-    .catch(err => console.error('Failed to load tasks:', err));
-
-dbFetch('/.netlify/functions/activities')
-    .then(checkOk).then(r => r.json())
-    .then(data => setActivities(data.activities || []))
-    .catch(err => console.error('Failed to load activities:', err));
-
-dbFetch('/.netlify/functions/settings')
-    .then(checkOk).then(r => r.json())
-    .then(data => {
-        if (data.settings) {
-            // Destructure users out — users come exclusively from the /users endpoint.
-            // Never let a stale users array embedded in the settings blob overwrite them.
-            const { users: _stripUsers, ...settingsFromDb } = data.settings;
-            setSettings(prev => ({
-                ...prev,
-                ...settingsFromDb,
-                taskTypes: settingsFromDb.taskTypes || prev.taskTypes || ['Call', 'Meeting', 'Email'],
-                quotaData: settingsFromDb.quotaData ? { ...prev.quotaData, ...settingsFromDb.quotaData } : prev.quotaData,
-                funnelStages: (settingsFromDb.funnelStages && settingsFromDb.funnelStages.length > 0)
-                    ? settingsFromDb.funnelStages
-                    : (prev.funnelStages && prev.funnelStages.length > 0)
-                        ? prev.funnelStages
-                        : [
-                            { name: 'Qualification', weight: 10 },
-                            { name: 'Discovery', weight: 20 },
-                            { name: 'Evaluation (Demo)', weight: 40 },
-                            { name: 'Proposal', weight: 60 },
-                            { name: 'Negotiation/Review', weight: 75 },
-                            { name: 'Contracts', weight: 90 },
-                            { name: 'Closed Won', weight: 100 },
-                            { name: 'Closed Lost', weight: 0 }
-                        ],
-            }));
-        }
-        // Mark settings as loaded from DB — enables the save effect.
-        // setTimeout(0) ensures this runs after React batches the setSettings call above.
-        setTimeout(() => { settingsReady.current = true; }, 0);
-    })
-    .catch(err => {
-        console.error('Failed to load settings:', err);
-        // Allow saves even on error so the app isn't permanently stuck
-        setTimeout(() => { settingsReady.current = true; }, 0);
-    });
-
-// Load users from dedicated endpoint (admins/managers only — others get empty list)
-dbFetch('/.netlify/functions/users')
-    .then(r => r.ok ? r.json() : { users: [] })
-    .then(data => {
-        if (data.users && data.users.length > 0) {
-            setSettings(prev => ({ ...prev, users: data.users }));
-        }
-    })
-    .catch(() => {}); // Non-fatal — reps just won't see user list
+// Settings + users loading delegated to useSettings hook
+loadSettings(clerkUser);
 
 // Load current user's own profile (notification prefs, etc.)
 dbFetch('/.netlify/functions/users?me=true')
@@ -1735,22 +1666,7 @@ dbFetch('/.netlify/functions/users?me=true')
 
 
 
-    useEffect(() => {
-    // Guard: do NOT write to DB until settings have been loaded FROM DB.
-    // Without this check, the effect fires on mount with defaults/localStorage
-    // and overwrites real data in the database.
-    if (!settingsReady.current) return;
-    // Strip users from the settings blob — users are managed exclusively by the
-    // /users endpoint and must never be embedded here. Storing them in both places
-    // causes a race on load where the stale settings blob overwrites the /users table.
-    const { users: _stripUsers, ...settingsToSave } = settings;
-    try { safeStorage.setItem('salesSettings', JSON.stringify(settingsToSave)); } catch(e) {}
-    dbFetch('/.netlify/functions/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settingsToSave)
-    }).catch(err => console.error('Failed to save settings:', err));
-}, [settings]);
+    // Settings save effect managed by useSettings hook
 
     useEffect(() => {
         try { safeStorage.setItem('spiffClaims', JSON.stringify(spiffClaims)); } catch(e) {}
@@ -1893,6 +1809,10 @@ dbFetch('/.netlify/functions/users?me=true')
         }
         return `FY${fiscalYear} ${quarter}`;
     };
+
+    // Populate getQuarter refs now that the functions are defined
+    _getQuarterRef.current      = getQuarter;
+    _getQuarterLabelRef.current = getQuarterLabel;
 
     const quarterlyData = {};
     visibleOpportunities.forEach(opp => {
@@ -2095,12 +2015,7 @@ dbFetch('/.netlify/functions/users?me=true')
         }
     };
 
-    const handleUpdateFiscalYearStart = (month) => {
-        setSettings(prev => ({
-            ...prev,
-            fiscalYearStart: parseInt(month)
-        }));
-    };
+    // handleUpdateFiscalYearStart managed by useSettings hook
 
     const toggleAccountExpanded = (accountId) => {
         setExpandedAccounts({
@@ -2119,127 +2034,17 @@ dbFetch('/.netlify/functions/users?me=true')
         setShowTaskModal(true);
     };
 
-    const handleDeleteTask = (taskId) => {
-        const task = tasks.find(t => t.id === taskId);
-        if (!task) return;
-        showConfirm('Are you sure you want to delete this task?', () => {
-            const snapshot = [...tasks];
-           setTasks(tasks.filter(t => t.id !== taskId));
-dbFetch(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' })
-    .catch(err => console.error('Failed to delete task:', err));
-            addAudit('delete', 'task', taskId, task.title || task.subject || taskId, '');
-            softDelete(
-                `Task "${task.title || task.subject || 'Untitled'}"`,
-                () => {},
-                () => { setTasks(snapshot); setUndoToast(null); }
-            );
-        });
-    };
+    // handleDeleteTask managed by useTasks hook
 
-    const [taskModalError, setTaskModalError] = useState(null);
-    const [taskModalSaving, setTaskModalSaving] = useState(false);
 
-    const handleSaveTask = async (taskData) => {
-        setTaskModalError(null);
-        setTaskModalSaving(true);
+    // handleSaveTask managed by useTasks hook
 
-        const fireCalendarEvent = async (task) => {
-            if (!task.addToCalendar || !task.dueDate) return;
-            try {
-                const relatedOpp = task.opportunityId ? (opportunities || []).find(o => o.id === task.opportunityId) : null;
-                const description = [
-                    task.description || task.notes || '',
-                    relatedOpp ? 'Opportunity: ' + (relatedOpp.opportunityName || relatedOpp.account) : '',
-                    task.type ? 'Type: ' + task.type : '',
-                ].filter(Boolean).join('\n');
-                await fetch('/.netlify/functions/calendar-add-event', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ title: task.title, date: task.dueDate, description }),
-                });
-            } catch (err) {
-                console.warn('Calendar event creation failed (non-blocking):', err);
-            }
-        };
+    // handleCompleteTask managed by useTasks hook
 
-        if (editingTask) {
-            const payload = { ...taskData, id: editingTask.id };
-            try {
-                const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                const data = await res.json();
-                if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
-                setTasks(tasks.map(t => t.id === editingTask.id ? (data.task || payload) : t));
-                addAudit('update', 'task', editingTask.id, taskData.title || editingTask.id, taskData.type || '');
-                fireCalendarEvent(payload);
-                setShowTaskModal(false); setTaskModalError(null);
-            } catch (err) { console.error('Failed to update task:', err); setTaskModalError('Failed to save task. Please check your connection and try again.'); }
-            finally { setTaskModalSaving(false); }
-        } else {
-            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-            const newTask = { ...taskData, id: newId };
-            try {
-                const res = await dbFetch('/.netlify/functions/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTask) });
-                const data = await res.json();
-                if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
-                setTasks([...tasks, data.task || newTask]);
-                addAudit('create', 'task', newId, taskData.title || newId, taskData.type || '');
-                fireCalendarEvent(newTask);
-                setShowTaskModal(false); setTaskModalError(null);
-            } catch (err) { console.error('Failed to save task:', err); setTaskModalError('Failed to save task. Please check your connection and try again.'); }
-            finally { setTaskModalSaving(false); }
-        }
-    };
+    // handleAddTaskType managed by useSettings hook
 
-    const handleCompleteTask = (taskId, newStatus) => {
-        setTasks(tasks.map(t => {
-            if (t.id !== taskId) return t;
-            if (newStatus !== undefined) {
-                return { ...t, status: newStatus, completed: newStatus === 'Completed', completedDate: newStatus === 'Completed' ? new Date().toISOString().split('T')[0] : t.completedDate };
-            }
-            // Legacy toggle
-            const wasCompleted = t.completed || t.status === 'Completed';
-            return { ...t, completed: !wasCompleted, status: wasCompleted ? 'Open' : 'Completed', completedDate: wasCompleted ? t.completedDate : new Date().toISOString().split('T')[0] };
-        }));
-    };
 
-    const handleAddTaskType = (newType) => {
-        if (newType && !(settings.taskTypes || []).includes(newType)) {
-            setSettings(prev => ({ ...prev, taskTypes: [...(prev.taskTypes || []), newType] }));
-        }
-    };
-
-    const [calendarAddingTaskId, setCalendarAddingTaskId] = useState(null);
-    const [calendarAddFeedback, setCalendarAddFeedback] = useState({}); // taskId -> 'success' | 'error'
-
-    const handleAddTaskToCalendar = async (e, task) => {
-        e.stopPropagation();
-        if (!task.dueDate) return;
-        setCalendarAddingTaskId(task.id);
-        try {
-            const relatedOpp = task.opportunityId ? (opportunities || []).find(o => o.id === task.opportunityId) : null;
-            const description = [
-                task.notes || '',
-                relatedOpp ? 'Opportunity: ' + (relatedOpp.opportunityName || relatedOpp.account) : '',
-                task.type ? 'Type: ' + task.type : '',
-            ].filter(Boolean).join('\n');
-            const res = await fetch('/.netlify/functions/calendar-add-event', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: task.title,
-                    date: task.dueDate,
-                    description,
-                }),
-            });
-            if (!res.ok) throw new Error('Failed');
-            setCalendarAddFeedback(prev => ({ ...prev, [task.id]: 'success' }));
-        } catch {
-            setCalendarAddFeedback(prev => ({ ...prev, [task.id]: 'error' }));
-        } finally {
-            setCalendarAddingTaskId(null);
-            setTimeout(() => setCalendarAddFeedback(prev => { const n = { ...prev }; delete n[task.id]; return n; }), 3000);
-        }
-    };
+    // handleAddTaskToCalendar managed by useTasks hook
 
     const handleAddContact = () => {
         setEditingContact(null);
@@ -2251,178 +2056,22 @@ dbFetch(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' })
         setShowContactModal(true);
     };
 
-    const handleDeleteContact = (contactId) => {
-        const contact = contacts.find(c => c.id === contactId);
-        if (!contact) return;
-        showConfirm('Are you sure you want to delete this contact?', () => {
-            const snapshot = [...contacts];
-            setContacts(contacts.filter(c => c.id !== contactId));
-dbFetch(`/.netlify/functions/contacts?id=${contactId}`, { method: 'DELETE' })
-    .catch(err => console.error('Failed to delete contact:', err));
-            addAudit('delete', 'contact', contactId, ((contact.firstName||'') + ' ' + (contact.lastName||'')).trim() || contactId, contact.company || '');
-            softDelete(
-                `Contact "${((contact.firstName||'') + ' ' + (contact.lastName||'')).trim()}"`,
-                () => {},
-                () => { setContacts(snapshot); setUndoToast(null); }
-            );
-        });
-    };
+    // handleDeleteContact managed by useContacts hook
 
-    const [contactModalError, setContactModalError] = useState(null);
-    const [contactModalSaving, setContactModalSaving] = useState(false);
 
-    const handleSaveContact = async (contactData) => {
-        setContactModalError(null);
-        setContactModalSaving(true);
-        if (editingContact) {
-            const payload = { ...contactData, id: editingContact.id };
-            try {
-                const res = await dbFetch('/.netlify/functions/contacts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                const data = await res.json();
-                if (!res.ok) { setContactModalError(data.error || 'Failed to save contact. Please try again.'); setContactModalSaving(false); return; }
-                setContacts(contacts.map(c => c.id === editingContact.id ? (data.contact || payload) : c));
-                addAudit('update', 'contact', editingContact.id, ((contactData.firstName||'') + ' ' + (contactData.lastName||'')).trim() || editingContact.id, contactData.company || '');
-                setShowContactModal(false); setContactModalError(null);
-            } catch (err) { console.error('Failed to update contact:', err); setContactModalError('Failed to save contact. Please check your connection and try again.'); }
-            finally { setContactModalSaving(false); }
-        } else {
-            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-            const newContact = { ...contactData, id: newId };
-            try {
-                const res = await dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newContact) });
-                const data = await res.json();
-                if (!res.ok) { setContactModalError(data.error || 'Failed to save contact. Please try again.'); setContactModalSaving(false); return; }
-                setContacts([...contacts, data.contact || newContact]);
-                addAudit('create', 'contact', newId, ((contactData.firstName||'') + ' ' + (contactData.lastName||'')).trim() || newId, contactData.company || '');
-                setShowContactModal(false); setContactModalError(null);
-            } catch (err) { console.error('Failed to save contact:', err); setContactModalError('Failed to save contact. Please check your connection and try again.'); }
-            finally { setContactModalSaving(false); }
-        }
-    };
+    // handleSaveContact managed by useContacts hook
 
     const handleEdit = (opp) => {
         setEditingOpp(opp);
         setShowModal(true);
     };
 
-    const handleDelete = (id) => {
-        const opp = opportunities.find(o => o.id === id);
-        if (!opp) return;
-        showConfirm('Are you sure you want to delete this opportunity?', () => {
-            const snapshot = [...opportunities];
-            setOpportunities(opportunities.filter(o => o.id !== id));
-dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
-    .then(r => r.json())
-    .catch(err => console.error('Failed to delete opportunity:', err));
-            addAudit('delete', 'opportunity', id, opp.opportunityName || opp.account || id, opp.account);
-            softDelete(
-                `Opportunity "${opp.opportunityName || opp.account}"`,
-                () => {},  // already deleted above
-                () => { setOpportunities(snapshot); setUndoToast(null); }
-            );
-        });
-    };
+    // handleDelete (opportunities) managed by useOpportunities hook
 
-    const [oppModalError, setOppModalError] = useState(null);
-    const [oppModalSaving, setOppModalSaving] = useState(false);
 
-        const handleSave = (formData) => {
-        const today = new Date().toISOString().split('T')[0];
-        const prevOpp = editingOpp ? opportunities.find(o => o.id === editingOpp.id) : null;
-        const stageChanged = prevOpp && prevOpp.stage !== formData.stage;
+        // handleSave managed by useOpportunities hook
 
-        // Build stage history entry if stage changed
-        const stageHistoryEntry = stageChanged ? {
-            stage: formData.stage,
-            date: today,
-            prevStage: prevOpp.stage,
-            author: currentUser || '',
-            timestamp: new Date().toISOString()
-        } : null;
-
-        const enrichedData = {
-            ...formData,
-            createdDate: prevOpp?.createdDate || today,
-            stageChangedDate: stageChanged ? today : (prevOpp?.stageChangedDate || today),
-            stageHistory: stageChanged
-                ? [...(prevOpp?.stageHistory || []), stageHistoryEntry]
-                : (prevOpp?.stageHistory || []),
-            comments: prevOpp?.comments || [],
-            lostReason: formData.lostReason || prevOpp?.lostReason || '',
-            lostCategory: formData.lostCategory || prevOpp?.lostCategory || '',
-            lostDate: formData.lostDate || prevOpp?.lostDate || ''
-        };
-
-        // Intercept Closed Lost to prompt for reason
-        if (formData.stage === 'Closed Lost' && (!prevOpp || prevOpp.stage !== 'Closed Lost')) {
-            setShowModal(false);
-            setLostReasonModal({ pendingFormData: enrichedData, editingOpp });
-            return;
-        }
-
-        if (editingOpp && editingOpp.id) {
-            const updatedOpp = { ...enrichedData, id: editingOpp.id };
-            setOppModalSaving(true); setOppModalError(null);
-            dbFetch('/.netlify/functions/opportunities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedOpp) })
-                .then(async res => {
-                    const data = await res.json();
-                    if (!res.ok) { setOppModalError(data.error || 'Failed to save opportunity. Please try again.'); return; }
-                    setOpportunities(opportunities.map(opp => opp.id === editingOpp.id ? (data.opportunity || updatedOpp) : opp));
-                    addAudit('update', 'opportunity', editingOpp.id, enrichedData.opportunityName || enrichedData.account || editingOpp.id, enrichedData.account || '');
-                    setShowModal(false); setOppModalError(null);
-                })
-                .catch(err => { console.error('Failed to update opportunity:', err); setOppModalError('Failed to save opportunity. Please check your connection and try again.'); })
-                .finally(() => setOppModalSaving(false));
-        } else {
-            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-            const newOpp = { ...enrichedData, id: newId, pipelineId: activePipeline.id, createdBy: currentUser || '' };
-            setOppModalSaving(true); setOppModalError(null);
-            dbFetch('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newOpp) })
-                .then(async res => {
-                    const data = await res.json();
-                    if (!res.ok) { setOppModalError(data.error || 'Failed to save opportunity. Please try again.'); return; }
-                    setOpportunities([...opportunities, data.opportunity || newOpp]);
-                    addAudit('create', 'opportunity', newId, enrichedData.opportunityName || enrichedData.account || newId, enrichedData.account || '');
-                    setShowModal(false); setOppModalError(null);
-                })
-                .catch(err => { console.error('Failed to save opportunity:', err); setOppModalError('Failed to save opportunity. Please check your connection and try again.'); })
-                .finally(() => setOppModalSaving(false));
-        }
-    };
-
-    const completeLostSave = (formData, editingOppRef, lostReason, lostCategory) => {
-        const today = new Date().toISOString().split('T')[0];
-        const prevOppRef = editingOppRef ? opportunities.find(o => o.id === editingOppRef.id) : null;
-        const enriched = {
-            ...formData,
-            lostReason, lostCategory, lostDate: today,
-            comments: prevOppRef?.comments || formData.comments || [],
-            stageHistory: formData.stageHistory || prevOppRef?.stageHistory || []
-        };
-        if (editingOppRef) {
-            const updatedOpp = { ...enriched, id: editingOppRef.id };
-            setOpportunities(opportunities.map(opp =>
-                opp.id === editingOppRef.id ? updatedOpp : opp
-            ));
-            dbFetch('/.netlify/functions/opportunities', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedOpp)
-            }).catch(err => console.error('Failed to save lost opportunity:', err));
-            addAudit('update', 'opportunity', editingOppRef.id, enriched.opportunityName || enriched.account || editingOppRef.id, `Closed Lost: ${lostCategory || lostReason || ''}`);
-        } else {
-            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-            const newOpp = { ...enriched, id: newId, pipelineId: activePipeline.id };
-            setOpportunities([...opportunities, newOpp]);
-            dbFetch('/.netlify/functions/opportunities', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newOpp)
-            }).catch(err => console.error('Failed to save lost opportunity:', err));
-            addAudit('create', 'opportunity', newId, enriched.opportunityName || enriched.account || newId, `Closed Lost: ${lostCategory || lostReason || ''}`);
-        }
-        setLostReasonModal(null);
-    };
+    // completeLostSave managed by useOpportunities hook
 
     const handleAddAccount = () => {
         setEditingAccount(null);
@@ -2437,7 +2086,7 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
         setParentAccountForSub(parentAccount);
         setShowAccountModal(true);
     };
-    const getSubAccounts = (accountId) => (accounts || []).filter(a => a.parentId === accountId);
+    // getSubAccounts managed by useAccounts hook
 
     const handleEditAccount = (account, isSubAccount = false) => {
         if (isSubAccount) {
@@ -2451,95 +2100,12 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
         setShowAccountModal(true);
     };
 
-    const handleDeleteAccount = (accountId) => {
-        const account = accounts.find(acc => acc.id === accountId);
-        if (!account) return;
+    // handleDeleteAccount managed by useAccounts hook
 
-        const subs = getSubAccounts(accountId);
-        const allIds = [accountId, ...subs.map(s => s.id)];
-        const allNames = [account.name, ...subs.map(s => s.name)];
+    // handleDeleteSubAccount managed by useAccounts hook
 
-        const hasActiveOpportunities = opportunities.some(opp => allNames.includes(opp.account));
-        if (hasActiveOpportunities) {
-            alert(`Cannot delete "${account.name}" because it has active opportunities. Please close or reassign them first.`);
-            return;
-        }
 
-        const subMsg = subs.length > 0 ? ` This will also delete ${subs.length} sub-account${subs.length > 1 ? 's' : ''}.` : '';
-        showConfirm(`Are you sure you want to delete "${account.name}"?${subMsg}`, () => {
-            const snapshot = [...accounts];
-            setAccounts(accounts.filter(a => !allIds.includes(a.id)));
-            allIds.forEach(id => {
-                dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
-                    .catch(err => console.error('Failed to delete account:', err));
-            });
-            addAudit('delete', 'account', accountId, account.name, '');
-            softDelete(
-                `Account "${account.name}"`,
-                () => {},
-                () => { setAccounts(snapshot); setUndoToast(null); }
-            );
-        });
-    };
-
-    const handleDeleteSubAccount = (parentId, subAccountId) => {
-        // Sub-account is now a flat account row — delegate to handleDeleteAccount
-        handleDeleteAccount(subAccountId);
-    };
-
-    const [accountModalError, setAccountModalError] = useState(null);
-    const [accountModalSaving, setAccountModalSaving] = useState(false);
-
-    const handleSaveAccount = async (formData) => {
-        setAccountModalError(null);
-        setAccountModalSaving(true);
-        try {
-            let payload, method, auditAction, auditId, auditName, auditDetail;
-            if (editingAccount) {
-                payload = { ...formData, id: editingAccount.id };
-                method = 'PUT'; auditAction = 'update'; auditId = editingAccount.id;
-                auditName = formData.name || editingAccount.id; auditDetail = formData.industry || '';
-            } else if (editingSubAccount) {
-                payload = { ...formData, id: editingSubAccount.id, parentId: editingSubAccount.parentId };
-                method = 'PUT'; auditAction = 'update'; auditId = editingSubAccount.id;
-                auditName = formData.name || editingSubAccount.id; auditDetail = '';
-            } else if (parentAccountForSub) {
-                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                payload = { ...formData, id: newId, parentId: parentAccountForSub.id };
-                method = 'POST'; auditAction = 'create'; auditId = newId;
-                auditName = formData.name || newId; auditDetail = 'Sub of ' + parentAccountForSub.name;
-            } else {
-                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                payload = { ...formData, id: newId };
-                method = 'POST'; auditAction = 'create'; auditId = newId;
-                auditName = formData.name || newId; auditDetail = formData.industry || '';
-            }
-            const res = await dbFetch('/.netlify/functions/accounts', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            const data = await res.json();
-            if (!res.ok) { setAccountModalError(data.error || 'Failed to save account. Please try again.'); setAccountModalSaving(false); return; }
-            const saved = data.account || payload;
-            if (method === 'PUT') {
-                setAccounts(accounts.map(acc => acc.id === saved.id ? saved : acc));
-            } else {
-                setAccounts([...accounts, saved]);
-                if (auditDetail === '' || auditDetail.startsWith('Sub of')) { /* sub-account — no extra steps */ }
-                else if (accountCreatedFromOppForm) {
-                    setLastCreatedAccountName(formData.name);
-                    setEditingOpp(pendingOppFormData);
-                    setShowModal(true);
-                    setAccountCreatedFromOppForm(false);
-                    setPendingOppFormData(null);
-                }
-            }
-            addAudit(auditAction, 'account', auditId, auditName, auditDetail);
-            setShowAccountModal(false); setAccountModalError(null);
-        } catch (err) {
-            console.error('Failed to save account:', err);
-            setAccountModalError('Failed to save account. Please check your connection and try again.');
-        } finally {
-            setAccountModalSaving(false);
-        }
-    };
+    // handleSaveAccount managed by useAccounts hook
 
     // Stage color palette - unique color for each stage
     const stageColorPalette = [
@@ -2633,77 +2199,10 @@ dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
         setShowActivityModal(true);
     };
 
-    const handleDeleteActivity = (activityId) => {
-        showConfirm('Are you sure you want to delete this activity?', () => {
-         setActivities(activities.filter(a => a.id !== activityId));
-dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
-    .catch(err => console.error('Failed to delete activity:', err));
-        });
-    };
+    // handleDeleteActivity managed by useActivities hook
 
-    const [activityModalError, setActivityModalError] = useState(null);
-    const [activityModalSaving, setActivityModalSaving] = useState(false);
 
-    const handleSaveActivity = async (activityData) => {
-        setActivityModalError(null);
-        setActivityModalSaving(true);
-
-        const fireActivityCalendarEvent = async (activity) => {
-            if (!activity.addToCalendar || !activity.date) return;
-            try {
-                const relatedOpp = activity.opportunityId ? (opportunities || []).find(o => o.id === activity.opportunityId) : null;
-                const description = [
-                    activity.notes || '',
-                    relatedOpp ? 'Opportunity: ' + (relatedOpp.opportunityName || relatedOpp.account) : '',
-                    activity.companyName ? 'Company: ' + activity.companyName : '',
-                ].filter(Boolean).join('\n');
-                await fetch('/.netlify/functions/calendar-add-event', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: activity.type + (activity.companyName ? ' — ' + activity.companyName : '') + (relatedOpp ? ' — ' + (relatedOpp.opportunityName || relatedOpp.account) : ''),
-                        date: activity.date,
-                        description,
-                    }),
-                });
-            } catch (err) {
-                console.warn('Calendar event creation failed (non-blocking):', err);
-            }
-        };
-
-        if (editingActivity) {
-            const payload = { ...activityData, id: editingActivity.id };
-            try {
-                const res = await dbFetch('/.netlify/functions/activities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                const data = await res.json();
-                if (!res.ok) { setActivityModalError(data.error || 'Failed to save activity. Please try again.'); setActivityModalSaving(false); return; }
-                setActivities(activities.map(a => a.id === editingActivity.id ? (data.activity || payload) : a));
-                fireActivityCalendarEvent(payload);
-                setShowActivityModal(false); setActivityModalError(null);
-            } catch (err) { console.error('Failed to update activity:', err); setActivityModalError('Failed to save activity. Please check your connection and try again.'); }
-            finally { setActivityModalSaving(false); }
-        } else {
-            const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-            const newActivity = { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' };
-            try {
-                const res = await dbFetch('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) });
-                const data = await res.json();
-                if (!res.ok) { setActivityModalError(data.error || 'Failed to save activity. Please try again.'); setActivityModalSaving(false); return; }
-                setActivities([...activities, data.activity || newActivity]);
-                fireActivityCalendarEvent(newActivity);
-                setShowActivityModal(false); setActivityModalError(null);
-            } catch (err) { console.error('Failed to save activity:', err); setActivityModalError('Failed to save activity. Please check your connection and try again.'); }
-            finally { setActivityModalSaving(false); }
-        }
-        // Show follow-up task prompt if activity was linked to an opportunity
-        if (activityData.opportunityId) {
-            const linkedOpp = (opportunities || []).find(o => o.id === activityData.opportunityId);
-            setFollowUpPrompt({ opportunityId: activityData.opportunityId, opportunityName: linkedOpp?.opportunityName || linkedOpp?.account || 'this deal' });
-        }
-        setQuickLogOpen(false);
-        setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });
-        setQuickLogContactResults([]);
-    };
+    // handleSaveActivity managed by useActivities hook
 
     // ── Calendar strip auto-fetch (hoisted so useEffect can call it) ──────────
     const fetchCalendarEvents = async () => {
@@ -2746,7 +2245,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
     };
 
     const handleLogFromCalendar = async (ev, opportunityId) => {
-        const eventDate = ev.start?.date || (ev.start?.dateTime ? ev.start.dateTime.split('T')[0] : new Date().toISOString().split('T')[0]);
+        const eventDate = ev.start?.date || (ev.start?.dateTime ? ev.start.dateTime.split('T')[0] : [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'));
         const relatedOpp = opportunityId ? (opportunities || []).find(o => o.id === opportunityId) : null;
         const activityData = {
             type: 'Meeting',
@@ -2756,7 +2255,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
             companyName: relatedOpp?.account || '',
             addToCalendar: false,
         };
-        await handleSaveActivity(activityData);
+        await handleSaveActivity(activityData, { editingActivity, currentUser, opportunities, setShowActivityModal, setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults });
         setLoggedCalendarIds(prev => new Set([...prev, ev.id]));
         setLogFromCalOppMap(prev => ({ ...prev, [ev.id]: opportunityId || '' }));
         setLogFromCalLinkingId(null);
@@ -2773,7 +2272,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
         // Check last activity
         const oppActivities = activities.filter(a => a.opportunityId === opportunity.id);
         if (oppActivities.length > 0) {
-            const lastActivity = new Date(Math.max(...oppActivities.map(a => new Date(a.date))));
+            const lastActivity = new Date(Math.max(...oppActivities.map(a => new Date(a.date + 'T12:00:00'))));
             const daysSinceActivity = Math.floor((now - lastActivity) / (1000 * 60 * 60 * 24));
             
             if (daysSinceActivity > 30) { score -= 40; reasons.push('No activity in over 30 days (' + daysSinceActivity + ' days)'); }
@@ -2838,7 +2337,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                 // Stale deal alerts
                 const oppActivities = activities.filter(a => a.opportunityId === opp.id);
                 if (oppActivities.length > 0) {
-                    const lastActivity = new Date(Math.max(...oppActivities.map(a => new Date(a.date))));
+                    const lastActivity = new Date(Math.max(...oppActivities.map(a => new Date(a.date + 'T12:00:00'))));
                     const daysSinceActivity = Math.floor((now - lastActivity) / (1000 * 60 * 60 * 24));
                     
                     if (daysSinceActivity > 14 && opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost') {
@@ -2854,7 +2353,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                 
                 // Close date reminders
                 if (opp.forecastedCloseDate && opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost') {
-                    const closeDate = new Date(opp.forecastedCloseDate);
+                    const closeDate = new Date(opp.forecastedCloseDate + 'T12:00:00');
                     const daysToClose = Math.floor((closeDate - now) / (1000 * 60 * 60 * 24));
                     
                     if (daysToClose >= 0 && daysToClose <= 7) {
@@ -2880,7 +2379,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
             // Task reminders
             tasks.forEach(task => {
                 if (!task.completed && task.dueDate) {
-                    const dueDate = new Date(task.dueDate);
+                    const dueDate = new Date(task.dueDate + 'T12:00:00');
                     const daysUntilDue = Math.floor((dueDate - now) / (1000 * 60 * 60 * 24));
                     
                     if (daysUntilDue === 0) {
@@ -2975,7 +2474,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
     // Task due-today popup checker
     useEffect(() => {
         const checkDueToday = () => {
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
             const dueTodayTasks = tasks.filter(task => {
                 if (task.completed) return false;
                 const status = task.status || (task.completed ? 'Completed' : 'Open');
@@ -3653,7 +3152,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                         const now = new Date(); now.setHours(0,0,0,0);
                         const overdueCount = visibleTasks.filter(t => {
                             const s = t.status || (t.completed ? 'Completed' : 'Open');
-                            return (s === 'Open' || s === 'In-Process') && t.dueDate && new Date(t.dueDate) < now;
+                            return (s === 'Open' || s === 'In-Process') && t.dueDate && new Date(t.dueDate + 'T12:00:00') < now;
                         }).length;
                         return overdueCount > 0 ? (
                             <span style={{ position: 'absolute', top: '3px', right: '3px', background: '#ef4444', color: '#fff', borderRadius: '999px', fontSize: '0.5rem', fontWeight: '800', minWidth: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 }}>
@@ -3739,13 +3238,13 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 const sl = (settings.funnelStages || []).map(s => s.name);
                                 buckets = sl.map(s => valuesFn(visibleOpportunities.filter(o => o.stage === s)));
                             } else if (trendMode === 'month-over-month') {
-                                for (let i = 5; i >= 0; i--) { const d = new Date(_now.getFullYear(), _now.getMonth()-i, 1), nx = new Date(_now.getFullYear(), _now.getMonth()-i+1, 1); buckets.push(valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate) : null; return c && c >= d && c < nx; }))); }
+                                for (let i = 5; i >= 0; i--) { const d = new Date(_now.getFullYear(), _now.getMonth()-i, 1), nx = new Date(_now.getFullYear(), _now.getMonth()-i+1, 1); buckets.push(valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate + 'T12:00:00') : null; return c && c >= d && c < nx; }))); }
                             } else if (trendMode === 'quarter-over-quarter') {
-                                for (let i = 3; i >= 0; i--) { const qm = _now.getMonth()-(i*3), fy = _now.getFullYear()+Math.floor(qm/12), fm = ((qm%12)+12)%12; const s = new Date(fy,fm,1), e = new Date(fy,fm+3,1); buckets.push(valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate) : null; return c && c >= s && c < e; }))); }
+                                for (let i = 3; i >= 0; i--) { const qm = _now.getMonth()-(i*3), fy = _now.getFullYear()+Math.floor(qm/12), fm = ((qm%12)+12)%12; const s = new Date(fy,fm,1), e = new Date(fy,fm+3,1); buckets.push(valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate + 'T12:00:00') : null; return c && c >= s && c < e; }))); }
                             } else if (trendMode === 'year-to-date') {
-                                for (let m = 0; m <= _now.getMonth(); m++) { const s = new Date(_now.getFullYear(),m,1), e = new Date(_now.getFullYear(),m+1,1); buckets.push(valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate) : null; return c && c >= s && c < e; }))); }
+                                for (let m = 0; m <= _now.getMonth(); m++) { const s = new Date(_now.getFullYear(),m,1), e = new Date(_now.getFullYear(),m+1,1); buckets.push(valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate + 'T12:00:00') : null; return c && c >= s && c < e; }))); }
                             } else if (trendMode === 'year-over-year') {
-                                for (let m = 0; m < 12; m++) { const sT = new Date(_now.getFullYear(),m,1), eT = new Date(_now.getFullYear(),m+1,1), sL = new Date(_now.getFullYear()-1,m,1), eL = new Date(_now.getFullYear()-1,m+1,1); const tv = valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate) : null; return c && c >= sT && c < eT; })), lv = valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate) : null; return c && c >= sL && c < eL; })); buckets.push(tv - lv); }
+                                for (let m = 0; m < 12; m++) { const sT = new Date(_now.getFullYear(),m,1), eT = new Date(_now.getFullYear(),m+1,1), sL = new Date(_now.getFullYear()-1,m,1), eL = new Date(_now.getFullYear()-1,m+1,1); const tv = valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate + 'T12:00:00') : null; return c && c >= sT && c < eT; })), lv = valuesFn(visibleOpportunities.filter(o => { const c = o.forecastedCloseDate ? new Date(o.forecastedCloseDate + 'T12:00:00') : null; return c && c >= sL && c < eL; })); buckets.push(tv - lv); }
                             }
                             if (buckets.length < 2) return { pts: '0,28 110,28', polyFill: '0,28 110,28 110,28 0,28' };
                             const mx = Math.max(...buckets.map(Math.abs), 1), n = buckets.length;
@@ -3892,7 +3391,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 ) : (
                                     <div style={{ display: 'grid', gap: '0.75rem' }}>
                                         {visibleTasks.filter(t => (t.status || (t.completed ? 'Completed' : 'Open')) !== 'Completed').sort((a, b) => new Date(a.dueDate || '9999') - new Date(b.dueDate || '9999')).slice(0, 5).map(task => {
-                                            const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
+                                            const isOverdue = task.dueDate && new Date(task.dueDate + 'T12:00:00') < new Date();
                                             return (
                                             <div key={task.id}
                                                 onClick={() => { setEditingTask(task); setShowTaskModal(true); }}
@@ -3910,7 +3409,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                     {task.title}
                                                 </div>
                                                 <div style={{ fontSize: '0.75rem', color: isOverdue ? '#ef4444' : '#64748b' }}>
-                                                    {task.type}{task.dueDate ? ' • Due: ' + new Date(task.dueDate).toLocaleDateString() : ''}
+                                                    {task.type}{task.dueDate ? ' • Due: ' + new Date(task.dueDate + 'T12:00:00').toLocaleDateString() : ''}
                                                     {isOverdue ? ' — Overdue' : ''}
                                                 </div>
                                             </div>
@@ -3955,7 +3454,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                     quarterlyData[quarterLabel] = {
                                                         count: 0,
                                                         totalValue: 0,
-                                                        sortKey: new Date(opp.forecastedCloseDate).getTime()
+                                                        sortKey: new Date(opp.forecastedCloseDate + 'T12:00:00').getTime()
                                                     };
                                                 }
                                                 quarterlyData[quarterLabel].count++;
@@ -4700,8 +4199,8 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 let bkts = [];
                                                 const oppVal = o => kpiId === 'totalPipelineARR' || kpiId === 'avgARR' ? (parseFloat(o.arr)||0) : 1;
                                                 if (tMode === 'stage-distribution') { const sl = (settings.funnelStages||[]).map(s=>s.name); bkts = sl.map(s => pipelineFilteredOpps.filter(o=>o.stage===s).reduce((a,o)=>a+oppVal(o),0)); }
-                                                else if (tMode === 'month-over-month') { for(let i=5;i>=0;i--){const d=new Date(_n.getFullYear(),_n.getMonth()-i,1),nx=new Date(_n.getFullYear(),_n.getMonth()-i+1,1); bkts.push(pipelineFilteredOpps.filter(o=>{const c=o.forecastedCloseDate?new Date(o.forecastedCloseDate):null;return c&&c>=d&&c<nx;}).reduce((a,o)=>a+oppVal(o),0));} }
-                                                else if (tMode === 'quarter-over-quarter') { for(let i=3;i>=0;i--){const qm=_n.getMonth()-(i*3),fy=_n.getFullYear()+Math.floor(qm/12),fm=((qm%12)+12)%12;const s=new Date(fy,fm,1),e=new Date(fy,fm+3,1); bkts.push(pipelineFilteredOpps.filter(o=>{const c=o.forecastedCloseDate?new Date(o.forecastedCloseDate):null;return c&&c>=s&&c<e;}).reduce((a,o)=>a+oppVal(o),0));} }
+                                                else if (tMode === 'month-over-month') { for(let i=5;i>=0;i--){const d=new Date(_n.getFullYear(),_n.getMonth()-i,1),nx=new Date(_n.getFullYear(),_n.getMonth()-i+1,1); bkts.push(pipelineFilteredOpps.filter(o=>{const c=o.forecastedCloseDate?new Date(o.forecastedCloseDate + 'T12:00:00'):null;return c&&c>=d&&c<nx;}).reduce((a,o)=>a+oppVal(o),0));} }
+                                                else if (tMode === 'quarter-over-quarter') { for(let i=3;i>=0;i--){const qm=_n.getMonth()-(i*3),fy=_n.getFullYear()+Math.floor(qm/12),fm=((qm%12)+12)%12;const s=new Date(fy,fm,1),e=new Date(fy,fm+3,1); bkts.push(pipelineFilteredOpps.filter(o=>{const c=o.forecastedCloseDate?new Date(o.forecastedCloseDate + 'T12:00:00'):null;return c&&c>=s&&c<e;}).reduce((a,o)=>a+oppVal(o),0));} }
                                                 else { bkts = [rawVal*0.6, rawVal*0.75, rawVal*0.85, rawVal]; }
                                                 if (bkts.length < 2) return null;
                                                 const mx = Math.max(...bkts, 1), n = bkts.length;
@@ -4794,7 +4293,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: healthColor, display: 'inline-block' }} />
                                                 <span className="mobile-card-meta-item" style={{ color: healthColor, fontWeight: '600' }}>{health.status}</span>
                                                 {opp.forecastedCloseDate && (
-                                                    <span className="mobile-card-meta-item">📅 {new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                                    <span className="mobile-card-meta-item">📅 {new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                                                 )}
                                             </div>
                                         </div>
@@ -4880,10 +4379,10 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                             const probNum = (opp.probability !== null && opp.probability !== undefined) ? opp.probability / 100 : (stageDefault ? stageDefault.weight / 100 : 0.3);
                             const totalVal = (parseFloat(opp.arr) || 0) + (opp.implementationCost || 0);
                             const weighted = Math.round(totalVal * probNum);
-                            const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+                            const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00'));
                             const daysSinceAct = oppActs[0] ? Math.floor((new Date() - new Date(oppActs[0].date)) / 86400000) : null;
-                            const dealAgeDays = opp.createdDate ? Math.floor((new Date() - new Date(opp.createdDate)) / 86400000) : null;
-                            const timeInStageDays = opp.stageChangedDate ? Math.floor((new Date() - new Date(opp.stageChangedDate)) / 86400000) : null;
+                            const dealAgeDays = opp.createdDate ? Math.floor((new Date() - new Date(opp.createdDate + 'T12:00:00')) / 86400000) : null;
+                            const timeInStageDays = opp.stageChangedDate ? Math.floor((new Date() - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000) : null;
                             return (
                                 <div style={{ width:'300px', flexShrink:0, background:'#f8fafc', overflowY:'auto', padding:'1rem', display:'flex', flexDirection:'column', gap:'0.75rem', maxHeight:'70vh', position:'sticky', top:0, borderLeft:'1px solid #e2e8f0' }}>
                                     <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'0.5rem' }}>
@@ -4919,7 +4418,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             canViewField('probability') && { label:'Probability', value:<span style={{ fontWeight:'600', color:isOverridden?'#f59e0b':'#475569' }}>{effectiveProb !== null ? effectiveProb+'%' : '—'}{isOverridden?' ✎':''}</span> },
                                             canViewField('weightedValue') && { label:'Weighted', value:'$'+weighted.toLocaleString() },
                                             { label:'Sales Rep', value:opp.salesRep||'—' },
-                                            { label:'Close Date', value:opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—' },
+                                            { label:'Close Date', value:opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—' },
                                             canViewField('dealAge') && dealAgeDays !== null && { label:'Deal Age', value:<span style={{ color:dealAgeDays>90?'#ef4444':dealAgeDays>60?'#f59e0b':'#475569', fontWeight:'600' }}>{dealAgeDays}d</span> },
                                             canViewField('activities') && { label:'Activities', value:<span>{oppActs.length}{daysSinceAct !== null && <span style={{ fontSize:'0.7rem', color:daysSinceAct>14?'#ef4444':'#94a3b8', marginLeft:'0.35rem' }}>{daysSinceAct}d ago</span>}</span> },
                                             opp.nextSteps && { label:'Next Steps', value:opp.nextSteps },
@@ -4997,7 +4496,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     </select>
                                     {bulkAction.stage && (
                                         <button onClick={() => {
-                                            const today = new Date().toISOString().split('T')[0];
+                                            const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
                                             setOpportunities(prev => prev.map(o => selectedOpps.includes(o.id) ? {
                                                 ...o, stage: bulkAction.stage, stageChangedDate: today,
                                                 stageHistory: [...(o.stageHistory||[]), { stage: bulkAction.stage, date: today, prevStage: o.stage, author: currentUser||'', timestamp: new Date().toISOString() }]
@@ -5057,7 +4556,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                         const titleEl = document.getElementById('bulk-task-title-input');
                                         const title = titleEl ? titleEl.value.trim() : '';
                                         if (!title) return;
-                                        const today = new Date().toISOString().split('T')[0];
+                                        const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
                                         const newTasks = selectedOpps.map(oppId => {
                                             const opp = (opportunities || []).find(o => o.id === oppId);
                                             const newTask = { id: 'task_' + Date.now() + '_' + Math.random().toString(36).slice(2,6), title, type: 'Follow-up', status: 'Open', dueDate: today, assignedTo: opp?.salesRep || currentUser, relatedTo: oppId, opportunityId: oppId, account: opp?.account || '', createdAt: new Date().toISOString() };
@@ -5098,12 +4597,12 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 <span style={{ background: getStageColor(opp.stage).text+'22', color: getStageColor(opp.stage).text, padding:'0.125rem 0.5rem', borderRadius:'999px', fontSize:'0.6875rem', fontWeight:'700' }}>{opp.stage}</span>
                                                 <span style={{ width:'8px', height:'8px', borderRadius:'50%', background: health.color, display:'inline-block' }} />
                                                 <span className="mobile-card-meta-item" style={{ color: health.color, fontWeight:'600' }}>{health.status}</span>
-                                                {opp.forecastedCloseDate && <span className="mobile-card-meta-item">📅 {new Date(opp.forecastedCloseDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
+                                                {opp.forecastedCloseDate && <span className="mobile-card-meta-item">📅 {new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
                                             </div>
                                             <div className="mobile-card-actions" onClick={e => e.stopPropagation()}>
                                                 <button className="primary" onClick={() => { setEditingOpp(opp); setShowModal(true); }}>✏️ Edit</button>
                                                 <button onClick={() => { const s = document.createElement('select'); stages.forEach(st => { const o = document.createElement('option'); o.value=st; o.text=st; if(st===opp.stage) o.selected=true; s.appendChild(o); }); }}>Stage ▾</button>
-                                                {canEdit && <button onClick={() => { showConfirm('Delete this opportunity?', () => handleDeleteOpp(opp.id)); }} style={{ color:'#ef4444', borderColor:'#fecaca' }}>🗑</button>}
+                                                {canEdit && <button onClick={() => { showConfirm('Delete this opportunity?', () => handleDelete(opp.id)); }} style={{ color:'#ef4444', borderColor:'#fecaca' }}>🗑</button>}
                                             </div>
                                         </div>
                                     );
@@ -5119,7 +4618,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 const staleDeals = pipelineFilteredOpps.filter(opp => {
                                     if (opp.stage === 'Closed Won' || opp.stage === 'Closed Lost') return false;
                                     if (!opp.stageChangedDate) return false;
-                                    const days = Math.floor((new Date() - new Date(opp.stageChangedDate)) / 86400000);
+                                    const days = Math.floor((new Date() - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000);
                                     return days > 30;
                                 });
                                 const noActivityDeals = pipelineFilteredOpps.filter(opp => {
@@ -5286,7 +4785,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                         value={inlineEdit.value}
                                                         onChange={e => {
                                                             const newStage = e.target.value;
-                                                            const today = new Date().toISOString().split('T')[0];
+                                                            const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
                                                             const prevStageVal = opp.stage;
                                                             const updatedOpp = {
                                                                 ...opp, stage: newStage,
@@ -5345,7 +4844,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             </td>
 )}
                                             <td style={{ whiteSpace: 'nowrap' }}>
-                                                {new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                {new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                             </td>
                                             <td style={{ whiteSpace: 'nowrap' }}>
                                                 <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedPipelineOpp?.id === opp.id ? '#1d4ed8' : '#2563eb', color: '#fff', fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
@@ -5354,7 +4853,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                         {/* Activity log expand panel */}
                                         {!selectedPipelineOpp && expandedOppActivities[opp.id] === true && (() => {
                                             const oppActs = activities.filter(a => a.opportunityId === opp.id)
-                                                .sort((a, b) => new Date(b.date) - new Date(a.date));
+                                                .sort((a, b) => new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00'));
                                             if (oppActs.length === 0) return null;
                                             return (
                                                 <tr key={opp.id + '-acts'} style={{ background: '#f8fafc' }}>
@@ -5367,7 +4866,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                             {oppActs.slice(0, 5).map(a => (
                                                                 <div key={a.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.25rem 0.625rem', fontSize: '0.75rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                                                                     <span style={{ background: '#dbeafe', color: '#1e40af', padding: '0.05rem 0.35rem', borderRadius: '3px', fontSize: '0.625rem', fontWeight: '700', flexShrink: 0 }}>{a.type}</span>
-                                                                    <span style={{ color: '#94a3b8', flexShrink: 0 }}>{a.date ? new Date(a.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</span>
+                                                                    <span style={{ color: '#94a3b8', flexShrink: 0 }}>{a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</span>
                                                                     {a.notes && <span style={{ color: '#64748b', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.notes}</span>}
                                                                 </div>
                                                             ))}
@@ -5394,11 +4893,11 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 const probNum = (opp.probability !== null && opp.probability !== undefined) ? opp.probability / 100 : (stageDefault ? stageDefault.weight / 100 : 0.3);
                                 const totalVal = (parseFloat(opp.arr) || 0) + (opp.implementationCost || 0);
                                 const weighted = Math.round(totalVal * probNum);
-                                const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+                                const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00'));
                                 const lastAct = oppActs[0];
-                                const daysSinceAct = lastAct ? Math.floor((new Date() - new Date(lastAct.date)) / 86400000) : null;
-                                const dealAgeDays = opp.createdDate ? Math.floor((new Date() - new Date(opp.createdDate)) / 86400000) : null;
-                                const timeInStageDays = opp.stageChangedDate ? Math.floor((new Date() - new Date(opp.stageChangedDate)) / 86400000) : null;
+                                const daysSinceAct = lastAct ? Math.floor((new Date() - new Date(lastAct.date + 'T12:00:00')) / 86400000) : null;
+                                const dealAgeDays = opp.createdDate ? Math.floor((new Date() - new Date(opp.createdDate + 'T12:00:00')) / 86400000) : null;
+                                const timeInStageDays = opp.stageChangedDate ? Math.floor((new Date() - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000) : null;
                                 return (
                                     <div style={{
                                         width: '300px', flexShrink: 0, background: '#f8fafc',
@@ -5436,7 +4935,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 0.75rem', background:'#d1fae5', borderRadius:'6px', border:'1px solid #6ee7b7' }}>
                                                 <span style={{ fontSize:'1rem' }}>✅</span>
                                                 <span style={{ fontSize:'0.8rem', fontWeight:'700', color:'#065f46' }}>Closed Won</span>
-                                                {opp.forecastedCloseDate && <span style={{ fontSize:'0.75rem', color:'#059669', marginLeft:'auto' }}>{new Date(opp.forecastedCloseDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
+                                                {opp.forecastedCloseDate && <span style={{ fontSize:'0.75rem', color:'#059669', marginLeft:'auto' }}>{new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
                                             </div>
                                         ) : (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
@@ -5454,7 +4953,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 canViewField('probability') && { label: 'Probability', value: <span style={{ fontWeight: '600', color: isOverridden ? '#f59e0b' : '#475569' }}>{effectiveProb !== null ? effectiveProb + '%' : '—'}{isOverridden ? ' ✎' : ''}</span> },
                                                 canViewField('weightedValue') && { label: 'Weighted Value', value: '$' + weighted.toLocaleString() },
                                                 { label: 'Sales Rep', value: opp.salesRep || '—' },
-                                                { label: 'Close Date', value: opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
+                                                { label: 'Close Date', value: opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
                                                 { label: 'Close Quarter', value: opp.closeQuarter || '—' },
                                                 canViewField('dealAge') && dealAgeDays !== null && { label: 'Deal Age', value: <span style={{ color: dealAgeDays > 90 ? '#ef4444' : dealAgeDays > 60 ? '#f59e0b' : '#475569', fontWeight: '600' }}>{dealAgeDays}d</span> },
                                                 canViewField('timeInStage') && timeInStageDays !== null && { label: 'Time in Stage', value: <span style={{ color: (opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost' && timeInStageDays > 30) ? '#ef4444' : '#475569', fontWeight: '600' }}>{timeInStageDays}d</span> },
@@ -5494,7 +4993,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                             const icon = actTypeIcons[a.type] || '📝';
                                                             const bg = actTypeColors[a.type] || '#f1f5f9';
                                                             const tc = actTypeText[a.type] || '#475569';
-                                                            const dateStr = a.date ? new Date(a.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+                                                            const dateStr = a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
                                                             const isLast = idx === Math.min(sorted.length, 10) - 1;
                                                             return (
                                                                 <div key={a.id} style={{ display: 'flex', gap: '0.5rem', paddingBottom: isLast ? '0' : '0.5rem', position: 'relative' }}>
@@ -5753,7 +5252,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     </select>
                                     {bulkAction.stage && (
                                         <button onClick={() => {
-                                            const today = new Date().toISOString().split('T')[0];
+                                            const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
                                             setOpportunities(prev => prev.map(o => selectedOpps.includes(o.id) ? {
                                                 ...o, stage: bulkAction.stage, stageChangedDate: today,
                                                 stageHistory: [...(o.stageHistory||[]), { stage: bulkAction.stage, date: today, prevStage: o.stage, author: currentUser||'', timestamp: new Date().toISOString() }]
@@ -5820,11 +5319,11 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                 <span style={{ background: getStageColor(opp.stage).text+'22', color: getStageColor(opp.stage).text, padding:'0.125rem 0.5rem', borderRadius:'999px', fontSize:'0.6875rem', fontWeight:'700' }}>{opp.stage}</span>
                                                 <span style={{ width:'8px', height:'8px', borderRadius:'50%', background:health.color, display:'inline-block' }} />
                                                 <span className="mobile-card-meta-item" style={{ color:health.color, fontWeight:'600' }}>{health.status}</span>
-                                                {opp.forecastedCloseDate && <span className="mobile-card-meta-item">📅 {new Date(opp.forecastedCloseDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
+                                                {opp.forecastedCloseDate && <span className="mobile-card-meta-item">📅 {new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
                                             </div>
                                             <div className="mobile-card-actions" onClick={e => e.stopPropagation()}>
                                                 <button className="primary" onClick={() => { setEditingOpp(opp); setShowModal(true); }}>✏️ Edit</button>
-                                                {canEdit && <button onClick={() => { showConfirm('Delete this opportunity?', () => handleDeleteOpp(opp.id)); }} style={{ color:'#ef4444', borderColor:'#fecaca' }}>🗑 Delete</button>}
+                                                {canEdit && <button onClick={() => { showConfirm('Delete this opportunity?', () => handleDelete(opp.id)); }} style={{ color:'#ef4444', borderColor:'#fecaca' }}>🗑 Delete</button>}
                                             </div>
                                         </div>
                                     );
@@ -5855,7 +5354,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 const staleDeals = oppFilteredOpps.filter(opp => {
                                     if (opp.stage === 'Closed Won' || opp.stage === 'Closed Lost') return false;
                                     if (!opp.stageChangedDate) return false;
-                                    return Math.floor((new Date() - new Date(opp.stageChangedDate)) / 86400000) > 30;
+                                    return Math.floor((new Date() - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000) > 30;
                                 });
                                 const noActivityDeals = oppFilteredOpps.filter(opp => {
                                     if (opp.stage === 'Closed Won' || opp.stage === 'Closed Lost') return false;
@@ -5960,7 +5459,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                     <select autoFocus value={inlineEdit.value}
                                                         onChange={e => {
                                                             const newStage = e.target.value;
-                                                            const today = new Date().toISOString().split('T')[0];
+                                                            const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
                                                             const prevStageVal = opp.stage;
                                                             const updatedOpp = {
                                                                 ...opp, stage: newStage, stageChangedDate: today,
@@ -6050,7 +5549,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                             </td>
                                         </tr>
                                         {!selectedOppTabOpp && expandedOppActivities[opp.id] === true && (() => {
-                                            const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date)-new Date(a.date));
+                                            const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date + 'T12:00:00')-new Date(a.date + 'T12:00:00'));
                                             if (oppActs.length === 0) return null;
                                             return (
                                                 <tr key={opp.id+'-acts'} style={{ background:'#f8fafc' }}>
@@ -6063,7 +5562,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                             {oppActs.slice(0,5).map(a => (
                                                                 <div key={a.id} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'0.25rem 0.625rem', fontSize:'0.75rem', color:'#475569', display:'flex', alignItems:'center', gap:'0.375rem' }}>
                                                                     <span style={{ background:'#dbeafe', color:'#1e40af', padding:'0.05rem 0.35rem', borderRadius:'3px', fontSize:'0.625rem', fontWeight:'700', flexShrink:0 }}>{a.type}</span>
-                                                                    <span style={{ color:'#94a3b8', flexShrink:0 }}>{a.date ? new Date(a.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—'}</span>
+                                                                    <span style={{ color:'#94a3b8', flexShrink:0 }}>{a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—'}</span>
                                                                     {a.notes && <span style={{ color:'#64748b', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.notes}</span>}
                                                                 </div>
                                                             ))}
@@ -6089,11 +5588,11 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 const probNum = (opp.probability !== null && opp.probability !== undefined) ? opp.probability / 100 : (stageDefault ? stageDefault.weight / 100 : 0.3);
                                 const totalVal = (parseFloat(opp.arr) || 0) + (opp.implementationCost || 0);
                                 const weighted = Math.round(totalVal * probNum);
-                                const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+                                const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00'));
                                 const lastAct = oppActs[0];
-                                const daysSinceAct = lastAct ? Math.floor((new Date() - new Date(lastAct.date)) / 86400000) : null;
-                                const dealAgeDays = opp.createdDate ? Math.floor((new Date() - new Date(opp.createdDate)) / 86400000) : null;
-                                const timeInStageDays = opp.stageChangedDate ? Math.floor((new Date() - new Date(opp.stageChangedDate)) / 86400000) : null;
+                                const daysSinceAct = lastAct ? Math.floor((new Date() - new Date(lastAct.date + 'T12:00:00')) / 86400000) : null;
+                                const dealAgeDays = opp.createdDate ? Math.floor((new Date() - new Date(opp.createdDate + 'T12:00:00')) / 86400000) : null;
+                                const timeInStageDays = opp.stageChangedDate ? Math.floor((new Date() - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000) : null;
                                 const prods = Array.isArray(opp.products) ? opp.products : (opp.products ? [opp.products] : []);
                                 return (
                                     <div style={{ width: '300px', flexShrink: 0, background: '#f8fafc', overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '520px', position: 'sticky', top: 0, borderLeft: '1px solid #e2e8f0' }}>
@@ -6200,7 +5699,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                                     <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#1e293b' }}>${(parseFloat(opp.arr)||0).toLocaleString()}</span>
                                                                     <div style={{ width:'20px', height:'20px', borderRadius:'50%', background: health.score >= 70 ? '#dcfce7' : health.score >= 40 ? '#fef3c7' : '#fee2e2', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.5rem', fontWeight:'800', color: health.score >= 70 ? '#16a34a' : health.score >= 40 ? '#d97706' : '#dc2626', flexShrink:0 }}>{health.score}</div>
                                                                 </div>
-                                                                {opp.forecastedCloseDate && <div style={{ fontSize:'0.575rem', color:'#94a3b8', marginTop:'0.15rem' }}>Close: {new Date(opp.forecastedCloseDate).toLocaleDateString()}</div>}
+                                                                {opp.forecastedCloseDate && <div style={{ fontSize:'0.575rem', color:'#94a3b8', marginTop:'0.15rem' }}>Close: {new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString()}</div>}
                                                                 {opp.salesRep && <div style={{ fontSize:'0.575rem', color:'#94a3b8', marginBottom:'0.2rem' }}>{opp.salesRep}</div>}
                                                                 <div style={{ display:'flex', gap:'0.25rem', marginTop:'0.375rem' }} onClick={e => e.stopPropagation()}>
                                                                     <button className="action-btn" onClick={() => handleEdit(opp)} style={{ flex:1, padding:'0.15rem 0', fontSize:'0.6rem', textAlign:'center' }}>Edit</button>
@@ -6275,9 +5774,9 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 const isOverridden = opp.probability !== null && opp.probability !== undefined && opp.probability !== (stageDefault ? stageDefault.weight : null);
                                 const probNum = effectiveProb !== null ? effectiveProb / 100 : 0.3;
                                 const weighted = Math.round(((parseFloat(opp.arr)||0) + (opp.implementationCost||0)) * probNum);
-                                const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+                                const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00'));
                                 const daysSinceAct = oppActs[0] ? Math.floor((new Date() - new Date(oppActs[0].date)) / 86400000) : null;
-                                const dealAgeDays = opp.createdDate ? Math.floor((new Date() - new Date(opp.createdDate)) / 86400000) : null;
+                                const dealAgeDays = opp.createdDate ? Math.floor((new Date() - new Date(opp.createdDate + 'T12:00:00')) / 86400000) : null;
                                 return (
                                     <div style={{ width:'300px', flexShrink:0, background:'#f8fafc', overflowY:'auto', padding:'1rem', display:'flex', flexDirection:'column', gap:'0.75rem', maxHeight:'70vh', position:'sticky', top:0, borderLeft:'1px solid #e2e8f0' }}>
                                         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'0.5rem' }}>
@@ -6517,7 +6016,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 <button className="btn btn-secondary" style={{ padding: '0.3rem 0.625rem', fontSize: '0.6875rem' }} disabled={exportingCSV === 'tasks'} onClick={() => {
                                     const today = new Date(); today.setHours(0,0,0,0);
                                     const getStatus = (t) => t.status || (t.completed ? 'Completed' : 'Open');
-                                    const isOverdue = (t) => { const s = getStatus(t); return (s === 'Open' || s === 'In-Process') && t.dueDate && new Date(t.dueDate) < today; };
+                                    const isOverdue = (t) => { const s = getStatus(t); return (s === 'Open' || s === 'In-Process') && t.dueDate && new Date(t.dueDate + 'T12:00:00') < today; };
                                     const rows = [...visibleTasks]
                                         .filter(t => {
                                             if (taskStatusFilter.length === 0) return true;
@@ -6544,7 +6043,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                             {tasksSubView === 'activities' && (
                                 <button className="btn btn-secondary" style={{ padding: '0.3rem 0.625rem', fontSize: '0.6875rem' }} disabled={exportingCSV === 'activities'} onClick={() => {
                                     const rows = [...(activities||[])]
-                                        .sort((a,b) => new Date(b.date||'0') - new Date(a.date||'0'));
+                                        .sort((a,b) => new Date((b.date||'1970-01-01') + 'T12:00:00') - new Date((a.date||'1970-01-01') + 'T12:00:00'));
                                     exportToCSV(
                                         `activities-${new Date().toISOString().slice(0,10)}.csv`,
                                         ['Date','Type','Subject','Account','Rep','Duration (min)','Notes'],
@@ -6577,11 +6076,11 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                             <>
                             {(() => {
                                 const getStatus = (t) => t.status || (t.completed ? 'Completed' : 'Open');
-                                const todayStr = new Date().toISOString().split('T')[0];
+                                const todayStr = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
                                 const today = new Date(todayStr);
                                 const weekEnd = new Date(today); weekEnd.setDate(today.getDate() + 7);
                                 const isNotDone = (t) => getStatus(t) !== 'Completed';
-                                const isOverdue = (t) => isNotDone(t) && t.dueDate && new Date(t.dueDate) < today;
+                                const isOverdue = (t) => isNotDone(t) && t.dueDate && new Date(t.dueDate + 'T12:00:00') < today;
 
                                 // Apply status filter
                                 const filterTasks = (tasks) => {
@@ -6595,12 +6094,12 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     });
                                 };
 
-                                const overdueTasks = filterTasks(visibleTasks.filter(t => isNotDone(t) && getStatus(t) !== 'In-Process' && t.dueDate && new Date(t.dueDate) < today));
+                                const overdueTasks = filterTasks(visibleTasks.filter(t => isNotDone(t) && getStatus(t) !== 'In-Process' && t.dueDate && new Date(t.dueDate + 'T12:00:00') < today));
                                 const inProcessTasks = filterTasks(visibleTasks.filter(t => getStatus(t) === 'In-Process'));
                                 const todayTasks = filterTasks(visibleTasks.filter(t => isNotDone(t) && getStatus(t) !== 'In-Process' && t.dueDate === todayStr));
-                                const weekTasks = filterTasks(visibleTasks.filter(t => { if (!isNotDone(t) || getStatus(t) === 'In-Process') return false; const d = new Date(t.dueDate); return d > today && d <= weekEnd; }));
-                                const monthTasks = filterTasks(visibleTasks.filter(t => { if (!isNotDone(t) || getStatus(t) === 'In-Process') return false; const d = new Date(t.dueDate); return d > weekEnd && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear(); }));
-                                const futureTasks = filterTasks(visibleTasks.filter(t => { if (!isNotDone(t) || getStatus(t) === 'In-Process') return false; const d = new Date(t.dueDate); const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0); return d > monthEnd; }));
+                                const weekTasks = filterTasks(visibleTasks.filter(t => { if (!isNotDone(t) || getStatus(t) === 'In-Process') return false; const d = new Date(t.dueDate + 'T12:00:00'); return d > today && d <= weekEnd; }));
+                                const monthTasks = filterTasks(visibleTasks.filter(t => { if (!isNotDone(t) || getStatus(t) === 'In-Process') return false; const d = new Date(t.dueDate + 'T12:00:00'); return d > weekEnd && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear(); }));
+                                const futureTasks = filterTasks(visibleTasks.filter(t => { if (!isNotDone(t) || getStatus(t) === 'In-Process') return false; const d = new Date(t.dueDate + 'T12:00:00'); const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0); return d > monthEnd; }));
                                 const allOpenTasks = filterTasks(visibleTasks.filter(t => isNotDone(t))).sort((a, b) => new Date(a.dueDate || '9999') - new Date(b.dueDate || '9999'));
 
                                 const sectionColors = {
@@ -6661,13 +6160,13 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                                                 <span style={{ background: '#2563eb18', color: '#2563eb', padding: '0.125rem 0.4rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '600' }}>{task.type}</span>
                                                                             </td>
                                                                             <td style={{ padding: '0.5rem', textAlign: 'center', color: isOverdue(task) ? '#ef4444' : '#64748b', fontWeight: isOverdue(task) ? '700' : '400', fontSize: '0.8125rem' }}>
-                                                                                {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : '—'}
+                                                                                {task.dueDate ? new Date(task.dueDate + 'T12:00:00').toLocaleDateString() : '—'}
                                                                             </td>
                                                                             <td style={{ padding: '0.5rem', color: '#64748b', fontSize: '0.8125rem' }}>{related}</td>
                                                                             <td style={{ padding: '0.5rem', textAlign: 'right' }}>
                                                                                 <div style={{ display: 'flex', gap: '4px' }}>
                                                                                     {task.dueDate && (
-                                                                                        <button onClick={e => handleAddTaskToCalendar(e, task)}
+                                                                                        <button onClick={e => handleAddTaskToCalendar(e, task, opportunities)}
                                                                                             disabled={calendarAddingTaskId === task.id}
                                                                                             title={calendarAddFeedback[task.id] === 'success' ? 'Added to calendar!' : calendarAddFeedback[task.id] === 'error' ? 'Failed — try again' : 'Add to Google Calendar'}
                                                                                             style={{ padding: '4px 8px', borderRadius: '999px', border: '0.5px solid ' + (calendarAddFeedback[task.id] === 'success' ? '#10b981' : calendarAddFeedback[task.id] === 'error' ? '#fca5a5' : '#cbd5e1'), background: calendarAddFeedback[task.id] === 'success' ? '#d1fae5' : 'transparent', color: calendarAddFeedback[task.id] === 'success' ? '#059669' : calendarAddFeedback[task.id] === 'error' ? '#dc2626' : '#64748b', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
@@ -6701,7 +6200,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                     <Section id="today" label="Today" count={todayTasks.length} tasks={todayTasks} borderColor={sectionColors.today} />
                                     <Section id="thisWeek" label="This Week" count={weekTasks.length} tasks={weekTasks} borderColor={sectionColors.thisWeek} />
                                     <Section id="thisMonth" label="This Month" count={monthTasks.length} tasks={monthTasks} borderColor={sectionColors.thisMonth} />
-                                    <Section id="all" label="Future" count={futureTasks.length} tasks={futureTasks.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))} borderColor={sectionColors.future} />
+                                    <Section id="all" label="Future" count={futureTasks.length} tasks={futureTasks.sort((a, b) => new Date(a.dueDate + 'T12:00:00') - new Date(b.dueDate + 'T12:00:00'))} borderColor={sectionColors.future} />
                                     <Section id="allOpen" label="All" count={allOpenTasks.length} tasks={allOpenTasks} borderColor={sectionColors.allOpen} />
                                     {taskStatusFilter.length > 0 && overdueTasks.length === 0 && inProcessTasks.length === 0 && todayTasks.length === 0 && weekTasks.length === 0 && monthTasks.length === 0 && futureTasks.length === 0 && (
                                         <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>No tasks match the selected filters.</div>
@@ -6783,7 +6282,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                 return true;
                             }).sort((a, b) => new Date(b.completedDate || b.dueDate) - new Date(a.completedDate || a.dueDate));
 
-                            const todayStr2 = new Date().toISOString().split('T')[0];
+                            const todayStr2 = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
                             const today2 = new Date(todayStr2);
                             const weekEnd2 = new Date(today2); weekEnd2.setDate(today2.getDate() + 7);
                             const monthEnd2 = new Date(today2.getFullYear(), today2.getMonth() + 1, 0);
@@ -7072,7 +6571,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                         <div style={{ flexShrink: 0, textAlign: 'right', display: 'flex', gap: '4px' }}>
                                             <button onClick={() => handleEditAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
                                             <button onClick={() => handleAddSubAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Sub</button>
-                                            <button onClick={() => handleDeleteAccount(account.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
+                                            <button onClick={() => handleDeleteAccount(account.id, opportunities)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                         </div>
                                     </div>
                                     {expandedAccounts[account.id] && getSubAccounts(account.id).length > 0 && (
@@ -7082,7 +6581,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                     <span style={{ cursor: 'pointer', color: '#1e293b', fontWeight: '500' }} onClick={() => setViewingAccount(sub)}>↳ {sub.name}</span>
                                                     <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
                                                         <button onClick={() => handleEditAccount(sub, true)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                                        <button onClick={() => handleDeleteSubAccount(account.id, sub.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
+                                                        <button onClick={() => handleDeleteSubAccount(account.id, sub.id, opportunities)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -7156,7 +6655,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                     <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
                                                         <button onClick={() => handleEditAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
                                                         <button onClick={() => handleAddSubAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Sub</button>
-                                                        <button onClick={() => handleDeleteAccount(account.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
+                                                        <button onClick={() => handleDeleteAccount(account.id, opportunities)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                     </div>
                                                 </div>
 
@@ -7270,7 +6769,7 @@ dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                                                         </div>
                                                         <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
                                                             <button onClick={() => handleEditAccount(subAccount, true)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                                            <button onClick={() => handleDeleteSubAccount(account.id, subAccount.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
+                                                            <button onClick={() => handleDeleteSubAccount(account.id, subAccount.id, opportunities)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -9068,9 +8567,9 @@ ${bodyHtml}
                             const today = new Date(); today.setHours(0,0,0,0);
                             const completed = allTasks.filter(t => getStatus(t) === 'Completed');
                             const open      = allTasks.filter(t => getStatus(t) === 'Open' || getStatus(t) === 'In-Process');
-                            const overdue   = allTasks.filter(t => (getStatus(t)==='Open'||getStatus(t)==='In-Process') && t.dueDate && new Date(t.dueDate) < today);
+                            const overdue   = allTasks.filter(t => (getStatus(t)==='Open'||getStatus(t)==='In-Process') && t.dueDate && new Date(t.dueDate + 'T12:00:00') < today);
                             const compRate  = allTasks.length > 0 ? (completed.length/allTasks.length*100) : 0;
-                            const repTaskMap = allTasks.reduce((acc,t)=>{ const r=t.assignedTo||'Unassigned'; if(!acc[r])acc[r]={total:0,done:0,overdue:0}; acc[r].total++; if(getStatus(t)==='Completed')acc[r].done++; if((getStatus(t)==='Open'||getStatus(t)==='In-Process')&&t.dueDate&&new Date(t.dueDate)<today)acc[r].overdue++; return acc; },{});
+                            const repTaskMap = allTasks.reduce((acc,t)=>{ const r=t.assignedTo||'Unassigned'; if(!acc[r])acc[r]={total:0,done:0,overdue:0}; acc[r].total++; if(getStatus(t)==='Completed')acc[r].done++; if((getStatus(t)==='Open'||getStatus(t)==='In-Process')&&t.dueDate&&new Date(t.dueDate + 'T12:00:00')<today)acc[r].overdue++; return acc; },{});
                             const repTaskRows = Object.entries(repTaskMap).sort((a,b)=>b[1].total-a[1].total);
                             return (
                             <div style={cardStyle}>
@@ -9137,7 +8636,7 @@ ${bodyHtml}
                                   <tbody>
                                     {recentActs.map((a,i)=>(
                                       <tr key={a.id||i} style={{ background:i%2===0?'#fff':'#f8fafc' }}>
-                                        <td style={{ padding:'0.5rem 0.75rem', color:'#64748b', whiteSpace:'nowrap' }}>{a.date ? new Date(a.date).toLocaleDateString() : '—'}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', color:'#64748b', whiteSpace:'nowrap' }}>{a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString() : '—'}</td>
                                         <td style={{ padding:'0.5rem 0.75rem', whiteSpace:'nowrap' }}><span>{typeIcons[a.type]||'📋'} {a.type||'—'}</span></td>
                                         <td style={{ padding:'0.5rem 0.75rem', color:'#1e293b', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.subject||a.title||'—'}</td>
                                         <td style={{ padding:'0.5rem 0.75rem', color:'#475569', maxWidth:'150px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.account||'—'}</td>
@@ -11240,7 +10739,7 @@ ${bodyHtml}
                                                 const url = URL.createObjectURL(blob);
                                                 const a = document.createElement('a');
                                                 a.href = url;
-                                                const dateStr = new Date().toISOString().split('T')[0];
+                                                const dateStr = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
                                                 a.download = `sales-pipeline-backup-${dateStr}.json`;
                                                 document.body.appendChild(a);
                                                 a.click();
@@ -11506,7 +11005,7 @@ ${bodyHtml}
                 // Get recent activities
                 const recentActivities = matchedOpp
                     ? (activities || []).filter(a => a.opportunityId === matchedOpp.id)
-                        .sort((a, b) => new Date(b.date) - new Date(a.date))
+                        .sort((a, b) => new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00'))
                         .slice(0, 5)
                     : [];
 
@@ -11736,7 +11235,7 @@ ${bodyHtml}
                     }}
                     onClose={() => { setShowModal(false); setOppModalError(null); setOppModalSaving(false); }}
                     onDismissError={() => setOppModalError(null)}
-                    onSave={handleSave}
+                    onSave={(formData) => handleSave(formData, editingOpp, activePipeline, currentUser, setShowModal, setLostReasonModal)}
                     errorMessage={oppModalError}
                     saving={oppModalSaving}
                     onAddAccount={handleAddAccountFromOpportunity}
@@ -11782,7 +11281,7 @@ ${bodyHtml}
                     settings={settings}
                     onClose={() => { setShowAccountModal(false); setAccountModalError(null); setAccountModalSaving(false); }}
                     onDismissError={() => setAccountModalError(null)}
-                    onSave={handleSaveAccount}
+                    onSave={(formData) => handleSaveAccount(formData, { editingAccount, editingSubAccount, parentAccountForSub, accountCreatedFromOppForm, pendingOppFormData, setShowAccountModal, setLastCreatedAccountName, setEditingOpp, setShowModal, setAccountCreatedFromOppForm, setPendingOppFormData })}
                     onAddRep={() => { setShowUserModal(true); setEditingUser(null); }}
                     existingAccounts={accounts}
                     errorMessage={accountModalError}
@@ -11812,7 +11311,7 @@ ${bodyHtml}
                     settings={settings}
                     onClose={() => { setShowTaskModal(false); setTaskModalError(null); setTaskModalSaving(false); }}
                     onDismissError={() => setTaskModalError(null)}
-                    onSave={handleSaveTask}
+                    onSave={(taskData) => handleSaveTask(taskData, { editingTask, setShowTaskModal, opportunities })}
                     errorMessage={taskModalError}
                     saving={taskModalSaving}
                     onAddTaskType={handleAddTaskType}
@@ -11864,7 +11363,7 @@ ${bodyHtml}
                     if (a.opportunityId && t.opportunityId && a.opportunityId === t.opportunityId) return true;
                     if (a.contactId && t.contactId && a.contactId === t.contactId) return true;
                     return false;
-                }).sort((a, b) => new Date(b.date) - new Date(a.date));
+                }).sort((a, b) => new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00'));
 
                 return (
                     <div className="modal-overlay" onClick={() => setViewingTask(null)}>
@@ -11887,12 +11386,12 @@ ${bodyHtml}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
                                 <div style={{ padding: '0.625rem 0.75rem', background: '#f8f9fa', borderRadius: '6px' }}>
                                     <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Due Date</div>
-                                    <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1e293b' }}>{t.dueDate ? new Date(t.dueDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '-'}{t.dueTime ? ' at ' + t.dueTime : ''}</div>
+                                    <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1e293b' }}>{t.dueDate ? new Date(t.dueDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '-'}{t.dueTime ? ' at ' + t.dueTime : ''}</div>
                                 </div>
                                 {t.completedDate && (
                                     <div style={{ padding: '0.625rem 0.75rem', background: '#f0fdf4', borderRadius: '6px' }}>
                                         <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Completed</div>
-                                        <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#166534' }}>{new Date(t.completedDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                                        <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#166534' }}>{new Date(t.completedDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div>
                                     </div>
                                 )}
                                 {relatedOpp && (
@@ -11927,7 +11426,7 @@ ${bodyHtml}
                                     <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
                                         {taskActivities.map((a, idx) => (
                                             <div key={idx} style={{ display: 'flex', gap: '0.625rem', padding: '0.5rem 0', borderBottom: idx < taskActivities.length - 1 ? '1px solid #f1f3f5' : 'none', fontSize: '0.8125rem', alignItems: 'center' }}>
-                                                <span style={{ width: '65px', flexShrink: 0, color: '#94a3b8', fontSize: '0.75rem' }}>{a.date ? new Date(a.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}</span>
+                                                <span style={{ width: '65px', flexShrink: 0, color: '#94a3b8', fontSize: '0.75rem' }}>{a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}</span>
                                                 <span style={{ padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.625rem', fontWeight: '700', background: '#dbeafe', color: '#1e40af' }}>{a.type}</span>
                                                 <span style={{ flex: 1, color: '#475569' }}>{a.notes || a.subject || 'No details'}</span>
                                             </div>
@@ -11953,7 +11452,7 @@ ${bodyHtml}
                     settings={settings}
                     onClose={() => { setShowContactModal(false); setContactModalError(null); setContactModalSaving(false); }}
                     onDismissError={() => setContactModalError(null)}
-                    onSave={handleSaveContact}
+                    onSave={(contactData) => handleSaveContact(contactData, { editingContact, setShowContactModal })}
                     errorMessage={contactModalError}
                     saving={contactModalSaving}
                     onSaveNewContact={(newContactData) => {
@@ -12164,7 +11663,7 @@ ${bodyHtml}
                                                 {hasSubs && <span style={{ fontSize: '0.6875rem', color: isSubOpp ? '#4338ca' : '#64748b', fontWeight: isSubOpp ? '700' : '400' }}>{isSubOpp ? '↳ ' : ''}{opp.account}</span>}
                                                 <span style={{ background: sc.bg, color: sc.text, padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700' }}>{opp.stage}</span>
                                                 <span style={{ textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>${(parseFloat(opp.arr) || 0).toLocaleString()}</span>
-                                                <span style={{ textAlign: 'center', color: '#64748b', fontSize: '0.8125rem' }}>{opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}</span>
+                                                <span style={{ textAlign: 'center', color: '#64748b', fontSize: '0.8125rem' }}>{opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}</span>
                                             </div>
                                             );
                                         })}
@@ -12365,7 +11864,7 @@ ${bodyHtml}
                                                 </div>
                                                 <span style={{ background: sc.bg, color: sc.text, padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700', textAlign: 'center' }}>{opp.stage}</span>
                                                 <span style={{ textAlign: 'right', fontWeight: '700', color: '#1e293b' }}>${(parseFloat(opp.arr) || 0).toLocaleString()}</span>
-                                                <span style={{ textAlign: 'center', color: '#64748b', fontSize: '0.8125rem' }}>{opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}</span>
+                                                <span style={{ textAlign: 'center', color: '#64748b', fontSize: '0.8125rem' }}>{opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}</span>
                                                 <span style={{ textAlign: 'center' }}>
                                                     <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: opp.health === 'green' ? '#16a34a' : opp.health === 'yellow' ? '#f59e0b' : opp.health === 'red' ? '#ef4444' : '#d1d5db' }} />
                                                 </span>
@@ -12430,7 +11929,7 @@ ${bodyHtml}
                                     ) : (
                                         <div>
                                             {ctTasks.map((t, idx) => {
-                                                const isOD = t.dueDate && new Date(t.dueDate) < new Date(new Date().toISOString().split('T')[0]);
+                                                const isOD = t.dueDate && new Date(t.dueDate + 'T12:00:00') < new Date([new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'));
                                                 const st = t.status || 'Open';
                                                 const stc = { 'Open': { bg: '#dbeafe', c: '#1e40af' }, 'In-Process': { bg: '#fef3c7', c: '#92400e' } }[st] || { bg: '#dbeafe', c: '#1e40af' };
                                                 return (
@@ -12445,7 +11944,7 @@ ${bodyHtml}
                                                     </div>
                                                     <span style={{ background: '#2563eb18', color: '#2563eb', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.625rem', fontWeight: '600', flexShrink: 0 }}>{t.type}</span>
                                                     <span style={{ fontSize: '0.75rem', color: isOD ? '#ef4444' : '#64748b', fontWeight: isOD ? '700' : '400', flexShrink: 0, width: '75px', textAlign: 'right' }}>
-                                                        {t.dueDate ? new Date(t.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                                                        {t.dueDate ? new Date(t.dueDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                                                     </span>
                                                     {isOD && <span style={{ background: '#ef4444', color: '#fff', padding: '0.1rem 0.35rem', borderRadius: '3px', fontSize: '0.5625rem', fontWeight: '700' }}>OVERDUE</span>}
                                                 </div>
@@ -12478,7 +11977,7 @@ ${bodyHtml}
                                                 const relOpp = a.opportunityId ? opportunities.find(o => o.id === a.opportunityId) : null;
                                                 return (
                                                 <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.5rem 1.5rem', borderBottom: '1px solid #f1f3f5', background: idx % 2 === 0 ? '#fff' : '#fafbfc' }}>
-                                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', flexShrink: 0, width: '70px', paddingTop: '0.1rem' }}>{a.date ? new Date(a.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</span>
+                                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', flexShrink: 0, width: '70px', paddingTop: '0.1rem' }}>{a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</span>
                                                     <span style={{ background: '#dbeafe', color: '#1e40af', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.625rem', fontWeight: '700', flexShrink: 0 }}>{a.type || 'Note'}</span>
                                                     <div style={{ flex: 1, minWidth: 0 }}>
                                                         <div style={{ fontSize: '0.8125rem', color: '#475569' }}>{a.notes || a.subject || 'No details'}</div>
@@ -12641,13 +12140,14 @@ ${bodyHtml}
 
             {showActivityModal && (
                 <ActivityModal
+                    key={editingActivity?.id || ('new-activity-' + (showActivityModal ? 'open' : 'closed'))}
                     activity={editingActivity}
                     opportunities={opportunities}
                     contacts={contacts}
                     accounts={accounts}
                     onClose={() => { setShowActivityModal(false); setActivityModalError(null); setActivityModalSaving(false); }}
                     onDismissError={() => setActivityModalError(null)}
-                    onSave={handleSaveActivity}
+                    onSave={(activityData) => handleSaveActivity(activityData, { editingActivity, currentUser, opportunities, setShowActivityModal, setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults })}
                     errorMessage={activityModalError}
                     saving={activityModalSaving}
                     initialContext={activityInitialContext}
@@ -12825,8 +12325,8 @@ ${bodyHtml}
             {lostReasonModal && (
                 <LostReasonModal
                     oppName={lostReasonModal.pendingFormData.opportunityName || lostReasonModal.pendingFormData.account}
-                    onSave={(category, reason) => completeLostSave(lostReasonModal.pendingFormData, lostReasonModal.editingOpp, reason, category)}
-                    onSkip={() => completeLostSave(lostReasonModal.pendingFormData, lostReasonModal.editingOpp, '', '')}
+                    onSave={(category, reason) => completeLostSave(lostReasonModal.pendingFormData, lostReasonModal.editingOpp, reason, category, activePipeline, currentUser, setLostReasonModal)}
+                    onSkip={() => completeLostSave(lostReasonModal.pendingFormData, lostReasonModal.editingOpp, '', '', activePipeline, currentUser, setLostReasonModal)}
                 />
             )}
 
@@ -12889,8 +12389,8 @@ ${bodyHtml}
                                 {taskReminderPopup.dueDate && (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                         <span style={{ fontSize: '0.75rem', color: '#64748b', width: '55px' }}>Due:</span>
-                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: new Date(taskReminderPopup.dueDate) < new Date() ? '#ef4444' : '#1e293b' }}>
-                                            {new Date(taskReminderPopup.dueDate).toLocaleDateString()}
+                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: new Date(taskReminderPopup.dueDate + 'T12:00:00') < new Date() ? '#ef4444' : '#1e293b' }}>
+                                            {new Date(taskReminderPopup.dueDate + 'T12:00:00').toLocaleDateString()}
                                         </span>
                                     </div>
                                 )}
@@ -12999,7 +12499,7 @@ ${bodyHtml}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
                                     <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', width: '60px', flexShrink: 0 }}>Due</span>
                                     <span style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#dc2626', background: '#fef2f2', padding: '0.2rem 0.625rem', borderRadius: '6px', border: '1px solid #fecaca' }}>
-                                        {new Date(taskDuePopup.dueDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                                        {new Date(taskDuePopup.dueDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                                         {taskDuePopup.dueTime && <span style={{ marginLeft: '0.375rem' }}>at {taskDuePopup.dueTime}</span>}
                                     </span>
                                 </div>
@@ -13317,7 +12817,7 @@ ${bodyHtml}
                                     handleSaveActivity({
                                         type: quickLogForm.type,
                                         notes: quickLogForm.notes,
-                                        date: new Date().toISOString().split('T')[0],
+                                        date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
                                         opportunityId: quickLogForm.opportunityId || null,
                                         opportunityName: linkedOpp?.opportunityName || linkedOpp?.account || '',
                                         companyName: linkedOpp?.account || '',
@@ -13325,7 +12825,7 @@ ${bodyHtml}
                                         contactName: quickLogForm.contactSearch || '',
                                         salesRep: currentUser,
                                         addToCalendar: !!quickLogForm.addToCalendar,
-                                    });
+                                    }, { editingActivity: null, currentUser, opportunities, setShowActivityModal, setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults });
                                 }} style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     Save
                                 </button>

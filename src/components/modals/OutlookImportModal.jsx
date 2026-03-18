@@ -192,7 +192,7 @@ export default function OutlookImportModal({ contacts, opportunities, activities
         const toImport = matchResults.filter((_, idx) => importSelections[idx]);
         const newActivities = toImport.map(email => ({
             type: 'Email',
-            date: email.date || new Date().toISOString().split('T')[0],
+            date: email.date || [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
             contactId: email.matchedContacts.length > 0 ? email.matchedContacts[0].id : '',
             opportunityId: email.matchedOpportunity ? email.matchedOpportunity.id : '',
             notes: `Subject: ${email.subject}${email.to ? '\nTo: ' + email.to : ''}${email.cc ? '\nCC: ' + email.cc : ''}${email.body ? '\n\n' + email.body.substring(0, 500) + (email.body.length > 500 ? '...' : '') : ''}`,

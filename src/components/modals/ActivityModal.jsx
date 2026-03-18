@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 export default function ActivityModal({ activity, opportunities, contacts, accounts, onClose, onSave, initialContext, onSaveNewContact, onSaveNewAccount, onAddContact, onAddAccount, onAddOpportunity, errorMessage, onDismissError, saving }) {
     const [formData, setFormData] = useState(activity || {
         type: 'Call',
-        date: new Date().toISOString().split('T')[0],
+        date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
         opportunityId: initialContext?.opportunityId || '',
         contactId: initialContext?.contactId || '',
         companyName: '',
