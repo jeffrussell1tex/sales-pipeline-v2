@@ -143,6 +143,9 @@ export default function PipelineTab({
     const [pipelineTerritoryFilter, setPipelineTerritoryFilter] = useState([]);
     const [pipelineStageFilter, setPipelineStageFilter] = useState([]);
     const [selectedPipelineOpp, setSelectedPipelineOpp] = useState(null);
+    const [selectedOpps, setSelectedOpps] = useState([]);
+    const [healthPopover, setHealthPopover] = useState(null);
+    const [inlineEdit, setInlineEdit] = useState(null);
 
     useEffect(() => { localStorage.setItem('pipelineView', pipelineView); }, [pipelineView]);
 
