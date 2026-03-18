@@ -8,6 +8,7 @@ export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
+    const { userId, orgId, userRole, managedReps } = auth;
 
     const sanitize = (d) => ({
         id:                d.id,
