@@ -29,8 +29,19 @@ export async function verifyAuth(event) {
         const userId = payload.sub || '';
 
         // Extract org_id from JWT (Clerk puts it in org_id or active_organization_id)
-        const orgId = payload.org_id || payload.active_organization_id || null;
+        // Debug: log all payload keys to find where org_id is stored
+        console.log('JWT payload keys:', Object.keys(payload));
+        console.log('JWT org fields:', {
+            org_id: payload.org_id,
+            active_organization_id: payload.active_organization_id,
+            org: payload.org,
+            organizations: payload.organizations,
+            o: payload.o,
+        });
+
+        const orgId = payload.org_id || payload.active_organization_id || payload.o?.id || null;
         if (!orgId) {
+            console.error('No org_id in JWT. Full payload:', JSON.stringify(payload));
             return { error: 'No organization membership found. Please contact your administrator.', status: 403 };
         }
 
