@@ -146,6 +146,9 @@ export default function PipelineTab({
     const [selectedOpps, setSelectedOpps] = useState([]);
     const [healthPopover, setHealthPopover] = useState(null);
     const [inlineEdit, setInlineEdit] = useState(null);
+    const [pipelineSortField, setPipelineSortField] = useState('forecastedCloseDate');
+    const [pipelineSortDir, setPipelineSortDir] = useState('asc');
+    const [bulkAction, setBulkAction] = useState({ stage: '', rep: '' });
 
     useEffect(() => { localStorage.setItem('pipelineView', pipelineView); }, [pipelineView]);
 
