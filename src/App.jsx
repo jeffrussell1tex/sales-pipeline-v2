@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useUser, useClerk, useAuth, SignIn } from '@clerk/clerk-react';
+import { useUser, useClerk, useAuth, useOrganization, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch } from './utils/storage';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import CsvImportModal from './components/modals/CsvImportModal';
@@ -377,6 +377,7 @@ function App() {
     const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
     const { signOut } = useClerk();
     const { getToken } = useAuth();
+    const { organization, isLoaded: orgLoaded } = useOrganization();
 
     // Guard: prevents settings useEffect from writing to DB before DB data has loaded.
     // Without this, the effect fires on mount with localStorage/default values and
@@ -384,9 +385,10 @@ function App() {
     // settingsReady managed by useSettings hook
 
     // Make getToken available to dbFetch utility
+    // organizationId in getToken ensures Clerk includes org_id in the JWT
     useEffect(() => {
-        window.__getClerkToken = getToken;
-    }, [getToken]);
+        window.__getClerkToken = () => getToken({ organizationId: organization?.id });
+    }, [getToken, organization]);
     const clerkUserMeta = clerkUser?.publicMetadata || {};
     const currentUser = clerkUser
         ? (((clerkUser.firstName || '') + ' ' + (clerkUser.lastName || '')).trim() || clerkUser.emailAddresses?.[0]?.emailAddress || 'User')
@@ -1600,7 +1602,7 @@ dbFetch('/.netlify/functions/users?me=true')
 
     const handleLogout = () => signOut();
 
-    if (!clerkLoaded) {
+    if (!clerkLoaded || !orgLoaded) {
         return (
             <div className="login-page">
                 <div className="login-card" style={{ textAlign: 'center', padding: '3rem' }}>
@@ -1625,6 +1627,23 @@ dbFetch('/.netlify/functions/users?me=true')
                         <p style={{ color: '#94a3b8', fontSize: '0.875rem', margin: 0 }}>Sign in to continue</p>
                     </div>
                     <SignIn routing="hash" />
+                </div>
+            </div>
+        );
+    }
+
+    if (!organization) {
+        return (
+            <div className="login-page">
+                <div className="login-card" style={{ textAlign: 'center', padding: '3rem', maxWidth: '420px', margin: '10vh auto' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏢</div>
+                    <h2 style={{ color: '#1e293b', fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.75rem' }}>No Organization Found</h2>
+                    <p style={{ color: '#64748b', fontSize: '0.875rem', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+                        You haven't been added to a company yet. Contact your administrator to be invited to your organization.
+                    </p>
+                    <button onClick={() => signOut()} style={{ padding: '0.5rem 1.5rem', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', color: '#475569' }}>
+                        Sign Out
+                    </button>
                 </div>
             </div>
         );
