@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useUser, useClerk, useAuth, useOrganization, SignIn } from '@clerk/clerk-react';
+import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch } from './utils/storage';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import CsvImportModal from './components/modals/CsvImportModal';
@@ -378,6 +378,19 @@ function App() {
     const { signOut } = useClerk();
     const { getToken } = useAuth();
     const { organization, isLoaded: orgLoaded } = useOrganization();
+    const { userMemberships, setActive, isLoaded: orgListLoaded } = useOrganizationList({
+        userMemberships: { infinite: true },
+    });
+
+    // Auto-activate the user's first org if none is active
+    React.useEffect(() => {
+        if (!orgListLoaded || !clerkLoaded) return;
+        if (organization) return; // already active
+        const firstMembership = userMemberships?.data?.[0];
+        if (firstMembership?.organization?.id) {
+            setActive({ organization: firstMembership.organization.id });
+        }
+    }, [orgListLoaded, clerkLoaded, organization, userMemberships?.data]);
 
     // Guard: prevents settings useEffect from writing to DB before DB data has loaded.
     // Without this, the effect fires on mount with localStorage/default values and
