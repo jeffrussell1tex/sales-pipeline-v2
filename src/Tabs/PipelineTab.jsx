@@ -115,6 +115,7 @@ export default function PipelineTab({
         canViewField,
         visibleOpportunities,
         getKpiColor,
+        setUndoToast,
         activePipeline,
         allPipelines,
         handleDelete,
@@ -149,6 +150,7 @@ export default function PipelineTab({
     const [pipelineSortField, setPipelineSortField] = useState('forecastedCloseDate');
     const [pipelineSortDir, setPipelineSortDir] = useState('asc');
     const [bulkAction, setBulkAction] = useState({ stage: '', rep: '' });
+    const [expandedOppActivities, setExpandedOppActivities] = useState({});
 
     useEffect(() => { localStorage.setItem('pipelineView', pipelineView); }, [pipelineView]);
 

@@ -2201,6 +2201,7 @@ dbFetch('/.netlify/functions/users?me=true')
         viewingTerritory, setViewingTerritory,
         // UI state
         exportingCSV, setExportingCSV,
+        setUndoToast,
         getKpiColor,
         // Navigation
         activeTab, setActiveTab,
