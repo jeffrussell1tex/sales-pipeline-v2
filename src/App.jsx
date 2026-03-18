@@ -9,6 +9,7 @@ import { useAccounts } from './hooks/useAccounts';
 import { useContacts } from './hooks/useContacts';
 import { useTasks } from './hooks/useTasks';
 import { useActivities } from './hooks/useActivities';
+import { AppProvider, useApp } from './AppContext';
 import LeadImportModal from './components/modals/LeadImportModal';
 import OutlookImportModal from './components/modals/OutlookImportModal';
 import PipelinesSettingsPanel from './components/modals/PipelinesSettingsPanel';
@@ -86,7 +87,10 @@ function LeadForm({ lead, onSave, onClose, canSeeAll, allReps }) {
 }
 
 
-function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditingOpp, setShowModal, onImportClick }) {
+function LeadsTab({ leads, setLeads, setEditingOpp, setShowModal, onImportClick }) {
+    const { settings, currentUser, canSeeAll, softDelete, showConfirm } = useApp();
+    const [leadDragging, setLeadDragging] = React.useState(null); // { leadId, fromStage }
+    const [leadDragOver, setLeadDragOver] = React.useState(null); // stage name
     const stageColors = { 'New':'#94a3b8','Contacted':'#0ea5e9','Qualified':'#8b5cf6','Working':'#f59e0b','Converted':'#10b981','Dead':'#ef4444' };
     const scoreBg = s => s >= 70 ? '#fee2e2' : s >= 40 ? '#fef3c7' : '#dbeafe';
     const scoreColor = s => s >= 70 ? '#dc2626' : s >= 40 ? '#d97706' : '#2563eb';
@@ -136,9 +140,32 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
         setNewLead(null); setEditingLead(null);
     };
 
-    const deleteLead = async (id) => {
-        setLeads(prev => prev.filter(l => l.id !== id));
-        await dbFetch('/.netlify/functions/leads?id=' + id, { method: 'DELETE' }).catch(console.error);
+    const deleteLead = (id) => {
+        const lead = leads.find(l => l.id === id);
+        if (!lead) return;
+        showConfirm('Are you sure you want to delete this lead?', () => {
+            const snapshot = [...leads];
+            setLeads(prev => prev.filter(l => l.id !== id));
+            dbFetch('/.netlify/functions/leads?id=' + id, { method: 'DELETE' }).catch(console.error);
+            softDelete(
+                `Lead "${[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || 'Unnamed'}"`,
+                () => {},
+                () => { setLeads(snapshot); }
+            );
+        });
+    };
+
+    const handleLeadDrop = (toStage) => {
+        if (!leadDragging || leadDragging.fromStage === toStage) {
+            setLeadDragging(null); setLeadDragOver(null); return;
+        }
+        const updated = leads.map(l =>
+            l.id === leadDragging.leadId ? { ...l, status: toStage } : l
+        );
+        setLeads(updated);
+        const lead = updated.find(l => l.id === leadDragging.leadId);
+        if (lead) dbFetch('/.netlify/functions/leads', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(lead) }).catch(console.error);
+        setLeadDragging(null); setLeadDragOver(null);
     };
 
     const convertLead = (lead) => {
@@ -334,14 +361,22 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
                                 {Object.entries(stageColors).map(([stage, color]) => {
                                     const colLeads = filtered.filter(l => (l.status || 'New') === stage);
                                     return (
-                                        <div key={stage} style={{ width:'190px', flexShrink:0, flexGrow:1, minWidth:'160px', maxWidth:'220px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+                                        <div key={stage}
+                                            onDragOver={e => { e.preventDefault(); setLeadDragOver(stage); }}
+                                            onDragLeave={() => setLeadDragOver(null)}
+                                            onDrop={() => handleLeadDrop(stage)}
+                                            style={{ width:'190px', flexShrink:0, flexGrow:1, minWidth:'160px', maxWidth:'220px', background: leadDragOver === stage ? '#eff6ff' : '#f8fafc', border: leadDragOver === stage ? '1px solid #93c5fd' : '1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden', transition:'all 0.15s' }}>
                                             <div style={{ padding:'0.5rem 0.75rem', borderTop:'3px solid '+color, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                                                 <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.04em' }}>{stage}</span>
                                                 <span style={{ fontSize:'0.6rem', fontWeight:'700', background:'#e2e8f0', color:'#64748b', borderRadius:'10px', padding:'0.1rem 0.35rem' }}>{colLeads.length}</span>
                                             </div>
                                             <div style={{ padding:'0.5rem', display:'flex', flexDirection:'column', gap:'0.375rem', minHeight:'60px' }}>
                                                 {colLeads.map(lead => (
-                                                    <div key={lead.id} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'0.5rem 0.625rem', transition:'all 0.1s' }}
+                                                    <div key={lead.id}
+                                                        draggable
+                                                        onDragStart={() => setLeadDragging({ leadId: lead.id, fromStage: stage })}
+                                                        onDragEnd={() => { setLeadDragging(null); setLeadDragOver(null); }}
+                                                        style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'0.5rem 0.625rem', transition:'all 0.1s', cursor:'grab', opacity: leadDragging?.leadId === lead.id ? 0.5 : 1 }}
                                                         onMouseEnter={e => { e.currentTarget.style.borderColor='#2563eb'; e.currentTarget.style.boxShadow='0 2px 8px rgba(37,99,235,0.1)'; }}
                                                         onMouseLeave={e => { e.currentTarget.style.borderColor='#e2e8f0'; e.currentTarget.style.boxShadow='none'; }}>
                                                         <div style={{ fontSize:'0.75rem', fontWeight:'600', color:'#1e293b', marginBottom:'0.15rem', cursor:'pointer' }} onClick={() => setEditingLead(lead)}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || '—'}</div>
@@ -491,7 +526,8 @@ function LeadsTab({ leads, setLeads, settings, currentUser, canSeeAll, setEditin
 
 
 
-function FunnelView({ stages, pipelineFilteredOpps, funnelExpandedStage, setFunnelExpandedStage, settings, handleEdit, handleDelete }) {
+function FunnelView({ pipelineFilteredOpps, funnelExpandedStage, setFunnelExpandedStage, handleEdit, handleDelete }) {
+    const { stages, settings } = useApp();
     const stageColors = ['#6366f1','#8b5cf6','#0ea5e9','#f59e0b','#f97316','#10b981','#16a34a','#ef4444'];
     return (
         <div style={{ padding: '1.25rem 1.5rem' }}>
@@ -560,7 +596,8 @@ function FunnelView({ stages, pipelineFilteredOpps, funnelExpandedStage, setFunn
     );
 }
 
-function KanbanView({ stages, pipelineFilteredOpps, kanbanDragging, kanbanDragOver, setKanbanDragging, setKanbanDragOver, opportunities, setOpportunities, currentUser, calculateDealHealth, handleEdit, handleDelete }) {
+function KanbanView({ pipelineFilteredOpps, kanbanDragging, kanbanDragOver, setKanbanDragging, setKanbanDragOver, handleEdit, handleDelete }) {
+    const { stages, opportunities, setOpportunities, currentUser, calculateDealHealth } = useApp();
     const stageColors = ['#6366f1','#8b5cf6','#0ea5e9','#f59e0b','#f97316','#10b981','#16a34a','#ef4444'];
 
     const handleKanbanDrop = (toStage) => {
@@ -643,7 +680,8 @@ function KanbanView({ stages, pipelineFilteredOpps, kanbanDragging, kanbanDragOv
 }
 
 
-function TerritoriesSettings({ settings, setSettings, onBack }) {
+function TerritoriesSettings({ onBack }) {
+    const { settings, setSettings } = useApp();
     const { useState } = React;
     const territories = settings.territories || [];
     const [newName, setNewName] = useState('');
@@ -747,7 +785,8 @@ function TerritoriesSettings({ settings, setSettings, onBack }) {
     );
 }
 
-function VerticalsSettings({ settings, setSettings, onBack }) {
+function VerticalsSettings({ onBack }) {
+    const { settings, setSettings } = useApp();
     const { useState } = React;
     const verticals = settings.verticals || [];
     const [newName, setNewName] = useState('');
@@ -851,7 +890,8 @@ function VerticalsSettings({ settings, setSettings, onBack }) {
     );
 }
 
-function TeamBuilder({ settings, setSettings, onBack }) {
+function TeamBuilder({ onBack }) {
+    const { settings, setSettings } = useApp();
     const { useState } = React;
     const allUsers = (settings.users || []).filter(u => u.name);
     const managers = allUsers.filter(u => u.userType === 'Manager' || u.userType === 'Admin');
@@ -2606,7 +2646,65 @@ dbFetch('/.netlify/functions/users?me=true')
         return t.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     };
 
+    // ── AppContext value ─────────────────────────────────────────────
+    const appContextValue = {
+        // Data
+        settings, setSettings,
+        opportunities, setOpportunities,
+        accounts, setAccounts,
+        contacts, setContacts,
+        tasks, setTasks,
+        activities, setActivities,
+        leads, setLeads,
+        // Auth
+        currentUser,
+        userRole,
+        clerkUser,
+        canSeeAll: userRole === 'Admin' || userRole === 'Manager',
+        // Utility functions
+        getQuarter,
+        getQuarterLabel,
+        getStageColor,
+        calculateDealHealth,
+        exportToCSV,
+        showConfirm,
+        softDelete,
+        addAudit,
+        canViewField,
+        isRepVisible,
+        // Derived
+        stages,
+        dbOffline,
+        // Hook handlers
+        handleDelete,
+        handleSave,
+        completeLostSave,
+        handleDeleteAccount,
+        handleDeleteSubAccount,
+        handleSaveAccount,
+        handleDeleteContact,
+        handleSaveContact,
+        handleDeleteTask,
+        handleSaveTask,
+        handleCompleteTask,
+        handleAddTaskToCalendar,
+        handleDeleteActivity,
+        handleSaveActivity,
+        handleUpdateFiscalYearStart,
+        handleAddTaskType,
+        loadOpportunities,
+        loadAccounts,
+        loadContacts,
+        loadTasks,
+        loadActivities,
+        // Viewing/filtering (managers)
+        viewingRep, setViewingRep,
+        viewingTeam, setViewingTeam,
+        viewingTerritory, setViewingTerritory,
+    };
+
     return (
+        <AppProvider value={appContextValue}>
         <div className="app-container">
             <header className="header">
                 <div className="header-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', position: 'relative' }}>
@@ -4439,16 +4537,11 @@ dbFetch('/.netlify/functions/users?me=true')
                     {/* ════ KANBAN VIEW ════ */}
                     {pipelineView === 'kanban' && (
                         <KanbanView
-                            stages={stages}
                             pipelineFilteredOpps={pipelineFilteredOpps}
                             kanbanDragging={kanbanDragging}
                             kanbanDragOver={kanbanDragOver}
                             setKanbanDragging={setKanbanDragging}
                             setKanbanDragOver={setKanbanDragOver}
-                            opportunities={opportunities}
-                            setOpportunities={setOpportunities}
-                            currentUser={currentUser}
-                            calculateDealHealth={calculateDealHealth}
                             handleEdit={handleEdit}
                             handleDelete={handleDelete}
                         />
@@ -7204,9 +7297,6 @@ dbFetch('/.netlify/functions/users?me=true')
                 <LeadsTab
                     leads={leads}
                     setLeads={setLeads}
-                    settings={settings}
-                    currentUser={currentUser}
-                    canSeeAll={canSeeAll}
                     setEditingOpp={setEditingOpp}
                     setShowModal={setShowModal}
                     onImportClick={() => setShowLeadImportModal(true)}
@@ -10072,22 +10162,16 @@ ${bodyHtml}
 
                     {settingsView === 'team-builder' && (
                         <TeamBuilder
-                            settings={settings}
-                            setSettings={setSettings}
                             onBack={() => setSettingsView('menu')}
                         />
                     )}
                     {settingsView === 'territories' && (
                         <TerritoriesSettings
-                            settings={settings}
-                            setSettings={setSettings}
                             onBack={() => setSettingsView('menu')}
                         />
                     )}
                     {settingsView === 'verticals' && (
                         <VerticalsSettings
-                            settings={settings}
-                            setSettings={setSettings}
                             onBack={() => setSettingsView('menu')}
                         />
                     )}
@@ -12863,6 +12947,7 @@ ${bodyHtml}
             )}
 
         </div>
+        </AppProvider>
     );
 }
 
