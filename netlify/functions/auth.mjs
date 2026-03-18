@@ -28,6 +28,12 @@ export async function verifyAuth(event) {
         });
         const userId = payload.sub || '';
 
+        // Extract org_id from JWT (Clerk puts it in org_id or active_organization_id)
+        const orgId = payload.org_id || payload.active_organization_id || null;
+        if (!orgId) {
+            return { error: 'No organization membership found. Please contact your administrator.', status: 403 };
+        }
+
         // Fetch user metadata
         const clerk = createClerkClient({ secretKey: clerkSecretKey });
         const user = await clerk.users.getUser(userId);
@@ -36,7 +42,7 @@ export async function verifyAuth(event) {
         const userRole    = meta.role || 'User';
         const managedReps = meta.managedReps || [];
 
-        return { userId, userRole, managedReps, error: null };
+        return { userId, orgId, userRole, managedReps, error: null };
 
     } catch (err) {
         console.error('Auth verification error:', err.message);

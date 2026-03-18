@@ -22,7 +22,7 @@ export const handler = async (event) => {
         return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     }
 
-    const { userId, userRole } = auth;
+    const { userId, orgId, userRole } = auth;
 
     // ── Helpers (hoisted above all early-exit handlers so they're available everywhere) ──
 
@@ -152,7 +152,7 @@ export const handler = async (event) => {
     try {
         // ── GET ───────────────────────────────────────────────────────────────
         if (event.httpMethod === 'GET') {
-            const rows = await db.select().from(users).orderBy(asc(users.name));
+            const rows = await db.select().from(users).where(eq(users.orgId, orgId)).orderBy(asc(users.name));
             return {
                 statusCode: 200,
                 headers,
@@ -166,7 +166,7 @@ export const handler = async (event) => {
             try {
                 const [row] = await db
                     .insert(users)
-                    .values(clean)
+                    .values({ ...clean, orgId })
                     .onConflictDoUpdate({
                         target: users.id,
                         set: { ...updateData, updatedAt: new Date() },
@@ -236,7 +236,7 @@ export const handler = async (event) => {
             if (!id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
-            await db.delete(users).where(eq(users.id, id));
+            await db.delete(users).where(and(eq(users.id, id), eq(users.orgId, orgId)));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
 

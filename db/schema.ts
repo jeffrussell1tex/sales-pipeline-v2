@@ -15,6 +15,7 @@ export const users = pgTable('users', {
     active:        boolean('active').notNull().default(true),
     profile:       jsonb('profile').default('{}'),                   // full profile fields (firstName, lastName, phone, etc.)
     createdAt:     timestamp('created_at').notNull().defaultNow(),
+    orgId:         text('org_id').notNull(),
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 });
 
@@ -47,6 +48,7 @@ export const accounts = pgTable('accounts', {
     parentAccountId:   text('parent_account_id'),                    // for sub-accounts
     notes:             text('notes'),
     createdAt:         timestamp('created_at').notNull().defaultNow(),
+    orgId:             text('org_id').notNull(),
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
 
@@ -81,6 +83,7 @@ export const contacts = pgTable('contacts', {
     assignedRep:       varchar('assigned_rep', { length: 255 }),
     assignedTerritory: varchar('assigned_territory', { length: 255 }),
     createdAt:         timestamp('created_at').notNull().defaultNow(),
+    orgId:             text('org_id').notNull(),
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
 
@@ -120,6 +123,7 @@ export const opportunities = pgTable('opportunities', {
     stageHistory:         jsonb('stage_history').default('[]'),       // [{stage, date, prevStage, author, timestamp}]
     comments:             jsonb('comments').default('[]'),            // [{id, text, author, timestamp}]
     createdAt:            timestamp('created_at').notNull().defaultNow(),
+    orgId:                text('org_id').notNull(),
     updatedAt:            timestamp('updated_at').notNull().defaultNow(),
 });
 
@@ -144,6 +148,7 @@ export const tasks = pgTable('tasks', {
     accountId:      text('account_id'),
     relatedTo:      text('related_to'),
     createdAt:      timestamp('created_at').notNull().defaultNow(),
+    orgId:          text('org_id').notNull(),
     updatedAt:      timestamp('updated_at').notNull().defaultNow(),
 });
 
@@ -162,6 +167,7 @@ export const activities = pgTable('activities', {
     accountId:     text('account_id'),
     author:        varchar('author', { length: 255 }),
     createdAt:     timestamp('created_at').notNull().defaultNow(),
+    orgId:         text('org_id').notNull(),
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 });
 
@@ -178,6 +184,7 @@ export const settings = pgTable('settings', {
     verticalMarkets: jsonb('vertical_markets').default('[]'),
     fieldVisibility: jsonb('field_visibility').default('{}'),        // role-based field access
     extra:           jsonb('extra').default('{}'),                   // overflow blob: quotaData, pipelines, teams, territories, verticals, commissionPlan, kpiConfig, logoUrl
+    orgId:           text('org_id').notNull(),
     updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 });
 
@@ -192,6 +199,7 @@ export const auditLog = pgTable('audit_log', {
     detail:     text('detail'),
     userId:     text('user_id'),
     userName:   varchar('user_name', { length: 255 }),
+    orgId:      text('org_id').notNull(),
     timestamp:  timestamp('timestamp').notNull().defaultNow(),
 });
 
@@ -213,5 +221,6 @@ export const leads = pgTable('leads', {
     notes:        text('notes'),
     convertedAt:  varchar('converted_at', { length: 30 }),
     createdAt:    timestamp('created_at').notNull().defaultNow(),
+    orgId:        text('org_id').notNull(),
     updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });

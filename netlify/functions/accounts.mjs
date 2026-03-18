@@ -30,13 +30,13 @@ export const handler = async (event) => {
 
     try {
         if (event.httpMethod === 'GET') {
-            const results = await db.select().from(accounts).orderBy(asc(accounts.name));
+            const results = await db.select().from(accounts).where(eq(accounts.orgId, orgId)).orderBy(asc(accounts.name));
             return { statusCode: 200, headers, body: JSON.stringify({ accounts: results }) };
         }
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            const [inserted] = await db.insert(accounts).values(sanitize(data)).returning();
+            const [inserted] = await db.insert(accounts).values({ ...sanitize(data), orgId }).returning();
             return { statusCode: 201, headers, body: JSON.stringify({ account: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
@@ -44,7 +44,7 @@ export const handler = async (event) => {
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
-            const [upserted] = await db.insert(accounts).values(clean)
+            const [upserted] = await db.insert(accounts).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: accounts.id, set: { ...updateData, updatedAt: new Date() } })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ account: upserted }) };
@@ -56,7 +56,7 @@ export const handler = async (event) => {
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
-            await db.delete(accounts).where(eq(accounts.id, id));
+            await db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId)));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };

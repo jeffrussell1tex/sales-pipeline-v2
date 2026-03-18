@@ -116,12 +116,12 @@ export const handler = async (event) => {
     if (auth.error) {
         return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     }
-    const { userId, userRole, managedReps } = auth;
+    const { userId, orgId, userRole, managedReps } = auth;
 
     try {
         // ── GET ───────────────────────────────────────────────────────────────
         if (event.httpMethod === 'GET') {
-            let results = await db.select().from(opportunities).orderBy(asc(opportunities.createdAt));
+            let results = await db.select().from(opportunities).where(eq(opportunities.orgId, orgId)).orderBy(asc(opportunities.createdAt));
             if (!canSeeAll(userRole)) {
                 results = results.filter(o => !o.salesRep || o.salesRep === userId);
             } else if (isManager(userRole) && managedReps.length > 0) {
@@ -136,7 +136,7 @@ export const handler = async (event) => {
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
-            const [inserted] = await db.insert(opportunities).values(sanitize(data)).returning();
+            const [inserted] = await db.insert(opportunities).values({ ...sanitize(data), orgId }).returning();
 
             // Email: new opportunity created — notify assigned rep if someone else created it
             if (inserted.salesRep && inserted.salesRep !== userId) {
@@ -162,14 +162,14 @@ export const handler = async (event) => {
             }
 
             // Fetch existing record before update so we can detect changes
-            const [existing] = await db.select().from(opportunities).where(eq(opportunities.id, data.id));
+            const [existing] = await db.select().from(opportunities).where(and(eq(opportunities.id, data.id), eq(opportunities.orgId, orgId)));
             const previousStage    = existing?.stage    || null;
             const previousComments = existing?.comments || [];
 
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(opportunities)
-                .values(clean)
+                .values({ ...clean, orgId })
                 .onConflictDoUpdate({
                     target: opportunities.id,
                     set: { ...updateData, updatedAt: new Date() }
@@ -252,7 +252,7 @@ export const handler = async (event) => {
             if (!id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
             }
-            await db.delete(opportunities).where(eq(opportunities.id, id));
+            await db.delete(opportunities).where(and(eq(opportunities.id, id), eq(opportunities.orgId, orgId)));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
 

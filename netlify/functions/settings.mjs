@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { settings } from '../../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 
 const SETTINGS_ID = 'default';
@@ -10,10 +10,11 @@ export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
+    const { orgId } = auth;
 
     try {
         if (event.httpMethod === 'GET') {
-            const rows = await db.select().from(settings).where(eq(settings.id, SETTINGS_ID));
+            const rows = await db.select().from(settings).where(eq(settings.orgId, orgId));
             if (rows.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ settings: null }) };
             const row = rows[0];
             return { statusCode: 200, headers, body: JSON.stringify({ settings: {
@@ -46,7 +47,7 @@ export const handler = async (event) => {
             // This prevents a partial save (e.g. from the quota manager) from
             // nulling out teams/territories/pipelines/verticals that weren't
             // included in the payload.
-            const existing = await db.select().from(settings).where(eq(settings.id, SETTINGS_ID));
+            const existing = await db.select().from(settings).where(eq(settings.orgId, orgId));
             const existingExtra = existing.length > 0 ? (existing[0].extra || {}) : {};
 
             // Merge: incoming data wins for any key it explicitly provides (even null),

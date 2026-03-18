@@ -8,7 +8,7 @@ export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
-    const { userId, userRole } = auth;
+    const { userId, orgId, userRole } = auth;
 
     const sanitize = (d) => ({
         id:           d.id,
@@ -29,7 +29,7 @@ export const handler = async (event) => {
 
     try {
         if (event.httpMethod === 'GET') {
-            let results = await db.select().from(leads).orderBy(asc(leads.createdAt));
+            let results = await db.select().from(leads).where(eq(leads.orgId, orgId)).orderBy(asc(leads.createdAt));
             if (!canSeeAll(userRole)) {
                 results = results.filter(l => !l.assignedTo || l.assignedTo === userId);
             }
@@ -38,7 +38,7 @@ export const handler = async (event) => {
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            const [inserted] = await db.insert(leads).values(sanitize(data)).returning();
+            const [inserted] = await db.insert(leads).values({ ...sanitize(data), orgId }).returning();
             return { statusCode: 201, headers, body: JSON.stringify({ lead: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
@@ -46,7 +46,7 @@ export const handler = async (event) => {
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
-            const [upserted] = await db.insert(leads).values(clean)
+            const [upserted] = await db.insert(leads).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: leads.id, set: { ...updateData, updatedAt: new Date() } })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ lead: upserted }) };
@@ -58,7 +58,7 @@ export const handler = async (event) => {
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
-            await db.delete(leads).where(eq(leads.id, id));
+            await db.delete(leads).where(and(eq(leads.id, id), eq(leads.orgId, orgId)));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };

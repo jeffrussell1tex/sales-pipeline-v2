@@ -41,13 +41,13 @@ export const handler = async (event) => {
 
     try {
         if (event.httpMethod === 'GET') {
-            const results = await db.select().from(contacts).orderBy(asc(contacts.lastName));
+            const results = await db.select().from(contacts).where(eq(contacts.orgId, orgId)).orderBy(asc(contacts.lastName));
             return { statusCode: 200, headers, body: JSON.stringify({ contacts: results }) };
         }
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            const [inserted] = await db.insert(contacts).values(sanitize(data)).returning();
+            const [inserted] = await db.insert(contacts).values({ ...sanitize(data), orgId }).returning();
             return { statusCode: 201, headers, body: JSON.stringify({ contact: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
@@ -55,7 +55,7 @@ export const handler = async (event) => {
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
-            const [upserted] = await db.insert(contacts).values(clean)
+            const [upserted] = await db.insert(contacts).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: contacts.id, set: { ...updateData, updatedAt: new Date() } })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ contact: upserted }) };
@@ -67,7 +67,7 @@ export const handler = async (event) => {
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
-            await db.delete(contacts).where(eq(contacts.id, id));
+            await db.delete(contacts).where(and(eq(contacts.id, id), eq(contacts.orgId, orgId)));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
         return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
