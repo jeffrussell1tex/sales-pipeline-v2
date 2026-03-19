@@ -966,18 +966,41 @@ export default function SalesManagerTab() {
                                                         </span>
                                                         {claim.status === 'pending' && (
                                                             <div style={{ display:'flex', gap:'0.25rem', flexShrink:0 }}>
-                                                                <button onClick={() => setSpiffClaims(prev => prev.map(c => c.id===claim.id ? {...c, status:'approved', approvedAt:new Date().toISOString(), approvedBy:currentUser} : c))}
+                                                                <button onClick={async () => {
+                                                                    const updated = {...claim, status:'approved', approvedAt:new Date().toISOString(), approvedBy:currentUser};
+                                                                    try {
+                                                                        await dbFetch('/.netlify/functions/spiff-claims', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updated) });
+                                                                        setSpiffClaims(prev => prev.map(c => c.id===claim.id ? updated : c));
+                                                                    } catch(err) { console.error('approve claim error:', err.message); }
+                                                                }}
                                                                     style={{ padding:'0.2rem 0.625rem', background:'#10b981', color:'#fff', border:'none', borderRadius:'5px', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>✓ Approve</button>
-                                                                <button onClick={() => setSpiffClaims(prev => prev.map(c => c.id===claim.id ? {...c, status:'rejected', approvedAt:new Date().toISOString(), approvedBy:currentUser} : c))}
+                                                                <button onClick={async () => {
+                                                                    const updated = {...claim, status:'rejected', approvedAt:new Date().toISOString(), approvedBy:currentUser};
+                                                                    try {
+                                                                        await dbFetch('/.netlify/functions/spiff-claims', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updated) });
+                                                                        setSpiffClaims(prev => prev.map(c => c.id===claim.id ? updated : c));
+                                                                    } catch(err) { console.error('reject claim error:', err.message); }
+                                                                }}
                                                                     style={{ padding:'0.2rem 0.625rem', background:'#ef4444', color:'#fff', border:'none', borderRadius:'5px', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>✕ Reject</button>
                                                             </div>
                                                         )}
                                                         {claim.status === 'approved' && (
-                                                            <button onClick={() => setSpiffClaims(prev => prev.map(c => c.id===claim.id ? {...c, status:'paid', paidAt:new Date().toISOString()} : c))}
+                                                            <button onClick={async () => {
+                                                                const updated = {...claim, status:'paid', paidAt:new Date().toISOString()};
+                                                                try {
+                                                                    await dbFetch('/.netlify/functions/spiff-claims', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updated) });
+                                                                    setSpiffClaims(prev => prev.map(c => c.id===claim.id ? updated : c));
+                                                                } catch(err) { console.error('mark paid error:', err.message); }
+                                                            }}
                                                                 style={{ padding:'0.2rem 0.625rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'5px', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>💳 Mark Paid</button>
                                                         )}
                                                         {(claim.status === 'rejected' || claim.status === 'paid') && (
-                                                            <button onClick={() => { if (window.confirm('Remove this claim?')) setSpiffClaims(prev => prev.filter(c => c.id !== claim.id)); }}
+                                                            <button onClick={async () => { if (window.confirm('Remove this claim?')) {
+                                                                try {
+                                                                    await dbFetch(`/.netlify/functions/spiff-claims?id=${claim.id}`, { method:'DELETE' });
+                                                                    setSpiffClaims(prev => prev.filter(c => c.id !== claim.id));
+                                                                } catch(err) { console.error('delete claim error:', err.message); }
+                                                            }}}
                                                                 style={{ background:'none', border:'none', color:'#94a3b8', cursor:'pointer', fontSize:'0.875rem', padding:'0', lineHeight:1, flexShrink:0 }}>×</button>
                                                         )}
                                                     </div>

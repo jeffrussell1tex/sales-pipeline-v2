@@ -203,6 +203,31 @@ export const auditLog = pgTable('audit_log', {
     timestamp:  timestamp('timestamp').notNull().defaultNow(),
 });
 
+// ── SPIFF CLAIMS ──────────────────────────────────────────────────────────────
+// Rep-submitted SPIFF bonus claims, pending manager approval
+export const spiffClaims = pgTable('spiff_claims', {
+    id:              text('id').primaryKey(),                         // e.g. "claim_<timestamp>"
+    orgId:           text('org_id').notNull(),
+    spiffId:         text('spiff_id').notNull(),                     // references settings.spiffs[].id
+    spiffName:       varchar('spiff_name', { length: 500 }),
+    opportunityId:   text('opportunity_id'),
+    opportunityName: varchar('opportunity_name', { length: 500 }),
+    account:         varchar('account', { length: 255 }),
+    repName:         varchar('rep_name', { length: 255 }).notNull(),
+    amount:          decimal('amount', { precision: 12, scale: 2 }),  // flat $ amount (0 for multiplier type)
+    multiplier:      decimal('multiplier', { precision: 6, scale: 3 }), // e.g. 1.5 for 1.5× multiplier
+    spiffType:       varchar('spiff_type', { length: 50 }),           // flat | pct | multiplier
+    dealArr:         decimal('deal_arr', { precision: 12, scale: 2 }),
+    status:          varchar('status', { length: 50 }).notNull().default('pending'), // pending | approved | rejected | paid
+    note:            text('note'),
+    claimedAt:       timestamp('claimed_at').notNull().defaultNow(),
+    approvedAt:      timestamp('approved_at'),
+    approvedBy:      varchar('approved_by', { length: 255 }),
+    paidAt:          timestamp('paid_at'),
+    createdAt:       timestamp('created_at').notNull().defaultNow(),
+    updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+});
+
 // ── RECOMMENDATION LOG ────────────────────────────────────────────────────────
 // Tracks when reps act on (or dismiss) recommended actions, and whether
 // the underlying signal was resolved afterward.

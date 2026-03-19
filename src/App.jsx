@@ -513,9 +513,7 @@ function App() {
     const [showModal, setShowModal] = useState(false);
     const [showSpiffClaimModal, setShowSpiffClaimModal] = useState(false);
     const [spiffClaimContext, setSpiffClaimContext] = useState(null); // { opp }
-    const [spiffClaims, setSpiffClaims] = useState(() => {
-        try { return JSON.parse(safeStorage.getItem('spiffClaims') || '[]'); } catch { return []; }
-    });
+    const [spiffClaims, setSpiffClaims] = useState([]);
     const [showAccountModal, setShowAccountModal] = useState(false);
     const [showUserModal, setShowUserModal] = useState(false);
     const [showTaskModal, setShowTaskModal] = useState(false);
@@ -848,9 +846,12 @@ dbFetch('/.netlify/functions/users?me=true')
 
     // Settings save effect managed by useSettings hook
 
+    // Load spiff claims from DB on mount
     useEffect(() => {
-        try { safeStorage.setItem('spiffClaims', JSON.stringify(spiffClaims)); } catch(e) {}
-    }, [spiffClaims]);
+        dbFetch('/.netlify/functions/spiff-claims')
+            .then(data => { if (data?.spiffClaims) setSpiffClaims(data.spiffClaims); })
+            .catch(err => console.warn('spiff-claims load error:', err.message));
+    }, []);
 
 
 
@@ -3635,7 +3636,7 @@ dbFetch('/.netlify/functions/users?me=true')
                                                     {spiff.type==='flat'?`$${parseFloat(spiff.amount||0).toLocaleString()} flat bonus`:spiff.type==='pct'?`${spiff.amount}% of deal ARR`:`Commission multiplier ${spiff.amount}×`}
                                                     {spiff.condition && <span> · {spiff.condition}</span>}
                                                 </div>
-                                                <button onClick={() => {
+                                                <button onClick={async () => {
                                                     const newClaim = {
                                                         id: 'claim_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
                                                         spiffId: spiff.id,
@@ -3655,7 +3656,17 @@ dbFetch('/.netlify/functions/users?me=true')
                                                         paidAt: null,
                                                         note: '',
                                                     };
-                                                    setSpiffClaims(prev => [...prev, newClaim]);
+                                                    try {
+                                                        const result = await dbFetch('/.netlify/functions/spiff-claims', {
+                                                            method: 'POST',
+                                                            headers: { 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify(newClaim),
+                                                        });
+                                                        setSpiffClaims(prev => [...prev, result.spiffClaim || newClaim]);
+                                                    } catch (err) {
+                                                        console.error('Failed to submit SPIFF claim:', err.message);
+                                                        setSpiffClaims(prev => [...prev, newClaim]); // optimistic fallback
+                                                    }
                                                 }}
                                                 style={{ width:'100%', padding:'0.375rem', background:'#7c3aed', color:'#fff', border:'none', borderRadius:'6px', fontSize:'0.75rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
                                                     Submit Claim
