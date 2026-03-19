@@ -376,11 +376,12 @@ function AiScoreTab({ opportunity, oppActivities, currentUser }) {
     const fetchScore = async (forceRefresh = false) => {
         setLoading(true); setError(null);
         try {
-            const data = await dbFetch('/.netlify/functions/ai-score', {
+            const res = await dbFetch('/.netlify/functions/ai-score', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ opportunityId: opportunity.id, forceRefresh }),
             });
+            const data = await res.json();
             if (data.disabled) {
                 setError('AI scoring is disabled. Enable it in Settings → AI Features.');
             } else {
