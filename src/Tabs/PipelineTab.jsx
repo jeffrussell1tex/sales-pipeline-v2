@@ -684,7 +684,6 @@ export default function PipelineTab({
                             <h2 style={{ margin:0, fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.05em' }}>Opportunities</h2>
                             <div style={{ display:'flex', gap:'0.5rem', alignItems:'center' }}>
                                 <span style={{ fontSize:'0.6875rem', color:'#94a3b8', fontWeight:'600' }}>{pipelineFilteredOpps.length} deals</span>
-                                <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} onClick={() => { setCsvImportType('opportunities'); setShowCsvImportModal(true); }}>↑ Import</button>
                                 <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} disabled={exportingCSV === 'pipeline'} onClick={() => {
                                     exportToCSV(
                                         `pipeline-${new Date().toISOString().slice(0,10)}.csv`,
@@ -700,6 +699,7 @@ export default function PipelineTab({
                                         ])
                                     , 'pipeline');
                                 }}>{exportingCSV === 'pipeline' ? '⏳ Exporting…' : '📤 Export'}</button>
+                                <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} onClick={() => { setCsvImportType('opportunities'); setShowCsvImportModal(true); }}>Import</button>
                                 <button className="btn" onClick={handleAddNew} style={{ padding:'0.3rem 0.75rem', fontSize:'0.6875rem', fontWeight:'700' }}>+ New</button>
                             </div>
                         </div>

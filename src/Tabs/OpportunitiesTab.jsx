@@ -273,7 +273,6 @@ export default function OpportunitiesTab({
                             {/* Right side: count + CSV + New */}
                             <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginLeft:'auto', flexShrink:0 }}>
                                 <span style={{ fontSize:'0.6875rem', color:'#94a3b8', fontWeight:'600' }}>{oppFilteredOpps.length} deals</span>
-                                <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} onClick={() => { setCsvImportType('opportunities'); setShowCsvImportModal(true); }}>↑ Import</button>
                                 <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} disabled={exportingCSV === 'opps'} onClick={() => {
                                     exportToCSV(
                                         `opportunities-${new Date().toISOString().slice(0,10)}.csv`,
@@ -289,6 +288,7 @@ export default function OpportunitiesTab({
                                         ])
                                     , 'opps');
                                 }}>{exportingCSV === 'opps' ? '⏳ Exporting…' : '📤 Export'}</button>
+                                <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} onClick={() => { setCsvImportType('opportunities'); setShowCsvImportModal(true); }}>Import</button>
                                 <button className="btn" onClick={handleAddNew} style={{ padding:'0.3rem 0.75rem', fontSize:'0.6875rem', fontWeight:'700' }}>+ New</button>
                             </div>
                         </div>
