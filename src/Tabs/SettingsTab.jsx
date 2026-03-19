@@ -41,6 +41,8 @@ export default function SettingsTab({
 
     // Local state
     const [settingsView, setSettingsView] = useState('menu');
+    const [savedToast, setSavedToast] = useState(false);
+    const [settingsSnapshot, setSettingsSnapshot] = useState(null);
     const [auditEntries, setAuditEntries] = useState([]);
     const [auditLoading, setAuditLoading] = useState(false);
     const [newPainPointInput, setNewPainPointInput] = useState('');
@@ -85,6 +87,45 @@ export default function SettingsTab({
         });
     };
 
+
+    const goToView = (view) => {
+        setSettingsSnapshot(JSON.parse(JSON.stringify(settings)));
+        setSettingsView(view);
+        setSavedToast(false);
+    };
+
+    const goBackToMenu = () => {
+        setSettingsSnapshot(null);
+        goBackToMenu();
+    };
+
+    const handleSaveView = () => {
+        setSettingsSnapshot(null);
+        setSavedToast(true);
+        setTimeout(() => setSavedToast(false), 2500);
+        goBackToMenu();
+    };
+
+    const handleCancelView = () => {
+        if (settingsSnapshot) setSettings(settingsSnapshot);
+        setSettingsSnapshot(null);
+        setSavedToast(false);
+        goBackToMenu();
+    };
+
+    const SaveCancelBar = () => (
+        <div style={{ display:'flex', gap:'0.75rem', padding:'1rem 1.5rem', borderTop:'1px solid #e2e8f0', background:'#f8fafc', marginTop:'1rem' }}>
+            <button onClick={handleSaveView}
+                style={{ padding:'0.5rem 1.5rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                Save changes
+            </button>
+            <button onClick={handleCancelView}
+                style={{ padding:'0.5rem 1.25rem', background:'transparent', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
+                Cancel
+            </button>
+        </div>
+    );
+
     return (
 
                 <div className="tab-page">
@@ -96,6 +137,11 @@ export default function SettingsTab({
                         </div>
                     </div>
                 <>
+                    {savedToast && (
+                        <div style={{ position:'fixed', bottom:'2rem', left:'50%', transform:'translateX(-50%)', background:'#1e293b', color:'#fff', padding:'0.625rem 1.5rem', borderRadius:'8px', fontSize:'0.875rem', fontWeight:'600', zIndex:9999, display:'flex', alignItems:'center', gap:'8px', boxShadow:'0 4px 16px rgba(0,0,0,0.18)' }}>
+                            <span style={{ color:'#4ade80' }}>✓</span> Settings saved
+                        </div>
+                    )}
                     {settingsView === 'menu' && (
                         <div className="table-container">
                             <div className="table-header">
@@ -137,7 +183,7 @@ export default function SettingsTab({
                                         const isLast = idx === arr.length - 1 || arr[idx + 1]?.group;
                                         return (
                                             <div key={item.view}
-                                                onClick={() => setSettingsView(item.view)}
+                                                onClick={() => goToView(item.view)}
                                                 style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 16px 9px 24px', borderBottom: isLast ? 'none' : '0.5px solid #f1f5f9', cursor: 'pointer', transition: 'background 0.1s' }}
                                                 onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -160,7 +206,7 @@ export default function SettingsTab({
                     {settingsView === 'products' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={() => setSettingsView('menu')} style={{ marginRight: '1rem' }}>← Back</button>
+                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
                                 <h2>PRODUCTS</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
@@ -217,7 +263,9 @@ export default function SettingsTab({
                                     )}
                                 </div>
                             </div>
-                        </div>
+                        
+                            <SaveCancelBar />
+</div>
                     )}
 
                     {settingsView === 'field-visibility' && (() => {
@@ -254,7 +302,7 @@ export default function SettingsTab({
                             <div className="table-container">
                                 <div className="table-header">
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <button className="btn btn-secondary" onClick={() => setSettingsView('menu')}>← Back</button>
+                                        <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
                                         <h2>FIELD VISIBILITY</h2>
                                     </div>
                                     <span style={{ fontSize: '0.8125rem', color: '#64748b' }}>Admins always see all fields</span>
@@ -336,7 +384,7 @@ export default function SettingsTab({
                             <div className="table-container">
                                 <div className="table-header">
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <button className="btn btn-secondary" onClick={() => setSettingsView('menu')}>← Back</button>
+                                        <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
                                         <h2>AUDIT LOG</h2>
                                     </div>
                                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -421,7 +469,7 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={() => setSettingsView('menu')}
+                                    onClick={goBackToMenu}
                                     style={{ marginRight: '1rem' }}
                                 >
                                     ← Back
@@ -476,7 +524,11 @@ export default function SettingsTab({
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        
+                            <SaveCancelBar />
+
+                            <SaveCancelBar />
+</div>
                     )}
 
                     {settingsView === 'logo' && (
@@ -484,7 +536,7 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={() => setSettingsView('menu')}
+                                    onClick={goBackToMenu}
                                     style={{ marginRight: '1rem' }}
                                 >
                                     ← Back
@@ -606,7 +658,9 @@ export default function SettingsTab({
                                     )}
                                 </div>
                             </div>
-                        </div>
+                        
+                            <SaveCancelBar />
+</div>
                     )}
 
                     {settingsView === 'users' && (
@@ -614,7 +668,7 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={() => setSettingsView('menu')}
+                                    onClick={goBackToMenu}
                                     style={{ marginRight: '1rem' }}
                                 >
                                     ← Back
@@ -711,17 +765,17 @@ export default function SettingsTab({
 
                     {settingsView === 'team-builder' && (
                         <TeamBuilder
-                            onBack={() => setSettingsView('menu')}
+                            onBack={goBackToMenu}
                         />
                     )}
                     {settingsView === 'territories' && (
                         <TerritoriesSettings
-                            onBack={() => setSettingsView('menu')}
+                            onBack={goBackToMenu}
                         />
                     )}
                     {settingsView === 'verticals' && (
                         <VerticalsSettings
-                            onBack={() => setSettingsView('menu')}
+                            onBack={goBackToMenu}
                         />
                     )}
 
@@ -730,7 +784,7 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={() => setSettingsView('menu')}
+                                    onClick={goBackToMenu}
                                     style={{ marginRight: '1rem' }}
                                 >
                                     ← Back
@@ -851,7 +905,9 @@ export default function SettingsTab({
                                     )}
                                 </div>
                             </div>
-                        </div>
+                        
+                            <SaveCancelBar />
+</div>
                     )}
 
                     {settingsView === 'vertical-markets' && (
@@ -859,7 +915,7 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={() => setSettingsView('menu')}
+                                    onClick={goBackToMenu}
                                     style={{ marginRight: '1rem' }}
                                 >
                                     ← Back
@@ -931,13 +987,15 @@ export default function SettingsTab({
                                     );
                                 })()}
                             </div>
-                        </div>
+                        
+                            <SaveCancelBar />
+</div>
                     )}
 
                     {settingsView === 'funnel-stages' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={() => setSettingsView('menu')} style={{ marginRight: '1rem' }}>← Back</button>
+                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
                                 <h2>SALES FUNNEL STAGES</h2>
                             </div>
                             <div style={{ padding: '1.5rem', maxWidth: '650px' }}>
@@ -1007,7 +1065,9 @@ export default function SettingsTab({
                                     })}
                                 </div>
                             </div>
-                        </div>
+                        
+                            <SaveCancelBar />
+</div>
                     )}
 
                     {settingsView === 'pipelines' && (
@@ -1017,14 +1077,14 @@ export default function SettingsTab({
                             opportunities={opportunities}
                             activePipelineId={activePipelineId}
                             setActivePipelineId={setActivePipelineId}
-                            onBack={() => setSettingsView('menu')}
+                            onBack={goBackToMenu}
                         />
                     )}
 
                     {settingsView === 'kpi-settings' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={() => setSettingsView('menu')} style={{ marginRight: '1rem' }}>← Back</button>
+                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
                                 <h2>KPI SETTINGS</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
@@ -1189,13 +1249,15 @@ export default function SettingsTab({
                                     onMouseLeave={e => { e.target.style.borderColor = '#d1d5db'; e.target.style.color = '#64748b'; }}
                                 >+ Add New KPI</button>
                             </div>
-                        </div>
+                        
+                            <SaveCancelBar />
+</div>
                     )}
 
                     {settingsView === 'ai-features' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn" onClick={() => setSettingsView('menu')}>← Back</button>
+                                <button className="btn" onClick={goBackToMenu}>← Back</button>
                                 <h2>AI FEATURES</h2>
                             </div>
                             <div style={{ padding: '1.5rem', maxWidth: '560px' }}>
@@ -1217,7 +1279,7 @@ export default function SettingsTab({
                                         <div>
                                             <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <span>🤖</span> AI deal scoring
-                                                {(settings.extra?.aiScoringEnabled) && (
+                                                {(settings.aiScoringEnabled) && (
                                                     <span style={{ fontSize: '0.625rem', fontWeight: '700', background: '#d1fae5', color: '#065f46', padding: '1px 8px', borderRadius: '999px' }}>ENABLED</span>
                                                 )}
                                             </div>
@@ -1229,21 +1291,21 @@ export default function SettingsTab({
                                             <div
                                                 onClick={() => setSettings(prev => ({
                                                     ...prev,
-                                                    extra: { ...(prev.extra || {}), aiScoringEnabled: !(prev.extra?.aiScoringEnabled) }
+                                                    aiScoringEnabled: !prev.aiScoringEnabled
                                                 }))}
                                                 style={{
                                                     width: '44px', height: '24px', borderRadius: '12px', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0,
-                                                    background: settings.extra?.aiScoringEnabled ? '#2563eb' : '#e2e8f0',
+                                                    background: settings.aiScoringEnabled ? '#2563eb' : '#e2e8f0',
                                                     position: 'relative',
                                                 }}>
                                                 <div style={{
                                                     position: 'absolute', top: '3px', width: '18px', height: '18px', borderRadius: '50%', background: '#fff',
-                                                    transition: 'left 0.2s', left: settings.extra?.aiScoringEnabled ? '23px' : '3px',
+                                                    transition: 'left 0.2s', left: settings.aiScoringEnabled ? '23px' : '3px',
                                                     boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                                                 }} />
                                             </div>
                                             <span style={{ fontSize: '0.75rem', color: '#64748b', userSelect: 'none' }}>
-                                                {settings.extra?.aiScoringEnabled ? 'On' : 'Off'}
+                                                {settings.aiScoringEnabled ? 'On' : 'Off'}
                                             </span>
                                         </label>
                                     </div>
@@ -1282,13 +1344,15 @@ export default function SettingsTab({
                                 </div>
 
                             </div>
-                        </div>
+                        
+                            <SaveCancelBar />
+</div>
                     )}
 
                     {settingsView === 'data-storage' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={() => setSettingsView('menu')} style={{ marginRight: '1rem' }}>← Back</button>
+                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
                                 <h2>DATA STORAGE</h2>
                             </div>
                             <div style={{ padding: '1.5rem', maxWidth: '600px' }}>
@@ -1376,7 +1440,9 @@ export default function SettingsTab({
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        
+                            <SaveCancelBar />
+</div>
                     )}
 
                     {settingsView === 'data-management' && (
@@ -1384,7 +1450,7 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={() => setSettingsView('menu')}
+                                    onClick={goBackToMenu}
                                     style={{ marginRight: '1rem' }}
                                 >
                                     ← Back
