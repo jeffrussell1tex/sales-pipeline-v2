@@ -95,12 +95,18 @@ export default function SettingsTab({
         setSavedToast(false);
     };
 
-    // Save — show toast and go back
+    // Back — just navigate to menu, no revert
+    const goBackToMenu = () => {
+        setSettingsSnapshot(null);
+        setSettingsView('menu');
+    };
+
+    // Save — commit changes, show toast, go back
     const handleSaveView = () => {
         setSettingsSnapshot(null);
         setSavedToast(true);
         setTimeout(() => setSavedToast(false), 2500);
-        goBackToMenu();
+        setSettingsView('menu');
     };
 
     // Cancel — revert to snapshot and go back
@@ -108,7 +114,7 @@ export default function SettingsTab({
         if (settingsSnapshot) setSettings(settingsSnapshot);
         setSettingsSnapshot(null);
         setSavedToast(false);
-        goBackToMenu();
+        setSettingsView('menu');
     };
 
     // Shared Save/Cancel bar rendered at the bottom of each settings view
