@@ -5,6 +5,23 @@ export const safeStorage = {
     removeItem(key) { try { localStorage.removeItem(key); } catch(e) {} }
 };
 
+// Waits until window.__getClerkToken is available (set by App.jsx after Clerk+org initializes)
+// Polls every 100ms for up to 8 seconds, then gives up.
+export const waitForToken = () => new Promise((resolve) => {
+    if (typeof window.__getClerkToken === 'function') { resolve(); return; }
+    let attempts = 0;
+    const interval = setInterval(() => {
+        attempts++;
+        if (typeof window.__getClerkToken === 'function') {
+            clearInterval(interval);
+            resolve();
+        } else if (attempts > 80) { // 8 seconds max
+            clearInterval(interval);
+            resolve(); // resolve anyway — dbFetch will send without token and get 401
+        }
+    }, 100);
+});
+
 // Authenticated fetch — injects Clerk JWT
 // window.__getClerkToken is set by App.jsx after useAuth() initializes
 export const dbFetch = async (url, options) => {
@@ -22,10 +39,10 @@ export const dbFetch = async (url, options) => {
         ...options,
         headers: { 'Content-Type': 'application/json', ...(options?.headers || {}), ...authHeaders }
     };
-    return fetch(url, mergedOptions)
-        .then(r => {
-            if (!r.ok) console.error(`DB error ${r.status} ${r.statusText} [${options?.method || 'GET'} ${url}]`);
-            return r;
-        })
-        .catch(err => { console.error(`Network error [${options?.method || 'GET'} ${url}]:`, err); throw err; });
+    const r = await fetch(url, mergedOptions);
+    if (!r.ok) {
+        console.error(`DB error ${r.status} ${r.statusText} [${options?.method || 'GET'} ${url}]`);
+        throw new Error(`HTTP ${r.status}`);
+    }
+    return r.json();
 };

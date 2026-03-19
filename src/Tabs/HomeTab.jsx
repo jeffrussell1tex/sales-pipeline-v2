@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import ViewingBar from '../components/ui/ViewingBar';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, waitForToken } from '../utils/storage';
 
 // ─────────────────────────────────────────────────────────────
 //  Team Health Panel — manager/admin view
@@ -239,6 +239,7 @@ function RecommendedActions({ opportunities, activities, tasks, settings, curren
         setLogLoaded(true);
         const run = async () => {
             try {
+                await waitForToken();
                 // Evaluate pending items (fire and forget)
                 await dbFetch(`/.netlify/functions/recommendation-log?rep=${encodeURIComponent(currentUser)}`, {
                     method: 'PUT',

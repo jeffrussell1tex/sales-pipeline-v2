@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
-import { safeStorage, dbFetch } from './utils/storage';
+import { safeStorage, dbFetch, waitForToken } from './utils/storage';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import CsvImportModal from './components/modals/CsvImportModal';
 import { useSettings } from './hooks/useSettings';
@@ -848,9 +848,13 @@ dbFetch('/.netlify/functions/users?me=true')
 
     // Load spiff claims from DB on mount
     useEffect(() => {
-        dbFetch('/.netlify/functions/spiff-claims')
-            .then(data => { if (data?.spiffClaims) setSpiffClaims(data.spiffClaims); })
-            .catch(err => console.warn('spiff-claims load error:', err.message));
+        const load = async () => {
+            await waitForToken();
+            dbFetch('/.netlify/functions/spiff-claims')
+                .then(data => { if (data?.spiffClaims) setSpiffClaims(data.spiffClaims); })
+                .catch(err => console.warn('spiff-claims load error:', err.message));
+        };
+        load();
     }, []);
 
 
