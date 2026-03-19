@@ -2439,6 +2439,8 @@ dbFetch('/.netlify/functions/users?me=true')
                     setSpiffClaimContext={setSpiffClaimContext}
                     setShowSpiffClaimModal={setShowSpiffClaimModal}
                     setLostReasonModal={setLostReasonModal}
+                    setCsvImportType={setCsvImportType}
+                    setShowCsvImportModal={setShowCsvImportModal}
                 />
             )}
 
@@ -3253,6 +3255,51 @@ dbFetch('/.netlify/functions/users?me=true')
                             throw new Error(`${accountsFailed} of ${accountsWithIds.length} accounts failed to save. The rest imported successfully — try re-importing the failed records.`);
                         }
                         // Modal handles its own close via Done button
+                    }}
+                    onImportOpportunities={async (newOpps) => {
+                        const BATCH_SIZE = 20;
+                        const today = new Date().toISOString().split('T')[0];
+                        const activePipelineId = allPipelines?.[0]?.id || 'default';
+                        const oppsWithIds = newOpps.map((o) => ({
+                            id: crypto.randomUUID(),
+                            pipelineId: activePipelineId,
+                            opportunityName: o.opportunityName || o.account || 'Imported Deal',
+                            account:              o.account              || '',
+                            salesRep:             o.salesRep             || currentUser,
+                            stage:                o.stage                || 'Qualification',
+                            arr:                  parseFloat(o.arr)      || 0,
+                            implementationCost:   parseFloat(o.implementationCost) || 0,
+                            forecastedCloseDate:  o.forecastedCloseDate  || '',
+                            products:             o.products             || '',
+                            notes:                o.notes                || '',
+                            nextSteps:            o.nextSteps            || '',
+                            territory:            o.territory            || '',
+                            vertical:             o.vertical             || '',
+                            probability:          parseInt(o.probability) || null,
+                            createdDate:          o.createdDate          || today,
+                            createdBy:            currentUser,
+                            stageHistory:         [],
+                            comments:             [],
+                            contactIds:           [],
+                        }));
+                        setOpportunities(prev => [...prev, ...oppsWithIds]);
+                        let failed = 0;
+                        for (let i = 0; i < oppsWithIds.length; i += BATCH_SIZE) {
+                            const batch = oppsWithIds.slice(i, i + BATCH_SIZE);
+                            const results = await Promise.allSettled(batch.map(async (opp) => {
+                                const r = await dbFetch('/.netlify/functions/opportunities', {
+                                    method: 'POST', body: JSON.stringify(opp)
+                                });
+                                if (!r || !r.ok) throw new Error('failed');
+                            }));
+                            failed += results.filter(r => r.status === 'rejected').length;
+                            if (typeof window.__importProgressCb === 'function') {
+                                window.__importProgressCb(Math.min(i + BATCH_SIZE, oppsWithIds.length), oppsWithIds.length);
+                            }
+                        }
+                        if (failed > 0) {
+                            throw new Error(`${failed} of ${oppsWithIds.length} opportunities failed to save. The rest imported successfully.`);
+                        }
                     }}
                 />
             )}

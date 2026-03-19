@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-export default function CsvImportModal({ importType, contacts, accounts, onClose, onImportContacts, onImportAccounts }) {
+export default function CsvImportModal({ importType, contacts, accounts, onClose, onImportContacts, onImportAccounts, onImportOpportunities }) {
     const [step, setStep] = useState('upload'); // upload, mapping, preview, results
     const [csvHeaders, setCsvHeaders] = useState([]);
     const [csvRows, setCsvRows] = useState([]);
@@ -41,7 +41,24 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
         { key: 'country', label: 'Country' }
     ];
 
-    const appFields = importType === 'contacts' ? contactFields : accountFields;
+    const opportunityFields = [
+        { key: 'opportunityName', label: 'Opportunity Name', required: true },
+        { key: 'account',         label: 'Account Name',     required: true },
+        { key: 'salesRep',        label: 'Sales Rep' },
+        { key: 'stage',           label: 'Stage' },
+        { key: 'arr',             label: 'ARR ($)' },
+        { key: 'implementationCost', label: 'Implementation Cost ($)' },
+        { key: 'forecastedCloseDate', label: 'Close Date' },
+        { key: 'products',        label: 'Products' },
+        { key: 'notes',           label: 'Notes' },
+        { key: 'nextSteps',       label: 'Next Steps' },
+        { key: 'territory',       label: 'Territory' },
+        { key: 'vertical',        label: 'Vertical' },
+        { key: 'probability',     label: 'Probability (%)' },
+        { key: 'createdDate',     label: 'Created Date' },
+    ];
+
+    const appFields = importType === 'contacts' ? contactFields : importType === 'opportunities' ? opportunityFields : accountFields;
 
     const parseCSV = (text) => {
         const lines = text.split(/\r?\n/).filter(l => l.trim());
@@ -131,6 +148,8 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
         try {
             if (importType === 'contacts') {
                 await onImportContacts(data);
+            } else if (importType === 'opportunities') {
+                await onImportOpportunities(data);
             } else {
                 await onImportAccounts(data);
             }
@@ -152,7 +171,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
         <div className="modal-overlay">
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '85vh', overflow: 'auto' }}>
-                <h2>Import {importType === 'contacts' ? 'Contacts' : 'Accounts'} from CSV</h2>
+                <h2>Import {importType === 'contacts' ? 'Contacts' : importType === 'opportunities' ? 'Opportunities' : 'Accounts'} from CSV</h2>
 
                 {step === 'upload' && (
                     <div>
@@ -285,7 +304,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
                                         {importProgress > 0 ? `Saving… ${importProgress}%` : 'Saving…'}
                                     </>
                                 ) : (
-                                    <>Import {previewData.length} {importType === 'contacts' ? 'Contacts' : 'Accounts'}</>
+                                    <>Import {previewData.length} {importType === 'contacts' ? 'Contacts' : importType === 'opportunities' ? 'Opportunities' : 'Accounts'}</>
                                 )}
                             </button>
                         </div>
@@ -313,7 +332,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
                                     Import Complete!
                                 </h3>
                                 <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>
-                                    Successfully imported <strong>{importStats?.total}</strong> {importType === 'contacts' ? 'contacts' : 'accounts'}.
+                                    Successfully imported <strong>{importStats?.total}</strong> {importType === 'contacts' ? 'contacts' : importType === 'opportunities' ? 'opportunities' : 'accounts'}.
                                     {importType === 'contacts' && ' Any new companies have been added to your Accounts list.'}
                                 </p>
                                 <button className="btn" onClick={onClose}>Done</button>
