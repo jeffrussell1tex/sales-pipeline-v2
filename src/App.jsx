@@ -378,6 +378,7 @@ function App() {
     const { signOut } = useClerk();
     const { getToken } = useAuth();
     const { organization, isLoaded: orgLoaded } = useOrganization();
+    const prevOrgIdRef = React.useRef(null);
     const { userMemberships, setActive, isLoaded: orgListLoaded } = useOrganizationList({
         userMemberships: { infinite: true },
     });
@@ -721,7 +722,9 @@ dbFetch('/.netlify/functions/leads')
     .catch(err => console.error('Failed to load leads:', err));
 
 // Settings + users loading delegated to useSettings hook
-loadSettings(clerkUser);
+const orgSwitched = prevOrgIdRef.current && prevOrgIdRef.current !== organization?.id;
+prevOrgIdRef.current = organization?.id || null;
+loadSettings(clerkUser, orgSwitched);
 
 // Load current user's own profile (notification prefs, etc.)
 dbFetch('/.netlify/functions/users?me=true')

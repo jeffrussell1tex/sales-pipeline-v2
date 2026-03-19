@@ -73,8 +73,15 @@ export function useSettings() {
     });
 
     // Load settings from DB on mount
-    const loadSettings = (clerkUser) => {
+    const loadSettings = (clerkUser, clearFirst = false) => {
         if (!clerkUser) return;
+
+        // Reset state when switching orgs to prevent bleed-through
+        if (clearFirst) {
+            settingsReady.current = false;
+            setSettings(DEFAULT_SETTINGS);
+            try { safeStorage.removeItem('salesSettings'); } catch(e) {}
+        }
 
         dbFetch('/.netlify/functions/settings')
             .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -82,19 +89,16 @@ export function useSettings() {
                 if (data.settings) {
                     // Strip users — they come exclusively from the /users endpoint
                     const { users: _stripUsers, ...settingsFromDb } = data.settings;
-                    setSettings(prev => ({
-                        ...prev,
+                    // Replace settings entirely (don't merge with prev) to prevent org bleed-through
+                    setSettings({
+                        ...DEFAULT_SETTINGS,
                         ...settingsFromDb,
-                        taskTypes: settingsFromDb.taskTypes || prev.taskTypes || ['Call', 'Meeting', 'Email'],
-                        quotaData: settingsFromDb.quotaData
-                            ? { ...prev.quotaData, ...settingsFromDb.quotaData }
-                            : prev.quotaData,
-                        funnelStages: (settingsFromDb.funnelStages && settingsFromDb.funnelStages.length > 0)
-                            ? settingsFromDb.funnelStages
-                            : (prev.funnelStages && prev.funnelStages.length > 0)
-                                ? prev.funnelStages
-                                : DEFAULT_SETTINGS.funnelStages,
-                    }));
+                        taskTypes: settingsFromDb.taskTypes?.length ? settingsFromDb.taskTypes : DEFAULT_SETTINGS.taskTypes,
+                        funnelStages: settingsFromDb.funnelStages?.length ? settingsFromDb.funnelStages : DEFAULT_SETTINGS.funnelStages,
+                    });
+                } else {
+                    // No settings for this org yet — use defaults
+                    setSettings(DEFAULT_SETTINGS);
                 }
                 setTimeout(() => { settingsReady.current = true; }, 0);
             })
