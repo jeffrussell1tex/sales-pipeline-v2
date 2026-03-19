@@ -1,0 +1,288 @@
+/**
+ * pipeline-alerts.mjs — Proactive pipeline health email alerts
+ *
+ * Runs daily at 8am UTC via Netlify scheduled functions.
+ * Evaluates all active opportunities against the same signals used by the
+ * RecommendedActions panel on the home screen, then sends targeted emails
+ * to reps (and their managers for urgent signals) — but only when:
+ *   1. The rep has opted in to that alert type in their notification prefs
+ *   2. The same alert for the same deal hasn't fired in the last 7 days
+ *      (deduplication via the recommendation_log table)
+ *
+ * Netlify schedule config in netlify.toml:
+ *   [functions."pipeline-alerts"]
+ *   schedule = "0 8 * * *"
+ *
+ * Signal types evaluated:
+ *   stale       - no activity in 14+ days
+ *   stuck       - days in stage >= 2x historical average (or 21d fallback)
+ *   lapsed      - forecasted close date has passed
+ *   velocity    - 2+ stages in 14 days (positive alert)
+ */
+
+import { db } from '../../db/index.js';
+import { opportunities, activities, users, recommendationLog } from '../../db/schema.js';
+import { eq, and, gte } from 'drizzle-orm';
+import { sendEmail, emailTemplates } from './send-email.mjs';
+
+const DEDUP_DAYS = 7;
+const today = new Date();
+const todayStr = today.toISOString().split('T')[0];
+
+// ── Default prefs (mirrors digest.mjs pattern) ────────────────────────────────
+const DEFAULT_PREFS = {
+    dealSilent:    { enabled: true  },
+    dealStuck:     { enabled: true  },
+    closeLapsed:   { enabled: true  },
+    dealMomentum:  { enabled: true  },
+    managerAlerts: { enabled: true  },
+};
+
+function wantsAlert(profile, alertType) {
+    const prefs = profile?.notificationPrefs || {};
+    const pref  = prefs[alertType] ?? DEFAULT_PREFS[alertType] ?? { enabled: false };
+    return pref.enabled === true;
+}
+
+// ── Date helpers ──────────────────────────────────────────────────────────────
+function daysSince(dateStr) {
+    if (!dateStr) return null;
+    return Math.floor((today - new Date(dateStr + 'T12:00:00')) / 86400000);
+}
+
+function daysBetween(a, b) {
+    return Math.floor((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
+}
+
+// Build avg days per stage from Closed Won stageHistory
+function buildAvgDaysInStage(allOpps) {
+    const map = {};
+    allOpps
+        .filter(o => o.stage === 'Closed Won' && Array.isArray(o.stageHistory) && o.stageHistory.length > 0)
+        .forEach(o => {
+            o.stageHistory.forEach((h, i) => {
+                const from = i === 0 ? o.createdDate : o.stageHistory[i - 1]?.date;
+                if (!from || !h.date) return;
+                const stageName = h.prevStage || h.stage;
+                if (!map[stageName]) map[stageName] = [];
+                map[stageName].push(daysBetween(from, h.date));
+            });
+        });
+    const result = {};
+    Object.entries(map).forEach(([s, arr]) => {
+        result[s] = Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
+    });
+    return result;
+}
+
+// Check if this deal+signal was already alerted recently
+async function wasRecentlyAlerted(orgId, repName, opportunityId, actionType) {
+    const since = new Date(today.getTime() - DEDUP_DAYS * 86400000);
+    try {
+        const rows = await db.select({ id: recommendationLog.id })
+            .from(recommendationLog)
+            .where(and(
+                eq(recommendationLog.orgId, orgId),
+                eq(recommendationLog.repName, repName),
+                eq(recommendationLog.opportunityId, opportunityId),
+                eq(recommendationLog.actionType, actionType),
+                gte(recommendationLog.dismissedAt, since),
+            ))
+            .limit(1);
+        return rows.length > 0;
+    } catch {
+        return false; // fail open — better to send than silently skip
+    }
+}
+
+// Log the alert so resolution tracking works automatically
+async function logAlert(orgId, repName, actionType, opp, signal) {
+    try {
+        await db.insert(recommendationLog).values({
+            id:            `pal_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            orgId,
+            repName,
+            actionType,
+            opportunityId: opp.id,
+            dealName:      opp.opportunityName || opp.account || 'Unnamed deal',
+            arrAtRisk:     opp.arr ?? null,
+            stage:         opp.stage,
+            signal,
+            outcome:       'pending',
+            dismissedAt:   new Date(),
+        });
+    } catch (err) {
+        console.error('pipeline-alerts: logAlert failed:', err.message);
+    }
+}
+
+// ── Main handler ──────────────────────────────────────────────────────────────
+export const handler = async () => {
+    console.log('pipeline-alerts: starting at', today.toISOString());
+
+    try {
+        const allUsers = await db.select().from(users);
+        const allOpps  = await db.select().from(opportunities);
+        const allActs  = await db.select().from(activities);
+
+        const avgDaysInStage = buildAvgDaysInStage(allOpps);
+
+        // Build lookup maps
+        const userByName = {};
+        allUsers.forEach(u => { userByName[u.name] = u; });
+
+        // Manager lookup: repName → manager (by managedReps array, then by team fallback)
+        const managerByRep  = {};
+        const managerByTeam = {};
+        allUsers.forEach(u => {
+            if (u.role === 'Manager' && u.team) managerByTeam[u.team] = u;
+            (u.profile?.managedReps || []).forEach(rep => { managerByRep[rep] = u; });
+        });
+
+        const activeOpps = allOpps.filter(o =>
+            o.stage !== 'Closed Won' && o.stage !== 'Closed Lost' && o.salesRep
+        );
+
+        let emailsSent = 0;
+        let skipped    = 0;
+
+        for (const opp of activeOpps) {
+            const repName = opp.salesRep;
+            const repUser = userByName[repName];
+            if (!repUser?.email || !repUser.active) continue;
+
+            const orgId   = opp.orgId;
+            const profile = repUser.profile || {};
+            const arr     = parseFloat(opp.arr) || 0;
+            const name    = opp.opportunityName || opp.account || 'Unnamed deal';
+            const manager = managerByRep[repName] || (repUser.team ? managerByTeam[repUser.team] : null);
+
+            const oppActs = allActs
+                .filter(a => a.opportunityId === opp.id)
+                .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+            const lastActDate    = oppActs[0]?.date || opp.createdDate;
+            const daysSilent     = daysSince(lastActDate);
+            const daysInStage    = daysSince(opp.stageChangedDate || opp.createdDate);
+            const avgForStage    = avgDaysInStage[opp.stage] || null;
+            const stuckThreshold = avgForStage ? avgForStage * 2 : 21;
+            const daysLapsed     = opp.forecastedCloseDate
+                ? -daysBetween(todayStr, opp.forecastedCloseDate)
+                : null;
+            const createdDays    = daysSince(opp.createdDate);
+            const stageCount     = (opp.stageHistory || []).length;
+
+            // ── Signal 1: Silent deal (14+ days no activity) ──────────────────
+            if (daysSilent !== null && daysSilent >= 14 && wantsAlert(profile, 'dealSilent')) {
+                const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'stale');
+                if (!alerted) {
+                    try {
+                        await sendEmail({
+                            to: repUser.email,
+                            ...emailTemplates.dealSilent({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent, opportunityId: opp.id }),
+                        });
+                        await logAlert(orgId, repName, 'stale', opp, `No activity in ${daysSilent} days`);
+                        emailsSent++;
+                        console.log(`dealSilent → ${repUser.email} (${name}, ${daysSilent}d)`);
+
+                        // Manager copy for very stale (21+ days)
+                        if (daysSilent >= 21 && manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
+                            await sendEmail({
+                                to: manager.email,
+                                ...emailTemplates.managerDealAlert({ managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'silent', detail: `No activity in ${daysSilent} days`, opportunityId: opp.id }),
+                            });
+                            emailsSent++;
+                        }
+                    } catch (err) {
+                        console.error(`dealSilent error (${name}):`, err.message);
+                    }
+                } else { skipped++; }
+            }
+
+            // ── Signal 2: Stuck in stage ──────────────────────────────────────
+            if (daysInStage !== null && daysInStage >= stuckThreshold && daysInStage >= 14 && wantsAlert(profile, 'dealStuck')) {
+                const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'stuck');
+                if (!alerted) {
+                    try {
+                        await sendEmail({
+                            to: repUser.email,
+                            ...emailTemplates.dealStuck({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage, opportunityId: opp.id }),
+                        });
+                        await logAlert(orgId, repName, 'stuck', opp, `${daysInStage} days in ${opp.stage}${avgForStage ? ` (avg ${avgForStage}d)` : ''}`);
+                        emailsSent++;
+                        console.log(`dealStuck → ${repUser.email} (${name}, ${daysInStage}d)`);
+
+                        // Manager copy if 3× over average
+                        const veryStuck = avgForStage ? daysInStage >= avgForStage * 3 : daysInStage >= 30;
+                        if (veryStuck && manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
+                            await sendEmail({
+                                to: manager.email,
+                                ...emailTemplates.managerDealAlert({ managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'stuck', detail: `${daysInStage} days in ${opp.stage}${avgForStage ? ` (avg ${avgForStage}d)` : ''}`, opportunityId: opp.id }),
+                            });
+                            emailsSent++;
+                        }
+                    } catch (err) {
+                        console.error(`dealStuck error (${name}):`, err.message);
+                    }
+                } else { skipped++; }
+            }
+
+            // ── Signal 3: Close date lapsed ───────────────────────────────────
+            if (daysLapsed !== null && daysLapsed > 0 && wantsAlert(profile, 'closeLapsed')) {
+                const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'lapsed');
+                if (!alerted) {
+                    try {
+                        await sendEmail({
+                            to: repUser.email,
+                            ...emailTemplates.closeDateLapsed({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate, opportunityId: opp.id }),
+                        });
+                        await logAlert(orgId, repName, 'lapsed', opp, `Close date ${opp.forecastedCloseDate} passed ${daysLapsed} days ago`);
+                        emailsSent++;
+                        console.log(`closeLapsed → ${repUser.email} (${name}, ${daysLapsed}d overdue)`);
+
+                        // Always CC manager on lapsed close date
+                        if (manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
+                            await sendEmail({
+                                to: manager.email,
+                                ...emailTemplates.managerDealAlert({ managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'lapsed', detail: `Close date ${opp.forecastedCloseDate} passed ${daysLapsed} days ago`, opportunityId: opp.id }),
+                            });
+                            emailsSent++;
+                        }
+                    } catch (err) {
+                        console.error(`closeLapsed error (${name}):`, err.message);
+                    }
+                } else { skipped++; }
+            }
+
+            // ── Signal 4: High-velocity deal (positive) ───────────────────────
+            if (
+                createdDays !== null && createdDays <= 14 && stageCount >= 2 &&
+                !['Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'].includes(opp.stage) &&
+                wantsAlert(profile, 'dealMomentum')
+            ) {
+                const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'velocity');
+                if (!alerted) {
+                    try {
+                        await sendEmail({
+                            to: repUser.email,
+                            ...emailTemplates.dealMomentum({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, stageCount, daysSinceCreated: createdDays, opportunityId: opp.id }),
+                        });
+                        await logAlert(orgId, repName, 'velocity', opp, `${stageCount} stages in ${createdDays} days`);
+                        emailsSent++;
+                        console.log(`dealMomentum → ${repUser.email} (${name})`);
+                    } catch (err) {
+                        console.error(`dealMomentum error (${name}):`, err.message);
+                    }
+                } else { skipped++; }
+            }
+        }
+
+        const summary = `${emailsSent} emails sent, ${skipped} skipped (dedup)`;
+        console.log('pipeline-alerts: complete —', summary);
+        return { statusCode: 200, body: JSON.stringify({ emailsSent, skipped }) };
+
+    } catch (err) {
+        console.error('pipeline-alerts: fatal error:', err.message);
+        return { statusCode: 500, body: err.message };
+    }
+};

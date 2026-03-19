@@ -374,9 +374,120 @@ export const emailTemplates = {
         `);
         return { subject, html };
     },
-};
+    /**
+     * Rep alert: deal has gone silent (no activity in N days).
+     * @param {{ repName, dealName, account, arr, stage, daysSilent, opportunityId }} data
+     */
+    dealSilent({ repName, dealName, account, arr, stage, daysSilent, opportunityId }) {
+        const subject = `Action needed: "${dealName}" has been silent for ${daysSilent} days`;
+        const html = layout(subject, `
+            <h2>This deal needs your attention</h2>
+            <p>Hi ${repName}, <strong>${dealName}</strong> hasn't had any activity in <strong>${daysSilent} days</strong>. Deals that go silent in ${stage} rarely recover without outreach.</p>
+            <div class="detail-box">
+                <div class="detail-row"><span class="detail-label">Account</span><span>${account || '—'}</span></div>
+                <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage)}</span></div>
+                <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
+                <div class="detail-row"><span class="detail-label">Last activity</span><span>${daysSilent} days ago</span></div>
+            </div>
+            <p style="color:#92400e;background:#fef3c7;padding:12px 16px;border-radius:6px;font-size:13px;">
+                <strong>Recommended action:</strong> Log a call or send a follow-up email today to keep this deal moving.
+            </p>
+            <a class="btn" href="${appUrl}">Open Pipeline →</a>
+        `);
+        return { subject, html };
+    },
 
-// ─── Netlify function handler ────────────────────────────────────────────────
+    /**
+     * Rep alert: deal stuck in stage longer than average.
+     * @param {{ repName, dealName, account, arr, stage, daysInStage, avgDays, opportunityId }} data
+     */
+    dealStuck({ repName, dealName, account, arr, stage, daysInStage, avgDays, opportunityId }) {
+        const subject = `"${dealName}" has been in ${stage} for ${daysInStage} days`;
+        const html = layout(subject, `
+            <h2>Deal may be stuck</h2>
+            <p>Hi ${repName}, <strong>${dealName}</strong> has been in <strong>${stage}</strong> for ${daysInStage} days — ${avgDays ? `your average for this stage is ${avgDays} days` : 'well above typical'}. Consider advancing it or disqualifying.</p>
+            <div class="detail-box">
+                <div class="detail-row"><span class="detail-label">Account</span><span>${account || '—'}</span></div>
+                <div class="detail-row"><span class="detail-label">Current stage</span><span>${stageBadge(stage)}</span></div>
+                <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
+                <div class="detail-row"><span class="detail-label">Days in stage</span><span>${daysInStage}d ${avgDays ? `(avg: ${avgDays}d)` : ''}</span></div>
+            </div>
+            <p style="color:#1e40af;background:#dbeafe;padding:12px 16px;border-radius:6px;font-size:13px;">
+                <strong>Recommended action:</strong> Schedule a next step, advance the stage, or mark as Closed Lost to keep your pipeline accurate.
+            </p>
+            <a class="btn" href="${appUrl}">Open Pipeline →</a>
+        `);
+        return { subject, html };
+    },
+
+    /**
+     * Rep alert: close date has lapsed.
+     * @param {{ repName, dealName, account, arr, stage, daysLapsed, originalCloseDate, opportunityId }} data
+     */
+    closeDateLapsed({ repName, dealName, account, arr, stage, daysLapsed, originalCloseDate, opportunityId }) {
+        const subject = `Close date lapsed: "${dealName}" was due ${daysLapsed} day${daysLapsed !== 1 ? 's' : ''} ago`;
+        const html = layout(subject, `
+            <h2>Close date needs updating</h2>
+            <p>Hi ${repName}, the forecasted close date for <strong>${dealName}</strong> passed ${daysLapsed} day${daysLapsed !== 1 ? 's' : ''} ago. Please update your pipeline to keep forecasting accurate.</p>
+            <div class="detail-box">
+                <div class="detail-row"><span class="detail-label">Account</span><span>${account || '—'}</span></div>
+                <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage)}</span></div>
+                <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
+                <div class="detail-row"><span class="detail-label">Was due</span><span>${originalCloseDate} (${daysLapsed}d ago)</span></div>
+            </div>
+            <a class="btn" href="${appUrl}">Update Pipeline →</a>
+        `);
+        return { subject, html };
+    },
+
+    /**
+     * Manager alert: one of their reps has an at-risk deal.
+     * @param {{ managerName, repName, dealName, account, arr, stage, alertType, detail, opportunityId }} data
+     */
+    managerDealAlert({ managerName, repName, dealName, account, arr, stage, alertType, detail, opportunityId }) {
+        const alertLabels = { silent: 'Gone silent', stuck: 'Stuck in stage', lapsed: 'Close date lapsed' };
+        const subject = `Pipeline alert: ${alertLabels[alertType] || alertType} — ${dealName} (${repName})`;
+        const html = layout(subject, `
+            <h2>Pipeline alert for your team</h2>
+            <p>Hi ${managerName}, a deal on <strong>${repName}'s</strong> pipeline needs attention.</p>
+            <div class="detail-box">
+                <div class="detail-row"><span class="detail-label">Rep</span><span>${repName}</span></div>
+                <div class="detail-row"><span class="detail-label">Deal</span><span>${dealName}</span></div>
+                <div class="detail-row"><span class="detail-label">Account</span><span>${account || '—'}</span></div>
+                <div class="detail-row"><span class="detail-label">Stage</span><span>${stageBadge(stage)}</span></div>
+                <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
+                <div class="detail-row"><span class="detail-label">Alert</span><span class="badge badge-yellow">${alertLabels[alertType] || alertType}</span></div>
+                <div class="detail-row"><span class="detail-label">Detail</span><span>${detail}</span></div>
+            </div>
+            <p style="font-size:13px;color:#4a4a6a;">Consider reaching out to ${repName} to coach on next steps.</p>
+            <a class="btn" href="${appUrl}">View Pipeline →</a>
+        `);
+        return { subject, html };
+    },
+
+    /**
+     * Rep positive alert: high-velocity deal — keep momentum.
+     * @param {{ repName, dealName, account, arr, stage, stageCount, daysSinceCreated, opportunityId }} data
+     */
+    dealMomentum({ repName, dealName, account, arr, stage, stageCount, daysSinceCreated, opportunityId }) {
+        const subject = `Great momentum: "${dealName}" is moving fast — keep it going!`;
+        const html = layout(subject, `
+            <h2>Keep this deal moving</h2>
+            <p>Hi ${repName}, <strong>${dealName}</strong> has advanced through ${stageCount} stages in just ${daysSinceCreated} days — excellent velocity! Don't let the momentum stall.</p>
+            <div class="detail-box">
+                <div class="detail-row"><span class="detail-label">Account</span><span>${account || '—'}</span></div>
+                <div class="detail-row"><span class="detail-label">Current stage</span><span>${stageBadge(stage)}</span></div>
+                <div class="detail-row"><span class="detail-label">ARR</span><span>${formatCurrency(arr)}</span></div>
+                <div class="detail-row"><span class="detail-label">Progression</span><span>${stageCount} stages in ${daysSinceCreated} days</span></div>
+            </div>
+            <p style="color:#065f46;background:#d1fae5;padding:12px 16px;border-radius:6px;font-size:13px;">
+                <strong>Recommended action:</strong> Schedule the next step now to maintain velocity.
+            </p>
+            <a class="btn" href="${appUrl}">Open Pipeline →</a>
+        `);
+        return { subject, html };
+    },
+};
 //
 // This handler allows other parts of the app (or future scheduled functions)
 // to trigger emails by POSTing to /.netlify/functions/send-email.

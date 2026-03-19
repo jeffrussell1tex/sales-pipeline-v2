@@ -2,6 +2,294 @@ import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
+// ─────────────────────────────────────────────────────────────
+//  Team Health Panel (inline copy — shared logic with HomeTab)
+// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+//  TeamHealthPanel — shared between HomeTab and SalesManagerTab
+//  Props: opportunities, activities, tasks, settings,
+//         currentUser, userRole, compact (bool)
+// ─────────────────────────────────────────────────────────────
+function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUser, userRole, compact = false, setActiveTab }) {
+    const [sortBy, setSortBy] = React.useState('health');
+    const [selectedTeam, setSelectedTeam] = React.useState('all');
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    const isAdmin   = userRole === 'Admin';
+    const isManager = userRole === 'Manager';
+    if (!isAdmin && !isManager) return null;
+
+    const fmtArr = (v) => v >= 1000000 ? '$' + (v/1000000).toFixed(1)+'M' : v >= 1000 ? '$'+Math.round(v/1000)+'K' : '$'+(v||0).toLocaleString();
+    const daysSince = (d) => d ? Math.floor((today - new Date(d+'T12:00:00'))/86400000) : null;
+
+    // Scope visible reps
+    const allUsers = (settings.users||[]).filter(u => u.name && u.userType !== 'ReadOnly');
+    const currentUserObj = allUsers.find(u => u.name === currentUser);
+    const allReps = allUsers.filter(u => u.userType === 'User');
+    const visibleReps = isAdmin ? allReps : allReps.filter(u =>
+        (currentUserObj?.teamId && u.teamId === currentUserObj.teamId) ||
+        (currentUserObj?.team   && u.team   === currentUserObj.team)
+    );
+
+    // Build per-rep stats
+    const repStats = visibleReps.map(rep => {
+        const repOpps  = (opportunities||[]).filter(o => o.salesRep === rep.name && !['Closed Won','Closed Lost'].includes(o.stage));
+        const allRepOpps = (opportunities||[]).filter(o => o.salesRep === rep.name);
+        const wonOpps  = allRepOpps.filter(o => o.stage === 'Closed Won');
+        const lostOpps = allRepOpps.filter(o => o.stage === 'Closed Lost');
+        const closedTotal = wonOpps.length + lostOpps.length;
+        const winRate  = closedTotal > 0 ? Math.round((wonOpps.length / closedTotal) * 100) : null;
+
+        const repActs  = (activities||[]).filter(a => a.salesRep === rep.name || a.author === rep.name);
+        const lastActDate = repActs.sort((a,b) => b.date?.localeCompare(a.date))[0]?.date || null;
+        const daysSinceAct = daysSince(lastActDate);
+
+        const repTasks = (tasks||[]).filter(t => t.assignedTo === rep.name);
+        const overdueCount = repTasks.filter(t => {
+            const due = t.dueDate || t.due;
+            return !t.completed && t.status !== 'Completed' && due && new Date(due+'T12:00:00') < today;
+        }).length;
+
+        const pipelineArr = repOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+        const dealCount   = repOpps.length;
+
+        // Quota attainment
+        const quotaMode   = rep.quotaType || 'annual';
+        const quota       = quotaMode === 'annual'
+            ? (rep.annualQuota||0)/4
+            : (['q1','q2','q3','q4'].reduce((s,q) => s+(rep[q+'Quota']||0), 0)/4);
+        const wonArr      = wonOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+        const attainPct   = quota > 0 ? Math.round((wonArr/quota)*100) : null;
+
+        // Stale deal count
+        const staleDeals  = repOpps.filter(o => {
+            const lastOppAct = (activities||[]).filter(a => a.opportunityId === o.id).sort((a,b) => b.date?.localeCompare(a.date))[0];
+            const ds = daysSince(lastOppAct?.date || o.createdDate);
+            return ds !== null && ds >= 14;
+        }).length;
+
+        // ── Health score (0–100) ─────────────────────────────
+        // Weighted composite of 4 signals
+        let score = 100;
+        // Activity recency (–30 max)
+        if      (daysSinceAct === null)  score -= 30;
+        else if (daysSinceAct >= 21)     score -= 30;
+        else if (daysSinceAct >= 14)     score -= 20;
+        else if (daysSinceAct >= 7)      score -= 10;
+        // Stale deals (–25 max)
+        score -= Math.min(25, staleDeals * 8);
+        // Overdue tasks (–20 max)
+        score -= Math.min(20, overdueCount * 5);
+        // Quota attainment (–25 max)
+        if      (attainPct === null)     score -= 10;
+        else if (attainPct < 25)         score -= 25;
+        else if (attainPct < 50)         score -= 15;
+        else if (attainPct < 75)         score -= 5;
+        score = Math.max(0, Math.round(score));
+
+        const status = score >= 65 ? 'healthy' : score >= 40 ? 'warning' : 'at-risk';
+        const statusColor = score >= 65 ? '#639922' : score >= 40 ? '#BA7517' : '#E24B4A';
+        const statusBg    = score >= 65 ? '#EAF3DE' : score >= 40 ? '#FAEEDA' : '#FCEBEB';
+        const statusText  = score >= 65 ? '#27500A' : score >= 40 ? '#854F0B' : '#A32D2D';
+        const statusLabel = score >= 65
+            ? (score >= 80 ? 'Top performer' : 'On track')
+            : (score >= 40 ? (staleDeals > 0 ? `${staleDeals} stale deal${staleDeals>1?'s':''}` : 'Needs attention') : 'Needs coaching');
+        const statusSub   = score >= 65
+            ? (winRate !== null ? `${winRate}% win rate` : `${dealCount} active deals`)
+            : (overdueCount > 0 ? `${overdueCount} overdue task${overdueCount>1?'s':''}` : daysSinceAct !== null ? `${daysSinceAct}d since last activity` : 'No activities logged');
+
+        // Avatar color
+        const avatarColors = ['#2563eb','#7c3aed','#059669','#d97706','#dc2626','#0891b2','#be185d'];
+        const avatarBg = avatarColors[(rep.name||'').charCodeAt(0) % avatarColors.length];
+        const initials = (rep.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+
+        return { rep, score, status, statusColor, statusBg, statusText, statusLabel, statusSub, pipelineArr, dealCount, daysSinceAct, overdueCount, attainPct, winRate, staleDeals, avatarBg, initials };
+    });
+
+    // Group by team
+    const teams = {};
+    repStats.forEach(rs => {
+        const teamName = rs.rep.team || 'Unassigned';
+        if (!teams[teamName]) teams[teamName] = [];
+        teams[teamName].push(rs);
+    });
+
+    // Sort within each team
+    const sortFn = (a, b) => {
+        if (sortBy === 'health')   return a.score - b.score;
+        if (sortBy === 'arr')      return b.pipelineArr - a.pipelineArr;
+        if (sortBy === 'quota')    return (b.attainPct||0) - (a.attainPct||0);
+        return 0;
+    };
+    Object.values(teams).forEach(arr => arr.sort(sortFn));
+
+    const teamColors = ['#2563eb','#7c3aed','#059669','#d97706','#0891b2','#be185d'];
+    const teamList   = Object.entries(teams);
+    const teamNames  = teamList.map(([name]) => name);
+    const filteredTeamList = selectedTeam === 'all' ? teamList : teamList.filter(([name]) => name === selectedTeam);
+
+    // SVG ring helper
+    const Ring = ({ score, size = 48, stroke = 4, color }) => {
+        const r = (size/2) - stroke;
+        const circ = 2 * Math.PI * r;
+        const dash = (score/100) * circ;
+        return (
+            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink:0 }}>
+                <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={stroke}/>
+                <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+                    strokeDasharray={`${dash} ${circ}`} strokeDashoffset={circ*0.25} strokeLinecap="round"/>
+                <text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="central"
+                    style={{ fontSize: size < 40 ? '10px' : '12px', fontWeight:'700', fill:color, fontFamily:'inherit' }}>
+                    {score}
+                </text>
+            </svg>
+        );
+    };
+
+    // ── COMPACT (home screen strip) ────────────────────────────
+    if (compact) {
+        const allSorted = [...repStats].sort(sortFn);
+        const totalArr  = repStats.reduce((s,r) => s+r.pipelineArr, 0);
+        const atRisk    = repStats.filter(r => r.status === 'at-risk').length;
+        return (
+            <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', marginBottom:'1.5rem', overflow:'hidden' }}>
+                <div style={{ padding:'0.875rem 1.25rem', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div>
+                        <div style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.08em' }}>Team pipeline health</div>
+                        <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'2px' }}>
+                            {repStats.length} rep{repStats.length!==1?'s':''} · {fmtArr(totalArr)} pipeline
+                            {atRisk > 0 && <span style={{ marginLeft:'0.5rem', color:'#E24B4A', fontWeight:'600' }}>· {atRisk} need{atRisk===1?'s':''} attention</span>}
+                        </div>
+                    </div>
+                    {setActiveTab && (
+                        <button onClick={() => setActiveTab('salesmanager')}
+                            style={{ fontSize:'0.75rem', padding:'4px 12px', border:'0.5px solid #e2e8f0', borderRadius:'6px', background:'transparent', color:'#64748b', cursor:'pointer', fontFamily:'inherit' }}>
+                            View detail →
+                        </button>
+                    )}
+                </div>
+                <div style={{ padding:'0.875rem 1.25rem', display:'flex', gap:'8px', overflowX:'auto' }}>
+                    {allSorted.map(rs => (
+                        <div key={rs.rep.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'8px 12px', border:`0.5px solid ${rs.statusColor}30`, borderLeft:`3px solid ${rs.statusColor}`, borderRadius:'0 8px 8px 0', background:'#fafafa', flexShrink:0, minWidth:'140px' }}>
+                            <Ring score={rs.score} size={36} stroke={3} color={rs.statusColor} />
+                            <div style={{ minWidth:0 }}>
+                                <div style={{ fontSize:'12px', fontWeight:'600', color:'#1e293b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'90px' }}>{rs.rep.name}</div>
+                                <div style={{ fontSize:'11px', color:'#64748b' }}>{fmtArr(rs.pipelineArr)}</div>
+                                <div style={{ fontSize:'10px', color:rs.statusColor, fontWeight:'600', marginTop:'1px' }}>{rs.statusLabel}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    // ── FULL DETAIL (Sales Manager tab) ───────────────────────
+    return (
+        <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', marginBottom:'1.5rem', overflow:'hidden' }}>
+            <div style={{ padding:'0.875rem 1.25rem', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'0.5rem' }}>
+                <div>
+                    <div style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.08em' }}>Team pipeline health</div>
+                    <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'2px' }}>
+                        {selectedTeam === 'all' ? 'All teams · ' : `${selectedTeam} · `}
+                        Sorted by {sortBy === 'health' ? 'health score · worst first' : sortBy === 'arr' ? 'pipeline ARR · highest first' : 'quota attainment · highest first'}
+                    </div>
+                </div>
+                <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+                    {teamNames.length > 1 && (
+                        <select value={selectedTeam} onChange={e => setSelectedTeam(e.target.value)}
+                            style={{ fontSize:'0.75rem', padding:'0.3rem 1.5rem 0.3rem 0.625rem', border:'0.5px solid #e2e8f0', borderRadius:'6px', background:'#f8fafc', color:'#475569', cursor:'pointer', fontFamily:'inherit', appearance:'none', backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")", backgroundRepeat:'no-repeat', backgroundPosition:'right 6px center' }}>
+                            <option value="all">All teams</option>
+                            {teamNames.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                    )}
+                    <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+                        style={{ fontSize:'0.75rem', padding:'0.3rem 1.5rem 0.3rem 0.625rem', border:'0.5px solid #e2e8f0', borderRadius:'6px', background:'#f8fafc', color:'#475569', cursor:'pointer', fontFamily:'inherit', appearance:'none', backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")", backgroundRepeat:'no-repeat', backgroundPosition:'right 6px center' }}>
+                        <option value="health">Sort: Health score</option>
+                        <option value="arr">Sort: Pipeline ARR</option>
+                        <option value="quota">Sort: Quota attainment</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style={{ padding:'1.25rem' }}>
+                {filteredTeamList.map(([teamName, reps], ti) => {
+                    const teamColor = teamColors[ti % teamColors.length];
+                    const teamArr   = reps.reduce((s,r) => s+r.pipelineArr, 0);
+                    const avgHealth = reps.length ? Math.round(reps.reduce((s,r) => s+r.score, 0)/reps.length) : 0;
+                    return (
+                        <div key={teamName} style={{ marginBottom: ti < filteredTeamList.length-1 ? '1.5rem' : 0 }}>
+                            {/* Team header */}
+                            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'10px' }}>
+                                <div style={{ width:'10px', height:'10px', borderRadius:'50%', background:teamColor, flexShrink:0 }}/>
+                                <div style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1e293b' }}>{teamName}</div>
+                                <div style={{ fontSize:'0.75rem', color:'#94a3b8' }}>
+                                    {reps.length} rep{reps.length!==1?'s':''} · {fmtArr(teamArr)} pipeline · avg health {avgHealth}
+                                </div>
+                            </div>
+                            {/* Rep cards */}
+                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:'10px' }}>
+                                {reps.map(rs => (
+                                    <div key={rs.rep.id} style={{ background:'#fff', border:`0.5px solid #e2e8f0`, borderLeft:`3px solid ${rs.statusColor}`, borderRadius:'0 10px 10px 0', padding:'14px' }}>
+                                        {/* Card top */}
+                                        <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px' }}>
+                                            <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:rs.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', fontWeight:'700', color:'#fff', flexShrink:0 }}>{rs.initials}</div>
+                                            <div style={{ flex:1, minWidth:0 }}>
+                                                <div style={{ fontSize:'13px', fontWeight:'600', color:'#1e293b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{rs.rep.name}</div>
+                                                <div style={{ fontSize:'11px', color:'#64748b' }}>{rs.rep.territory || rs.rep.team || 'Sales Rep'}</div>
+                                            </div>
+                                            <Ring score={rs.score} size={48} stroke={4} color={rs.statusColor} />
+                                        </div>
+                                        {/* Stats 2-col grid */}
+                                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
+                                            {[
+                                                { val: fmtArr(rs.pipelineArr), lbl: 'Pipeline ARR', danger: rs.pipelineArr === 0 },
+                                                { val: rs.dealCount, lbl: 'Active deals', danger: rs.dealCount === 0 },
+                                                { val: rs.daysSinceAct !== null ? rs.daysSinceAct+'d' : '—', lbl: 'Last activity', danger: rs.daysSinceAct === null || rs.daysSinceAct >= 14, warn: rs.daysSinceAct >= 7 && rs.daysSinceAct < 14 },
+                                                { val: rs.overdueCount, lbl: 'Overdue tasks', danger: rs.overdueCount >= 3, warn: rs.overdueCount >= 1 && rs.overdueCount < 3 },
+                                            ].map(({ val, lbl, danger, warn }) => (
+                                                <div key={lbl} style={{ background:'#f8fafc', borderRadius:'6px', padding:'6px 8px' }}>
+                                                    <div style={{ fontSize:'13px', fontWeight:'600', color: danger ? '#A32D2D' : warn ? '#854F0B' : '#1e293b' }}>{val}</div>
+                                                    <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'1px' }}>{lbl}</div>
+                                                </div>
+                                            ))}
+                                            {/* Quota bar — spans both cols */}
+                                            <div style={{ gridColumn:'span 2', background:'#f8fafc', borderRadius:'6px', padding:'6px 8px' }}>
+                                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
+                                                    <div style={{ fontSize:'10px', color:'#94a3b8' }}>Quota attainment</div>
+                                                    <div style={{ fontSize:'12px', fontWeight:'600', color: rs.attainPct === null ? '#94a3b8' : rs.attainPct >= 75 ? '#27500A' : rs.attainPct >= 40 ? '#854F0B' : '#A32D2D' }}>
+                                                        {rs.attainPct !== null ? rs.attainPct+'%' : '—'}
+                                                    </div>
+                                                </div>
+                                                <div style={{ height:'3px', background:'#e2e8f0', borderRadius:'2px' }}>
+                                                    <div style={{ height:'100%', width: (rs.attainPct||0)+'%', maxWidth:'100%', background: rs.attainPct >= 75 ? '#639922' : rs.attainPct >= 40 ? '#BA7517' : '#E24B4A', borderRadius:'2px', transition:'width .4s' }}/>
+                                                </div>
+                                            </div>
+                                            {/* Win rate */}
+                                            <div style={{ background:'#f8fafc', borderRadius:'6px', padding:'6px 8px' }}>
+                                                <div style={{ fontSize:'13px', fontWeight:'600', color: rs.winRate === null ? '#94a3b8' : rs.winRate >= 50 ? '#27500A' : '#1e293b' }}>{rs.winRate !== null ? rs.winRate+'%' : '—'}</div>
+                                                <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'1px' }}>Win rate</div>
+                                            </div>
+                                            {/* Status pill */}
+                                            <div style={{ background:rs.statusBg, borderRadius:'6px', padding:'6px 8px' }}>
+                                                <div style={{ fontSize:'11px', fontWeight:'600', color:rs.statusText }}>{rs.statusLabel}</div>
+                                                <div style={{ fontSize:'10px', color:rs.statusText, opacity:0.75, marginTop:'1px' }}>{rs.statusSub}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+
+
 function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, inputSt, updateRepField, compactInput }) {
     const initials = (name) => (name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
     const cardStyle = { background:'#fff', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' };
@@ -121,6 +409,8 @@ export default function SalesManagerTab() {
     const {
         settings, setSettings,
         opportunities,
+        activities,
+        tasks,
         currentUser, userRole,
         getQuarter, getQuarterLabel,
         exportToCSV,
@@ -144,6 +434,17 @@ export default function SalesManagerTab() {
                             <p>Set rep quotas by territory — territory totals roll up automatically</p>
                         </div>
                     </div>
+
+                    {/* ── TEAM HEALTH PANEL ── */}
+                    <TeamHealthPanel
+                        opportunities={opportunities}
+                        activities={activities}
+                        tasks={tasks}
+                        settings={settings}
+                        currentUser={currentUser}
+                        userRole={userRole}
+                        compact={false}
+                    />
                     {(() => {
                         const allUsers = (settings.users || []).filter(u => u.name && u.userType !== 'ReadOnly');
                         const quarters = ['Q1','Q2','Q3','Q4'];

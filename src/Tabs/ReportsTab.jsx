@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import AnalyticsDashboard from '../components/ui/AnalyticsDashboard';
+import { dbFetch } from '../utils/storage';
 
 export default function ReportsTab() {
     const {
@@ -573,25 +574,28 @@ ${bodyHtml}
                             </div>
                           </div>
 
-                          {/* ── Sub-navigation tabs ── */}
-                          <div style={{ display:'flex', gap:0, borderBottom:'2px solid #e2e8f0', padding:'0 1.25rem', background:'#fafbfc', overflowX:'auto' }}>
-                            {[
-                              { key:'pipeline',    icon:'📊', label:'Pipeline',    desc:'Funnel · Forecast · Stage · Team' },
-                              { key:'performance', icon:'🎯', label:'Performance', desc:'Quota · Velocity · Win/Loss' },
-                              { key:'revenue',     icon:'💰', label:'Revenue',     desc:'Closed Won · Commissions · Forecast' },
-                              { key:'activity',    icon:'📋', label:'Activity',    desc:'Tasks · Activities · Leaderboard' },
-                              { key:'leads',       icon:'🎯', label:'Leads',       desc:'Funnel · Sources · Rep · Trend' },
-                              { key:'actions',     icon:'⚡', label:'Actions',     desc:'Recommendations · Outcomes · Rate' },
-                            ].map(t => (
-                              <button key={t.key} onClick={() => setReportSubTab(t.key)}
-                                style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.75rem 1.25rem', border:'none', borderBottom: reportSubTab === t.key ? '2px solid #2563eb' : '2px solid transparent', marginBottom:'-2px', background:'transparent', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>
-                                <span style={{ fontSize:'0.9rem' }}>{t.icon}</span>
-                                <div style={{ textAlign:'left' }}>
-                                  <div style={{ fontSize:'0.8125rem', fontWeight:'700', color: reportSubTab === t.key ? '#2563eb' : '#475569' }}>{t.label}</div>
-                                  <div style={{ fontSize:'0.625rem', color:'#94a3b8', fontWeight:'500' }}>{t.desc}</div>
-                                </div>
-                              </button>
-                            ))}
+                          {/* ── Report selector dropdown ── */}
+                          <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.75rem 1.25rem', borderBottom:'1px solid #e2e8f0', background:'#fafbfc' }}>
+                            <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Report:</span>
+                            <select
+                              value={reportSubTab}
+                              onChange={e => setReportSubTab(e.target.value)}
+                              style={{ fontSize:'0.875rem', fontWeight:'600', padding:'0.375rem 2rem 0.375rem 0.75rem', border:'1px solid #e2e8f0', borderRadius:'8px', background:'#fff', color:'#1e293b', cursor:'pointer', fontFamily:'inherit', appearance:'none', backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")", backgroundRepeat:'no-repeat', backgroundPosition:'right 8px center', minWidth:'160px' }}>
+                              <option value="pipeline">📊 Pipeline</option>
+                              <option value="performance">🎯 Performance</option>
+                              <option value="revenue">💰 Revenue</option>
+                              <option value="activity">📋 Activity</option>
+                              <option value="leads">🎯 Leads</option>
+                              <option value="actions">⚡ Actions</option>
+                            </select>
+                            <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>
+                              {reportSubTab === 'pipeline'    ? 'Funnel · Forecast · Stage · Team' :
+                               reportSubTab === 'performance' ? 'Quota · Velocity · Win/Loss' :
+                               reportSubTab === 'revenue'     ? 'Closed Won · Commissions · Forecast' :
+                               reportSubTab === 'activity'    ? 'Tasks · Activities · Leaderboard' :
+                               reportSubTab === 'leads'       ? 'Funnel · Sources · Rep · Trend' :
+                               'Recommendations · Outcomes · Rate'}
+                            </span>
                           </div>
                         </div>
 
@@ -1722,9 +1726,6 @@ ${bodyHtml}
                             );
                         })()}
 
-                            );
-                        })()}
-
                         {/* ── ACTIONS SUBTAB ── */}
                         {reportSubTab === 'actions' && (
                             <RecommendationReport
@@ -1758,9 +1759,7 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
             const rep = canSeeAll ? (selectedRep || '') : currentUser;
             const params = new URLSearchParams({ days });
             if (rep) params.append('rep', rep);
-            const res = await fetch(`/.netlify/functions/recommendation-log?${params}`);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const json = await res.json();
+            const json = await dbFetch(`/.netlify/functions/recommendation-log?${params}`);
             setData(json);
         } catch (err) {
             setError(err.message);
