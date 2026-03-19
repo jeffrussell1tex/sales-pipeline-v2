@@ -1777,48 +1777,25 @@ dbFetch('/.netlify/functions/users?me=true')
         <AppProvider value={appContextValue}>
         <div className="app-container">
             <header className="header">
-                <div className="header-inner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', position: 'relative' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0 }}>
-                        {settings.logoUrl ? (
-                            <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-start', gap:'0.25rem' }}>
-                                <img 
-                                    src={settings.logoUrl} 
-                                    alt="Company Logo" 
-                                    className="header-logo"
-                                    style={{ 
-                                        height: '64px', 
-                                        width: 'auto',
-                                        maxWidth: '220px',
-                                        objectFit: 'contain',
-                                        filter: 'brightness(0) invert(1)',
-                                    }} 
-                                />
-                                <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap', paddingLeft:'2px' }}>
-                                    <span style={{ fontSize:'0.75rem', color:'rgba(255,255,255,0.65)' }}>
-                                        {new Date().toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}
-                                    </span>
-                                    <span style={{ color:'rgba(255,255,255,0.35)', fontSize:'0.75rem' }}>·</span>
-                                    <span style={{ fontSize:'0.6rem', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', background:'rgba(255,255,255,0.15)', color:'#fff', padding:'0.15rem 0.5rem', borderRadius:'999px', border:'1px solid rgba(255,255,255,0.25)', lineHeight:'1.4' }}>
-                                        {(() => { const q = getQuarter(new Date().toISOString()); return getQuarterLabel(q, new Date().toISOString()); })()}
-                                    </span>
-                                </div>
-                            </div>
-                        ) : (
-                            <div>
-                                <h1>Sales Pipeline Tracker</h1>
-                                <p style={{ display:'flex', alignItems:'center', gap:'0.625rem', flexWrap:'wrap' }}>
-                                    <span style={{ fontSize:'0.75rem', color:'rgba(255,255,255,0.65)' }}>
-                                        {new Date().toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}
-                                    </span>
-                                    <span style={{ color:'rgba(255,255,255,0.35)' }}>·</span>
-                                    <span style={{ fontSize:'0.6rem', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.06em', background:'rgba(255,255,255,0.15)', color:'#fff', padding:'0.15rem 0.5rem', borderRadius:'999px', border:'1px solid rgba(255,255,255,0.25)', lineHeight:'1.4' }}>
-                                        {(() => { const q = getQuarter(new Date().toISOString()); return getQuarterLabel(q, new Date().toISOString()); })()}
-                                    </span>
-                                </p>
-                            </div>
-                        )}
+                <div className="header-inner" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: 'auto auto', alignItems: 'center', gap: '0.375rem 0.75rem', position: 'relative' }}>
+                    {/* ── LEFT: Accelerep permanent brand logo ── */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gridColumn: '1', gridRow: '1 / 3', gap: '0.25rem', flexShrink: 0 }}>
+                        <img
+                            src="/accelerep-logo-transparent-large.svg"
+                            alt="Accelerep"
+                            style={{ height: '40px', width: 'auto', maxWidth: '180px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: '2px' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)' }}>
+                                {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                            </span>
+                            <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.75rem' }}>·</span>
+                            <span style={{ fontSize: '0.6rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', background: 'rgba(255,255,255,0.15)', color: '#fff', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid rgba(255,255,255,0.25)', lineHeight: '1.4' }}>
+                                {(() => { const q = getQuarter(new Date().toISOString()); return getQuarterLabel(q, new Date().toISOString()); })()}
+                            </span>
+                        </div>
                     </div>
-                    <div className="header-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.375rem' }}>
+                    <div className="header-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.375rem', gridColumn: '3', gridRow: '1 / 3', justifyContent: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <div style={{ position: 'relative' }}>
                         <div
@@ -1890,7 +1867,7 @@ dbFetch('/.netlify/functions/users?me=true')
                             </button>
                         </div>
                         {userMemberships?.data?.length > 1 && (
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.125rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.125rem' }}>
                                 <OrganizationSwitcher
                                     appearance={{
                                         elements: {
@@ -2244,8 +2221,19 @@ dbFetch('/.netlify/functions/users?me=true')
                         )}
                     </div>
                     </div>
-                    {/* Global Search - centered command bar */}
-                    <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 200 }}>
+                    {/* ── CENTER TOP: Client uploaded logo ── */}
+                    <div style={{ gridColumn: '2', gridRow: '1', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40px' }}>
+                        {settings.logoUrl && (
+                            <img
+                                src={settings.logoUrl}
+                                alt="Company Logo"
+                                style={{ height: '36px', width: 'auto', maxWidth: '200px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }}
+                            />
+                        )}
+                    </div>
+
+                    {/* Global Search - centered, row 2 */}
+                    <div style={{ gridColumn: '2', gridRow: '2', zIndex: 200 }}>
                         <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '999px', border: '1px solid #e2e8f0', padding: '0.35rem 1rem', gap: '0.5rem', width: '340px', transition: 'box-shadow 0.15s, border-color 0.15s' }}
                             onFocusCapture={e => { e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.background = '#fff'; }}
                             onBlurCapture={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f1f5f9'; }}>
