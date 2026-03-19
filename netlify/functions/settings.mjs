@@ -67,7 +67,7 @@ export const handler = async (event) => {
             };
 
             const dbRow = {
-                id:              SETTINGS_ID,
+                id:              orgId,
                 companyName:     data.companyName     || null,
                 companyLogo:     data.companyLogo     || null,
                 fiscalYearStart: data.fiscalYearStart || null,
@@ -81,7 +81,7 @@ export const handler = async (event) => {
             };
             await db.insert(settings).values(dbRow).onConflictDoUpdate({
                 target: settings.id,
-                set: { companyName: dbRow.companyName, companyLogo: dbRow.companyLogo, fiscalYearStart: dbRow.fiscalYearStart, stages: dbRow.stages, taskTypes: dbRow.taskTypes, painPoints: dbRow.painPoints, verticalMarkets: dbRow.verticalMarkets, fieldVisibility: dbRow.fieldVisibility, extra: dbRow.extra, updatedAt: dbRow.updatedAt }
+                set: { orgId, companyName: dbRow.companyName, companyLogo: dbRow.companyLogo, fiscalYearStart: dbRow.fiscalYearStart, stages: dbRow.stages, taskTypes: dbRow.taskTypes, painPoints: dbRow.painPoints, verticalMarkets: dbRow.verticalMarkets, fieldVisibility: dbRow.fieldVisibility, extra: dbRow.extra, updatedAt: dbRow.updatedAt }
             });
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
