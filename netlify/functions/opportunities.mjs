@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { opportunities, users } from '../../db/schema.js';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isManager } from './auth.mjs';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 
@@ -76,6 +76,12 @@ const sanitize = (data) => ({
     forecastedCloseDate:data.forecastedCloseDate || null,
     closeQuarter:       data.closeQuarter        || null,
     products:           data.products            || null,
+    productRevenues:    (() => {
+        const r = data.productRevenues;
+        if (r && typeof r === 'object' && !Array.isArray(r)) return r;
+        if (typeof r === 'string') { try { return JSON.parse(r); } catch { return {}; } }
+        return {};
+    })(),
     unionized:          data.unionized           || null,
     painPoints:         data.painPoints          || null,
     contacts:           data.contacts            || null,

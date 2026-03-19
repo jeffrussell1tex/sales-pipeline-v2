@@ -1,6 +1,464 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { stages } from '../../utils/constants';
 
+// ─────────────────────────────────────────────────────────────
+//  Deal History Tab
+// ─────────────────────────────────────────────────────────────
+function DealHistoryTab({ opportunity, oppActivities, stages, settings, contacts, activityTypeIcon, onSaveActivity, onDeleteActivity, currentUser, onClose, saving, onUpdate }) {
+    const [showLogActivity, setShowLogActivity] = React.useState(false);
+    const [newActivity, setNewActivity] = React.useState({
+        type: 'Call',
+        date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
+        notes: ''
+    });
+    const activityTypes = ['Call', 'Email', 'Meeting', 'Demo', 'Proposal Sent', 'Follow-up', 'Other'];
+
+    // ── Journey map: build ordered stage list with dates from stageHistory ──
+    const stageHistory = opportunity.stageHistory || [];
+    const allStages = stages && stages.length > 0 ? stages : ['Qualification','Discovery','Evaluation (Demo)','Proposal','Negotiation/Review','Contracts','Closed Won','Closed Lost'];
+
+    // Build a map of stage → first date reached
+    const stageDateMap = {};
+    if (opportunity.createdDate) {
+        const firstStage = stageHistory.length > 0 ? stageHistory[0].prevStage : opportunity.stage;
+        if (firstStage) stageDateMap[firstStage] = opportunity.createdDate;
+    }
+    stageHistory.forEach(h => { if (!stageDateMap[h.stage]) stageDateMap[h.stage] = h.date; });
+
+    // Determine which stages are done/active/future
+    const currentStageIdx = allStages.indexOf(opportunity.stage);
+    const journeyStages = allStages.map((s, i) => ({
+        name: s,
+        date: stageDateMap[s] || null,
+        status: i < currentStageIdx ? 'done' : i === currentStageIdx ? 'active' : 'future',
+    }));
+
+    // ── Swim lane: position activities on a 0-100% timeline ──
+    const allDates = [
+        opportunity.createdDate,
+        ...oppActivities.map(a => a.date),
+        ...stageHistory.map(h => h.date),
+    ].filter(Boolean).map(d => new Date(d + 'T12:00:00').getTime());
+    const minTs = allDates.length ? Math.min(...allDates) : Date.now();
+    const maxTs = allDates.length ? Math.max(...allDates) : Date.now() + 86400000;
+    const tspan = maxTs - minTs || 1;
+    const pct = (dateStr) => Math.max(2, Math.min(96, ((new Date(dateStr + 'T12:00:00').getTime() - minTs) / tspan) * 96 + 2));
+
+    // Group activities by type for swim lanes
+    const byType = { Call: [], Email: [], Meeting: [], Demo: [], 'Proposal Sent': [], 'Follow-up': [], Other: [] };
+    oppActivities.forEach(a => { const k = byType[a.type] ? a.type : 'Other'; byType[k].push(a); });
+    const swimLanes = Object.entries(byType).filter(([, acts]) => acts.length > 0);
+
+    // Stage change events for swim lane
+    const stageEvents = stageHistory.map(h => ({ date: h.date, label: `→ ${h.stage}`, prev: h.prevStage, next: h.stage }));
+    if (opportunity.createdDate) stageEvents.unshift({ date: opportunity.createdDate, label: 'Deal opened', prev: null, next: allStages[0] });
+
+    // ── Stats ──
+    const today = new Date();
+    const dealAge = opportunity.createdDate ? Math.floor((today - new Date(opportunity.createdDate + 'T12:00:00')) / 86400000) : null;
+    const timeInStage = opportunity.stageChangedDate ? Math.floor((today - new Date(opportunity.stageChangedDate + 'T12:00:00')) / 86400000) : null;
+    const actCounts = oppActivities.reduce((acc, a) => { acc[a.type] = (acc[a.type] || 0) + 1; return acc; }, {});
+
+    // Contact engagement
+    const contactEngagement = {};
+    oppActivities.forEach(a => {
+        if (a.contactName) {
+            if (!contactEngagement[a.contactName]) contactEngagement[a.contactName] = { calls: 0, emails: 0, meetings: 0, last: a.date };
+            if (a.type === 'Call' || a.type === 'Follow-up') contactEngagement[a.contactName].calls++;
+            else if (a.type === 'Email' || a.type === 'Proposal Sent') contactEngagement[a.contactName].emails++;
+            else contactEngagement[a.contactName].meetings++;
+            if (a.date > contactEngagement[a.contactName].last) contactEngagement[a.contactName].last = a.date;
+        }
+    });
+    // Also include contacts listed on the opportunity
+    const oppContactNames = (opportunity.contacts || '').split(', ').filter(Boolean).map(c => c.split(' (')[0]);
+    oppContactNames.forEach(n => { if (!contactEngagement[n]) contactEngagement[n] = { calls: 0, emails: 0, meetings: 0, last: null }; });
+
+    const fmtDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+
+    const [tooltip, setTooltip] = React.useState(null); // { x, y, title, sub }
+
+    // ── Color helpers ──
+    const typeColors = {
+        Call: { bg: '#EAF3DE', text: '#3B6D11', dot: '#639922' },
+        Email: { bg: '#E6F1FB', text: '#185FA5', dot: '#378ADD' },
+        Meeting: { bg: '#EEEDFE', text: '#534AB7', dot: '#7F77DD' },
+        Demo: { bg: '#FAEEDA', text: '#854F0B', dot: '#EF9F27' },
+        'Proposal Sent': { bg: '#FBEAF0', text: '#993556', dot: '#D4537E' },
+        'Follow-up': { bg: '#E1F5EE', text: '#0F6E56', dot: '#1D9E75' },
+        Other: { bg: '#F1EFE8', text: '#5F5E5A', dot: '#888780' },
+    };
+
+    return (
+        <div style={{ paddingBottom: '1rem' }}>
+
+            {/* ── Stats row ── */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginBottom: '1.25rem' }}>
+                {[
+                    { val: dealAge !== null ? `${dealAge}d` : '—', lbl: 'Deal age', color: dealAge > 90 ? '#ef4444' : dealAge > 60 ? '#f59e0b' : '#10b981' },
+                    { val: timeInStage !== null ? `${timeInStage}d` : '—', lbl: 'In this stage', color: timeInStage > 30 ? '#ef4444' : timeInStage > 14 ? '#f59e0b' : '#10b981' },
+                    { val: oppActivities.length, lbl: 'Activities', color: '#2563eb' },
+                    { val: Object.keys(contactEngagement).length, lbl: 'Contacts engaged', color: '#7c3aed' },
+                ].map(({ val, lbl, color }) => (
+                    <div key={lbl} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
+                        <div style={{ fontSize: '1.25rem', fontWeight: '700', color }}>{val}</div>
+                        <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '2px' }}>{lbl}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* ── Journey map + swim lanes — dark panel ── */}
+            <div style={{ background: '#1e293b', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem' }}>
+
+            {/* ── Journey map ── */}
+            <div style={{ marginBottom: '0.5rem', fontSize: '0.6875rem', fontWeight: '700', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Deal journey</div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: oppActivities.length > 0 ? '1.75rem' : '0', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+                {journeyStages.map((s, i) => {
+                    const isDone = s.status === 'done';
+                    const isActive = s.status === 'active';
+                    const isFuture = s.status === 'future';
+                    const trackColor = isDone ? '#4ade80' : isActive ? '#60a5fa' : 'rgba(255,255,255,0.15)';
+                    const dotBg = isDone ? '#4ade80' : isActive ? '#60a5fa' : 'rgba(255,255,255,0.2)';
+                    const labelColor = isDone ? '#86efac' : isActive ? '#93c5fd' : 'rgba(255,255,255,0.35)';
+                    const dateColor = 'rgba(255,255,255,0.3)';
+                    return (
+                        <React.Fragment key={s.name}>
+                            {i > 0 && (
+                                <div style={{ flex: 1, height: '6px', background: trackColor, marginTop: '5px', minWidth: '12px', opacity: isFuture ? 0.4 : 1 }} />
+                            )}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                                <div style={{
+                                    width: '16px', height: '16px', borderRadius: '50%',
+                                    background: dotBg,
+                                    border: isActive ? '2px solid #1e293b' : '2px solid transparent',
+                                    boxShadow: isActive ? '0 0 0 3px #3b82f6' : 'none',
+                                    flexShrink: 0,
+                                }} />
+                                <div style={{ marginTop: '6px', textAlign: 'center', maxWidth: '72px' }}>
+                                    <div style={{ fontSize: '0.625rem', fontWeight: isActive ? '700' : '600', color: labelColor, whiteSpace: 'nowrap' }}>{s.name}</div>
+                                    {s.date && <div style={{ fontSize: '0.5625rem', color: dateColor, marginTop: '1px' }}>{fmtDate(s.date)}</div>}
+                                </div>
+                            </div>
+                        </React.Fragment>
+                    );
+                })}
+            </div>
+
+            {/* ── Activity swim lanes ── */}
+            {oppActivities.length > 0 && (
+                <>
+                <div style={{ marginBottom: '0.5rem', fontSize: '0.6875rem', fontWeight: '700', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Activity map</div>
+                <div style={{ position: 'relative', marginBottom: '0' }}>
+                    {/* Stage change row */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0', marginBottom: '10px' }}>
+                        <div style={{ width: '72px', fontSize: '0.625rem', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>Stages</div>
+                        <div style={{ flex: 1, height: '2px', background: 'rgba(255,255,255,0.12)', borderRadius: '1px', position: 'relative' }}>
+                            {stageEvents.map((ev, i) => (
+                                <div key={i}
+                                    style={{ position: 'absolute', left: `${pct(ev.date)}%`, top: '50%', transform: 'translate(-50%,-50%) rotate(45deg)', width: '10px', height: '10px', background: 'rgba(255,255,255,0.55)', borderRadius: '2px', cursor: 'pointer', border: '1.5px solid #1e293b' }}
+                                    title={`${ev.label} · ${fmtDate(ev.date)}`}
+                                    onMouseEnter={() => setTooltip({ title: ev.label, sub: fmtDate(ev.date) })}
+                                    onMouseLeave={() => setTooltip(null)}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                    {/* Activity type lanes */}
+                    {swimLanes.map(([type, acts]) => {
+                        const c = typeColors[type] || typeColors.Other;
+                        return (
+                            <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '0', marginBottom: '10px' }}>
+                                <div style={{ width: '72px', fontSize: '0.625rem', color: 'rgba(255,255,255,0.5)', flexShrink: 0 }}>{type}</div>
+                                <div style={{ flex: 1, height: '2px', background: 'rgba(255,255,255,0.12)', borderRadius: '1px', position: 'relative' }}>
+                                    {acts.map((act, i) => (
+                                        <div key={i}
+                                            style={{ position: 'absolute', left: `${pct(act.date)}%`, top: '50%', transform: 'translate(-50%,-50%)', width: '12px', height: '12px', borderRadius: '50%', background: c.dot, border: '2px solid #1e293b', cursor: 'pointer' }}
+                                            onMouseEnter={() => setTooltip({ title: `${act.type} · ${fmtDate(act.date)}`, sub: act.notes ? act.notes.slice(0, 60) + (act.notes.length > 60 ? '…' : '') : '' })}
+                                            onMouseLeave={() => setTooltip(null)}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                    {/* Tooltip */}
+                    {tooltip && (
+                        <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: '80px', background: '#0f172a', color: '#fff', borderRadius: '6px', padding: '6px 10px', fontSize: '0.75rem', pointerEvents: 'none', zIndex: 50, maxWidth: '260px', whiteSpace: 'normal', lineHeight: 1.4, border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <div style={{ fontWeight: '700' }}>{tooltip.title}</div>
+                            {tooltip.sub && <div style={{ opacity: 0.65, marginTop: '2px' }}>{tooltip.sub}</div>}
+                        </div>
+                    )}
+                    {/* Legend */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '12px', paddingLeft: '72px' }}>
+                        {swimLanes.map(([type]) => {
+                            const c = typeColors[type] || typeColors.Other;
+                            return (
+                                <span key={type} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.6875rem', color: 'rgba(255,255,255,0.45)' }}>
+                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: c.dot, display: 'inline-block' }} />
+                                    {type}
+                                </span>
+                            );
+                        })}
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.6875rem', color: 'rgba(255,255,255,0.45)' }}>
+                            <span style={{ width: '8px', height: '8px', background: 'rgba(255,255,255,0.5)', display: 'inline-block', transform: 'rotate(45deg)', borderRadius: '1px' }} />
+                            Stage change
+                        </span>
+                    </div>
+                </div>
+                </>
+            )}
+
+            </div>{/* end dark panel */}
+
+            {/* ── Activity timeline feed ── */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    Activity history {oppActivities.length > 0 && <span style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '999px', padding: '0.1rem 0.45rem', fontSize: '0.625rem', marginLeft: '4px' }}>{oppActivities.length}</span>}
+                </div>
+                <button type="button" onClick={() => setShowLogActivity(v => !v)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', padding: '0.3rem 0.75rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    + Log Activity
+                </button>
+            </div>
+
+            {/* Quick-log form */}
+            {showLogActivity && (
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', marginBottom: '0.875rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                        <div>
+                            <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.375rem' }}>Type</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                                {activityTypes.map(t => (
+                                    <button key={t} type="button" onClick={() => setNewActivity(a => ({ ...a, type: t }))}
+                                        style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontFamily: 'inherit', fontSize: '0.6875rem', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s',
+                                            border: '1px solid ' + (newActivity.type === t ? '#2563eb' : '#e2e8f0'),
+                                            background: newActivity.type === t ? '#eff6ff' : '#fff',
+                                            color: newActivity.type === t ? '#2563eb' : '#64748b' }}>
+                                        {activityTypeIcon[t] || '📝'} {t}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.375rem' }}>Date</div>
+                            <input type="date" value={newActivity.date}
+                                onChange={e => setNewActivity(a => ({ ...a, date: e.target.value }))}
+                                style={{ width: '100%', padding: '0.5rem 0.625rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8125rem', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+                        </div>
+                    </div>
+                    <div style={{ marginBottom: '0.75rem' }}>
+                        <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.375rem' }}>Notes</div>
+                        <textarea value={newActivity.notes}
+                            onChange={e => setNewActivity(a => ({ ...a, notes: e.target.value }))}
+                            placeholder="What happened? Key takeaways, next actions..."
+                            rows={3}
+                            style={{ width: '100%', padding: '0.5rem 0.625rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8125rem', fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: '1.5' }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                        <button type="button" onClick={() => setShowLogActivity(false)}
+                            style={{ padding: '0.4rem 0.875rem', background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                        <button type="button" onClick={() => {
+                            if (!newActivity.type) return;
+                            onSaveActivity && onSaveActivity({ ...newActivity, opportunityId: opportunity.id, companyName: opportunity.account || '' });
+                            setNewActivity({ type: 'Call', date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'), notes: '' });
+                            setShowLogActivity(false);
+                        }}
+                            style={{ padding: '0.4rem 0.875rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>Save Activity</button>
+                    </div>
+                </div>
+            )}
+
+            {/* Activity feed — combined activities + stage changes, sorted newest first */}
+            {oppActivities.length === 0 && !showLogActivity ? (
+                <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8', fontSize: '0.8125rem', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #e2e8f0' }}>
+                    No activities logged yet. Click <strong>+ Log Activity</strong> to start tracking this deal's history.
+                </div>
+            ) : (
+                <div style={{ position: 'relative', paddingLeft: '28px' }}>
+                    {/* Vertical line */}
+                    <div style={{ position: 'absolute', left: '9px', top: '6px', bottom: '6px', width: '1.5px', background: '#e2e8f0' }} />
+
+                    {/* Build merged timeline: activities + stage changes */}
+                    {(() => {
+                        const items = [
+                            ...oppActivities.map(a => ({ ...a, _type: 'activity' })),
+                            ...stageHistory.map(h => ({ ...h, _type: 'stage', date: h.date })),
+                        ].sort((a, b) => new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00'));
+
+                        return items.map((item, i) => {
+                            if (item._type === 'stage') {
+                                return (
+                                    <div key={`stage-${i}`} style={{ position: 'relative', marginBottom: '12px' }}>
+                                        <div style={{ position: 'absolute', left: '-28px', top: '2px', width: '18px', height: '18px', background: '#f1f5f9', border: '1.5px solid #e2e8f0', borderRadius: '3px', transform: 'rotate(45deg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} />
+                                        <div style={{ background: 'none', border: '1px dashed #e2e8f0', borderRadius: '8px', padding: '7px 12px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                            <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '999px', background: '#f1f5f9', color: '#64748b', fontWeight: '500' }}>{item.prevStage || '—'}</span>
+                                            <span style={{ color: '#cbd5e1', fontSize: '0.75rem' }}>→</span>
+                                            <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '999px', background: '#eff6ff', color: '#2563eb', fontWeight: '600' }}>{item.stage}</span>
+                                            <span style={{ marginLeft: 'auto', fontSize: '0.6875rem', color: '#94a3b8' }}>{fmtDate(item.date)}</span>
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            const c = typeColors[item.type] || typeColors.Other;
+                            return (
+                                <div key={item.id || `act-${i}`} style={{ position: 'relative', marginBottom: '12px' }}>
+                                    <div style={{ position: 'absolute', left: '-28px', top: '6px', width: '18px', height: '18px', borderRadius: '50%', background: c.bg, border: `1.5px solid ${c.dot}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', fontWeight: '700', color: c.text }}>
+                                        {item.type === 'Call' ? 'C' : item.type === 'Email' ? 'E' : item.type === 'Meeting' ? 'M' : item.type === 'Demo' ? 'D' : item.type === 'Proposal Sent' ? 'P' : item.type === 'Follow-up' ? 'F' : '•'}
+                                    </div>
+                                    <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '8px', padding: '10px 12px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: item.notes ? '4px' : '0' }}>
+                                            <span style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#1e293b' }}>
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                                    <span style={{ background: c.bg, color: c.text, borderRadius: '4px', padding: '1px 7px', fontSize: '0.6875rem', fontWeight: '700' }}>{item.type}</span>
+                                                    {item.contactName && <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '500' }}>· {item.contactName}</span>}
+                                                </span>
+                                            </span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, marginLeft: '8px' }}>
+                                                <span style={{ fontSize: '0.6875rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtDate(item.date)}</span>
+                                                {onDeleteActivity && (
+                                                    <button type="button" onClick={() => onDeleteActivity(item.id)}
+                                                        style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: '0.8125rem', padding: 0, lineHeight: 1 }}
+                                                        onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                                                        onMouseLeave={e => e.currentTarget.style.color = '#cbd5e1'}>✕</button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {item.notes && (
+                                            <div style={{ fontSize: '0.8125rem', color: '#475569', lineHeight: '1.45', wordBreak: 'break-word' }}>{item.notes}</div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        });
+                    })()}
+                </div>
+            )}
+
+            {/* ── Cancel / Update buttons ── */}
+            <div style={{ display: 'flex', gap: '0.625rem', justifyContent: 'flex-end', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid #e2e8f0' }}>
+                <button type="button" onClick={onClose}
+                    style={{ padding: '0.5rem 1.25rem', background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Cancel
+                </button>
+                <button type="button" onClick={() => onUpdate && onUpdate()}
+                    style={{ padding: '0.5rem 1.25rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {saving && <span style={{ width: '12px', height: '12px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
+                    {saving ? 'Saving…' : 'Update'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Contact Engagement Tab
+// ─────────────────────────────────────────────────────────────
+function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, onUpdate, saving }) {
+    const fmtDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+
+    // Build engagement map
+    const contactEngagement = {};
+    oppActivities.forEach(a => {
+        if (a.contactName) {
+            if (!contactEngagement[a.contactName]) contactEngagement[a.contactName] = { calls: 0, emails: 0, meetings: 0, demos: 0, other: 0, last: a.date, firstContact: a.date };
+            if (a.type === 'Call' || a.type === 'Follow-up') contactEngagement[a.contactName].calls++;
+            else if (a.type === 'Email' || a.type === 'Proposal Sent') contactEngagement[a.contactName].emails++;
+            else if (a.type === 'Meeting') contactEngagement[a.contactName].meetings++;
+            else if (a.type === 'Demo') contactEngagement[a.contactName].demos++;
+            else contactEngagement[a.contactName].other++;
+            if (a.date > contactEngagement[a.contactName].last) contactEngagement[a.contactName].last = a.date;
+            if (a.date < contactEngagement[a.contactName].firstContact) contactEngagement[a.contactName].firstContact = a.date;
+        }
+    });
+    // Add contacts listed on the opp with no activities
+    (opportunity.contacts || '').split(', ').filter(Boolean).forEach(n => {
+        const name = n.split(' (')[0];
+        if (!contactEngagement[name]) contactEngagement[name] = { calls: 0, emails: 0, meetings: 0, demos: 0, other: 0, last: null, firstContact: null };
+    });
+
+    const entries = Object.entries(contactEngagement);
+    const typeColors = ['#2563eb','#7c3aed','#059669','#d97706','#dc2626','#0891b2'];
+    const avatarColor = (name) => typeColors[name.charCodeAt(0) % typeColors.length];
+
+    // Find full contact record for role info
+    const findContact = (name) => (contacts || []).find(c => `${c.firstName} ${c.lastName}` === name || `${c.firstName} ${c.lastName}`.startsWith(name.split(' ')[0]));
+
+    return (
+        <div style={{ paddingBottom: '1rem' }}>
+            {entries.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: '#94a3b8', fontSize: '0.875rem', background: '#f8fafc', borderRadius: '10px', border: '1px dashed #e2e8f0' }}>
+                    No contacts linked to this deal yet. Add contacts on the Details tab or log activities with contact names.
+                </div>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {entries.sort((a, b) => {
+                        const totalA = a[1].calls + a[1].emails + a[1].meetings + a[1].demos + a[1].other;
+                        const totalB = b[1].calls + b[1].emails + b[1].meetings + b[1].demos + b[1].other;
+                        return totalB - totalA;
+                    }).map(([name, eng]) => {
+                        const total = eng.calls + eng.emails + eng.meetings + eng.demos + eng.other;
+                        const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+                        const color = avatarColor(name);
+                        const contactRec = findContact(name);
+                        return (
+                            <div key={name} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px 16px' }}>
+                                {/* Header row */}
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: total > 0 ? '12px' : 0 }}>
+                                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: '700', flexShrink: 0 }}>{initials}</div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1e293b' }}>{name}</div>
+                                        {contactRec?.title && <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px' }}>{contactRec.title}{contactRec.company ? ` · ${contactRec.company}` : ''}</div>}
+                                        {total === 0 && <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px', fontStyle: 'italic' }}>No interactions logged yet</div>}
+                                    </div>
+                                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                        <div style={{ fontSize: '1.125rem', fontWeight: '700', color: total > 0 ? '#1e293b' : '#cbd5e1' }}>{total}</div>
+                                        <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>interactions</div>
+                                    </div>
+                                </div>
+                                {/* Breakdown + dates */}
+                                {total > 0 && (
+                                    <div style={{ paddingLeft: '48px' }}>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                                            {[
+                                                { key: 'calls', label: 'Calls', bg: '#EAF3DE', text: '#3B6D11' },
+                                                { key: 'emails', label: 'Emails', bg: '#E6F1FB', text: '#185FA5' },
+                                                { key: 'meetings', label: 'Meetings', bg: '#EEEDFE', text: '#534AB7' },
+                                                { key: 'demos', label: 'Demos', bg: '#FAEEDA', text: '#854F0B' },
+                                                { key: 'other', label: 'Other', bg: '#F1EFE8', text: '#5F5E5A' },
+                                            ].filter(t => eng[t.key] > 0).map(t => (
+                                                <span key={t.key} style={{ padding: '2px 10px', borderRadius: '999px', background: t.bg, color: t.text, fontSize: '0.75rem', fontWeight: '600' }}>
+                                                    {eng[t.key]} {t.label.toLowerCase()}
+                                                </span>
+                                            ))}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.6875rem', color: '#94a3b8' }}>
+                                            {eng.firstContact && <span>First contact: <strong style={{ color: '#64748b' }}>{fmtDate(eng.firstContact)}</strong></span>}
+                                            {eng.last && <span>Last activity: <strong style={{ color: '#64748b' }}>{fmtDate(eng.last)}</strong></span>}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* ── Cancel / Update buttons ── */}
+            <div style={{ display: 'flex', gap: '0.625rem', justifyContent: 'flex-end', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid #e2e8f0' }}>
+                <button type="button" onClick={onClose}
+                    style={{ padding: '0.5rem 1.25rem', background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Cancel
+                </button>
+                <button type="button" onClick={() => onUpdate && onUpdate()}
+                    style={{ padding: '0.5rem 1.25rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.7 : 1, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {saving && <span style={{ width: '12px', height: '12px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />}
+                    {saving ? 'Saving…' : 'Update'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
 export default function OpportunityModal({ opportunity, accounts, contacts, settings, pipelines, activePipelineId, currentUser, activities, onSaveActivity, onDeleteActivity, onSaveComment, onEditComment, onDeleteComment, onClose, onSave, onAddAccount, onSaveNewContact, onSaveNewAccount, onAddContact, lastCreatedAccountName, onAddRep, lastCreatedRepName, errorMessage, onDismissError, saving }) {
     const stages = (settings.funnelStages && settings.funnelStages.length > 0)
         ? settings.funnelStages.filter(s => s.name.trim()).map(s => s.name)
@@ -15,24 +473,55 @@ export default function OpportunityModal({ opportunity, accounts, contacts, sett
         if (!rules) return true;
         return rules[modalUserRole] !== false;
     };
-    const [formData, setFormData] = useState(opportunity || {
-        opportunityName: '',
-        account: '',
-        site: '',
-        salesRep: '',
-        painPoints: '',
-        contacts: '',
-        stage: 'Qualification',
-        probability: null,
-        arr: 0,
-        implementationCost: 0,
-        forecastedCloseDate: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
-        products: '',
-        unionized: 'No',
-        notes: '',
-        nextSteps: '',
-        pipelineId: activePipelineId || 'default'
+    const [formData, setFormData] = useState(() => {
+        const base = opportunity || {
+            opportunityName: '',
+            account: '',
+            site: '',
+            salesRep: '',
+            painPoints: '',
+            contacts: '',
+            stage: 'Qualification',
+            probability: null,
+            arr: 0,
+            implementationCost: 0,
+            forecastedCloseDate: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
+            products: '',
+            unionized: 'No',
+            notes: '',
+            nextSteps: '',
+            pipelineId: activePipelineId || 'default'
+        };
+        return {
+            ...base,
+            // Guarantee no null/undefined ever reaches a controlled input
+            opportunityName: base.opportunityName ?? '',
+            account:         base.account ?? '',
+            site:            base.site ?? '',
+            salesRep:        base.salesRep ?? '',
+            painPoints:      base.painPoints ?? '',
+            contacts:        base.contacts ?? '',
+            stage:           base.stage ?? 'Qualification',
+            notes:           base.notes ?? '',
+            nextSteps:       base.nextSteps ?? '',
+            products:        base.products ?? '',
+            unionized:       base.unionized ?? 'No',
+            forecastedCloseDate: base.forecastedCloseDate ?? [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
+            pipelineId:      base.pipelineId ?? activePipelineId ?? 'default',
+            arr:             parseFloat(base.arr) || 0,
+            implementationCost: parseFloat(base.implementationCost) || 0,
+            productRevenues: (base.productRevenues && typeof base.productRevenues === 'object') ? base.productRevenues : {},
+        };
     });
+
+    // Compute total deal size from per-product revenues
+    const computedArr = (() => {
+        const revs = formData.productRevenues || {};
+        const selectedProducts = formData.products ? formData.products.split(',').map(p => p.trim()).filter(Boolean) : [];
+        if (selectedProducts.length === 0) return parseFloat(formData.arr) || 0;
+        const total = selectedProducts.reduce((sum, p) => sum + (parseFloat(revs[p]) || 0), 0);
+        return total;
+    })();
 
     const [contactSearch, setContactSearch] = useState('');
     const [showContactSuggestions, setShowContactSuggestions] = useState(false);
@@ -132,8 +621,12 @@ export default function OpportunityModal({ opportunity, accounts, contacts, sett
             errors.salesRep = 'Sales rep is required';
         if (!formData.forecastedCloseDate)
             errors.forecastedCloseDate = 'Close date is required';
-        if (formData.arr === '' || formData.arr === null || formData.arr === undefined || parseFloat(formData.arr) < 0)
-            errors.arr = 'ARR is required (enter 0 if none)';
+        if (formData.arr === '' || formData.arr === null || formData.arr === undefined || parseFloat(formData.arr) < 0) {
+            // arr is now computed from productRevenues — only validate if no products selected
+            const selectedProducts = formData.products ? formData.products.split(',').map(p => p.trim()).filter(Boolean) : [];
+            if (selectedProducts.length === 0 && (formData.arr === '' || formData.arr === null || formData.arr === undefined || parseFloat(formData.arr) < 0))
+                errors.arr = 'Enter revenue for at least one product, or add a manual total';
+        }
 
         // Warn if account name doesn't match an existing account
 if (formData.account && formData.account.trim()) {
@@ -158,14 +651,22 @@ if (formData.account && formData.account.trim()) {
             return;
         }
         setValidationErrors({});
+        // Serialize productRevenues as numbers (inputs store strings)
+        const cleanRevenues = Object.fromEntries(
+            Object.entries(formData.productRevenues || {}).map(([k, v]) => [k, parseFloat(v) || 0])
+        );
         onSave({
             ...formData,
-            arr: parseFloat(formData.arr) || 0,
-            implementationCost: parseFloat(formData.implementationCost) || 0,
+            arr: isNaN(computedArr) ? 0 : computedArr,
+            probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null,
+            productRevenues: cleanRevenues,
             closeQuarter: closeQuarter,
             contactIds: selectedContactIds
         });
     };
+
+    // Modal tab state
+    const [modalTab, setModalTab] = React.useState('details');
 
     // Activity log state (inside modal)
     const [showLogActivity, setShowLogActivity] = React.useState(false);
@@ -268,7 +769,7 @@ if (formData.account && formData.account.trim()) {
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div className="modal-overlay">
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px' }}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '860px' }}>
                 <h2 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
                     <span>{opportunity ? 'Edit Opportunity' : 'New Opportunity'}</span>
                     {opportunity && (
@@ -278,11 +779,73 @@ if (formData.account && formData.account.trim()) {
                     )}
                 </h2>
 
+                {/* ── Tab bar (only for existing opportunities) ── */}
+                {opportunity && (
+                    <div style={{ display: 'flex', gap: '2px', borderBottom: '1.5px solid #e2e8f0', marginBottom: '1.25rem', marginTop: '0.25rem' }}>
+                        {[
+                            { id: 'details', label: 'Details' },
+                            { id: 'history', label: `History${oppActivities.length > 0 ? ` (${oppActivities.length})` : ''}` },
+                            { id: 'contacts', label: `Contacts${Object.keys((() => { const ce = {}; oppActivities.forEach(a => { if (a.contactName) ce[a.contactName] = true; }); (opportunity.contacts||'').split(', ').filter(Boolean).forEach(n => { ce[n.split(' (')[0]] = true; }); return ce; })()).length > 0 ? ` (${Object.keys((() => { const ce = {}; oppActivities.forEach(a => { if (a.contactName) ce[a.contactName] = true; }); (opportunity.contacts||'').split(', ').filter(Boolean).forEach(n => { ce[n.split(' (')[0]] = true; }); return ce; })()).length})` : ''}` },
+                        ].map(tab => (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => setModalTab(tab.id)}
+                                style={{
+                                    padding: '0.5rem 1rem',
+                                    fontSize: '0.8125rem',
+                                    fontWeight: '600',
+                                    fontFamily: 'inherit',
+                                    cursor: 'pointer',
+                                    border: 'none',
+                                    borderBottom: modalTab === tab.id ? '2px solid #2563eb' : '2px solid transparent',
+                                    marginBottom: '-1.5px',
+                                    background: 'transparent',
+                                    color: modalTab === tab.id ? '#2563eb' : '#64748b',
+                                    transition: 'all 0.15s',
+                                }}
+                            >{tab.label}</button>
+                        ))}
+                    </div>
+                )}
+
+                {/* ══ HISTORY TAB ══ */}
+                {opportunity && modalTab === 'history' && (
+                    <DealHistoryTab
+                        opportunity={opportunity}
+                        oppActivities={oppActivities}
+                        stages={stages}
+                        settings={settings}
+                        contacts={contacts}
+                        activityTypeIcon={activityTypeIcon}
+                        onSaveActivity={onSaveActivity}
+                        onDeleteActivity={onDeleteActivity}
+                        currentUser={currentUser}
+                        onClose={onClose}
+                        saving={saving}
+                        onUpdate={() => { const f = document.getElementById('opp-form'); if (f) f.requestSubmit(); }}
+                    />
+                )}
+
+                {/* ══ CONTACT ENGAGEMENT TAB ══ */}
+                {opportunity && modalTab === 'contacts' && (
+                    <ContactEngagementTab
+                        opportunity={opportunity}
+                        oppActivities={oppActivities}
+                        contacts={contacts}
+                        onClose={onClose}
+                        saving={saving}
+                        onUpdate={() => { const f = document.getElementById('opp-form'); if (f) f.requestSubmit(); }}
+                    />
+                )}
+
+                {/* ══ DETAILS TAB (existing content) ══ */}
+                <div style={{ display: opportunity && (modalTab === 'history' || modalTab === 'contacts') ? 'none' : 'block' }}>
+
                 {/* Deal age / time in stage info strip */}
                 {opportunity && dealAgeInfo && (dealAgeInfo.dealAge !== null || dealAgeInfo.timeInStage !== null) && (
                     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', marginBottom: '1rem', overflow: 'hidden' }}>
-                        {/* Main metrics row */}
-                        <div style={{ display: 'flex', gap: '1rem', padding: '0.625rem 0.875rem', flexWrap: 'wrap', borderBottom: (opportunity.stageHistory && opportunity.stageHistory.length > 0) ? '1px solid #e2e8f0' : 'none' }}>
+                        <div style={{ display: 'flex', gap: '1rem', padding: '0.625rem 0.875rem', flexWrap: 'wrap' }}>
                             {dealAgeInfo.dealAge !== null && (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                                     <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Deal Age</span>
@@ -321,26 +884,6 @@ if (formData.account && formData.account.trim()) {
                                 </>
                             )}
                         </div>
-                        {/* Stage history timeline */}
-                        {opportunity.stageHistory && opportunity.stageHistory.length > 0 && (
-                            <div style={{ padding: '0.5rem 0.875rem', display: 'flex', gap: '0', alignItems: 'center', flexWrap: 'wrap', rowGap: '0.25rem' }}>
-                                <span style={{ fontSize: '0.6125rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.625rem', flexShrink: 0 }}>Stage History</span>
-                                {(() => {
-                                    const hist = opportunity.stageHistory || [];
-                                    const first = opportunity.createdDate ? { stage: hist[0]?.prevStage || opportunity.stage, date: opportunity.createdDate } : null;
-                                    const entries = first ? [first, ...hist.map(h => ({ stage: h.stage, date: h.date }))] : hist.map(h => ({ stage: h.stage, date: h.date }));
-                                    return entries.map((e, i) => (
-                                        <React.Fragment key={i}>
-                                            {i > 0 && <span style={{ color: '#cbd5e1', fontSize: '0.625rem', margin: '0 0.2rem' }}>→</span>}
-                                            <span style={{ fontSize: '0.6875rem', color: '#475569', fontWeight: i === entries.length - 1 ? '700' : '400' }}>
-                                                {e.stage}
-                                                <span style={{ color: '#94a3b8', marginLeft: '0.2rem', fontWeight: '400' }}>({new Date(e.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})</span>
-                                            </span>
-                                        </React.Fragment>
-                                    ));
-                                })()}
-                            </div>
-                        )}
                     </div>
                 )}
 
@@ -365,7 +908,7 @@ if (formData.account && formData.account.trim()) {
                         )}
                     </div>
                 )}
-                <form onSubmit={handleSubmit}>
+                <form id="opp-form" onSubmit={handleSubmit}>
                     <div className="form-grid">
                         <div className="form-group full">
                             <label>Opportunity Name*</label>
@@ -525,9 +1068,10 @@ if (formData.account && formData.account.trim()) {
                         {/* Probability field */}
                         {(() => {
                             const stageDefault = (settings?.funnelStages || []).find(s => s.name === formData.stage);
-                            const defaultProb = stageDefault ? stageDefault.weight : null;
-                            const effectiveProb = formData.probability !== null && formData.probability !== undefined ? formData.probability : defaultProb;
-                            const isOverridden = formData.probability !== null && formData.probability !== undefined && formData.probability !== defaultProb;
+                            const rawWeight = stageDefault ? parseFloat(stageDefault.weight) : NaN;
+                            const defaultProb = !isNaN(rawWeight) ? rawWeight : null;
+                            const effectiveProb = (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : defaultProb;
+                            const isOverridden = formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability) && formData.probability !== defaultProb;
                             if (!canViewField('probability')) return null;
                             return (
                                 <div className="form-group">
@@ -546,7 +1090,7 @@ if (formData.account && formData.account.trim()) {
                                         <input
                                             type="number"
                                             min="0" max="100"
-                                            value={effectiveProb !== null ? effectiveProb : ''}
+                                            value={(effectiveProb !== null && effectiveProb !== undefined && !isNaN(effectiveProb)) ? effectiveProb : ''}
                                             placeholder={defaultProb !== null ? String(defaultProb) : '0'}
                                             onChange={e => {
                                                 const val = e.target.value === '' ? null : Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
@@ -571,8 +1115,8 @@ if (formData.account && formData.account.trim()) {
                                 </div>
                             );
                         })()}
-                        <div className="form-group">
-                            <label>Product Interest</label>
+                        <div className="form-group full">
+                            <label>Products & Revenue</label>
                             {(() => {
                                 const selectedProducts = formData.products
                                     ? formData.products.split(',').map(p => p.trim()).filter(Boolean)
@@ -591,17 +1135,12 @@ if (formData.account && formData.account.trim()) {
                                         : [...current, product];
                                     handleChange('products', updated.join(', '));
                                 };
+                                const setProductRevenue = (product, value) => {
+                                    const revs = { ...(formData.productRevenues || {}), [product]: value };
+                                    handleChange('productRevenues', revs);
+                                };
                                 return (
                                     <div style={{ position: 'relative' }}>
-                                        {/* Selected tags */}
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginBottom: selectedProducts.length ? '0.5rem' : 0 }}>
-                                            {selectedProducts.map(p => (
-                                                <span key={p} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.625rem', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600', color: '#1e40af' }}>
-                                                    {p}
-                                                    <span onClick={() => toggleProduct(p)} style={{ cursor: 'pointer', fontSize: '0.875rem', lineHeight: 1, color: '#93c5fd' }}>×</span>
-                                                </span>
-                                            ))}
-                                        </div>
                                         {/* Search input */}
                                         <input
                                             type="text"
@@ -625,32 +1164,58 @@ if (formData.account && formData.account.trim()) {
                                                 ))}
                                             </div>
                                         )}
+                                        {/* Per-product revenue rows */}
+                                        {selectedProducts.length > 0 && (
+                                            <div style={{ marginTop: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', padding: '0.375rem 0.75rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                                    <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Product</span>
+                                                    <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '2rem' }}>Annual Revenue ($)</span>
+                                                    <span />
+                                                </div>
+                                                {selectedProducts.map(p => (
+                                                    <div key={p} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', padding: '0.5rem 0.75rem', borderBottom: '1px solid #f1f5f9', gap: '0.75rem' }}>
+                                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{p}</span>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={String((formData.productRevenues || {})[p] ?? '')}
+                                                            onChange={e => setProductRevenue(p, e.target.value)}
+                                                            placeholder="0"
+                                                            style={{ width: '140px', padding: '0.35rem 0.625rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8125rem', fontFamily: 'inherit', textAlign: 'right' }}
+                                                        />
+                                                        <span onClick={() => toggleProduct(p)} style={{ cursor: 'pointer', fontSize: '1rem', lineHeight: 1, color: '#cbd5e1', padding: '0.125rem' }}
+                                                            onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                                                            onMouseLeave={e => e.currentTarget.style.color = '#cbd5e1'}>×</span>
+                                                    </div>
+                                                ))}
+                                                {/* Total row */}
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', padding: '0.5rem 0.75rem', background: '#f0fdf4', gap: '0.75rem' }}>
+                                                    <span style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#15803d' }}>Total ARR</span>
+                                                    <span style={{ fontSize: '0.875rem', fontWeight: '700', color: '#15803d', textAlign: 'right', minWidth: '140px' }}>
+                                                        ${(isNaN(computedArr) ? 0 : computedArr).toLocaleString()}
+                                                    </span>
+                                                    <span />
+                                                </div>
+                                            </div>
+                                        )}
+                                        {/* Fallback manual ARR if no products */}
+                                        {selectedProducts.length === 0 && (
+                                            <div style={{ marginTop: '0.625rem' }}>
+                                                <label style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.375rem' }}>Total ARR ($) — no products selected</label>
+                                                <input
+                                                    type="number"
+                                                    value={formData.arr ?? 0}
+                                                    onChange={e => handleChange('arr', e.target.value)}
+                                                    placeholder="0"
+                                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: validationErrors.arr ? '1px solid #dc2626' : '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box', background: validationErrors.arr ? '#fff8f8' : '#fff' }}
+                                                />
+                                                {validationErrors.arr && <div className="field-error" style={{ color: '#dc2626', fontSize: '0.6875rem', fontWeight: '600', marginTop: '0.25rem' }}>⚠ {validationErrors.arr}</div>}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })()}
                         </div>
-{canViewField('arr') && (
-                        <div className="form-group">
-                            <label>ARR ($)*</label>
-                            <input
-                                type="number"
-                                value={formData.arr}
-                                onChange={e => handleChange('arr', e.target.value)}
-                                style={validationErrors.arr ? { borderColor: '#dc2626', background: '#fff8f8' } : {}}
-                            />
-                            {validationErrors.arr && <div className="field-error" style={{ color: '#dc2626', fontSize: '0.6875rem', fontWeight: '600', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>⚠ {validationErrors.arr}</div>}
-                        </div>
-)}
-{canViewField('implCost') && (
-                        <div className="form-group">
-                            <label>Implementation Cost ($)*</label>
-                            <input
-                                type="number"
-                                value={formData.implementationCost}
-                                onChange={e => handleChange('implementationCost', e.target.value)}
-                            />
-                        </div>
-)}
                         <div className="form-group">
                             <label>Forecasted Close Date*</label>
                             <input
@@ -1085,119 +1650,6 @@ if (formData.account && formData.account.trim()) {
                         )}
                     </div>
 
-                    {/* ── Activity Log ─────────────────────────── */}
-                    {opportunity && (
-                        <div style={{ borderTop: '2px solid #e2e8f0', marginTop: '1.25rem', paddingTop: '1.25rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                    <span style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1e293b' }}>Activity Log</span>
-                                    {oppActivities.length > 0 && (
-                                        <span style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', padding: '0.1rem 0.45rem', borderRadius: '999px', fontSize: '0.625rem', fontWeight: '700' }}>
-                                            {oppActivities.length}
-                                        </span>
-                                    )}
-                                </div>
-                                <button type="button" onClick={() => setShowLogActivity(v => !v)}
-                                    style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', padding: '0.375rem 0.75rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                    + Log Activity
-                                </button>
-                            </div>
-
-                            {/* Inline quick-log form */}
-                            {showLogActivity && (
-                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', marginBottom: '0.875rem' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                                        <div>
-                                            <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.375rem' }}>Type</div>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                                                {activityTypes.map(t => (
-                                                    <button key={t} type="button" onClick={() => setNewActivity(a => ({ ...a, type: t }))}
-                                                        style={{ padding: '0.25rem 0.5rem', borderRadius: '4px', fontFamily: 'inherit', fontSize: '0.6875rem', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s',
-                                                            border: '1px solid ' + (newActivity.type === t ? '#2563eb' : '#e2e8f0'),
-                                                            background: newActivity.type === t ? '#eff6ff' : '#fff',
-                                                            color: newActivity.type === t ? '#2563eb' : '#64748b' }}>
-                                                        {activityTypeIcon[t] || '📝'} {t}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.375rem' }}>Date</div>
-                                            <input type="date" value={newActivity.date}
-                                                onChange={e => setNewActivity(a => ({ ...a, date: e.target.value }))}
-                                                style={{ width: '100%', padding: '0.5rem 0.625rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8125rem', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
-                                        </div>
-                                    </div>
-                                    <div style={{ marginBottom: '0.75rem' }}>
-                                        <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.375rem' }}>Notes</div>
-                                        <textarea value={newActivity.notes}
-                                            onChange={e => setNewActivity(a => ({ ...a, notes: e.target.value }))}
-                                            placeholder="What happened? Key takeaways, next actions..."
-                                            rows={3}
-                                            style={{ width: '100%', padding: '0.5rem 0.625rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8125rem', fontFamily: 'inherit', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: '1.5' }} />
-                                    </div>
-                                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                        <button type="button" onClick={() => setShowLogActivity(false)}
-                                            style={{ padding: '0.4rem 0.875rem', background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                            Cancel
-                                        </button>
-                                        <button type="button" onClick={() => {
-                                                if (!newActivity.type) return;
-                                                onSaveActivity && onSaveActivity({
-                                                    ...newActivity,
-                                                    opportunityId: opportunity.id,
-                                                    companyName: opportunity.account || ''
-                                                });
-                                                setNewActivity({ type: 'Call', date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'), notes: '' });
-                                                setShowLogActivity(false);
-                                            }}
-                                            style={{ padding: '0.4rem 0.875rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                            Save Activity
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Activity history */}
-                            {oppActivities.length === 0 && !showLogActivity && (
-                                <div style={{ textAlign: 'center', padding: '1.25rem', color: '#94a3b8', fontSize: '0.8125rem', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #e2e8f0' }}>
-                                    No activities logged yet. Click <strong>+ Log Activity</strong> to record a call, email, or meeting.
-                                </div>
-                            )}
-                            {oppActivities.length > 0 && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '260px', overflowY: 'auto' }}>
-                                    {oppActivities.map((act, i) => (
-                                        <div key={act.id} style={{ display: 'flex', gap: '0.75rem', padding: '0.625rem 0.75rem', background: i % 2 === 0 ? '#fff' : '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '8px', alignItems: 'flex-start' }}>
-                                            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
-                                                {activityTypeIcon[act.type] || '📝'}
-                                            </div>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
-                                                    <span style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#1e293b' }}>{act.type}</span>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                        <span style={{ fontSize: '0.6875rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                                                            {new Date(act.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                                        </span>
-                                                        {onDeleteActivity && (
-                                                            <button type="button" onClick={() => onDeleteActivity(act.id)}
-                                                                title="Remove activity"
-                                                                style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', fontSize: '0.8125rem', padding: '0', lineHeight: 1 }}
-                                                                onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-                                                                onMouseLeave={e => e.currentTarget.style.color = '#cbd5e1'}>✕</button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                {act.notes && (
-                                                    <div style={{ fontSize: '0.8125rem', color: '#475569', lineHeight: '1.4', wordBreak: 'break-word' }}>{act.notes}</div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
                     {Object.keys(validationErrors).length > 0 && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 0.875rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', marginTop: '1rem', color: '#dc2626', fontSize: '0.8125rem', fontWeight: '600' }}>
                             ⚠ Please fill in all required fields before saving.
@@ -1213,7 +1665,9 @@ if (formData.account && formData.account.trim()) {
                         </button>
                     </div>
                 </form>
+                </div>{/* end details tab */}
             </div>
+
             {nestedModal && nestedModal.type === 'contact' && (
                 <div className="modal-overlay" style={{ zIndex: 2000 }} onClick={() => setNestedModal(null)}>
                     <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>

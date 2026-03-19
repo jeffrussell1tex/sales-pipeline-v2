@@ -1777,26 +1777,107 @@ dbFetch('/.netlify/functions/users?me=true')
         <AppProvider value={appContextValue}>
         <div className="app-container">
             <header className="header">
-                <div className="header-inner" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gridTemplateRows: 'auto auto', alignItems: 'center', gap: '0.375rem 0.75rem', position: 'relative' }}>
-                    {/* ── LEFT: Accelerep permanent brand logo ── */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gridColumn: '1', gridRow: '1 / 3', gap: '0.25rem', flexShrink: 0 }}>
-                        <img
-                            src="/accelerep-logo-transparent-large.svg"
-                            alt="Accelerep"
-                            style={{ height: '40px', width: 'auto', maxWidth: '180px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }}
-                        />
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: '2px' }}>
+                <div className="header-inner" style={{ position: 'relative' }}>
+                    {/* ── SINGLE ROW: left=date/logo | center=search | right=user actions ── */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+
+                    {/* LEFT: client logo + date/quarter */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', minWidth: '160px' }}>
+                        {settings.logoUrl ? (
+                            <img src={settings.logoUrl} alt="Company Logo"
+                                style={{ height: '48px', width: 'auto', maxWidth: '200px', objectFit: 'contain' }} />
+                        ) : (
+                            <img src="/accelerep-logo-transparent-large.svg" alt="Accelerep"
+                                style={{ height: '48px', width: 'auto', maxWidth: '200px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+                        )}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
                             <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.65)' }}>
                                 {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                             </span>
-                            <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.75rem' }}>·</span>
                             <span style={{ fontSize: '0.6rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', background: 'rgba(255,255,255,0.15)', color: '#fff', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid rgba(255,255,255,0.25)', lineHeight: '1.4' }}>
                                 {(() => { const q = getQuarter(new Date().toISOString()); return getQuarterLabel(q, new Date().toISOString()); })()}
                             </span>
                         </div>
                     </div>
-                    <div className="header-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.375rem', gridColumn: '3', gridRow: '1 / 3', justifyContent: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+
+                    {/* CENTER: Accelerep logo + search bar */}
+                    <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', padding: '0 1.5rem' }}>
+                        {/* Inline Accelerep logo — bars + wordmark, all white */}
+                        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', opacity: 0.92 }}>
+                            <svg width="108" height="32" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg">
+                                {/* Rising pipeline bars icon */}
+                                <g transform="translate(80, 76)">
+                                    <rect x="0"   y="104" width="32" height="52"  rx="6" fill="white" opacity="0.35"/>
+                                    <rect x="42"  y="72"  width="32" height="84"  rx="6" fill="white" opacity="0.55"/>
+                                    <rect x="84"  y="36"  width="32" height="120" rx="6" fill="white" opacity="0.75"/>
+                                    <rect x="126" y="0"   width="32" height="156" rx="6" fill="white"/>
+                                    <polyline points="16,104 58,72 100,36 142,0" fill="none" stroke="white" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <circle cx="142" cy="0" r="9" fill="white"/>
+                                </g>
+                                {/* Wordmark */}
+                                <text x="312" y="204" fontFamily="Arial, Helvetica, sans-serif" fontSize="116" fontWeight="500" fill="white" letterSpacing="-2">Accelerep</text>
+                                {/* TM */}
+                                <text x="960" y="124" fontFamily="Arial, Helvetica, sans-serif" fontSize="32" fontWeight="400" fill="white" opacity="0.7">™</text>
+                            </svg>
+                        </div>
+                        <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />
+                        <div style={{ position: 'relative', zIndex: 200 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '999px', border: '1px solid #e2e8f0', padding: '0.35rem 1rem', gap: '0.5rem', width: '340px', transition: 'box-shadow 0.15s, border-color 0.15s' }}
+                                onFocusCapture={e => { e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.background = '#fff'; }}
+                                onBlurCapture={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f1f5f9'; }}>
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#94a3b8" strokeWidth="1.5" style={{ flexShrink: 0 }}><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13" strokeLinecap="round"/></svg>
+                                <input
+                                    className="global-search-input"
+                                    type="text"
+                                    placeholder="Search accounts, contacts, deals..."
+                                    value={globalSearch}
+                                    onChange={e => { setGlobalSearch(e.target.value); setShowSearchResults(e.target.value.length > 0); }}
+                                    onFocus={() => { if (globalSearch.length > 0) setShowSearchResults(true); }}
+                                    style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.8125rem', color: '#1e293b', flex: 1, padding: 0, fontFamily: 'inherit' }}
+                                />
+                                {globalSearch ? (
+                                    <button onClick={() => { setGlobalSearch(''); setShowSearchResults(false); }}
+                                        style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8125rem', padding: 0, lineHeight: 1, flexShrink: 0 }}>✕</button>
+                                ) : (
+                                    <span style={{ fontSize: '0.625rem', color: '#94a3b8', background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: '3px', padding: '1px 5px', lineHeight: 1.4, flexShrink: 0 }}>/</span>
+                                )}
+                            </div>
+                            {showSearchResults && globalSearch.length > 0 && (
+                                <>
+                                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} onClick={() => setShowSearchResults(false)} />
+                                <div className="spt-search-results" style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '0.375rem', width: '400px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 9999 }} onClick={e => e.stopPropagation()}>
+                                    {(() => {
+                                        const q = globalSearch.toLowerCase();
+                                        const matchedAccounts = accounts.filter(a => (a.name || '').toLowerCase().includes(q) || (a.accountOwner || '').toLowerCase().includes(q)).slice(0, 5);
+                                        const matchedContacts = contacts.filter(c => ((c.firstName || '') + ' ' + (c.lastName || '')).toLowerCase().includes(q) || (c.company || '').toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q)).slice(0, 5);
+                                        const matchedOpps = opportunities.filter(o => (o.opportunityName || '').toLowerCase().includes(q) || (o.account || '').toLowerCase().includes(q)).slice(0, 5);
+                                        const total = matchedAccounts.length + matchedContacts.length + matchedOpps.length;
+                                        if (total === 0) return (<div style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.8125rem' }}>No results found</div>);
+                                        return (<>
+                                            {matchedAccounts.length > 0 && (<div>
+                                                <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.625rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#f8fafc', borderBottom: '1px solid #f1f3f5' }}>Accounts</div>
+                                                {matchedAccounts.map(a => { const openDeals = opportunities.filter(o => (o.account||'').toLowerCase() === (a.name||'').toLowerCase() && o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length; return (<div key={'sa-'+a.id} style={{ padding: '0.4rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); setTimeout(() => setViewingAccount(a), 100); }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='transparent'}><div><div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{a.name}</div>{a.accountOwner && <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{a.accountOwner}{openDeals > 0 ? ` · ${openDeals} open deal${openDeals>1?'s':''}` : ''}</div>}</div><span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>Account</span></div>); })}
+                                            </div>)}
+                                            {matchedContacts.length > 0 && (<div>
+                                                <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.625rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#f8fafc', borderBottom: '1px solid #f1f3f5' }}>Contacts</div>
+                                                {matchedContacts.map(c => (<div key={'sc-'+c.id} style={{ padding: '0.4rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('contacts'); setTimeout(() => setViewingContact(c), 100); }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='transparent'}><div><div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{c.firstName} {c.lastName}</div><div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{[c.title, c.company].filter(Boolean).join(' · ')}</div></div><span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>Contact</span></div>))}
+                                            </div>)}
+                                            {matchedOpps.length > 0 && (<div>
+                                                <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.625rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#f8fafc', borderBottom: '1px solid #f1f3f5' }}>Opportunities</div>
+                                                {matchedOpps.map(o => (<div key={'so-'+o.id} style={{ padding: '0.4rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('pipeline'); setTimeout(() => { setEditingOpp(o); setShowModal(true); }, 150); }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='transparent'}><div><div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{o.opportunityName || o.account || 'Unnamed'}</div><div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{o.account} · {o.stage}</div></div><span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>${(o.arr||0).toLocaleString()}</span></div>))}
+                                            </div>)}
+                                        </>);
+                                    })()}
+                                </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* RIGHT: stacked — user pill on top, icons below, org switcher below that */}
+                    <div className="header-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem', justifyContent: 'center', minWidth: '160px' }}>
+                        {/* ROW A: user pill */}
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
                         <div style={{ position: 'relative' }}>
                         <div
                             onClick={() => {
@@ -1866,27 +1947,6 @@ dbFetch('/.netlify/functions/users?me=true')
                                 Logout
                             </button>
                         </div>
-                        {userMemberships?.data?.length > 1 && (
-                            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.125rem' }}>
-                                <OrganizationSwitcher
-                                    appearance={{
-                                        elements: {
-                                            rootBox: { display: 'flex', alignItems: 'center' },
-                                            organizationSwitcherTrigger: {
-                                                padding: '0.2rem 0.625rem',
-                                                borderRadius: '12px',
-                                                border: '1px solid rgba(255,255,255,0.2)',
-                                                background: 'rgba(255,255,255,0.1)',
-                                                color: '#fff',
-                                                fontSize: '0.6875rem',
-                                                fontWeight: '600',
-                                            }
-                                        }
-                                    }}
-                                />
-                            </div>
-                        )}
-
                         {/* ── Profile Panel ─────────────────────────────────── */}
                         {showProfilePanel && (() => {
                             const DEFAULT_PREFS = {
@@ -2087,16 +2147,38 @@ dbFetch('/.netlify/functions/users?me=true')
                                 </>
                             );
                         })()}
-                        </div>
+                        </div>{/* end profile panel relative wrapper */}
+                        </div>{/* end ROW A: user pill */}
+
+                        {/* ROW B: org switcher + keyboard + bell — all centered under user pill */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                        {userMemberships?.data?.length > 1 && (
+                            <OrganizationSwitcher
+                                appearance={{
+                                    elements: {
+                                        rootBox: { display: 'flex', alignItems: 'center' },
+                                        organizationSwitcherTrigger: {
+                                            padding: '0.2rem 0.625rem',
+                                            borderRadius: '12px',
+                                            border: '1px solid rgba(255,255,255,0.2)',
+                                            background: 'rgba(255,255,255,0.1)',
+                                            color: '#fff',
+                                            fontSize: '0.6875rem',
+                                            fontWeight: '600',
+                                        }
+                                    }
+                                }}
+                            />
+                        )}
                         <button
                             onClick={() => setShowShortcuts(v => !v)}
                             title="Keyboard shortcuts"
                             style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '50%',
-                                width: '40px', height: '40px', cursor: 'pointer', fontSize: '1rem', fontWeight: '800',
+                                width: '32px', height: '32px', cursor: 'pointer', fontSize: '1rem', fontWeight: '800',
                                 transition: 'all 0.2s ease', fontFamily: 'inherit', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}
                             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.25)'; e.currentTarget.style.transform = 'scale(1.1)'; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.transform = 'scale(1)'; }}>
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                                 <rect x="2" y="6" width="20" height="13" rx="2"/>
                                 <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M10 14h4"/>
                             </svg>
@@ -2105,33 +2187,34 @@ dbFetch('/.netlify/functions/users?me=true')
                         <button
                             onClick={() => setShowNotifications(!showNotifications)}
                             style={{
-                                background: notifications.length > 0 ? '#ef4444' : '#f1f3f5',
-                                color: notifications.length > 0 ? 'white' : '#64748b',
-                                border: 'none',
+                                background: notifications.length > 0 ? '#ef4444' : 'rgba(255,255,255,0.15)',
+                                color: notifications.length > 0 ? 'white' : '#fff',
+                                border: notifications.length > 0 ? 'none' : '1px solid rgba(255,255,255,0.25)',
                                 borderRadius: '50%',
-                                width: '40px',
-                                height: '40px',
+                                width: '32px',
+                                height: '32px',
                                 cursor: 'pointer',
-                                fontSize: '1.2rem',
+                                fontSize: '1rem',
                                 fontWeight: '700',
                                 position: 'relative',
-                                transition: 'all 0.2s ease'
+                                transition: 'all 0.2s ease',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
                             }}
-                            onMouseEnter={e => e.target.style.transform = 'scale(1.1)'}
-                            onMouseLeave={e => e.target.style.transform = 'scale(1)'}
+                            onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
+                            onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                         >
                             🔔
                             {notifications.length > 0 && (
                                 <span style={{
                                     position: 'absolute',
-                                    top: '-5px',
-                                    right: '-5px',
+                                    top: '-4px',
+                                    right: '-4px',
                                     background: '#f59e0b',
                                     color: 'white',
                                     borderRadius: '50%',
-                                    width: '20px',
-                                    height: '20px',
-                                    fontSize: '0.7rem',
+                                    width: '16px',
+                                    height: '16px',
+                                    fontSize: '0.6rem',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center'
@@ -2219,72 +2302,12 @@ dbFetch('/.netlify/functions/users?me=true')
                                 )}
                             </div>
                         )}
-                    </div>
-                    </div>
-                    {/* ── CENTER TOP: Client uploaded logo ── */}
-                    <div style={{ gridColumn: '2', gridRow: '1', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40px' }}>
-                        {settings.logoUrl && (
-                            <img
-                                src={settings.logoUrl}
-                                alt="Company Logo"
-                                style={{ height: '36px', width: 'auto', maxWidth: '200px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }}
-                            />
-                        )}
-                    </div>
+                    </div>{/* end notifications relative wrapper */}
+                    </div>{/* end ROW B: icons */}
 
-                    {/* Global Search - centered, row 2 */}
-                    <div style={{ gridColumn: '2', gridRow: '2', zIndex: 200 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '999px', border: '1px solid #e2e8f0', padding: '0.35rem 1rem', gap: '0.5rem', width: '340px', transition: 'box-shadow 0.15s, border-color 0.15s' }}
-                            onFocusCapture={e => { e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.background = '#fff'; }}
-                            onBlurCapture={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f1f5f9'; }}>
-                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#94a3b8" strokeWidth="1.5" style={{ flexShrink: 0 }}><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13" strokeLinecap="round"/></svg>
-                            <input
-                                className="global-search-input"
-                                type="text"
-                                placeholder="Search accounts, contacts, deals..."
-                                value={globalSearch}
-                                onChange={e => { setGlobalSearch(e.target.value); setShowSearchResults(e.target.value.length > 0); }}
-                                onFocus={() => { if (globalSearch.length > 0) setShowSearchResults(true); }}
-                                style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.8125rem', color: '#1e293b', flex: 1, padding: 0, fontFamily: 'inherit' }}
-                            />
-                            {globalSearch ? (
-                                <button onClick={() => { setGlobalSearch(''); setShowSearchResults(false); }}
-                                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8125rem', padding: 0, lineHeight: 1, flexShrink: 0 }}>✕</button>
-                            ) : (
-                                <span style={{ fontSize: '0.625rem', color: '#94a3b8', background: '#fff', border: '0.5px solid #e2e8f0', borderRadius: '3px', padding: '1px 5px', lineHeight: 1.4, flexShrink: 0 }}>/</span>
-                            )}
-                        </div>
-                        {showSearchResults && globalSearch.length > 0 && (
-                            <>
-                            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} onClick={() => setShowSearchResults(false)} />
-                            <div className="spt-search-results" style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '0.375rem', width: '400px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 9999 }} onClick={e => e.stopPropagation()}>
-                                {(() => {
-                                    const q = globalSearch.toLowerCase();
-                                    const matchedAccounts = accounts.filter(a => (a.name || '').toLowerCase().includes(q) || (a.accountOwner || '').toLowerCase().includes(q)).slice(0, 5);
-                                    const matchedContacts = contacts.filter(c => ((c.firstName || '') + ' ' + (c.lastName || '')).toLowerCase().includes(q) || (c.company || '').toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q)).slice(0, 5);
-                                    const matchedOpps = opportunities.filter(o => (o.opportunityName || '').toLowerCase().includes(q) || (o.account || '').toLowerCase().includes(q)).slice(0, 5);
-                                    const total = matchedAccounts.length + matchedContacts.length + matchedOpps.length;
-                                    if (total === 0) return (<div style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.8125rem' }}>No results found</div>);
-                                    return (<>
-                                        {matchedAccounts.length > 0 && (<div>
-                                            <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.625rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#f8fafc', borderBottom: '1px solid #f1f3f5' }}>Accounts</div>
-                                            {matchedAccounts.map(a => { const openDeals = opportunities.filter(o => (o.account||'').toLowerCase() === (a.name||'').toLowerCase() && o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length; return (<div key={'sa-'+a.id} style={{ padding: '0.4rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('accounts'); setTimeout(() => setViewingAccount(a), 100); }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='transparent'}><div><div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{a.name}</div>{a.accountOwner && <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{a.accountOwner}{openDeals > 0 ? ` · ${openDeals} open deal${openDeals>1?'s':''}` : ''}</div>}</div><span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>Account</span></div>); })}
-                                        </div>)}
-                                        {matchedContacts.length > 0 && (<div>
-                                            <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.625rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#f8fafc', borderBottom: '1px solid #f1f3f5' }}>Contacts</div>
-                                            {matchedContacts.map(c => (<div key={'sc-'+c.id} style={{ padding: '0.4rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('contacts'); setTimeout(() => setViewingContact(c), 100); }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='transparent'}><div><div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{c.firstName} {c.lastName}</div><div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{[c.title, c.company].filter(Boolean).join(' · ')}</div></div><span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>Contact</span></div>))}
-                                        </div>)}
-                                        {matchedOpps.length > 0 && (<div>
-                                            <div style={{ padding: '0.5rem 0.75rem', fontSize: '0.625rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', background: '#f8fafc', borderBottom: '1px solid #f1f3f5' }}>Opportunities</div>
-                                            {matchedOpps.map(o => (<div key={'so-'+o.id} style={{ padding: '0.4rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { setGlobalSearch(''); setShowSearchResults(false); setActiveTab('pipeline'); setTimeout(() => { setEditingOpp(o); setShowModal(true); }, 150); }} onMouseEnter={e => e.currentTarget.style.background='#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background='transparent'}><div><div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{o.opportunityName || o.account || 'Unnamed'}</div><div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{o.account} · {o.stage}</div></div><span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>${(o.arr||0).toLocaleString()}</span></div>))}
-                                        </div>)}
-                                    </>);
-                                })()}
-                            </div>
-                            </>
-                        )}
-                    </div>
-                    </div>
+                    </div>{/* end header-actions */}
+
+                    </div>{/* end outer single row */}
                 </div>
             </header>
 
