@@ -363,7 +363,7 @@ function DealHistoryTab({ opportunity, oppActivities, stages, settings, contacts
 // ─────────────────────────────────────────────────────────────
 //  AI Score Tab
 // ─────────────────────────────────────────────────────────────
-function AiScoreTab({ opportunity, oppActivities, currentUser }) {
+function AiScoreTab({ opportunity, oppActivities, currentUser, onClose, onUpdate }) {
     const [score, setScore] = React.useState(opportunity.aiScore || null);
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState(null);
@@ -501,6 +501,17 @@ function AiScoreTab({ opportunity, oppActivities, currentUser }) {
                             ↻ Refresh score
                         </button>
                     </div>
+                    {/* Cancel / Update buttons */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+                        <button type="button" onClick={onClose}
+                            style={{ padding: '0.5rem 1.25rem', border: '1px solid #e2e8f0', borderRadius: '7px', background: '#fff', color: '#64748b', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            Cancel
+                        </button>
+                        <button type="button" onClick={() => onUpdate && onUpdate()}
+                            style={{ padding: '0.5rem 1.5rem', border: 'none', borderRadius: '7px', background: '#2563eb', color: '#fff', fontSize: '0.875rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            Update
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -514,6 +525,16 @@ function AiScoreTab({ opportunity, oppActivities, currentUser }) {
                         style={{ fontSize: '0.875rem', padding: '0.5rem 1.5rem', border: 'none', borderRadius: '8px', background: '#2563eb', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '600' }}>
                         Score this deal
                     </button>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+                        <button type="button" onClick={onClose}
+                            style={{ padding: '0.5rem 1.25rem', border: '1px solid #e2e8f0', borderRadius: '7px', background: '#fff', color: '#64748b', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            Cancel
+                        </button>
+                        <button type="button" onClick={() => onUpdate && onUpdate()}
+                            style={{ padding: '0.5rem 1.5rem', border: 'none', borderRadius: '7px', background: '#2563eb', color: '#fff', fontSize: '0.875rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            Update
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
@@ -1016,6 +1037,8 @@ if (formData.account && formData.account.trim()) {
                         opportunity={opportunity}
                         oppActivities={oppActivities}
                         currentUser={currentUser}
+                        onClose={onClose}
+                        onUpdate={() => { const f = document.getElementById('opp-form'); if (f) f.requestSubmit(); }}
                     />
                 )}
 
