@@ -956,7 +956,7 @@ if (formData.account && formData.account.trim()) {
                             { id: 'details', label: 'Details' },
                             { id: 'history', label: `History${oppActivities.length > 0 ? ` (${oppActivities.length})` : ''}` },
                             { id: 'contacts', label: `Contacts${Object.keys((() => { const ce = {}; oppActivities.forEach(a => { if (a.contactName) ce[a.contactName] = true; }); (opportunity.contacts||'').split(', ').filter(Boolean).forEach(n => { ce[n.split(' (')[0]] = true; }); return ce; })()).length > 0 ? ` (${Object.keys((() => { const ce = {}; oppActivities.forEach(a => { if (a.contactName) ce[a.contactName] = true; }); (opportunity.contacts||'').split(', ').filter(Boolean).forEach(n => { ce[n.split(' (')[0]] = true; }); return ce; })()).length})` : ''}` },
-                            ...(settings?.extra?.aiScoringEnabled ? [{ id: 'ai-score', label: '🤖 AI Score' }] : []),
+                            ...(settings?.aiScoringEnabled ? [{ id: 'ai-score', label: '🤖 AI Score' }] : []),
                         ].map(tab => (
                             <button
                                 key={tab.id}
