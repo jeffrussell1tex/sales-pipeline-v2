@@ -1817,24 +1817,6 @@ dbFetch('/.netlify/functions/users?me=true')
                     </div>
                     <div className="header-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.375rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        {userMemberships?.data?.length > 1 && (
-                            <OrganizationSwitcher
-                                appearance={{
-                                    elements: {
-                                        rootBox: { display: 'flex', alignItems: 'center' },
-                                        organizationSwitcherTrigger: {
-                                            padding: '0.375rem 0.75rem',
-                                            borderRadius: '20px',
-                                            border: '1px solid rgba(255,255,255,0.2)',
-                                            background: 'rgba(255,255,255,0.12)',
-                                            color: '#fff',
-                                            fontSize: '0.8125rem',
-                                            fontWeight: '600',
-                                        }
-                                    }
-                                }}
-                            />
-                        )}
                         <div style={{ position: 'relative' }}>
                         <div
                             onClick={() => {
@@ -1904,6 +1886,26 @@ dbFetch('/.netlify/functions/users?me=true')
                                 Logout
                             </button>
                         </div>
+                        {userMemberships?.data?.length > 1 && (
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.125rem' }}>
+                                <OrganizationSwitcher
+                                    appearance={{
+                                        elements: {
+                                            rootBox: { display: 'flex', alignItems: 'center' },
+                                            organizationSwitcherTrigger: {
+                                                padding: '0.2rem 0.625rem',
+                                                borderRadius: '12px',
+                                                border: '1px solid rgba(255,255,255,0.2)',
+                                                background: 'rgba(255,255,255,0.1)',
+                                                color: '#fff',
+                                                fontSize: '0.6875rem',
+                                                fontWeight: '600',
+                                            }
+                                        }
+                                    }}
+                                />
+                            </div>
+                        )}
 
                         {/* ── Profile Panel ─────────────────────────────────── */}
                         {showProfilePanel && (() => {
