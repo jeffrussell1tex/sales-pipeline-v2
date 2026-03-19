@@ -41,8 +41,6 @@ export default function SettingsTab({
 
     // Local state
     const [settingsView, setSettingsView] = useState('menu');
-    const [savedToast, setSavedToast] = useState(false);
-    const [settingsSnapshot, setSettingsSnapshot] = useState(null);
     const [auditEntries, setAuditEntries] = useState([]);
     const [auditLoading, setAuditLoading] = useState(false);
     const [newPainPointInput, setNewPainPointInput] = useState('');
@@ -87,50 +85,6 @@ export default function SettingsTab({
         });
     };
 
-
-    // Navigate to a settings view — snapshot current settings for Cancel
-    const goToView = (view) => {
-        setSettingsSnapshot(JSON.parse(JSON.stringify(settings)));
-        setSettingsView(view);
-        setSavedToast(false);
-    };
-
-    // Back — just navigate to menu, no revert
-    const goBackToMenu = () => {
-        setSettingsSnapshot(null);
-        setSettingsView('menu');
-    };
-
-    // Save — commit changes, show toast, go back
-    const handleSaveView = () => {
-        setSettingsSnapshot(null);
-        setSavedToast(true);
-        setTimeout(() => setSavedToast(false), 2500);
-        setSettingsView('menu');
-    };
-
-    // Cancel — revert to snapshot and go back
-    const handleCancelView = () => {
-        if (settingsSnapshot) setSettings(settingsSnapshot);
-        setSettingsSnapshot(null);
-        setSavedToast(false);
-        setSettingsView('menu');
-    };
-
-    // Shared Save/Cancel bar rendered at the bottom of each settings view
-    const SaveCancelBar = () => (
-        <div style={{ display:'flex', gap:'0.75rem', padding:'1rem 1.5rem', borderTop:'1px solid #e2e8f0', background:'#f8fafc', marginTop:'0.5rem' }}>
-            <button onClick={handleSaveView}
-                style={{ padding:'0.5rem 1.5rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
-                Save changes
-            </button>
-            <button onClick={handleCancelView}
-                style={{ padding:'0.5rem 1.25rem', background:'transparent', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
-                Cancel
-            </button>
-        </div>
-    );
-
     return (
 
                 <div className="tab-page">
@@ -142,11 +96,6 @@ export default function SettingsTab({
                         </div>
                     </div>
                 <>
-                    {savedToast && (
-                        <div style={{ position:'fixed', bottom:'2rem', left:'50%', transform:'translateX(-50%)', background:'#1e293b', color:'#fff', padding:'0.625rem 1.5rem', borderRadius:'8px', fontSize:'0.875rem', fontWeight:'600', zIndex:9999, display:'flex', alignItems:'center', gap:'8px', boxShadow:'0 4px 16px rgba(0,0,0,0.18)' }}>
-                            <span style={{ color:'#4ade80' }}>✓</span> Settings saved
-                        </div>
-                    )}
                     {settingsView === 'menu' && (
                         <div className="table-container">
                             <div className="table-header">
@@ -188,7 +137,7 @@ export default function SettingsTab({
                                         const isLast = idx === arr.length - 1 || arr[idx + 1]?.group;
                                         return (
                                             <div key={item.view}
-                                                onClick={() => goToView(item.view)}
+                                                onClick={() => setSettingsView(item.view)}
                                                 style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 16px 9px 24px', borderBottom: isLast ? 'none' : '0.5px solid #f1f5f9', cursor: 'pointer', transition: 'background 0.1s' }}
                                                 onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -211,9 +160,9 @@ export default function SettingsTab({
                     {settingsView === 'products' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
+                                <button className="btn btn-secondary" onClick={() => setSettingsView('menu')} style={{ marginRight: '1rem' }}>← Back</button>
                                 <h2>PRODUCTS</h2>
-                                </div>
+                            </div>
                             <div style={{ padding: '1.5rem' }}>
                                 <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1.5rem', lineHeight: '1.6' }}>
                                     Define your product and service catalog. These products will appear as selectable options when creating or editing opportunities.
@@ -267,8 +216,7 @@ export default function SettingsTab({
                                         </div>
                                     )}
                                 </div>
-                        </div>
-                            <SaveCancelBar />
+                            </div>
                         </div>
                     )}
 
@@ -306,7 +254,7 @@ export default function SettingsTab({
                             <div className="table-container">
                                 <div className="table-header">
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
+                                        <button className="btn btn-secondary" onClick={() => setSettingsView('menu')}>← Back</button>
                                         <h2>FIELD VISIBILITY</h2>
                                     </div>
                                     <span style={{ fontSize: '0.8125rem', color: '#64748b' }}>Admins always see all fields</span>
@@ -388,7 +336,7 @@ export default function SettingsTab({
                             <div className="table-container">
                                 <div className="table-header">
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
+                                        <button className="btn btn-secondary" onClick={() => setSettingsView('menu')}>← Back</button>
                                         <h2>AUDIT LOG</h2>
                                     </div>
                                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -473,10 +421,12 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={goBackToMenu}
+                                    onClick={() => setSettingsView('menu')}
                                     style={{ marginRight: '1rem' }}
-                                >← Back</button>
-                                                                <h2>FISCAL YEAR SETTINGS</h2>
+                                >
+                                    ← Back
+                                </button>
+                                <h2>FISCAL YEAR SETTINGS</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
                                 <div className="form-group" style={{ maxWidth: '400px' }}>
@@ -526,7 +476,6 @@ export default function SettingsTab({
                                     </div>
                                 </div>
                             </div>
-                            <SaveCancelBar />
                         </div>
                     )}
 
@@ -535,10 +484,12 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={goBackToMenu}
+                                    onClick={() => setSettingsView('menu')}
                                     style={{ marginRight: '1rem' }}
-                                >← Back</button>
-                                                                <h2>COMPANY LOGO</h2>
+                                >
+                                    ← Back
+                                </button>
+                                <h2>COMPANY LOGO</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
                                 <div style={{ maxWidth: '600px' }}>
@@ -655,7 +606,6 @@ export default function SettingsTab({
                                     )}
                                 </div>
                             </div>
-                            <SaveCancelBar />
                         </div>
                     )}
 
@@ -664,9 +614,11 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={goBackToMenu}
+                                    onClick={() => setSettingsView('menu')}
                                     style={{ marginRight: '1rem' }}
-                                >← Back</button>
+                                >
+                                    ← Back
+                                </button>
                                 <h2>MANAGE USERS</h2>
                                 <button className="btn" onClick={handleAddUser}>+ ADD USER</button>
                             </div>
@@ -759,17 +711,17 @@ export default function SettingsTab({
 
                     {settingsView === 'team-builder' && (
                         <TeamBuilder
-                            onBack={handleCancelView}
+                            onBack={() => setSettingsView('menu')}
                         />
                     )}
                     {settingsView === 'territories' && (
                         <TerritoriesSettings
-                            onBack={handleCancelView}
+                            onBack={() => setSettingsView('menu')}
                         />
                     )}
                     {settingsView === 'verticals' && (
                         <VerticalsSettings
-                            onBack={handleCancelView}
+                            onBack={() => setSettingsView('menu')}
                         />
                     )}
 
@@ -778,10 +730,12 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={goBackToMenu}
+                                    onClick={() => setSettingsView('menu')}
                                     style={{ marginRight: '1rem' }}
-                                >← Back</button>
-                                                                <h2>PAIN POINTS LIBRARY</h2>
+                                >
+                                    ← Back
+                                </button>
+                                <h2>PAIN POINTS LIBRARY</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
                                 <div style={{ marginBottom: '2rem' }}>
@@ -897,7 +851,6 @@ export default function SettingsTab({
                                     )}
                                 </div>
                             </div>
-                            <SaveCancelBar />
                         </div>
                     )}
 
@@ -906,10 +859,12 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={goBackToMenu}
+                                    onClick={() => setSettingsView('menu')}
                                     style={{ marginRight: '1rem' }}
-                                >← Back</button>
-                                                                <h2>INDUSTRIES</h2>
+                                >
+                                    ← Back
+                                </button>
+                                <h2>INDUSTRIES</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
                                 {(() => {
@@ -976,14 +931,13 @@ export default function SettingsTab({
                                     );
                                 })()}
                             </div>
-                            <SaveCancelBar />
                         </div>
                     )}
 
                     {settingsView === 'funnel-stages' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
+                                <button className="btn btn-secondary" onClick={() => setSettingsView('menu')} style={{ marginRight: '1rem' }}>← Back</button>
                                 <h2>SALES FUNNEL STAGES</h2>
                             </div>
                             <div style={{ padding: '1.5rem', maxWidth: '650px' }}>
@@ -1053,7 +1007,6 @@ export default function SettingsTab({
                                     })}
                                 </div>
                             </div>
-                            <SaveCancelBar />
                         </div>
                     )}
 
@@ -1064,15 +1017,15 @@ export default function SettingsTab({
                             opportunities={opportunities}
                             activePipelineId={activePipelineId}
                             setActivePipelineId={setActivePipelineId}
-                            onBack={handleCancelView}
+                            onBack={() => setSettingsView('menu')}
                         />
                     )}
 
                     {settingsView === 'kpi-settings' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
-                                                                <h2>KPI SETTINGS</h2>
+                                <button className="btn btn-secondary" onClick={() => setSettingsView('menu')} style={{ marginRight: '1rem' }}>← Back</button>
+                                <h2>KPI SETTINGS</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
                                 <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
@@ -1236,15 +1189,14 @@ export default function SettingsTab({
                                     onMouseLeave={e => { e.target.style.borderColor = '#d1d5db'; e.target.style.color = '#64748b'; }}
                                 >+ Add New KPI</button>
                             </div>
-                            <SaveCancelBar />
                         </div>
                     )}
 
                     {settingsView === 'ai-features' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
-                                                                <h2>AI FEATURES</h2>
+                                <button className="btn" onClick={() => setSettingsView('menu')}>← Back</button>
+                                <h2>AI FEATURES</h2>
                             </div>
                             <div style={{ padding: '1.5rem', maxWidth: '560px' }}>
 
@@ -1265,7 +1217,7 @@ export default function SettingsTab({
                                         <div>
                                             <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <span>🤖</span> AI deal scoring
-                                                {(settings.aiScoringEnabled) && (
+                                                {(settings.extra?.aiScoringEnabled) && (
                                                     <span style={{ fontSize: '0.625rem', fontWeight: '700', background: '#d1fae5', color: '#065f46', padding: '1px 8px', borderRadius: '999px' }}>ENABLED</span>
                                                 )}
                                             </div>
@@ -1277,21 +1229,21 @@ export default function SettingsTab({
                                             <div
                                                 onClick={() => setSettings(prev => ({
                                                     ...prev,
-                                                    aiScoringEnabled: !prev.aiScoringEnabled
+                                                    extra: { ...(prev.extra || {}), aiScoringEnabled: !(prev.extra?.aiScoringEnabled) }
                                                 }))}
                                                 style={{
                                                     width: '44px', height: '24px', borderRadius: '12px', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0,
-                                                    background: settings.aiScoringEnabled ? '#2563eb' : '#e2e8f0',
+                                                    background: settings.extra?.aiScoringEnabled ? '#2563eb' : '#e2e8f0',
                                                     position: 'relative',
                                                 }}>
                                                 <div style={{
                                                     position: 'absolute', top: '3px', width: '18px', height: '18px', borderRadius: '50%', background: '#fff',
-                                                    transition: 'left 0.2s', left: settings.aiScoringEnabled ? '23px' : '3px',
+                                                    transition: 'left 0.2s', left: settings.extra?.aiScoringEnabled ? '23px' : '3px',
                                                     boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                                                 }} />
                                             </div>
                                             <span style={{ fontSize: '0.75rem', color: '#64748b', userSelect: 'none' }}>
-                                                {settings.aiScoringEnabled ? 'On' : 'Off'}
+                                                {settings.extra?.aiScoringEnabled ? 'On' : 'Off'}
                                             </span>
                                         </label>
                                     </div>
@@ -1330,15 +1282,14 @@ export default function SettingsTab({
                                 </div>
 
                             </div>
-                            <SaveCancelBar />
                         </div>
                     )}
 
                     {settingsView === 'data-storage' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
-                                                                <h2>DATA STORAGE</h2>
+                                <button className="btn btn-secondary" onClick={() => setSettingsView('menu')} style={{ marginRight: '1rem' }}>← Back</button>
+                                <h2>DATA STORAGE</h2>
                             </div>
                             <div style={{ padding: '1.5rem', maxWidth: '600px' }}>
                                 <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
@@ -1425,7 +1376,6 @@ export default function SettingsTab({
                                     </div>
                                 </div>
                             </div>
-                            <SaveCancelBar />
                         </div>
                     )}
 
@@ -1434,9 +1384,11 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={goBackToMenu}
+                                    onClick={() => setSettingsView('menu')}
                                     style={{ marginRight: '1rem' }}
-                                >← Back</button>
+                                >
+                                    ← Back
+                                </button>
                                 <h2>DATA MANAGEMENT</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
@@ -1704,12 +1656,12 @@ export default function SettingsTab({
                                         className="btn"
                                         onClick={() => {
                                             showConfirm('Are you SURE you want to delete ALL data? This cannot be undone.\n\nConsider exporting a backup first.', () => {
-                                                showConfirm('FINAL WARNING: This will permanently erase all opportunities, accounts, contacts, tasks, activities, and settings. Proceed?', () => {
+                                                showConfirm('FINAL WARNING: This will permanently erase all opportunities, accounts, contacts, tasks, activities, and settings. Proceed?', async () => {
+                                                    // Clear React state immediately
                                                     setOpportunities([]);
                                                     setAccounts([]);
                                                     setContacts([]);
                                                     setTasks([]);
-                                                    setSettings(prev => ({ ...prev, taskTypes: ['Call', 'Meeting', 'Email'] }));
                                                     setActivities([]);
                                                     setSettings({
                                                         fiscalYearStart: 10,
@@ -1718,17 +1670,36 @@ export default function SettingsTab({
                                                         painPoints: ['High Turnover', 'Scheduling Complexity', 'Compliance Issues', 'Manual Processes', 'Poor Visibility', 'Budget Constraints', 'Integration Challenges'],
                                                         verticalMarkets: ['Manufacturing', 'Healthcare', 'Energy & Utilities', 'Oil & Gas', 'Transportation', 'Government', 'Retail', 'Hospitality', 'Construction', 'Mining']
                                                     });
+                                                    // Clear localStorage
                                                     try {
-                                                    safeStorage.removeItem('salesOpportunities');
-                                                    safeStorage.removeItem('salesAccounts');
-                                                    safeStorage.removeItem('salesContacts');
-                                                    safeStorage.removeItem('salesTasks');
-                                                    safeStorage.removeItem('salesTaskTypes');
-                                                    safeStorage.removeItem('salesActivities');
-                                                    safeStorage.removeItem('salesSettings');
+                                                        safeStorage.removeItem('salesOpportunities');
+                                                        safeStorage.removeItem('salesAccounts');
+                                                        safeStorage.removeItem('salesContacts');
+                                                        safeStorage.removeItem('salesTasks');
+                                                        safeStorage.removeItem('salesTaskTypes');
+                                                        safeStorage.removeItem('salesActivities');
+                                                        safeStorage.removeItem('salesSettings');
                                                     } catch(e) {}
-                                                    alert('All data has been cleared.');
-                                                    goBackToMenu();
+                                                    // Clear DB — delete from all entity tables
+                                                    const endpoints = [
+                                                        '/.netlify/functions/opportunities',
+                                                        '/.netlify/functions/accounts',
+                                                        '/.netlify/functions/contacts',
+                                                        '/.netlify/functions/tasks',
+                                                        '/.netlify/functions/activities',
+                                                        '/.netlify/functions/leads',
+                                                    ];
+                                                    try {
+                                                        await Promise.all(endpoints.map(url =>
+                                                            dbFetch(`${url}?clear=true`, { method: 'DELETE' }).catch(err =>
+                                                                console.error('Clear failed for', url, err.message)
+                                                            )
+                                                        ));
+                                                        alert('All data has been cleared.');
+                                                    } catch(e) {
+                                                        alert('Local data cleared. Some database records may not have been deleted — refresh the page to verify.');
+                                                    }
+                                                    setSettingsView('menu');
                                                 });
                                             });
                                         }}
