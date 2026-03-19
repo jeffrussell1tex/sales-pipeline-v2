@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { stages } from '../../utils/constants';
+import { dbFetch } from '../../utils/storage';
 
 // ─────────────────────────────────────────────────────────────
 //  Deal History Tab
@@ -355,6 +356,165 @@ function DealHistoryTab({ opportunity, oppActivities, stages, settings, contacts
                     {saving ? 'Saving…' : 'Update'}
                 </button>
             </div>
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────
+//  AI Score Tab
+// ─────────────────────────────────────────────────────────────
+function AiScoreTab({ opportunity, oppActivities, currentUser }) {
+    const [score, setScore] = React.useState(opportunity.aiScore || null);
+    const [loading, setLoading] = React.useState(false);
+    const [error, setError] = React.useState(null);
+
+    // Auto-load if no cached score exists
+    React.useEffect(() => {
+        if (!score) fetchScore(false);
+    }, []);
+
+    const fetchScore = async (forceRefresh = false) => {
+        setLoading(true); setError(null);
+        try {
+            const data = await dbFetch('/.netlify/functions/ai-score', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ opportunityId: opportunity.id, forceRefresh }),
+            });
+            if (data.disabled) {
+                setError('AI scoring is disabled. Enable it in Settings → AI Features.');
+            } else {
+                setScore(data);
+            }
+        } catch (err) {
+            setError('Failed to generate score: ' + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const verdictConfig = {
+        'Strong':   { color: '#27500A', bg: '#EAF3DE', border: '#C0DD97', bar: '#639922' },
+        'On Track': { color: '#185FA5', bg: '#E6F1FB', border: '#B5D4F4', bar: '#378ADD' },
+        'At Risk':  { color: '#854F0B', bg: '#FAEEDA', border: '#FAC775', bar: '#BA7517' },
+        'Critical': { color: '#A32D2D', bg: '#FCEBEB', border: '#F7C1C1', bar: '#E24B4A' },
+    };
+    const sentimentConfig = {
+        positive: { dot: '#639922', bg: '#EAF3DE', text: '#27500A' },
+        warning:  { dot: '#BA7517', bg: '#FAEEDA', text: '#854F0B' },
+        negative: { dot: '#E24B4A', bg: '#FCEBEB', text: '#A32D2D' },
+    };
+
+    const vc = score?.verdict ? verdictConfig[score.verdict] || verdictConfig['At Risk'] : null;
+    const scoredAge = score?.scoredAt
+        ? Math.floor((Date.now() - new Date(score.scoredAt).getTime()) / 60000)
+        : null;
+    const ageLabel = scoredAge !== null
+        ? scoredAge < 60 ? `${scoredAge}m ago` : scoredAge < 1440 ? `${Math.floor(scoredAge/60)}h ago` : `${Math.floor(scoredAge/1440)}d ago`
+        : null;
+
+    return (
+        <div style={{ padding: '0.25rem 0 1rem' }}>
+            {/* Loading */}
+            {loading && (
+                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🤖</div>
+                    <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1e293b', marginBottom: '4px' }}>Analyzing deal health…</div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Claude is reviewing activity history, stage velocity, and contact engagement</div>
+                </div>
+            )}
+
+            {/* Error */}
+            {!loading && error && (
+                <div style={{ textAlign: 'center', padding: '2rem' }}>
+                    <div style={{ fontSize: '0.875rem', color: '#ef4444', marginBottom: '1rem' }}>{error}</div>
+                    <button onClick={() => fetchScore(false)} style={{ fontSize: '0.8125rem', padding: '0.5rem 1.25rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#f8fafc', color: '#1e293b', cursor: 'pointer', fontFamily: 'inherit' }}>Try again</button>
+                </div>
+            )}
+
+            {/* Score display */}
+            {!loading && !error && score && vc && (
+                <div>
+                    {/* Header row — score ring + verdict + headline */}
+                    <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start', padding: '1rem 1.25rem', background: vc.bg, border: `1px solid ${vc.border}`, borderRadius: '10px', marginBottom: '1rem' }}>
+                        {/* Score ring */}
+                        <div style={{ position: 'relative', width: '72px', height: '72px', flexShrink: 0 }}>
+                            <svg width="72" height="72" viewBox="0 0 72 72">
+                                <circle cx="36" cy="36" r="30" fill="none" stroke={vc.border} strokeWidth="6"/>
+                                <circle cx="36" cy="36" r="30" fill="none" stroke={vc.bar} strokeWidth="6"
+                                    strokeDasharray={`${(score.score/100)*188} 188`}
+                                    strokeDashoffset="47" strokeLinecap="round"/>
+                            </svg>
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: vc.color, lineHeight: 1 }}>{score.score}</div>
+                                <div style={{ fontSize: '9px', fontWeight: '600', color: vc.color, opacity: 0.7, marginTop: '1px' }}>/100</div>
+                            </div>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                <span style={{ fontSize: '0.875rem', fontWeight: '700', color: vc.color, background: '#fff', padding: '2px 10px', borderRadius: '999px', border: `1px solid ${vc.border}` }}>{score.verdict}</span>
+                                {ageLabel && <span style={{ fontSize: '0.6875rem', color: vc.color, opacity: 0.7 }}>Scored {ageLabel}</span>}
+                                {score.fromCache && <span style={{ fontSize: '0.6875rem', color: vc.color, opacity: 0.6 }}>· cached</span>}
+                            </div>
+                            <div style={{ fontSize: '0.875rem', fontWeight: '600', color: vc.color, lineHeight: 1.4 }}>{score.headline}</div>
+                        </div>
+                    </div>
+
+                    {/* Signals */}
+                    {score.signals?.length > 0 && (
+                        <div style={{ marginBottom: '1rem' }}>
+                            <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Signals</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                {score.signals.map((sig, i) => {
+                                    const sc = sentimentConfig[sig.sentiment] || sentimentConfig.warning;
+                                    return (
+                                        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 12px', background: sc.bg, borderRadius: '8px' }}>
+                                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: sc.dot, flexShrink: 0, marginTop: '4px' }}/>
+                                            <div style={{ fontSize: '0.8125rem', color: sc.text, lineHeight: 1.5 }}>{sig.text}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Recommendation */}
+                    {score.recommendation && (
+                        <div style={{ marginBottom: '1rem', padding: '0.875rem 1rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                            <div style={{ fontSize: '1rem', flexShrink: 0, lineHeight: 1 }}>→</div>
+                            <div>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '3px' }}>Recommended next action</div>
+                                <div style={{ fontSize: '0.875rem', color: '#1e293b', fontWeight: '500', lineHeight: 1.5 }}>{score.recommendation}</div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Refresh button + disclaimer */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: '0.6875rem', color: '#94a3b8', lineHeight: 1.5 }}>
+                            Powered by Claude AI · Deal data is sent to Anthropic's API to generate this score
+                        </div>
+                        <button
+                            onClick={() => fetchScore(true)}
+                            style={{ fontSize: '0.75rem', padding: '0.375rem 1rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', color: '#475569', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                            ↻ Refresh score
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Empty state — no score yet, not loading */}
+            {!loading && !error && !score && (
+                <div style={{ textAlign: 'center', padding: '3rem' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🤖</div>
+                    <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1e293b', marginBottom: '4px' }}>No score yet</div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '1.25rem' }}>Generate an AI health assessment for this deal</div>
+                    <button onClick={() => fetchScore(false)}
+                        style={{ fontSize: '0.875rem', padding: '0.5rem 1.5rem', border: 'none', borderRadius: '8px', background: '#2563eb', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '600' }}>
+                        Score this deal
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
@@ -795,6 +955,7 @@ if (formData.account && formData.account.trim()) {
                             { id: 'details', label: 'Details' },
                             { id: 'history', label: `History${oppActivities.length > 0 ? ` (${oppActivities.length})` : ''}` },
                             { id: 'contacts', label: `Contacts${Object.keys((() => { const ce = {}; oppActivities.forEach(a => { if (a.contactName) ce[a.contactName] = true; }); (opportunity.contacts||'').split(', ').filter(Boolean).forEach(n => { ce[n.split(' (')[0]] = true; }); return ce; })()).length > 0 ? ` (${Object.keys((() => { const ce = {}; oppActivities.forEach(a => { if (a.contactName) ce[a.contactName] = true; }); (opportunity.contacts||'').split(', ').filter(Boolean).forEach(n => { ce[n.split(' (')[0]] = true; }); return ce; })()).length})` : ''}` },
+                            ...(settings?.extra?.aiScoringEnabled ? [{ id: 'ai-score', label: '🤖 AI Score' }] : []),
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -845,6 +1006,15 @@ if (formData.account && formData.account.trim()) {
                         onClose={onClose}
                         saving={saving}
                         onUpdate={() => { const f = document.getElementById('opp-form'); if (f) f.requestSubmit(); }}
+                    />
+                )}
+
+                {/* ══ AI SCORE TAB ══ */}
+                {opportunity && modalTab === 'ai-score' && (
+                    <AiScoreTab
+                        opportunity={opportunity}
+                        oppActivities={oppActivities}
+                        currentUser={currentUser}
                     />
                 )}
 

@@ -122,6 +122,7 @@ export const opportunities = pgTable('opportunities', {
     createdBy:            varchar('created_by', { length: 255 }),
     stageHistory:         jsonb('stage_history').default('[]'),       // [{stage, date, prevStage, author, timestamp}]
     comments:             jsonb('comments').default('[]'),            // [{id, text, author, timestamp}]
+    aiScore:              jsonb('ai_score'),                          // {score, verdict, headline, signals, recommendation, scoredAt}
     createdAt:            timestamp('created_at').notNull().defaultNow(),
     orgId:                text('org_id').notNull(),
     updatedAt:            timestamp('updated_at').notNull().defaultNow(),
