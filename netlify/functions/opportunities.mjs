@@ -102,6 +102,7 @@ const sanitize = (data) => ({
     createdBy:          data.createdBy           || null,
     stageHistory:       data.stageHistory        || [],
     comments:           data.comments            || [],
+    aiScore:            data.aiScore             ?? null,
 });
 
 // ── Handler ───────────────────────────────────────────────────────────────────
