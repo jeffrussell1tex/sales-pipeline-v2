@@ -1019,7 +1019,7 @@ if (formData.account && formData.account.trim()) {
                 )}
 
                 {/* ══ DETAILS TAB (existing content) ══ */}
-                <div style={{ display: opportunity && (modalTab === 'history' || modalTab === 'contacts') ? 'none' : 'block' }}>
+                <div style={{ display: opportunity && (modalTab === 'history' || modalTab === 'contacts' || modalTab === 'ai-score') ? 'none' : 'block' }}>
 
                 {/* Deal age / time in stage info strip */}
                 {opportunity && dealAgeInfo && (dealAgeInfo.dealAge !== null || dealAgeInfo.timeInStage !== null) && (
