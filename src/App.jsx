@@ -851,6 +851,7 @@ dbFetch('/.netlify/functions/users?me=true')
         const load = async () => {
             await waitForToken();
             dbFetch('/.netlify/functions/spiff-claims')
+                .then(r => r.json())
                 .then(data => { if (data?.spiffClaims) setSpiffClaims(data.spiffClaims); })
                 .catch(err => console.warn('spiff-claims load error:', err.message));
         };

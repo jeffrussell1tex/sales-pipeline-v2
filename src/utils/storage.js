@@ -39,10 +39,10 @@ export const dbFetch = async (url, options) => {
         ...options,
         headers: { 'Content-Type': 'application/json', ...(options?.headers || {}), ...authHeaders }
     };
-    const r = await fetch(url, mergedOptions);
-    if (!r.ok) {
-        console.error(`DB error ${r.status} ${r.statusText} [${options?.method || 'GET'} ${url}]`);
-        throw new Error(`HTTP ${r.status}`);
-    }
-    return r.json();
+    return fetch(url, mergedOptions)
+        .then(r => {
+            if (!r.ok) console.error(`DB error ${r.status} ${r.statusText} [${options?.method || 'GET'} ${url}]`);
+            return r;
+        })
+        .catch(err => { console.error(`Network error [${options?.method || 'GET'} ${url}]:`, err); throw err; });
 };

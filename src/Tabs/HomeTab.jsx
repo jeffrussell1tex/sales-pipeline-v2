@@ -246,7 +246,8 @@ function RecommendedActions({ opportunities, activities, tasks, settings, curren
                     headers: { 'Content-Type': 'application/json' },
                 });
                 // Fetch summary stats for the action rate widget
-                const data = await dbFetch(`/.netlify/functions/recommendation-log?rep=${encodeURIComponent(currentUser)}&days=30`);
+                const res = await dbFetch(`/.netlify/functions/recommendation-log?rep=${encodeURIComponent(currentUser)}&days=30`);
+                const data = await res.json();
                 if (data?.summary && data.summary.total > 0) {
                     setActionRate({
                         resolved: data.summary.resolved,
