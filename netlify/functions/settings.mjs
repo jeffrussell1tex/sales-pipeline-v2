@@ -70,6 +70,7 @@ export const handler = async (event) => {
 
             const dbRow = {
                 id:              orgId,
+                orgId:           orgId,
                 companyName:     data.companyName     || null,
                 companyLogo:     data.companyLogo     || null,
                 fiscalYearStart: data.fiscalYearStart || null,
