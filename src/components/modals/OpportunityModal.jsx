@@ -64,6 +64,8 @@ export default function OpportunityModal({ opportunity, accounts, contacts, sett
     );
     const [nestedModal, setNestedModal] = useState(null);
     const [validationErrors, setValidationErrors] = useState({});
+    const [productSearch, setProductSearch] = useState('');
+    const [showProductDropdown, setShowProductDropdown] = useState(false);
 
     // Auto-calculate close quarter based on forecasted close date and fiscal year settings
     const calculateCloseQuarter = (dateString) => {
