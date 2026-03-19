@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { users } from '../../db/schema.js';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
@@ -232,6 +232,11 @@ export const handler = async (event) => {
 
         // ── DELETE ────────────────────────────────────────────────────────────
         if (event.httpMethod === 'DELETE') {
+            // clear=true — delete all users for this org (used by Clear All Data)
+            if (event.queryStringParameters?.clear === 'true') {
+                await db.delete(users).where(eq(users.orgId, orgId));
+                return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
+            }
             const id = event.queryStringParameters?.id;
             if (!id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };

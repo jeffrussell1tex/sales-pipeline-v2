@@ -1675,6 +1675,7 @@ export default function SettingsTab({
                                                         '/.netlify/functions/tasks',
                                                         '/.netlify/functions/activities',
                                                         '/.netlify/functions/leads',
+                                                        '/.netlify/functions/users',
                                                     ];
                                                     try {
                                                         await Promise.all(endpoints.map(url =>
@@ -1682,6 +1683,30 @@ export default function SettingsTab({
                                                                 console.error('Clear failed for', url, err.message)
                                                             )
                                                         ));
+                                                        // Reset settings to blank defaults
+                                                        await dbFetch('/.netlify/functions/settings', {
+                                                            method: 'PUT',
+                                                            headers: { 'Content-Type': 'application/json' },
+                                                            body: JSON.stringify({
+                                                                companyName: '',
+                                                                companyLogo: '',
+                                                                fiscalYearStart: '',
+                                                                funnelStages: [],
+                                                                taskTypes: ['Call', 'Meeting', 'Email'],
+                                                                painPoints: [],
+                                                                verticalMarkets: [],
+                                                                fieldVisibility: {},
+                                                                products: [],
+                                                                pipelines: null,
+                                                                teams: null,
+                                                                territories: null,
+                                                                verticals: null,
+                                                                quotaData: null,
+                                                                kpiConfig: null,
+                                                                logoUrl: null,
+                                                                aiScoringEnabled: false,
+                                                            }),
+                                                        }).catch(err => console.error('Settings reset failed:', err.message));
                                                     } catch(e) {
                                                         console.error('DB clear error:', e);
                                                     }
