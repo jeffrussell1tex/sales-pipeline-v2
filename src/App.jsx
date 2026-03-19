@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, SignIn } from '@clerk/clerk-react';
+import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch } from './utils/storage';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
 import CsvImportModal from './components/modals/CsvImportModal';
@@ -1817,6 +1817,24 @@ dbFetch('/.netlify/functions/users?me=true')
                     </div>
                     <div className="header-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.375rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        {userMemberships?.data?.length > 1 && (
+                            <OrganizationSwitcher
+                                appearance={{
+                                    elements: {
+                                        rootBox: { display: 'flex', alignItems: 'center' },
+                                        organizationSwitcherTrigger: {
+                                            padding: '0.375rem 0.75rem',
+                                            borderRadius: '20px',
+                                            border: '1px solid rgba(255,255,255,0.2)',
+                                            background: 'rgba(255,255,255,0.12)',
+                                            color: '#fff',
+                                            fontSize: '0.8125rem',
+                                            fontWeight: '600',
+                                        }
+                                    }
+                                }}
+                            />
+                        )}
                         <div style={{ position: 'relative' }}>
                         <div
                             onClick={() => {
