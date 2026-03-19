@@ -111,38 +111,47 @@ function DealHistoryTab({ opportunity, oppActivities, stages, settings, contacts
             <div style={{ background: '#1e293b', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem' }}>
 
             {/* ── Journey map ── */}
-            <div style={{ marginBottom: '0.5rem', fontSize: '0.6875rem', fontWeight: '700', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Deal journey</div>
-            <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: oppActivities.length > 0 ? '1.75rem' : '0', overflowX: 'auto', paddingBottom: '0.5rem' }}>
-                {journeyStages.map((s, i) => {
-                    const isDone = s.status === 'done';
-                    const isActive = s.status === 'active';
-                    const isFuture = s.status === 'future';
-                    const trackColor = isDone ? '#4ade80' : isActive ? '#60a5fa' : 'rgba(255,255,255,0.15)';
-                    const dotBg = isDone ? '#4ade80' : isActive ? '#60a5fa' : 'rgba(255,255,255,0.2)';
-                    const labelColor = isDone ? '#86efac' : isActive ? '#93c5fd' : 'rgba(255,255,255,0.35)';
-                    const dateColor = 'rgba(255,255,255,0.3)';
-                    return (
-                        <React.Fragment key={s.name}>
-                            {i > 0 && (
-                                <div style={{ flex: 1, height: '6px', background: trackColor, marginTop: '5px', minWidth: '12px', opacity: isFuture ? 0.4 : 1 }} />
-                            )}
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                                <div style={{
-                                    width: '16px', height: '16px', borderRadius: '50%',
-                                    background: dotBg,
-                                    border: isActive ? '2px solid #1e293b' : '2px solid transparent',
-                                    boxShadow: isActive ? '0 0 0 3px #3b82f6' : 'none',
-                                    flexShrink: 0,
-                                }} />
-                                <div style={{ marginTop: '6px', textAlign: 'center', maxWidth: '72px' }}>
-                                    <div style={{ fontSize: '0.625rem', fontWeight: isActive ? '700' : '600', color: labelColor, whiteSpace: 'nowrap' }}>{s.name}</div>
-                                    {s.date && <div style={{ fontSize: '0.5625rem', color: dateColor, marginTop: '1px' }}>{fmtDate(s.date)}</div>}
-                                </div>
-                            </div>
-                        </React.Fragment>
-                    );
-                })}
-            </div>
+            <div style={{ marginBottom: '0.75rem', fontSize: '0.6875rem', fontWeight: '700', color: 'rgba(255,255,255,0.45)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Deal journey</div>
+            {/* ── Journey map (SVG) ── */}
+            {(() => {
+                const count = journeyStages.length;
+                const svgW = 760;
+                const padX = 30;
+                const trackY = 28;
+                const spacing = (svgW - padX * 2) / Math.max(count - 1, 1);
+                return (
+                    <svg width="100%" viewBox={`0 0 ${svgW} 80`} style={{ display: 'block', marginBottom: oppActivities.length > 0 ? '1.25rem' : '0' }}>
+                        {/* Track segments */}
+                        {journeyStages.map((s, i) => {
+                            if (i === 0) return null;
+                            const x1 = padX + (i - 1) * spacing + 8;
+                            const x2 = padX + i * spacing - 8;
+                            const isDone = journeyStages[i - 1].status === 'done' || journeyStages[i - 1].status === 'active';
+                            const color = isDone ? (s.status === 'future' ? 'rgba(255,255,255,0.15)' : '#4ade80') : 'rgba(255,255,255,0.15)';
+                            return <rect key={`t-${i}`} x={x1} y={trackY - 2} width={Math.max(x2 - x1, 0)} height={4} rx={2} fill={color} opacity={s.status === 'future' ? 0.4 : 1} />;
+                        })}
+                        {/* Dots + labels */}
+                        {journeyStages.map((s, i) => {
+                            const cx = padX + i * spacing;
+                            const isDone = s.status === 'done';
+                            const isActive = s.status === 'active';
+                            const dotFill = isDone ? '#4ade80' : isActive ? '#60a5fa' : 'rgba(255,255,255,0.2)';
+                            const labelColor = isDone ? '#86efac' : isActive ? '#93c5fd' : 'rgba(255,255,255,0.3)';
+                            const r = isActive ? 9 : 7;
+                            return (
+                                <g key={`d-${i}`}>
+                                    {isActive && <circle cx={cx} cy={trackY} r={13} fill="none" stroke="#3b82f6" strokeWidth={2} opacity={0.5} />}
+                                    <circle cx={cx} cy={trackY} r={r} fill={dotFill} />
+                                    <text x={cx} y={52} textAnchor="middle" fill={labelColor} fontSize={9} fontWeight={isActive ? '700' : '500'} fontFamily="inherit">
+                                        {s.name.length > 12 ? s.name.replace('/', '/\u200B') : s.name}
+                                    </text>
+                                    {s.date && <text x={cx} y={65} textAnchor="middle" fill="rgba(255,255,255,0.25)" fontSize={8} fontFamily="inherit">{fmtDate(s.date)}</text>}
+                                </g>
+                            );
+                        })}
+                    </svg>
+                );
+            })()}
 
             {/* ── Activity swim lanes ── */}
             {oppActivities.length > 0 && (

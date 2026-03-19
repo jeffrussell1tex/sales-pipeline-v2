@@ -203,7 +203,25 @@ export const auditLog = pgTable('audit_log', {
     timestamp:  timestamp('timestamp').notNull().defaultNow(),
 });
 
-// ── LEADS ─────────────────────────────────────────────────────────────────────
+// ── RECOMMENDATION LOG ────────────────────────────────────────────────────────
+// Tracks when reps act on (or dismiss) recommended actions, and whether
+// the underlying signal was resolved afterward.
+export const recommendationLog = pgTable('recommendation_log', {
+    id:             text('id').primaryKey(),                          // e.g. "rec_<timestamp>"
+    orgId:          text('org_id').notNull(),
+    repName:        varchar('rep_name', { length: 255 }).notNull(),
+    actionType:     varchar('action_type', { length: 100 }).notNull(), // stale | stuck | lapsed | coverage | velocity | task
+    opportunityId:  text('opportunity_id'),                           // null for task-only actions
+    dealName:       varchar('deal_name', { length: 500 }),
+    arrAtRisk:      decimal('arr_at_risk', { precision: 12, scale: 2 }),
+    stage:          varchar('stage', { length: 100 }),
+    signal:         text('signal'),                                   // human-readable reason that triggered it
+    dismissedAt:    timestamp('dismissed_at').notNull().defaultNow(),
+    outcome:        varchar('outcome', { length: 50 }).notNull().default('pending'), // pending | resolved | ignored
+    resolvedAt:     timestamp('resolved_at'),
+    daysToResolve:  integer('days_to_resolve'),
+    createdAt:      timestamp('created_at').notNull().defaultNow(),
+});
 // Inbound prospects before they become opportunities
 export const leads = pgTable('leads', {
     id:           text('id').primaryKey(),

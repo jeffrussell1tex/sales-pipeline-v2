@@ -2,6 +2,417 @@ import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import ViewingBar from '../components/ui/ViewingBar';
 
+// ─────────────────────────────────────────────────────────────
+//  Recommended Actions Panel
+// ─────────────────────────────────────────────────────────────
+function RecommendedActions({ opportunities, activities, tasks, settings, currentUser, userRole, isManager, isAdmin, canSeeAll, stages, setEditingOpp, setShowModal, setEditingTask, setShowTaskModal, setActiveTab }) {
+    const [filter, setFilter] = React.useState('all');
+    const [dismissed, setDismissed] = React.useState(new Set());
+    const [actionRate, setActionRate] = React.useState(null); // { resolved, total, rate }
+    const [logLoaded, setLogLoaded] = React.useState(false);
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    const fmtCurrency = (v) => v >= 1000000 ? '$' + (v/1000000).toFixed(1) + 'M' : v >= 1000 ? '$' + Math.round(v/1000) + 'K' : '$' + (v||0).toLocaleString();
+    const daysSince = (dateStr) => dateStr ? Math.floor((today - new Date(dateStr + 'T12:00:00')) / 86400000) : null;
+    const daysBetween = (a, b) => Math.floor((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
+
+    // On mount: evaluate pending items + load summary stats
+    React.useEffect(() => {
+        if (logLoaded) return;
+        setLogLoaded(true);
+        const run = async () => {
+            try {
+                // Evaluate pending items (fire and forget)
+                await fetch(`/.netlify/functions/recommendation-log?rep=${encodeURIComponent(currentUser)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                // Fetch summary stats for the action rate widget
+                const res = await fetch(`/.netlify/functions/recommendation-log?rep=${encodeURIComponent(currentUser)}&days=30`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.summary && data.summary.total > 0) {
+                        setActionRate({
+                            resolved: data.summary.resolved,
+                            total: data.summary.total,
+                            rate: data.summary.resolveRate,
+                            avgDays: data.summary.avgDays,
+                            byType: data.summary.byType || {},
+                        });
+                    }
+                }
+            } catch (err) {
+                console.warn('recommendation-log load error:', err.message);
+            }
+        };
+        run();
+    }, [currentUser]);
+
+    // Log a dismissed recommendation to the DB
+    const logDismiss = async (item) => {
+        try {
+            await fetch('/.netlify/functions/recommendation-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id:            'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+                    repName:       currentUser,
+                    actionType:    item.cat === 'tasks' ? 'task' : item.id.split('-')[0],
+                    opportunityId: item.opp?.id || (item.cat === 'tasks' ? item.taskId : null),
+                    dealName:      item.opp ? (item.opp.opportunityName || item.opp.account) : item.title,
+                    arrAtRisk:     item.arr || null,
+                    stage:         item.stage || null,
+                    signal:        item.reason || null,
+                }),
+            });
+        } catch (err) {
+            console.warn('Failed to log recommendation dismiss:', err.message);
+        }
+    };
+
+    const dismiss = (item) => {
+        setDismissed(d => new Set([...d, item.id]));
+        logDismiss(item);
+    };
+
+    // Average days per stage across all won deals
+    const avgDaysInStage = React.useMemo(() => {
+        const map = {};
+        (opportunities || []).filter(o => o.stage === 'Closed Won' && o.stageHistory?.length > 0).forEach(o => {
+            const hist = o.stageHistory;
+            hist.forEach((h, i) => {
+                const from = i === 0 ? o.createdDate : hist[i-1]?.date;
+                if (!from || !h.date) return;
+                const days = daysBetween(from, h.date);
+                if (!map[h.prevStage || h.stage]) map[h.prevStage || h.stage] = [];
+                map[h.prevStage || h.stage].push(days);
+            });
+        });
+        const result = {};
+        Object.entries(map).forEach(([s, arr]) => { result[s] = Math.round(arr.reduce((a,b)=>a+b,0)/arr.length); });
+        return result;
+    }, [opportunities]);
+
+    // Rep's own win rate for coaching insight
+    const myWonDeals = (opportunities||[]).filter(o => o.stage === 'Closed Won' && o.salesRep === currentUser);
+    const myTotalDeals = (opportunities||[]).filter(o => ['Closed Won','Closed Lost'].includes(o.stage) && o.salesRep === currentUser);
+    const myWinRate = myTotalDeals.length > 0 ? Math.round((myWonDeals.length / myTotalDeals.length) * 100) : null;
+
+    // Average activities per won deal for this rep
+    const avgActsWon = myWonDeals.length > 0
+        ? Math.round(myWonDeals.reduce((sum, o) => sum + (activities||[]).filter(a => a.opportunityId === o.id).length, 0) / myWonDeals.length)
+        : null;
+
+    // Build action items from live data
+    const actions = React.useMemo(() => {
+        const items = [];
+        const activeOpps = (opportunities||[]).filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
+
+        activeOpps.forEach(opp => {
+            const oppActs = (activities||[]).filter(a => a.opportunityId === opp.id).sort((a,b) => b.date.localeCompare(a.date));
+            const lastActDate = oppActs[0]?.date || opp.createdDate;
+            const daysSinceContact = daysSince(lastActDate);
+            const daysInStage = opp.stageChangedDate ? daysSince(opp.stageChangedDate) : daysSince(opp.createdDate);
+            const avgForStage = avgDaysInStage[opp.stage] || null;
+            const closeDate = opp.forecastedCloseDate;
+            const daysToClose = closeDate ? daysBetween(todayStr, closeDate) : null;
+            const arr = parseFloat(opp.arr) || 0;
+            const name = opp.opportunityName || opp.account || 'Unnamed deal';
+
+            // Stale — no contact in 14+ days on an active deal
+            if (daysSinceContact !== null && daysSinceContact >= 14 && !['Closed Won','Closed Lost'].includes(opp.stage)) {
+                items.push({
+                    id: `stale-${opp.id}`,
+                    priority: daysSinceContact >= 21 ? 'urgent' : 'warning',
+                    cat: 'urgent',
+                    title: `${name} — no contact in ${daysSinceContact} days`,
+                    reason: `Last activity was ${oppActs[0] ? oppActs[0].type.toLowerCase() : 'deal creation'}. Deals that go silent here rarely recover without outreach.`,
+                    tags: [{ label: `${daysSinceContact}d no contact`, type: daysSinceContact >= 21 ? 'red' : 'amber' }],
+                    arr,
+                    stage: opp.stage,
+                    action: 'Log a call',
+                    onClick: () => { setEditingOpp(opp); setShowModal(true); },
+                    opp,
+                });
+            }
+
+            // Stuck in stage — 2× the average or 21+ days with no avg data
+            const stuckThreshold = avgForStage ? avgForStage * 2 : 21;
+            if (daysInStage !== null && daysInStage >= stuckThreshold && daysInStage >= 14) {
+                items.push({
+                    id: `stuck-${opp.id}`,
+                    priority: 'warning',
+                    cat: 'urgent',
+                    title: `${name} stuck in ${opp.stage} for ${daysInStage} days`,
+                    reason: avgForStage
+                        ? `Your average time in ${opp.stage} is ${avgForStage} days. This deal is ${Math.round(daysInStage/avgForStage)}× over — consider advancing or disqualifying.`
+                        : `21+ days in the same stage with no progression. Review and decide next step.`,
+                    tags: [{ label: `${daysInStage}d in stage`, type: 'amber' }],
+                    arr,
+                    stage: opp.stage,
+                    action: 'Edit deal',
+                    onClick: () => { setEditingOpp(opp); setShowModal(true); },
+                    opp,
+                });
+            }
+
+            // Close date lapsed
+            if (daysToClose !== null && daysToClose < 0) {
+                items.push({
+                    id: `lapsed-${opp.id}`,
+                    priority: Math.abs(daysToClose) > 7 ? 'urgent' : 'warning',
+                    cat: 'urgent',
+                    title: `${name} — close date passed ${Math.abs(daysToClose)} day${Math.abs(daysToClose)!==1?'s':''} ago`,
+                    reason: `Forecasted close was ${new Date(closeDate + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}. Update the close date or move the stage to keep your pipeline accurate.`,
+                    tags: [{ label: `${Math.abs(daysToClose)}d overdue`, type: 'red' }],
+                    arr,
+                    stage: opp.stage,
+                    action: 'Update date',
+                    onClick: () => { setEditingOpp(opp); setShowModal(true); },
+                    opp,
+                });
+            }
+
+            // Low stakeholder coverage — contacts listed but few engaged
+            const contactNames = (opp.contacts||'').split(', ').filter(Boolean);
+            const engagedContacts = new Set(oppActs.map(a => a.contactName).filter(Boolean));
+            if (contactNames.length >= 2 && engagedContacts.size < 2 && arr >= 20000) {
+                items.push({
+                    id: `coverage-${opp.id}`,
+                    priority: 'info',
+                    cat: 'followup',
+                    title: `${name} — only ${engagedContacts.size} of ${contactNames.length} contacts engaged`,
+                    reason: `Multi-threaded deals close faster. Reach out to ${contactNames.filter(n => !engagedContacts.has(n.split(' (')[0]))[0]?.split(' (')[0] || 'additional stakeholders'} to broaden coverage.`,
+                    tags: [{ label: 'Low coverage', type: 'blue' }],
+                    arr,
+                    stage: opp.stage,
+                    action: 'View contacts',
+                    onClick: () => { setEditingOpp(opp); setShowModal(true); },
+                    opp,
+                });
+            }
+
+            // High-velocity deal — moving fast, reinforce momentum
+            const createdDays = daysSince(opp.createdDate);
+            const stageCount = (opp.stageHistory||[]).length;
+            if (createdDays !== null && createdDays <= 14 && stageCount >= 2 && !['Negotiation/Review','Contracts','Closed Won','Closed Lost'].includes(opp.stage)) {
+                items.push({
+                    id: `velocity-${opp.id}`,
+                    priority: 'success',
+                    cat: 'momentum',
+                    title: `${name} is moving fast — ${stageCount} stages in ${createdDays} days`,
+                    reason: `Great velocity. Keep the momentum by scheduling the next step before the end of the week.`,
+                    tags: [{ label: 'High velocity', type: 'green' }],
+                    arr,
+                    stage: opp.stage,
+                    action: 'Add task',
+                    onClick: () => { setEditingTask({ relatedTo: opp.id, opportunityId: opp.id, type: 'Follow-up', dueDate: new Date(Date.now()+2*86400000).toISOString().split('T')[0] }); setShowTaskModal(true); },
+                    opp,
+                });
+            }
+        });
+
+        // Overdue tasks
+        (tasks||[]).filter(t => {
+            const due = t.dueDate || t.due;
+            const done = t.status === 'Completed' || t.completed;
+            return !done && due && new Date(due + 'T12:00:00') < today;
+        }).slice(0, 3).forEach(task => {
+            const daysOver = daysSince(task.dueDate || task.due);
+            items.push({
+                id: `task-${task.id}`,
+                priority: daysOver >= 3 ? 'urgent' : 'warning',
+                cat: 'tasks',
+                title: `Overdue task: "${task.title}"`,
+                reason: `Due ${daysOver} day${daysOver!==1?'s':''} ago. Complete or reschedule to keep your pipeline clean.`,
+                tags: [{ label: `${daysOver}d overdue`, type: daysOver >= 3 ? 'red' : 'amber' }],
+                arr: null,
+                stage: null,
+                action: 'View task',
+                onClick: () => { setEditingTask(task); setShowTaskModal(true); },
+            });
+        });
+
+        // Sort: urgent first, then warning, then info, then success; within each by ARR desc
+        const order = { urgent: 0, warning: 1, info: 2, tasks: 3, followup: 4, momentum: 5 };
+        return items
+            .filter(a => !dismissed.has(a.id))
+            .sort((a, b) => (order[a.cat]||9) - (order[b.cat]||9) || (b.arr||0) - (a.arr||0));
+    }, [opportunities, activities, tasks, dismissed, avgDaysInStage]);
+
+    // Coaching hints — based on rep's own historical patterns
+    const coachingHints = React.useMemo(() => {
+        const hints = [];
+        if (myWinRate !== null && myWinRate < 40) {
+            hints.push({ type: 'info', text: `Your win rate is ${myWinRate}%. Top performers in similar roles average 45–55%. Focus on qualifying harder at Discovery.` });
+        }
+        if (myWinRate !== null && myWinRate >= 55) {
+            hints.push({ type: 'success', text: `Strong win rate at ${myWinRate}%. You're in the top tier — focus on deal size and pipeline volume to maximize impact.` });
+        }
+        if (avgActsWon !== null && avgActsWon > 0) {
+            const activeWithFewActs = (opportunities||[]).filter(o => {
+                const n = (activities||[]).filter(a => a.opportunityId === o.id).length;
+                return !['Closed Won','Closed Lost'].includes(o.stage) && n < Math.ceil(avgActsWon * 0.4);
+            });
+            if (activeWithFewActs.length > 0) {
+                hints.push({ type: 'warning', text: `Your won deals average ${avgActsWon} activities. ${activeWithFewActs.length} active deal${activeWithFewActs.length>1?'s are':' is'} under-actioned — increase touchpoints to match your winning pattern.` });
+            }
+        }
+        // Deals closing soon with no recent activity
+        const closingSoon = (opportunities||[]).filter(o => {
+            const daysToClose = o.forecastedCloseDate ? daysBetween(todayStr, o.forecastedCloseDate) : null;
+            const lastAct = (activities||[]).filter(a => a.opportunityId === o.id).sort((a,b) => b.date.localeCompare(a.date))[0];
+            const daysSinceAct = lastAct ? daysSince(lastAct.date) : 99;
+            return daysToClose !== null && daysToClose <= 14 && daysToClose >= 0 && daysSinceAct > 5 && !['Closed Won','Closed Lost'].includes(o.stage);
+        });
+        if (closingSoon.length > 0) {
+            hints.push({ type: 'warning', text: `${closingSoon.length} deal${closingSoon.length>1?'s are':' is'} closing within 14 days but haven't been contacted recently. Don't let these slip at the finish line.` });
+        }
+        // Positive — most active this week
+        const thisWeek = new Date(); thisWeek.setDate(thisWeek.getDate() - 7);
+        const weekActs = (activities||[]).filter(a => a.salesRep === currentUser && a.date >= thisWeek.toISOString().split('T')[0]);
+        if (weekActs.length >= 5) {
+            hints.push({ type: 'success', text: `Great week — ${weekActs.length} activities logged in the last 7 days. Consistent activity is the #1 predictor of quota attainment.` });
+        }
+        return hints.slice(0, 3);
+    }, [opportunities, activities, myWinRate, avgActsWon]);
+
+    const priorityConfig = {
+        urgent:   { bar: '#E24B4A', dot: '#E24B4A' },
+        warning:  { bar: '#BA7517', dot: '#BA7517' },
+        info:     { bar: '#378ADD', dot: '#378ADD' },
+        success:  { bar: '#639922', dot: '#639922' },
+        tasks:    { bar: '#BA7517', dot: '#BA7517' },
+        followup: { bar: '#378ADD', dot: '#378ADD' },
+        momentum: { bar: '#639922', dot: '#639922' },
+    };
+    const tagStyle = {
+        red:    { background: '#FCEBEB', color: '#A32D2D' },
+        amber:  { background: '#FAEEDA', color: '#854F0B' },
+        blue:   { background: '#E6F1FB', color: '#185FA5' },
+        green:  { background: '#EAF3DE', color: '#3B6D11' },
+    };
+    const hintConfig = {
+        success: { bg: '#EAF3DE', border: '#C0DD97', text: '#27500A', icon: '★', iconBg: '#639922' },
+        warning: { bg: '#FAEEDA', border: '#FAC775', text: '#633806', icon: '!', iconBg: '#BA7517' },
+        info:    { bg: '#E6F1FB', border: '#B5D4F4', text: '#0C447C', icon: '→', iconBg: '#378ADD' },
+    };
+
+    const filterCats = { all: null, urgent: ['urgent','tasks'], followup: ['followup'], momentum: ['momentum'] };
+    const filtered = filter === 'all' ? actions : actions.filter(a => (filterCats[filter]||[]).includes(a.cat));
+    const urgentCount = actions.filter(a => ['urgent','tasks'].includes(a.cat)).length;
+    const atRiskArr = actions.filter(a => a.arr && ['urgent','warning'].includes(a.priority)).reduce((s,a)=>s+(a.arr||0),0);
+
+    if (actions.length === 0 && coachingHints.length === 0) return null;
+
+    return (
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', marginBottom: '1.5rem', overflow: 'hidden' }}>
+            {/* Header */}
+            <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                    <div style={{ fontSize: '0.6875rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                        Recommended actions
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>
+                        Personalized for {currentUser} · {actions.length} action{actions.length!==1?'s':''}
+                        {atRiskArr > 0 && <span style={{ marginLeft: '0.5rem', color: '#ef4444', fontWeight: '600' }}>· {fmtCurrency(atRiskArr)} at risk</span>}
+                    </div>
+                </div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                    {[['all','All'], ['urgent','Urgent'], ['followup','Follow-up'], ['momentum','Wins']].map(([k,l]) => (
+                        <button key={k} onClick={() => setFilter(k)}
+                            style={{ fontSize: '0.6875rem', padding: '3px 10px', borderRadius: '999px', border: '0.5px solid', cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s',
+                                borderColor: filter===k ? '#94a3b8' : '#e2e8f0',
+                                background: filter===k ? '#f1f5f9' : 'transparent',
+                                color: filter===k ? '#1e293b' : '#64748b',
+                                fontWeight: filter===k ? '700' : '400' }}>
+                            {l}{k==='urgent' && urgentCount > 0 ? ` (${urgentCount})` : ''}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div style={{ padding: '0.75rem 1.25rem' }}>
+                {/* Action items */}
+                {filtered.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8', fontSize: '0.8125rem' }}>
+                        No actions in this category right now.
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: coachingHints.length > 0 ? '1rem' : '0' }}>
+                        {filtered.map(item => {
+                            const pc = priorityConfig[item.cat] || priorityConfig.info;
+                            return (
+                                <div key={item.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '10px 12px', border: '0.5px solid #e2e8f0', borderLeft: `3px solid ${pc.bar}`, borderRadius: '0 8px 8px 0', background: '#fafafa', position: 'relative' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b', lineHeight: 1.4 }}>{item.title}</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: 1.5 }}>{item.reason}</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', flexWrap: 'wrap' }}>
+                                            {item.tags?.map((tag, ti) => (
+                                                <span key={ti} style={{ fontSize: '0.6875rem', padding: '1px 8px', borderRadius: '999px', fontWeight: '600', ...tagStyle[tag.type] }}>{tag.label}</span>
+                                            ))}
+                                            {item.stage && <span style={{ fontSize: '0.6875rem', padding: '1px 8px', borderRadius: '4px', background: '#f1f5f9', color: '#64748b' }}>{item.stage}</span>}
+                                            {item.arr > 0 && <span style={{ fontSize: '0.6875rem', padding: '1px 8px', borderRadius: '4px', background: '#f0fdf4', color: '#15803d', fontWeight: '600' }}>{fmtCurrency(item.arr)}</span>}
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                        <button onClick={item.onClick}
+                                            style={{ fontSize: '0.75rem', padding: '5px 12px', borderRadius: '6px', border: '0.5px solid #e2e8f0', background: '#fff', color: '#1e293b', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', fontWeight: '600' }}>
+                                            {item.action}
+                                        </button>
+                                        <button onClick={() => dismiss(item)}
+                                            title="Dismiss"
+                                            style={{ fontSize: '0.875rem', padding: '4px 6px', border: 'none', background: 'none', color: '#cbd5e1', cursor: 'pointer', lineHeight: 1 }}
+                                            onMouseEnter={e => e.currentTarget.style.color='#94a3b8'}
+                                            onMouseLeave={e => e.currentTarget.style.color='#cbd5e1'}>✕</button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {/* Coaching hints */}
+                {coachingHints.length > 0 && (
+                    <>
+                        <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px', marginTop: filtered.length > 0 ? '0.25rem' : 0 }}>
+                            Coaching insights
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {coachingHints.map((hint, i) => {
+                                const hc = hintConfig[hint.type] || hintConfig.info;
+                                return (
+                                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 12px', background: hc.bg, border: `0.5px solid ${hc.border}`, borderRadius: '8px' }}>
+                                        <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: hc.iconBg, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6875rem', fontWeight: '700', flexShrink: 0 }}>{hc.icon}</div>
+                                        <div style={{ fontSize: '0.8125rem', color: hc.text, lineHeight: 1.5 }}>{hint.text}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </>
+                )}
+                {/* Action rate strip — shown once enough history exists */}
+                {actionRate && actionRate.total >= 3 && (
+                    <div style={{ marginTop: '0.875rem', paddingTop: '0.875rem', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Your action rate (30d)</div>
+                        <div style={{ flex: 1, height: '4px', background: '#f1f5f9', borderRadius: '2px', minWidth: '80px' }}>
+                            <div style={{ height: '100%', width: actionRate.rate + '%', background: actionRate.rate >= 60 ? '#639922' : actionRate.rate >= 35 ? '#BA7517' : '#E24B4A', borderRadius: '2px', transition: 'width 0.4s' }} />
+                        </div>
+                        <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: actionRate.rate >= 60 ? '#3B6D11' : actionRate.rate >= 35 ? '#854F0B' : '#A32D2D', flexShrink: 0 }}>
+                            {actionRate.rate}% resolved
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', flexShrink: 0 }}>
+                            {actionRate.resolved} of {actionRate.total} acted on
+                            {actionRate.avgDays && ` · avg ${actionRate.avgDays}d to resolve`}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 export default function HomeTab({
     setEditingOpp, setShowModal,
     setEditingTask, setShowTaskModal,
@@ -237,6 +648,25 @@ export default function HomeTab({
                         </div>
                         );
                     })()}
+
+                    {/* ── RECOMMENDED ACTIONS ── */}
+                    <RecommendedActions
+                        opportunities={visibleOpportunities}
+                        activities={activities}
+                        tasks={visibleTasks}
+                        settings={settings}
+                        currentUser={currentUser}
+                        userRole={userRole}
+                        isManager={isManager}
+                        isAdmin={isAdmin}
+                        canSeeAll={canSeeAll}
+                        stages={stages}
+                        setEditingOpp={setEditingOpp}
+                        setShowModal={setShowModal}
+                        setEditingTask={setEditingTask}
+                        setShowTaskModal={setShowTaskModal}
+                        setActiveTab={setActiveTab}
+                    />
 
                     {/* ── CROSS-PIPELINE SUMMARY (only when multiple pipelines) ── */}
                     {allPipelines.length > 1 && (() => {

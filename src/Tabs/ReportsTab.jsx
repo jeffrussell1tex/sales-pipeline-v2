@@ -526,6 +526,7 @@ ${bodyHtml}
                                    reportSubTab === 'performance' ? 'Quota, velocity and win/loss insights' :
                                    reportSubTab === 'revenue' ? 'Closed revenue and commission tracking' :
                                    reportSubTab === 'leads' ? 'Lead funnel · sources · rep performance · trend' :
+                                   reportSubTab === 'actions' ? 'Recommended action outcomes · resolution rate · rep coaching' :
                                    'Team activity and task completion'}
                                   {(reportsRep || reportsTeam || reportsTerritory) ? ` · ${reportsRep || reportsTeam || reportsTerritory}` : ''}
                                 </p>
@@ -580,6 +581,7 @@ ${bodyHtml}
                               { key:'revenue',     icon:'💰', label:'Revenue',     desc:'Closed Won · Commissions · Forecast' },
                               { key:'activity',    icon:'📋', label:'Activity',    desc:'Tasks · Activities · Leaderboard' },
                               { key:'leads',       icon:'🎯', label:'Leads',       desc:'Funnel · Sources · Rep · Trend' },
+                              { key:'actions',     icon:'⚡', label:'Actions',     desc:'Recommendations · Outcomes · Rate' },
                             ].map(t => (
                               <button key={t.key} onClick={() => setReportSubTab(t.key)}
                                 style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.75rem 1.25rem', border:'none', borderBottom: reportSubTab === t.key ? '2px solid #2563eb' : '2px solid transparent', marginBottom:'-2px', background:'transparent', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>
@@ -1720,6 +1722,178 @@ ${bodyHtml}
                             );
                         })()}
 
+                            );
+                        })()}
+
+                        {/* ── ACTIONS SUBTAB ── */}
+                        {reportSubTab === 'actions' && (
+                            <RecommendationReport
+                                currentUser={currentUser}
+                                canSeeAll={canSeeAll}
+                                settings={settings}
+                            />
+                        )}
+
                     </div>
                 );
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Recommendation Report — Actions subtab
+// ─────────────────────────────────────────────────────────────
+function RecommendationReport({ currentUser, canSeeAll, settings }) {
+    const [data, setData] = React.useState(null);
+    const [loading, setLoading] = React.useState(true);
+    const [error, setError] = React.useState(null);
+    const [selectedRep, setSelectedRep] = React.useState('');
+    const [days, setDays] = React.useState(30);
+
+    const allReps = canSeeAll
+        ? [...new Set((settings.users || []).filter(u => u.name).map(u => u.name))].sort()
+        : [currentUser];
+
+    const fetchData = React.useCallback(async () => {
+        setLoading(true); setError(null);
+        try {
+            const rep = canSeeAll ? (selectedRep || '') : currentUser;
+            const params = new URLSearchParams({ days });
+            if (rep) params.append('rep', rep);
+            const res = await fetch(`/.netlify/functions/recommendation-log?${params}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const json = await res.json();
+            setData(json);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    }, [selectedRep, days, currentUser, canSeeAll]);
+
+    React.useEffect(() => { fetchData(); }, [fetchData]);
+
+    const actionTypeLabels = {
+        stale: 'Stale deal', stuck: 'Stuck in stage', lapsed: 'Date lapsed',
+        coverage: 'Low coverage', velocity: 'High velocity', task: 'Overdue task',
+    };
+    const outcomeColors = {
+        resolved: { bg: '#EAF3DE', text: '#27500A', label: 'Resolved' },
+        ignored:  { bg: '#FAEEDA', text: '#633806', label: 'Ignored' },
+        pending:  { bg: '#E6F1FB', text: '#0C447C', label: 'Pending' },
+    };
+    const fmtCurrency = (v) => v >= 1000000 ? '$' + (v/1000000).toFixed(1) + 'M' : v >= 1000 ? '$' + Math.round(v/1000) + 'K' : '$' + Math.round(v||0).toLocaleString();
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+
+    return (
+        <div style={{ padding: '1.5rem' }}>
+            {/* Controls */}
+            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                {canSeeAll && (
+                    <select value={selectedRep} onChange={e => setSelectedRep(e.target.value)}
+                        style={{ fontSize: '0.8125rem', padding: '0.375rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontFamily: 'inherit', color: '#1e293b' }}>
+                        <option value="">All reps</option>
+                        {allReps.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                )}
+                <select value={days} onChange={e => setDays(Number(e.target.value))}
+                    style={{ fontSize: '0.8125rem', padding: '0.375rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontFamily: 'inherit', color: '#1e293b' }}>
+                    <option value={7}>Last 7 days</option>
+                    <option value={30}>Last 30 days</option>
+                    <option value={60}>Last 60 days</option>
+                    <option value={90}>Last 90 days</option>
+                </select>
+                <button onClick={fetchData} style={{ fontSize: '0.8125rem', padding: '0.375rem 0.875rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#f8fafc', color: '#1e293b', cursor: 'pointer', fontFamily: 'inherit' }}>Refresh</button>
+            </div>
+
+            {loading && <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>}
+            {error && <div style={{ textAlign: 'center', padding: '2rem', color: '#ef4444', fontSize: '0.875rem' }}>Failed to load: {error}</div>}
+
+            {!loading && !error && data && (
+                <>
+                {/* Summary cards */}
+                {data.summary && data.summary.total > 0 ? (
+                    <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '1.5rem' }}>
+                        {[
+                            { val: data.summary.total, lbl: 'Total actions', color: '#1e293b' },
+                            { val: data.summary.resolveRate != null ? data.summary.resolveRate + '%' : '—', lbl: 'Resolution rate', color: data.summary.resolveRate >= 60 ? '#27500A' : data.summary.resolveRate >= 35 ? '#854F0B' : '#A32D2D' },
+                            { val: data.summary.resolved, lbl: 'Resolved', color: '#27500A' },
+                            { val: data.summary.avgDays != null ? data.summary.avgDays + 'd' : '—', lbl: 'Avg days to resolve', color: '#185FA5' },
+                        ].map(({ val, lbl, color }) => (
+                            <div key={lbl} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 14px' }}>
+                                <div style={{ fontSize: '1.375rem', fontWeight: '700', color }}>{val}</div>
+                                <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '2px' }}>{lbl}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* By type breakdown */}
+                    {Object.keys(data.summary.byType || {}).length > 0 && (
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Effectiveness by action type</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px' }}>
+                                {Object.entries(data.summary.byType).map(([type, stats]) => {
+                                    const rate = stats.total > 0 ? Math.round((stats.resolved / stats.total) * 100) : 0;
+                                    return (
+                                        <div key={type} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
+                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b', marginBottom: '6px' }}>{actionTypeLabels[type] || type}</div>
+                                            <div style={{ height: '4px', background: '#f1f5f9', borderRadius: '2px', marginBottom: '6px' }}>
+                                                <div style={{ height: '100%', width: rate + '%', background: rate >= 60 ? '#639922' : rate >= 35 ? '#BA7517' : '#E24B4A', borderRadius: '2px' }} />
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: '#64748b' }}>
+                                                <span>{rate}% resolved</span>
+                                                <span>{stats.resolved}/{stats.total}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Log table */}
+                    <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Action history</div>
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                            <thead>
+                                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                    {['Date', 'Rep', 'Type', 'Deal', 'ARR', 'Signal', 'Outcome', 'Days'].map(h => (
+                                        <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: '0.6875rem', fontWeight: '700', color: '#64748b', whiteSpace: 'nowrap' }}>{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {data.logs.map((log, i) => {
+                                    const oc = outcomeColors[log.outcome] || outcomeColors.pending;
+                                    return (
+                                        <tr key={log.id} style={{ borderBottom: i < data.logs.length-1 ? '1px solid #f1f5f9' : 'none', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                                            <td style={{ padding: '8px 12px', color: '#64748b', whiteSpace: 'nowrap' }}>{fmtDate(log.dismissedAt)}</td>
+                                            <td style={{ padding: '8px 12px', color: '#1e293b', whiteSpace: 'nowrap' }}>{log.repName}</td>
+                                            <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                                                <span style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.6875rem', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>
+                                                    {actionTypeLabels[log.actionType] || log.actionType}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '8px 12px', color: '#1e293b', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{log.dealName || '—'}</td>
+                                            <td style={{ padding: '8px 12px', color: '#64748b', whiteSpace: 'nowrap' }}>{log.arrAtRisk ? fmtCurrency(log.arrAtRisk) : '—'}</td>
+                                            <td style={{ padding: '8px 12px', color: '#64748b', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.signal}>{log.signal || '—'}</td>
+                                            <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                                                <span style={{ background: oc.bg, color: oc.text, fontSize: '0.6875rem', padding: '2px 8px', borderRadius: '999px', fontWeight: '600' }}>{oc.label}</span>
+                                            </td>
+                                            <td style={{ padding: '8px 12px', color: '#64748b', whiteSpace: 'nowrap' }}>{log.daysToResolve != null ? log.daysToResolve + 'd' : '—'}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                    </>
+                ) : (
+                    <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8', fontSize: '0.875rem', border: '1px dashed #e2e8f0', borderRadius: '8px' }}>
+                        No recommendation actions logged yet. Dismiss actions on the home screen to start tracking outcomes.
+                    </div>
+                )}
+                </>
+            )}
+        </div>
+    );
 }
