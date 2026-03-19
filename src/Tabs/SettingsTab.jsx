@@ -1657,19 +1657,6 @@ export default function SettingsTab({
                                         onClick={() => {
                                             showConfirm('Are you SURE you want to delete ALL data? This cannot be undone.\n\nConsider exporting a backup first.', () => {
                                                 showConfirm('FINAL WARNING: This will permanently erase all opportunities, accounts, contacts, tasks, activities, and settings. Proceed?', async () => {
-                                                    // Clear React state immediately
-                                                    setOpportunities([]);
-                                                    setAccounts([]);
-                                                    setContacts([]);
-                                                    setTasks([]);
-                                                    setActivities([]);
-                                                    setSettings({
-                                                        fiscalYearStart: 10,
-                                                        users: [],
-                                                        logoUrl: '',
-                                                        painPoints: ['High Turnover', 'Scheduling Complexity', 'Compliance Issues', 'Manual Processes', 'Poor Visibility', 'Budget Constraints', 'Integration Challenges'],
-                                                        verticalMarkets: ['Manufacturing', 'Healthcare', 'Energy & Utilities', 'Oil & Gas', 'Transportation', 'Government', 'Retail', 'Hospitality', 'Construction', 'Mining']
-                                                    });
                                                     // Clear localStorage
                                                     try {
                                                         safeStorage.removeItem('salesOpportunities');
@@ -1695,11 +1682,11 @@ export default function SettingsTab({
                                                                 console.error('Clear failed for', url, err.message)
                                                             )
                                                         ));
-                                                        alert('All data has been cleared.');
                                                     } catch(e) {
-                                                        alert('Local data cleared. Some database records may not have been deleted — refresh the page to verify.');
+                                                        console.error('DB clear error:', e);
                                                     }
-                                                    setSettingsView('menu');
+                                                    // Reload the page — cleanest way to reset all React state
+                                                    window.location.reload();
                                                 });
                                             });
                                         }}
