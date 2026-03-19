@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { safeStorage, dbFetch } from '../utils/storage';
 
 const DEFAULT_SETTINGS = {
-    fiscalYearStart: 10,
+    fiscalYearStart: 1,
+    products: [],
     users: [],
     teams: [],
     territories: [],

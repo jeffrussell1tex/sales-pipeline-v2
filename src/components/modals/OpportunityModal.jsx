@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { productOptions, stages } from '../../utils/constants';
+import { stages } from '../../utils/constants';
 
 export default function OpportunityModal({ opportunity, accounts, contacts, settings, pipelines, activePipelineId, currentUser, activities, onSaveActivity, onDeleteActivity, onSaveComment, onEditComment, onDeleteComment, onClose, onSave, onAddAccount, onSaveNewContact, onSaveNewAccount, onAddContact, lastCreatedAccountName, onAddRep, lastCreatedRepName, errorMessage, onDismissError, saving }) {
     const stages = (settings.funnelStages && settings.funnelStages.length > 0)
@@ -27,7 +27,7 @@ export default function OpportunityModal({ opportunity, accounts, contacts, sett
         arr: 0,
         implementationCost: 0,
         forecastedCloseDate: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
-        products: 'Shiftboard',
+        products: '',
         unionized: 'No',
         notes: '',
         nextSteps: '',
@@ -570,16 +570,62 @@ if (formData.account && formData.account.trim()) {
                             );
                         })()}
                         <div className="form-group">
-                            <label>Product Interest*</label>
-                            <select
-                                value={formData.products}
-                                onChange={e => handleChange('products', e.target.value)}
-                                required
-                            >
-                                {productOptions.map(product => (
-                                    <option key={product} value={product}>{product}</option>
-                                ))}
-                            </select>
+                            <label>Product Interest</label>
+                            {(() => {
+                                const selectedProducts = formData.products
+                                    ? formData.products.split(',').map(p => p.trim()).filter(Boolean)
+                                    : [];
+                                const availableProducts = (settings?.products || []);
+                                const filtered = availableProducts.filter(p =>
+                                    p.toLowerCase().includes(productSearch.toLowerCase()) &&
+                                    !selectedProducts.includes(p)
+                                );
+                                const toggleProduct = (product) => {
+                                    const current = formData.products
+                                        ? formData.products.split(',').map(p => p.trim()).filter(Boolean)
+                                        : [];
+                                    const updated = current.includes(product)
+                                        ? current.filter(p => p !== product)
+                                        : [...current, product];
+                                    handleChange('products', updated.join(', '));
+                                };
+                                return (
+                                    <div style={{ position: 'relative' }}>
+                                        {/* Selected tags */}
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginBottom: selectedProducts.length ? '0.5rem' : 0 }}>
+                                            {selectedProducts.map(p => (
+                                                <span key={p} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.625rem', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600', color: '#1e40af' }}>
+                                                    {p}
+                                                    <span onClick={() => toggleProduct(p)} style={{ cursor: 'pointer', fontSize: '0.875rem', lineHeight: 1, color: '#93c5fd' }}>×</span>
+                                                </span>
+                                            ))}
+                                        </div>
+                                        {/* Search input */}
+                                        <input
+                                            type="text"
+                                            value={productSearch}
+                                            onChange={e => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
+                                            onFocus={() => setShowProductDropdown(true)}
+                                            onBlur={() => setTimeout(() => setShowProductDropdown(false), 150)}
+                                            placeholder={availableProducts.length ? "Search or select products…" : "No products defined in Settings yet"}
+                                            style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                                        />
+                                        {/* Dropdown */}
+                                        {showProductDropdown && filtered.length > 0 && (
+                                            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: '180px', overflowY: 'auto', marginTop: '2px' }}>
+                                                {filtered.map(p => (
+                                                    <div key={p} onMouseDown={() => { toggleProduct(p); setProductSearch(''); }}
+                                                        style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.875rem', color: '#1e293b' }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                                                        onMouseLeave={e => e.currentTarget.style.background = ''}>
+                                                        {p}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </div>
 {canViewField('arr') && (
                         <div className="form-group">

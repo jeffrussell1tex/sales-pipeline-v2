@@ -91,7 +91,18 @@ export default function AnalyticsDashboard({ opportunities, settings, quotaData,
             .reduce((sum, opp) => sum + opp.arr, 0)
     })).filter(item => item.count > 0);
 
-    const productData = ['Shiftboard', 'AutoCall', 'Timesheets'].map(product => ({
+    // Use settings.products as the canonical list, fall back to deriving from data
+    const settingsProductList = settings?.products || [];
+    const dataProductList = [...new Set(
+        slicedOpportunities
+            .flatMap(opp => typeof opp.products === 'string' && opp.products
+                ? opp.products.split(',').map(p => p.trim()).filter(Boolean)
+                : [])
+    )];
+    const productList = settingsProductList.length > 0
+        ? [...new Set([...settingsProductList, ...dataProductList])].sort()
+        : dataProductList.sort();
+    const productData = productList.map(product => ({
         product: product,
         count: slicedOpportunities.filter(opp => (opp.products || []).includes(product)).length,
         arr: slicedOpportunities.filter(opp => (opp.products || []).includes(product))

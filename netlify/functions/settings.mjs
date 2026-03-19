@@ -22,6 +22,7 @@ export const handler = async (event) => {
                 companyLogo:     row.companyLogo     || '',
                 fiscalYearStart: row.fiscalYearStart || '',
                 funnelStages:    row.stages          || [],
+                products:        row.extra?.products        || [],
                 taskTypes:       row.taskTypes       || ['Call', 'Meeting', 'Email'],
                 painPoints:      row.painPoints      || [],
                 verticalMarkets: row.verticalMarkets || [],
@@ -64,6 +65,7 @@ export const handler = async (event) => {
                 logoUrl:         'logoUrl'         in data ? (data.logoUrl         || null) : existingExtra.logoUrl         || null,
                 kpiConfig:       'kpiConfig'       in data ? (data.kpiConfig       || null) : existingExtra.kpiConfig       || null,
                 commissionPlan:  'commissionPlan'  in data ? (data.commissionPlan  || null) : existingExtra.commissionPlan  || null,
+                products:        'products'        in data ? (data.products        || [])   : existingExtra.products        || [],
             };
 
             const dbRow = {
