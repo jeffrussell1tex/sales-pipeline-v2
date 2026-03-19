@@ -100,7 +100,7 @@ export default function SettingsTab({
         setSettingsSnapshot(null);
         setSavedToast(true);
         setTimeout(() => setSavedToast(false), 2500);
-        handleSaveView();
+        goBackToMenu();
     };
 
     // Cancel — revert to snapshot and go back
@@ -108,7 +108,7 @@ export default function SettingsTab({
         if (settingsSnapshot) setSettings(settingsSnapshot);
         setSettingsSnapshot(null);
         setSavedToast(false);
-        handleSaveView();
+        goBackToMenu();
     };
 
     // Shared Save/Cancel bar rendered at the bottom of each settings view
@@ -205,10 +205,9 @@ export default function SettingsTab({
                     {settingsView === 'products' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={handleCancelView}>← Back</button>
+                                <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
                                 <h2>PRODUCTS</h2>
-                                <div style={{marginLeft:'auto',display:'flex',gap:'0.5rem'}}><button className="btn" onClick={handleSaveView}>Save changes</button><button className="btn btn-secondary" onClick={handleCancelView}>Cancel</button></div>
-                            </div>
+                                </div>
                             <div style={{ padding: '1.5rem' }}>
                                 <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1.5rem', lineHeight: '1.6' }}>
                                     Define your product and service catalog. These products will appear as selectable options when creating or editing opportunities.
@@ -262,7 +261,8 @@ export default function SettingsTab({
                                         </div>
                                     )}
                                 </div>
-                            </div>
+                        </div>
+                            <SaveCancelBar />
                         </div>
                     )}
 
@@ -300,11 +300,7 @@ export default function SettingsTab({
                             <div className="table-container">
                                 <div className="table-header">
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <button className="btn btn-secondary" onClick={handleCancelView}>← Back</button>
-                                <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem' }}>
-                                    <button className="btn" onClick={handleSaveView}>Save changes</button>
-                                    <button className="btn btn-secondary" onClick={handleCancelView}>Cancel</button>
-                                </div>
+                                        <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
                                         <h2>FIELD VISIBILITY</h2>
                                     </div>
                                     <span style={{ fontSize: '0.8125rem', color: '#64748b' }}>Admins always see all fields</span>
@@ -386,7 +382,7 @@ export default function SettingsTab({
                             <div className="table-container">
                                 <div className="table-header">
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <button className="btn btn-secondary" onClick={handleCancelView}>← Back</button>
+                                        <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
                                         <h2>AUDIT LOG</h2>
                                     </div>
                                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -471,13 +467,10 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={handleCancelView}
+                                    onClick={goBackToMenu}
                                     style={{ marginRight: '1rem' }}
-                                >
-                                    ← Back
-                                </button>
-                                <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem' }}><button className="btn" onClick={handleSaveView}>Save changes</button><button className="btn btn-secondary" onClick={handleCancelView}>Cancel</button></div>
-                                <h2>FISCAL YEAR SETTINGS</h2>
+                                >← Back</button>
+                                                                <h2>FISCAL YEAR SETTINGS</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
                                 <div className="form-group" style={{ maxWidth: '400px' }}>
@@ -527,6 +520,7 @@ export default function SettingsTab({
                                     </div>
                                 </div>
                             </div>
+                            <SaveCancelBar />
                         </div>
                     )}
 
@@ -535,13 +529,10 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={handleCancelView}
+                                    onClick={goBackToMenu}
                                     style={{ marginRight: '1rem' }}
-                                >
-                                    ← Back
-                                </button>
-                                <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem' }}><button className="btn" onClick={handleSaveView}>Save changes</button><button className="btn btn-secondary" onClick={handleCancelView}>Cancel</button></div>
-                                <h2>COMPANY LOGO</h2>
+                                >← Back</button>
+                                                                <h2>COMPANY LOGO</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
                                 <div style={{ maxWidth: '600px' }}>
@@ -658,6 +649,7 @@ export default function SettingsTab({
                                     )}
                                 </div>
                             </div>
+                            <SaveCancelBar />
                         </div>
                     )}
 
@@ -666,11 +658,9 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={handleCancelView}
+                                    onClick={goBackToMenu}
                                     style={{ marginRight: '1rem' }}
-                                >
-                                    ← Back
-                                </button>
+                                >← Back</button>
                                 <h2>MANAGE USERS</h2>
                                 <button className="btn" onClick={handleAddUser}>+ ADD USER</button>
                             </div>
@@ -782,13 +772,10 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={handleCancelView}
+                                    onClick={goBackToMenu}
                                     style={{ marginRight: '1rem' }}
-                                >
-                                    ← Back
-                                </button>
-                                <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem' }}><button className="btn" onClick={handleSaveView}>Save changes</button><button className="btn btn-secondary" onClick={handleCancelView}>Cancel</button></div>
-                                <h2>PAIN POINTS LIBRARY</h2>
+                                >← Back</button>
+                                                                <h2>PAIN POINTS LIBRARY</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
                                 <div style={{ marginBottom: '2rem' }}>
@@ -904,6 +891,7 @@ export default function SettingsTab({
                                     )}
                                 </div>
                             </div>
+                            <SaveCancelBar />
                         </div>
                     )}
 
@@ -912,13 +900,10 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={handleCancelView}
+                                    onClick={goBackToMenu}
                                     style={{ marginRight: '1rem' }}
-                                >
-                                    ← Back
-                                </button>
-                                <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem' }}><button className="btn" onClick={handleSaveView}>Save changes</button><button className="btn btn-secondary" onClick={handleCancelView}>Cancel</button></div>
-                                <h2>INDUSTRIES</h2>
+                                >← Back</button>
+                                                                <h2>INDUSTRIES</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
                                 {(() => {
@@ -985,13 +970,14 @@ export default function SettingsTab({
                                     );
                                 })()}
                             </div>
+                            <SaveCancelBar />
                         </div>
                     )}
 
                     {settingsView === 'funnel-stages' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={handleCancelView} style={{ marginRight: '1rem' }}>← Back</button>
+                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
                                 <h2>SALES FUNNEL STAGES</h2>
                             </div>
                             <div style={{ padding: '1.5rem', maxWidth: '650px' }}>
@@ -1061,6 +1047,7 @@ export default function SettingsTab({
                                     })}
                                 </div>
                             </div>
+                            <SaveCancelBar />
                         </div>
                     )}
 
@@ -1078,9 +1065,8 @@ export default function SettingsTab({
                     {settingsView === 'kpi-settings' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={handleCancelView} style={{ marginRight: '1rem' }}>← Back</button>
-                                <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem' }}><button className="btn" onClick={handleSaveView}>Save changes</button><button className="btn btn-secondary" onClick={handleCancelView}>Cancel</button></div>
-                                <h2>KPI SETTINGS</h2>
+                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
+                                                                <h2>KPI SETTINGS</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
                                 <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
@@ -1244,15 +1230,15 @@ export default function SettingsTab({
                                     onMouseLeave={e => { e.target.style.borderColor = '#d1d5db'; e.target.style.color = '#64748b'; }}
                                 >+ Add New KPI</button>
                             </div>
+                            <SaveCancelBar />
                         </div>
                     )}
 
                     {settingsView === 'ai-features' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={handleCancelView}>← Back</button>
-                                <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem' }}><button className="btn" onClick={handleSaveView}>Save changes</button><button className="btn btn-secondary" onClick={handleCancelView}>Cancel</button></div>
-                                <h2>AI FEATURES</h2>
+                                <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
+                                                                <h2>AI FEATURES</h2>
                             </div>
                             <div style={{ padding: '1.5rem', maxWidth: '560px' }}>
 
@@ -1338,15 +1324,15 @@ export default function SettingsTab({
                                 </div>
 
                             </div>
+                            <SaveCancelBar />
                         </div>
                     )}
 
                     {settingsView === 'data-storage' && (
                         <div className="table-container">
                             <div className="table-header">
-                                <button className="btn btn-secondary" onClick={handleCancelView} style={{ marginRight: '1rem' }}>← Back</button>
-                                <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem' }}><button className="btn" onClick={handleSaveView}>Save changes</button><button className="btn btn-secondary" onClick={handleCancelView}>Cancel</button></div>
-                                <h2>DATA STORAGE</h2>
+                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
+                                                                <h2>DATA STORAGE</h2>
                             </div>
                             <div style={{ padding: '1.5rem', maxWidth: '600px' }}>
                                 <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
@@ -1433,6 +1419,7 @@ export default function SettingsTab({
                                     </div>
                                 </div>
                             </div>
+                            <SaveCancelBar />
                         </div>
                     )}
 
@@ -1441,11 +1428,9 @@ export default function SettingsTab({
                             <div className="table-header">
                                 <button 
                                     className="btn btn-secondary" 
-                                    onClick={handleCancelView}
+                                    onClick={goBackToMenu}
                                     style={{ marginRight: '1rem' }}
-                                >
-                                    ← Back
-                                </button>
+                                >← Back</button>
                                 <h2>DATA MANAGEMENT</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
@@ -1737,7 +1722,7 @@ export default function SettingsTab({
                                                     safeStorage.removeItem('salesSettings');
                                                     } catch(e) {}
                                                     alert('All data has been cleared.');
-                                                    handleSaveView();
+                                                    goBackToMenu();
                                                 });
                                             });
                                         }}
