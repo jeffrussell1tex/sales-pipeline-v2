@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { safeStorage, dbFetch } from '../utils/storage';
+import { safeStorage, dbFetch, waitForToken } from '../utils/storage';
 
 const DEFAULT_SETTINGS = {
     fiscalYearStart: 1,
@@ -114,7 +114,8 @@ export function useSettings() {
                 setTimeout(() => { settingsReady.current = true; }, 0);
             });
 
-        // Load users from dedicated endpoint
+        // Load users from dedicated endpoint — wait for token first
+        waitForToken().then(() =>
         dbFetch('/.netlify/functions/users')
             .then(r => r.ok ? r.json() : { users: [] })
             .then(data => {
@@ -122,7 +123,8 @@ export function useSettings() {
                     setSettings(prev => ({ ...prev, users: data.users }));
                 }
             })
-            .catch(() => {});
+            .catch(() => {})
+        );
     };
 
     // Save settings to DB whenever they change (after initial load)

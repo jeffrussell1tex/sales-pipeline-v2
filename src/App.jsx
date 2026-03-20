@@ -705,14 +705,17 @@ function App() {
       useEffect(() => {
     if (!clerkUser || !organization?.id) return; // Don't load until authenticated + org active
     const loadData = async () => {
-const checkOk = (r) => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r; };
+        const checkOk = (r) => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r; };
 
-// ── Data loading delegated to hooks ──────────────────────────────
-loadOpportunities(setDbOffline);
-loadAccounts(setDbOffline);
-loadContacts(setDbOffline);
-loadTasks(setDbOffline);
-loadActivities(setDbOffline);
+        // Wait for Clerk token to be available before firing any DB calls
+        await waitForToken();
+
+        // ── Data loading delegated to hooks ──────────────────────────────
+        loadOpportunities(setDbOffline);
+        loadAccounts(setDbOffline);
+        loadContacts(setDbOffline);
+        loadTasks(setDbOffline);
+        loadActivities(setDbOffline);
 
 dbFetch('/.netlify/functions/leads')
     .then(checkOk).then(r => r.json())
