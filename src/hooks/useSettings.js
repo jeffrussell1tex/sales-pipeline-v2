@@ -69,7 +69,11 @@ export function useSettings() {
         try {
             const saved = safeStorage.getItem('salesSettings');
             if (saved) {
-                try { return JSON.parse(saved); } catch(e) {}
+                try {
+                    const parsed = JSON.parse(saved);
+                    // Always start with empty users — DB is the source of truth
+                    return { ...parsed, users: [] };
+                } catch(e) {}
             }
         } catch(e) {}
         return DEFAULT_SETTINGS;
