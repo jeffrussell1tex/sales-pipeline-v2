@@ -35,6 +35,7 @@ export default function AccountsTab({
         addAudit,
         getStageColor,
         getSubAccounts,
+        getAccountRollup,
         visibleAccounts,
         handleDeleteAccount,
         handleDeleteSubAccount,
