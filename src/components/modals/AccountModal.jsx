@@ -130,9 +130,9 @@ export default function AccountModal({ account, isSubAccount, settings: settings
                                 value={ownerSearch}
                                 onChange={e => {
                                     setOwnerSearch(e.target.value);
-                                    setShowOwnerSuggestions(e.target.value.length > 0);
+                                    setShowOwnerSuggestions(true);
                                 }}
-                                onFocus={() => setShowOwnerSuggestions(ownerSearch.length > 0)}
+                                onFocus={() => setShowOwnerSuggestions(true)}
                                 onBlur={() => setTimeout(() => setShowOwnerSuggestions(false), 200)}
                                 placeholder="Start typing name..."
                                 autoComplete="off"
@@ -145,7 +145,7 @@ export default function AccountModal({ account, isSubAccount, settings: settings
                                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                                 }}>
                                     {(settings?.users || [])
-                                        .filter(u => u.name.toLowerCase().startsWith(ownerSearch.toLowerCase()))
+                                        .filter(u => !ownerSearch || u.name.toLowerCase().startsWith(ownerSearch.toLowerCase()))
                                         .map(user => (
                                             <div key={user.id}
                                                 onMouseDown={e => e.preventDefault()}
