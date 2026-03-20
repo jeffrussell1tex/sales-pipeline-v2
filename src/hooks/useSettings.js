@@ -119,7 +119,7 @@ export function useSettings() {
         dbFetch('/.netlify/functions/users')
             .then(r => r.ok ? r.json() : { users: [] })
             .then(data => {
-                if (data.users && data.users.length > 0) {
+                if (data.users) {
                     setSettings(prev => ({ ...prev, users: data.users }));
                 }
             })
