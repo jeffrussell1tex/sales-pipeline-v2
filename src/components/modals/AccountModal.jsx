@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useApp } from '../AppContext';
 
-export default function AccountModal({ account, isSubAccount, settings, onClose, onSave, onAddRep, existingAccounts, errorMessage, onDismissError, saving }) {
+export default function AccountModal({ account, isSubAccount, settings: settingsProp, onClose, onSave, onAddRep, existingAccounts, errorMessage, onDismissError, saving }) {
+    const { settings: contextSettings } = useApp();
+    // Always use context settings for users — they're the most up-to-date
+    const settings = { ...settingsProp, users: contextSettings?.users?.length ? contextSettings.users : (settingsProp?.users || []) };
     const [formData, setFormData] = useState(account || {
         name: '',
         verticalMarket: '',
