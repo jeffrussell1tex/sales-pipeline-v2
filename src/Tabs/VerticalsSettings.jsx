@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
-export default function VerticalsSettings({ onBack }) {
+export default function VerticalsSettings({ onBack, onSave, onCancel }) {
     const { settings, setSettings } = useApp();
     const verticals = settings.verticals || [];
     const [newName, setNewName] = useState('');
@@ -101,6 +101,16 @@ export default function VerticalsSettings({ onBack }) {
                         })}
                     </div>
                 )}
+            </div>
+            <div style={{ display:'flex', gap:'0.75rem', padding:'1rem 1.5rem', borderTop:'1px solid #e2e8f0', background:'#f8fafc', marginTop:'1rem' }}>
+                <button onClick={onSave}
+                    style={{ padding:'0.5rem 1.5rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                    Save changes
+                </button>
+                <button onClick={onCancel}
+                    style={{ padding:'0.5rem 1.25rem', background:'transparent', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
+                    Cancel
+                </button>
             </div>
         </div>
     );

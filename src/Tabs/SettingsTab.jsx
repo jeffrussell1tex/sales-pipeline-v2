@@ -362,7 +362,8 @@ export default function SettingsTab({
                                         </table>
                                     </div>
                                 </div>
-                            </div>
+                                <SaveCancelBar />
+                        </div>
                         );
                     })()}
 
@@ -526,9 +527,7 @@ export default function SettingsTab({
                             </div>
                         
                             <SaveCancelBar />
-
-                            <SaveCancelBar />
-</div>
+                        </div>
                     )}
 
                     {settingsView === 'logo' && (
@@ -760,22 +759,29 @@ export default function SettingsTab({
                                     </div>
                                 )}
                             </div>
+                            <SaveCancelBar />
                         </div>
                     )}
 
                     {settingsView === 'team-builder' && (
                         <TeamBuilder
                             onBack={goBackToMenu}
+                            onSave={handleSaveView}
+                            onCancel={handleCancelView}
                         />
                     )}
                     {settingsView === 'territories' && (
                         <TerritoriesSettings
                             onBack={goBackToMenu}
+                            onSave={handleSaveView}
+                            onCancel={handleCancelView}
                         />
                     )}
                     {settingsView === 'verticals' && (
                         <VerticalsSettings
                             onBack={goBackToMenu}
+                            onSave={handleSaveView}
+                            onCancel={handleCancelView}
                         />
                     )}
 
@@ -1078,6 +1084,8 @@ export default function SettingsTab({
                             activePipelineId={activePipelineId}
                             setActivePipelineId={setActivePipelineId}
                             onBack={goBackToMenu}
+                            onSave={handleSaveView}
+                            onCancel={handleCancelView}
                         />
                     )}
 

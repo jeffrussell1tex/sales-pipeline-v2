@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-export default function PipelinesSettingsPanel({ settings, setSettings, opportunities, activePipelineId, setActivePipelineId, onBack }) {
+export default function PipelinesSettingsPanel({ settings, setSettings, opportunities, activePipelineId, setActivePipelineId, onBack, onSave, onCancel }) {
     const pipelines = (settings.pipelines && settings.pipelines.length > 0)
         ? settings.pipelines
         : [{ id: 'default', name: 'New Business', color: '#2563eb' }];
@@ -118,8 +118,17 @@ export default function PipelinesSettingsPanel({ settings, setSettings, opportun
                     💡 <strong>Tip:</strong> Each pipeline has its own view of opportunities, KPIs, analytics, and reports. Switch between them using the pipeline bar below the navigation tabs. You can also reassign any deal to a different pipeline by editing it.
                 </div>
             </div>
+            <div style={{ display:'flex', gap:'0.75rem', padding:'1rem 1.5rem', borderTop:'1px solid #e2e8f0', background:'#f8fafc', marginTop:'1rem' }}>
+                <button onClick={onSave}
+                    style={{ padding:'0.5rem 1.5rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                    Save changes
+                </button>
+                <button onClick={onCancel}
+                    style={{ padding:'0.5rem 1.25rem', background:'transparent', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
+                    Cancel
+                </button>
+            </div>
         </div>
     );
 }
 
-// Activity Modal Component
