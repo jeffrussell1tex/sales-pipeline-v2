@@ -96,21 +96,21 @@ export default function SettingsTab({
 
     const goBackToMenu = () => {
         setSettingsSnapshot(null);
-        goBackToMenu();
+        setSettingsView('menu');
     };
 
     const handleSaveView = () => {
         setSettingsSnapshot(null);
         setSavedToast(true);
         setTimeout(() => setSavedToast(false), 2500);
-        goBackToMenu();
+        setSettingsView('menu');
     };
 
     const handleCancelView = () => {
         if (settingsSnapshot) setSettings(settingsSnapshot);
         setSettingsSnapshot(null);
         setSavedToast(false);
-        goBackToMenu();
+        setSettingsView('menu');
     };
 
     const SaveCancelBar = () => (
