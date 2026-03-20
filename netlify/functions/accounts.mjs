@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { accounts } from '../../db/schema.js';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 
 export const handler = async (event) => {
