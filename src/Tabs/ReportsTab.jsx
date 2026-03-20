@@ -4,7 +4,7 @@ import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import AnalyticsDashboard from '../components/ui/AnalyticsDashboard';
 import { dbFetch } from '../utils/storage';
 
-export default function ReportsTab() {
+export default function ReportsTab({ leadsEnabled = true }) {
     const {
         settings,
         opportunities,
@@ -585,7 +585,7 @@ ${bodyHtml}
                               <option value="performance">🎯 Performance</option>
                               <option value="revenue">💰 Revenue</option>
                               <option value="activity">📋 Activity</option>
-                              <option value="leads">🎯 Leads</option>
+                              {leadsEnabled && <option value="leads">🎯 Leads</option>}
                               <option value="actions">⚡ Actions</option>
                             </select>
                             <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>
@@ -1496,7 +1496,7 @@ ${bodyHtml}
                         {/* ════════════════════════════════════════════
                              TAB: LEADS
                             ════════════════════════════════════════════ */}
-                        {reportSubTab === 'leads' && (() => {
+                        {reportSubTab === 'leads' && leadsEnabled && (() => {
                             const stageColors = { 'New':'#94a3b8','Contacted':'#0ea5e9','Qualified':'#8b5cf6','Working':'#f59e0b','Converted':'#10b981','Dead':'#ef4444' };
                             const allLeads = reportsTimedLeads;
                             const openLeads = allLeads.filter(l => l.status !== 'Converted' && l.status !== 'Dead');
