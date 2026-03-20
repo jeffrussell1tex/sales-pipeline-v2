@@ -712,41 +712,41 @@ function App() {
       useEffect(() => {
     if (!clerkUser || !organization?.id) return; // Don't load until authenticated + org active
     const loadData = async () => {
-const checkOk = (r) => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r; };
+        const checkOk = (r) => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r; };
 
-// ── Data loading delegated to hooks ──────────────────────────────
-loadOpportunities(setDbOffline);
-loadAccounts(setDbOffline);
-loadContacts(setDbOffline);
-loadTasks(setDbOffline);
-loadActivities(setDbOffline);
+        // ── Data loading delegated to hooks ──────────────────────────────
+        loadOpportunities(setDbOffline);
+        loadAccounts(setDbOffline);
+        loadContacts(setDbOffline);
+        loadTasks(setDbOffline);
+        loadActivities(setDbOffline);
 
-dbFetch('/.netlify/functions/leads')
-    .then(checkOk).then(r => r.json())
-    .then(data => setLeads(data.leads || []))
-    .catch(err => console.error('Failed to load leads:', err));
+        dbFetch('/.netlify/functions/leads')
+            .then(checkOk).then(r => r.json())
+            .then(data => setLeads(data.leads || []))
+            .catch(err => console.error('Failed to load leads:', err));
 
-// Settings + users loading delegated to useSettings hook
-const orgSwitched = prevOrgIdRef.current && prevOrgIdRef.current !== organization?.id;
-prevOrgIdRef.current = organization?.id || null;
-loadSettings(clerkUser, orgSwitched);
+        // Settings + users loading delegated to useSettings hook
+        const orgSwitched = prevOrgIdRef.current && prevOrgIdRef.current !== organization?.id;
+        prevOrgIdRef.current = organization?.id || null;
+        loadSettings(clerkUser, orgSwitched);
 
-// Load current user's own profile (notification prefs, etc.)
-dbFetch('/.netlify/functions/users?me=true')
-    .then(r => r.ok ? r.json() : null)
-    .then(data => {
-        if (data?.user) {
-            setMyProfile(data.user);
-            setProfileForm({
-                firstName: data.user.firstName || '',
-                lastName:  data.user.lastName  || '',
-                email:     data.user.email     || '',
-                phone:     data.user.phone     || '',
-                title:     data.user.title     || '',
-            });
-        }
-    })
-    .catch(() => {});
+        // Load current user's own profile (notification prefs, etc.)
+        dbFetch('/.netlify/functions/users?me=true')
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (data?.user) {
+                    setMyProfile(data.user);
+                    setProfileForm({
+                        firstName: data.user.firstName || '',
+                        lastName:  data.user.lastName  || '',
+                        email:     data.user.email     || '',
+                        phone:     data.user.phone     || '',
+                        title:     data.user.title     || '',
+                    });
+                }
+            })
+            .catch(() => {});
     };
     loadData();
 }, [clerkUser, organization]);
