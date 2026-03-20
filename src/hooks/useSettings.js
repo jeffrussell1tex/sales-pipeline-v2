@@ -68,11 +68,12 @@ export function useSettings() {
     const [settings, setSettings] = useState(() => {
         try {
             const saved = safeStorage.getItem('salesSettings');
+            const savedUsers = safeStorage.getItem('salesUsers');
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
-                    // Always start with empty users — DB is the source of truth
-                    return { ...parsed, users: [] };
+                    const users = savedUsers ? JSON.parse(savedUsers) : [];
+                    return { ...parsed, users };
                 } catch(e) {}
             }
         } catch(e) {}
@@ -88,55 +89,59 @@ export function useSettings() {
             settingsReady.current = false;
             setSettings(DEFAULT_SETTINGS);
             try { safeStorage.removeItem('salesSettings'); } catch(e) {}
+            try { safeStorage.removeItem('salesUsers'); } catch(e) {}
         }
 
-        dbFetch('/.netlify/functions/settings')
+        // Load settings and users in parallel, only mark ready when both complete
+        const settingsPromise = dbFetch('/.netlify/functions/settings')
             .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(data => {
                 if (data.settings) {
-                    // Strip users — they come exclusively from the /users endpoint
                     const { users: _stripUsers, ...settingsFromDb } = data.settings;
-                    // Replace settings entirely (don't merge with prev) to prevent org bleed-through
-                    setSettings({
+                    setSettings(prev => ({
                         ...DEFAULT_SETTINGS,
                         ...settingsFromDb,
+                        users: prev.users, // preserve users from cache/previous load
                         taskTypes: settingsFromDb.taskTypes?.length ? settingsFromDb.taskTypes : DEFAULT_SETTINGS.taskTypes,
                         funnelStages: settingsFromDb.funnelStages?.length ? settingsFromDb.funnelStages : DEFAULT_SETTINGS.funnelStages,
-                    });
+                    }));
                 } else {
-                    // No settings for this org yet — use defaults
-                    setSettings(DEFAULT_SETTINGS);
+                    setSettings(prev => ({ ...DEFAULT_SETTINGS, users: prev.users }));
                 }
-                setTimeout(() => { settingsReady.current = true; }, 0);
             })
-            .catch(err => {
-                console.error('Failed to load settings:', err);
-                setTimeout(() => { settingsReady.current = true; }, 0);
-            });
+            .catch(err => { console.error('Failed to load settings:', err); });
 
-        // Load users from dedicated endpoint — wait for token first
-        // Only Admins/Managers can fetch the full list; reps get 403 which we silently ignore
-        waitForToken().then(() =>
-        dbFetch('/.netlify/functions/users')
-            .then(r => {
-                if (!r.ok) return null; // 403 for reps — don't touch users array
-                return r.json();
-            })
-            .then(data => {
-                if (data && data.users) {
-                    setSettings(prev => ({ ...prev, users: data.users }));
-                }
-                // If data is null (403), leave existing users array untouched
-            })
-            .catch(() => {})
+        const usersPromise = waitForToken().then(() =>
+            dbFetch('/.netlify/functions/users')
+                .then(r => {
+                    if (!r.ok) return null; // 403 for reps — don't touch users array
+                    return r.json();
+                })
+                .then(data => {
+                    if (data && data.users) {
+                        setSettings(prev => ({ ...prev, users: data.users }));
+                    }
+                })
+                .catch(() => {})
         );
+
+        // Mark ready only after both loads complete (or fail)
+        Promise.allSettled([settingsPromise, usersPromise]).then(() => {
+            setTimeout(() => { settingsReady.current = true; }, 0);
+        });
     };
 
     // Save settings to DB whenever they change (after initial load)
     useEffect(() => {
         if (!settingsReady.current) return;
         const { users: _stripUsers, ...settingsToSave } = settings;
-        try { safeStorage.setItem('salesSettings', JSON.stringify(settingsToSave)); } catch(e) {}
+        try {
+            safeStorage.setItem('salesSettings', JSON.stringify(settingsToSave));
+            // Save users separately so reps can see them on reload without hitting /users
+            if (settings.users && settings.users.length > 0) {
+                safeStorage.setItem('salesUsers', JSON.stringify(settings.users));
+            }
+        } catch(e) {}
         dbFetch('/.netlify/functions/settings', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
