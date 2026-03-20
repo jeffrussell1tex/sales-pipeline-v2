@@ -937,7 +937,7 @@ dbFetch('/.netlify/functions/users?me=true')
     );
     const visibleAccounts = (accounts || [])
         .filter(acc => isRepVisible(acc.accountOwner))
-        .filter(acc => !acc.parentId);
+        .filter(acc => !acc.parentAccountId && !acc.parentId);
     const visibleContacts = (contacts || []).filter(c => isRepVisible(c.assignedRep));
     const visibleTasks = (() => {
         let base = (tasks || []).filter(t => isRepVisible(t.assignedTo));
