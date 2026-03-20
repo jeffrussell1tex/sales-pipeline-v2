@@ -425,6 +425,13 @@ function App() {
     }, [clerkUser]);
     const [activeTab, setActiveTab] = useState('home');
 
+    // Redirect away from leads tab if leads is disabled
+    useEffect(() => {
+        if (settings.leadsEnabled === false && activeTab === 'leads') {
+            setActiveTab('home');
+        }
+    }, [settings.leadsEnabled]);
+
     // ── Quick-log panel (pipeline floating button) ──
     const [quickLogOpen, setQuickLogOpen] = useState(false);
     const [quickLogForm, setQuickLogForm] = useState({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });
@@ -813,7 +820,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 case '6':
                     e.preventDefault(); setActiveTab('contacts'); break;
                 case '7':
-                    e.preventDefault(); setActiveTab('leads'); break;
+                    e.preventDefault(); if (settings.leadsEnabled !== false) setActiveTab('leads'); break;
                 case '8':
                     e.preventDefault(); setActiveTab('reports'); break;
                 case 'o': case 'O':
@@ -2377,12 +2384,14 @@ dbFetch('/.netlify/functions/users?me=true')
                 >
                     CONTACTS
                 </button>
+                {settings.leadsEnabled !== false && (
                 <button 
                     className={`nav-tab ${activeTab === 'leads' ? 'active' : ''}`}
                     onClick={() => setActiveTab('leads')}
                 >
                     LEADS
                 </button>
+                )}
                 <button 
                     className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
                     onClick={() => setActiveTab('reports')}
@@ -2520,7 +2529,7 @@ dbFetch('/.netlify/functions/users?me=true')
 
 
 
-            {activeTab === 'leads' && (
+            {activeTab === 'leads' && settings.leadsEnabled !== false && (
                 <LeadsTab
                     leads={leads}
                     setLeads={setLeads}
@@ -2531,7 +2540,7 @@ dbFetch('/.netlify/functions/users?me=true')
             )}
 
 
-            {activeTab === 'reports' && <ReportsTab />}
+            {activeTab === 'reports' && <ReportsTab leadsEnabled={settings.leadsEnabled !== false} />}
 
 
             {activeTab === 'salesManager' && <SalesManagerTab />}

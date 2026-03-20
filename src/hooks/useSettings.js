@@ -59,6 +59,7 @@ const DEFAULT_SETTINGS = {
         { id: 'attainment',       name: 'Attainment',              color: 'warning', tolerances: [{ label: 'Exceeding', min: 100, color: '#16a34a' },{ label: 'On Track', min: 70, color: '#f59e0b' },{ label: 'Behind', min: 0, color: '#ef4444' }] },
     ],
     aiScoringEnabled: false,
+    leadsEnabled: true,
 };
 
 export function useSettings() {
