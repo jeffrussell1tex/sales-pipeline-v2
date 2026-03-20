@@ -425,13 +425,6 @@ function App() {
     }, [clerkUser]);
     const [activeTab, setActiveTab] = useState('home');
 
-    // Redirect away from leads tab if leads is disabled
-    useEffect(() => {
-        if (settings.leadsEnabled === false && activeTab === 'leads') {
-            setActiveTab('home');
-        }
-    }, [settings.leadsEnabled]);
-
     // ── Quick-log panel (pipeline floating button) ──
     const [quickLogOpen, setQuickLogOpen] = useState(false);
     const [quickLogForm, setQuickLogForm] = useState({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });
@@ -712,41 +705,41 @@ function App() {
       useEffect(() => {
     if (!clerkUser || !organization?.id) return; // Don't load until authenticated + org active
     const loadData = async () => {
-        const checkOk = (r) => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r; };
+const checkOk = (r) => { if (!r.ok) { setDbOffline(true); throw new Error('HTTP ' + r.status); } setDbOffline(false); return r; };
 
-        // ── Data loading delegated to hooks ──────────────────────────────
-        loadOpportunities(setDbOffline);
-        loadAccounts(setDbOffline);
-        loadContacts(setDbOffline);
-        loadTasks(setDbOffline);
-        loadActivities(setDbOffline);
+// ── Data loading delegated to hooks ──────────────────────────────
+loadOpportunities(setDbOffline);
+loadAccounts(setDbOffline);
+loadContacts(setDbOffline);
+loadTasks(setDbOffline);
+loadActivities(setDbOffline);
 
-        dbFetch('/.netlify/functions/leads')
-            .then(checkOk).then(r => r.json())
-            .then(data => setLeads(data.leads || []))
-            .catch(err => console.error('Failed to load leads:', err));
+dbFetch('/.netlify/functions/leads')
+    .then(checkOk).then(r => r.json())
+    .then(data => setLeads(data.leads || []))
+    .catch(err => console.error('Failed to load leads:', err));
 
-        // Settings + users loading delegated to useSettings hook
-        const orgSwitched = prevOrgIdRef.current && prevOrgIdRef.current !== organization?.id;
-        prevOrgIdRef.current = organization?.id || null;
-        loadSettings(clerkUser, orgSwitched);
+// Settings + users loading delegated to useSettings hook
+const orgSwitched = prevOrgIdRef.current && prevOrgIdRef.current !== organization?.id;
+prevOrgIdRef.current = organization?.id || null;
+loadSettings(clerkUser, orgSwitched);
 
-        // Load current user's own profile (notification prefs, etc.)
-        dbFetch('/.netlify/functions/users?me=true')
-            .then(r => r.ok ? r.json() : null)
-            .then(data => {
-                if (data?.user) {
-                    setMyProfile(data.user);
-                    setProfileForm({
-                        firstName: data.user.firstName || '',
-                        lastName:  data.user.lastName  || '',
-                        email:     data.user.email     || '',
-                        phone:     data.user.phone     || '',
-                        title:     data.user.title     || '',
-                    });
-                }
-            })
-            .catch(() => {});
+// Load current user's own profile (notification prefs, etc.)
+dbFetch('/.netlify/functions/users?me=true')
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+        if (data?.user) {
+            setMyProfile(data.user);
+            setProfileForm({
+                firstName: data.user.firstName || '',
+                lastName:  data.user.lastName  || '',
+                email:     data.user.email     || '',
+                phone:     data.user.phone     || '',
+                title:     data.user.title     || '',
+            });
+        }
+    })
+    .catch(() => {});
     };
     loadData();
 }, [clerkUser, organization]);
@@ -820,7 +813,7 @@ function App() {
                 case '6':
                     e.preventDefault(); setActiveTab('contacts'); break;
                 case '7':
-                    e.preventDefault(); if (settings.leadsEnabled !== false) setActiveTab('leads'); break;
+                    e.preventDefault(); setActiveTab('leads'); break;
                 case '8':
                     e.preventDefault(); setActiveTab('reports'); break;
                 case 'o': case 'O':
@@ -2384,14 +2377,12 @@ function App() {
                 >
                     CONTACTS
                 </button>
-                {settings.leadsEnabled !== false && (
                 <button 
                     className={`nav-tab ${activeTab === 'leads' ? 'active' : ''}`}
                     onClick={() => setActiveTab('leads')}
                 >
                     LEADS
                 </button>
-                )}
                 <button 
                     className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
                     onClick={() => setActiveTab('reports')}
@@ -2529,7 +2520,7 @@ function App() {
 
 
 
-            {activeTab === 'leads' && settings.leadsEnabled !== false && (
+            {activeTab === 'leads' && (
                 <LeadsTab
                     leads={leads}
                     setLeads={setLeads}
@@ -2540,7 +2531,7 @@ function App() {
             )}
 
 
-            {activeTab === 'reports' && <ReportsTab leadsEnabled={settings.leadsEnabled !== false} />}
+            {activeTab === 'reports' && <ReportsTab />}
 
 
             {activeTab === 'salesManager' && <SalesManagerTab />}
