@@ -1615,17 +1615,7 @@ export default function SettingsTab({
                                                         : 'Unknown date';
                                                     
                                                     showConfirm(`Restore backup from ${exportDate}?\n\nThis file contains: ${counts}\n\nThis will REPLACE all current data.`, () => {
-                                                        if (d.opportunities) setOpportunities(d.opportunities);
-                                                        if (d.accounts) setAccounts(d.accounts);
-                                                        if (d.contacts) setContacts(d.contacts);
-                                                        if (d.leads) setLeads(d.leads);
-                                                        if (d.tasks) setTasks(d.tasks);
-                                                        if (d.taskTypes) setSettings(prev => ({ ...prev, taskTypes: d.taskTypes }));
-                                                        if (d.activities) setActivities(d.activities);
-                                                        if (d.settings) setSettings(d.settings);
-
-                                                        // Sync restored data: clear each table first, then insert
-                                                        // Fetches token explicitly to avoid stale closure issues.
+                                                        // Sync restored data to DB: clear each table first, then insert
                                                         const syncToDb = async () => {
                                                             setRestoringBackup(true);
                                                             try {
@@ -1641,7 +1631,9 @@ export default function SettingsTab({
                                                                 for (const { url } of endpoints) {
                                                                     await dbFetch(`${url}?clear=true`, { method: 'DELETE' }).catch(() => {});
                                                                 }
-                                                                // Step 2: Insert records sequentially per table
+                                                                // Also clear users
+                                                                await dbFetch('/.netlify/functions/users?clear=true', { method: 'DELETE' }).catch(() => {});
+                                                                // Step 2: Insert records per table
                                                                 let insertOk = 0, insertFail = 0;
                                                                 for (const { key, url } of endpoints) {
                                                                     if (!d[key] || d[key].length === 0) continue;
@@ -1654,17 +1646,19 @@ export default function SettingsTab({
                                                                         else { insertFail++; console.error('Restore insert failed', key, r?.status, record.id); }
                                                                     }
                                                                 }
-                                                                console.log(`Restore complete: ${insertOk} ok, ${insertFail} failed`);
+                                                                // Step 3: Restore settings
                                                                 if (d.settings) {
                                                                     await dbFetch('/.netlify/functions/settings', {
                                                                         method: 'PUT',
                                                                         body: JSON.stringify(d.settings)
                                                                     }).catch(() => {});
                                                                 }
+                                                                console.log(`Restore complete: ${insertOk} ok, ${insertFail} failed`);
                                                             } catch(e) { console.error('DB sync after restore failed:', e); }
                                                             finally { setRestoringBackup(false); }
                                                         };
-                                                        syncToDb().then(() => alert('Data restored successfully!'));
+                                                        // After DB sync, reload the page so all React state is fresh from DB
+                                                        syncToDb().then(() => window.location.reload());
                                                     }, false);
                                                 } catch (err) {
                                                     alert('Error reading backup file. The file may be corrupted or in an incorrect format.\n\nDetails: ' + err.message);

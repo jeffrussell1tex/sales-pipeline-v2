@@ -1806,27 +1806,8 @@ dbFetch('/.netlify/functions/users?me=true')
                         </div>
                     </div>
 
-                    {/* CENTER: Accelerep logo + search bar */}
-                    <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', padding: '0 1.5rem' }}>
-                        {/* Inline Accelerep logo — bars + wordmark, all white */}
-                        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', opacity: 0.92 }}>
-                            <svg width="108" height="32" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg">
-                                {/* Rising pipeline bars icon */}
-                                <g transform="translate(80, 76)">
-                                    <rect x="0"   y="104" width="32" height="52"  rx="6" fill="white" opacity="0.35"/>
-                                    <rect x="42"  y="72"  width="32" height="84"  rx="6" fill="white" opacity="0.55"/>
-                                    <rect x="84"  y="36"  width="32" height="120" rx="6" fill="white" opacity="0.75"/>
-                                    <rect x="126" y="0"   width="32" height="156" rx="6" fill="white"/>
-                                    <polyline points="16,104 58,72 100,36 142,0" fill="none" stroke="white" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <circle cx="142" cy="0" r="9" fill="white"/>
-                                </g>
-                                {/* Wordmark */}
-                                <text x="312" y="204" fontFamily="Arial, Helvetica, sans-serif" fontSize="116" fontWeight="500" fill="white" letterSpacing="-2">Accelerep</text>
-                                {/* TM */}
-                                <text x="960" y="124" fontFamily="Arial, Helvetica, sans-serif" fontSize="32" fontWeight="400" fill="white" opacity="0.7">™</text>
-                            </svg>
-                        </div>
-                        <div style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />
+                    {/* CENTER: search bar on top, Accelerep logo centered below */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', padding: '0 1.5rem' }}>
                         <div style={{ position: 'relative', zIndex: 200 }}>
                             <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '999px', border: '1px solid #e2e8f0', padding: '0.35rem 1rem', gap: '0.5rem', width: '340px', transition: 'box-shadow 0.15s, border-color 0.15s' }}
                                 onFocusCapture={e => { e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.background = '#fff'; }}
@@ -1877,6 +1858,21 @@ dbFetch('/.netlify/functions/users?me=true')
                                 </div>
                                 </>
                             )}
+                        </div>
+                        {/* Accelerep logo centered below search — 15% larger: 108→124px */}
+                        <div style={{ display: 'flex', alignItems: 'center', opacity: 0.92 }}>
+                            <svg width="124" height="37" viewBox="0 0 1200 360" xmlns="http://www.w3.org/2000/svg">
+                                <g transform="translate(80, 76)">
+                                    <rect x="0"   y="104" width="32" height="52"  rx="6" fill="white" opacity="0.35"/>
+                                    <rect x="42"  y="72"  width="32" height="84"  rx="6" fill="white" opacity="0.55"/>
+                                    <rect x="84"  y="36"  width="32" height="120" rx="6" fill="white" opacity="0.75"/>
+                                    <rect x="126" y="0"   width="32" height="156" rx="6" fill="white"/>
+                                    <polyline points="16,104 58,72 100,36 142,0" fill="none" stroke="white" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <circle cx="142" cy="0" r="9" fill="white"/>
+                                </g>
+                                <text x="312" y="204" fontFamily="Arial, Helvetica, sans-serif" fontSize="116" fontWeight="500" fill="white" letterSpacing="-2">Accelerep</text>
+                                <text x="960" y="124" fontFamily="Arial, Helvetica, sans-serif" fontSize="32" fontWeight="400" fill="white" opacity="0.7">™</text>
+                            </svg>
                         </div>
                     </div>
 
@@ -3187,21 +3183,47 @@ dbFetch('/.netlify/functions/users?me=true')
                     accounts={accounts}
                     onClose={() => setShowCsvImportModal(false)}
                     onImportContacts={async (newContacts) => {
-                        // Save records in batches to avoid overwhelming Netlify concurrency limits
-                        const saveBatch = async (url, items, progressOffset = 0, progressTotal = items.length) => {
-                            const BATCH_SIZE = 20;
-                            let failed = 0;
-                            let done = 0;
+                        // Lower concurrency to avoid Neon connection limits with large imports
+                        const CONCURRENCY = 3;   // max simultaneous DB calls
+                        const BATCH_SIZE = 50;   // records processed per progress tick
+                        const RETRY = 2;         // retry each record up to 2 times on failure
+                        const DELAY_MS = 100;    // ms pause between batches
+
+                        const saveOne = async (url, item, retriesLeft = RETRY) => {
+                            try {
+                                const r = await dbFetch(url, { method: 'POST', body: JSON.stringify(item) });
+                                if (!r || !r.ok) throw new Error('HTTP ' + (r?.status || 'no response'));
+                                return true;
+                            } catch (e) {
+                                if (retriesLeft > 0) {
+                                    await new Promise(res => setTimeout(res, 300));
+                                    return saveOne(url, item, retriesLeft - 1);
+                                }
+                                return false;
+                            }
+                        };
+
+                        const saveAll = async (url, items, progressOffset = 0, progressTotal = items.length) => {
+                            let failed = 0, done = 0;
+                            // Process in batches, each batch has limited concurrency
                             for (let i = 0; i < items.length; i += BATCH_SIZE) {
                                 const batch = items.slice(i, i + BATCH_SIZE);
-                                const results = await Promise.allSettled(batch.map(async (item) => {
-                                    const r = await dbFetch(url, { method: 'POST', body: JSON.stringify(item) });
-                                    if (!r || !r.ok) throw new Error('failed');
-                                }));
-                                failed += results.filter(r => r.status === 'rejected').length;
-                                done += batch.length;
-                                if (typeof window.__importProgressCb === 'function') {
-                                    window.__importProgressCb(progressOffset + done, progressTotal);
+                                // Run batch with limited concurrency
+                                const queue = [...batch];
+                                const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+                                    while (queue.length > 0) {
+                                        const item = queue.shift();
+                                        const ok = await saveOne(url, item);
+                                        if (!ok) failed++;
+                                        done++;
+                                        if (typeof window.__importProgressCb === 'function') {
+                                            window.__importProgressCb(progressOffset + done, progressTotal);
+                                        }
+                                    }
+                                });
+                                await Promise.all(workers);
+                                if (i + BATCH_SIZE < items.length) {
+                                    await new Promise(res => setTimeout(res, DELAY_MS));
                                 }
                             }
                             return failed;
@@ -3213,7 +3235,7 @@ dbFetch('/.netlify/functions/users?me=true')
                             createdAt: new Date().toISOString()
                         }));
 
-                        // Step 1: Auto-add new companies to accounts FIRST in batches
+                        // Step 1: Auto-add new companies to accounts first
                         const existingNames = accounts.map(a => a.name.toLowerCase());
                         const newCompanies = [...new Set(
                             newContacts.map(c => c.company).filter(c => c && !existingNames.includes(c.toLowerCase()))
@@ -3225,39 +3247,46 @@ dbFetch('/.netlify/functions/users?me=true')
                                 zip: '', country: '', website: '', phone: '', accountOwner: '',
                             }));
                             setAccounts(prev => [...prev, ...newAccts]);
-                            await saveBatch('/.netlify/functions/accounts', newAccts);
+                            await saveAll('/.netlify/functions/accounts', newAccts);
                         }
 
-                        // Step 2: Save contacts in batches — only after accounts confirmed saved
+                        // Step 2: Save contacts
                         setContacts(prev => [...prev, ...contactsWithIds]);
-                        const contactsFailed = await saveBatch('/.netlify/functions/contacts', contactsWithIds, 0, contactsWithIds.length);
+                        const contactsFailed = await saveAll('/.netlify/functions/contacts', contactsWithIds, 0, contactsWithIds.length);
                         if (contactsFailed > 0) {
                             throw new Error(`${contactsFailed} of ${contactsWithIds.length} contacts failed to save. The rest imported successfully — try re-importing the failed records.`);
                         }
-                        // Modal handles its own close via Done button
                     }}
                     onImportAccounts={async (newAccounts) => {
-                        const BATCH_SIZE = 20;
+                        const CONCURRENCY = 3, RETRY = 2, DELAY_MS = 100;
+                        const saveOne = async (item, retriesLeft = RETRY) => {
+                            try {
+                                const r = await dbFetch('/.netlify/functions/accounts', { method: 'POST', body: JSON.stringify(item) });
+                                if (!r || !r.ok) throw new Error('failed');
+                                return true;
+                            } catch {
+                                if (retriesLeft > 0) { await new Promise(res => setTimeout(res, 300)); return saveOne(item, retriesLeft - 1); }
+                                return false;
+                            }
+                        };
                         const accountsWithIds = newAccounts.map((a) => ({ ...a, id: crypto.randomUUID() }));
                         setAccounts(prev => [...prev, ...accountsWithIds]);
-                        let accountsFailed = 0;
-                        for (let i = 0; i < accountsWithIds.length; i += BATCH_SIZE) {
-                            const batch = accountsWithIds.slice(i, i + BATCH_SIZE);
-                            const results = await Promise.allSettled(batch.map(async (account) => {
-                                const r = await dbFetch('/.netlify/functions/accounts', {
-                                    method: 'POST', body: JSON.stringify(account)
-                                });
-                                if (!r || !r.ok) throw new Error('failed');
-                            }));
-                            accountsFailed += results.filter(r => r.status === 'rejected').length;
-                        }
-                        if (accountsFailed > 0) {
-                            throw new Error(`${accountsFailed} of ${accountsWithIds.length} accounts failed to save. The rest imported successfully — try re-importing the failed records.`);
-                        }
-                        // Modal handles its own close via Done button
+                        let failed = 0, done = 0;
+                        const queue = [...accountsWithIds];
+                        const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+                            while (queue.length > 0) {
+                                const item = queue.shift();
+                                const ok = await saveOne(item);
+                                if (!ok) failed++;
+                                done++;
+                                if (typeof window.__importProgressCb === 'function') window.__importProgressCb(done, accountsWithIds.length);
+                            }
+                        });
+                        await Promise.all(workers);
+                        if (failed > 0) throw new Error(`${failed} of ${accountsWithIds.length} accounts failed to save. The rest imported successfully.`);
                     }}
                     onImportOpportunities={async (newOpps) => {
-                        const BATCH_SIZE = 20;
+                        const CONCURRENCY = 3, RETRY = 2;
                         const today = new Date().toISOString().split('T')[0];
                         const activePipelineId = allPipelines?.[0]?.id || 'default';
                         const oppsWithIds = newOpps.map((o) => ({
@@ -3283,23 +3312,29 @@ dbFetch('/.netlify/functions/users?me=true')
                             contactIds:           [],
                         }));
                         setOpportunities(prev => [...prev, ...oppsWithIds]);
-                        let failed = 0;
-                        for (let i = 0; i < oppsWithIds.length; i += BATCH_SIZE) {
-                            const batch = oppsWithIds.slice(i, i + BATCH_SIZE);
-                            const results = await Promise.allSettled(batch.map(async (opp) => {
-                                const r = await dbFetch('/.netlify/functions/opportunities', {
-                                    method: 'POST', body: JSON.stringify(opp)
-                                });
+                        const saveOne = async (item, retriesLeft = RETRY) => {
+                            try {
+                                const r = await dbFetch('/.netlify/functions/opportunities', { method: 'POST', body: JSON.stringify(item) });
                                 if (!r || !r.ok) throw new Error('failed');
-                            }));
-                            failed += results.filter(r => r.status === 'rejected').length;
-                            if (typeof window.__importProgressCb === 'function') {
-                                window.__importProgressCb(Math.min(i + BATCH_SIZE, oppsWithIds.length), oppsWithIds.length);
+                                return true;
+                            } catch {
+                                if (retriesLeft > 0) { await new Promise(res => setTimeout(res, 300)); return saveOne(item, retriesLeft - 1); }
+                                return false;
                             }
-                        }
-                        if (failed > 0) {
-                            throw new Error(`${failed} of ${oppsWithIds.length} opportunities failed to save. The rest imported successfully.`);
-                        }
+                        };
+                        let failed = 0, done = 0;
+                        const queue = [...oppsWithIds];
+                        const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+                            while (queue.length > 0) {
+                                const item = queue.shift();
+                                const ok = await saveOne(item);
+                                if (!ok) failed++;
+                                done++;
+                                if (typeof window.__importProgressCb === 'function') window.__importProgressCb(done, oppsWithIds.length);
+                            }
+                        });
+                        await Promise.all(workers);
+                        if (failed > 0) throw new Error(`${failed} of ${oppsWithIds.length} opportunities failed to save. The rest imported successfully.`);
                     }}
                 />
             )}
