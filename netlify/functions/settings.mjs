@@ -40,6 +40,7 @@ export const handler = async (event) => {
                 kpiConfig:       row.extra?.kpiConfig       || null,
                 commissionPlan:  row.extra?.commissionPlan  || null,
                 aiScoringEnabled: row.extra?.aiScoringEnabled ?? false,
+                leadsEnabled:     row.extra?.leadsEnabled     ?? true,
             }})};
         }
         if (event.httpMethod === 'PUT') {
@@ -68,6 +69,7 @@ export const handler = async (event) => {
                 commissionPlan:  'commissionPlan'  in data ? (data.commissionPlan  || null) : existingExtra.commissionPlan  || null,
                 products:        'products'        in data ? (data.products        || [])   : existingExtra.products        || [],
                 aiScoringEnabled: 'aiScoringEnabled' in data ? !!data.aiScoringEnabled : existingExtra.aiScoringEnabled ?? false,
+                leadsEnabled:     'leadsEnabled'     in data ? !!data.leadsEnabled     : existingExtra.leadsEnabled     ?? true,
             };
 
             const dbRow = {
