@@ -1629,6 +1629,13 @@ dbFetch('/.netlify/functions/users?me=true')
 
     const handleLogout = () => signOut();
 
+    // Redirect away from leads tab if leads is disabled — must be before early returns
+    useEffect(() => {
+        if (settings.leadsEnabled === false && activeTab === 'leads') {
+            setActiveTab('home');
+        }
+    }, [settings.leadsEnabled]);
+
     if (!clerkLoaded || !orgLoaded) {
         return (
             <div className="login-page">
@@ -1778,13 +1785,6 @@ dbFetch('/.netlify/functions/users?me=true')
         activePipeline,
         allPipelines,
     };
-
-    // Redirect away from leads tab if leads is disabled
-    useEffect(() => {
-        if (settings.leadsEnabled === false && activeTab === 'leads') {
-            setActiveTab('home');
-        }
-    }, [settings.leadsEnabled]);
 
     return (
         <AppProvider value={appContextValue}>
