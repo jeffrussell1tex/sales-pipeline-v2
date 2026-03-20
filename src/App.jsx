@@ -1724,8 +1724,6 @@ dbFetch('/.netlify/functions/users?me=true')
         handleDeleteSubAccount,
         handleSaveAccount,
         handleDeleteContact,
-        handleDeleteAccount,
-        handleDeleteSubAccount,
         getSubAccounts,
         handleSaveContact,
         handleDeleteTask,

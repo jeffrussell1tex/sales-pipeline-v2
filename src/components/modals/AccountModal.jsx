@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useApp } from '../AppContext';
+import { useApp } from '../../AppContext';
 
 export default function AccountModal({ account, isSubAccount, settings: settingsProp, onClose, onSave, onAddRep, existingAccounts, errorMessage, onDismissError, saving }) {
     const { settings: contextSettings } = useApp();
