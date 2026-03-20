@@ -4,7 +4,16 @@ import { dbFetch } from '../utils/storage';
 import { SliceDropdown } from '../components/ui/ViewingBar';
 
 function KanbanView({ pipelineFilteredOpps, kanbanDragging, kanbanDragOver, setKanbanDragging, setKanbanDragOver, handleEdit, handleDelete }) {
-    const { stages, opportunities, setOpportunities, currentUser, calculateDealHealth } = useApp();
+    const {
+        stages, opportunities, setOpportunities,
+        accounts, contacts, tasks, setTasks, activities,
+        settings, currentUser, userRole, canSeeAll, isRepVisible,
+        exportToCSV, exportingCSV, setExportingCSV,
+        showConfirm, softDelete, addAudit,
+        getStageColor, calculateDealHealth, canViewField,
+        visibleOpportunities, activePipeline, allPipelines,
+        getQuarter, getQuarterLabel,
+    } = useApp();
     const stageColors = ['#6366f1','#8b5cf6','#0ea5e9','#f59e0b','#f97316','#10b981','#16a34a','#ef4444'];
 
     const handleKanbanDrop = (toStage) => {

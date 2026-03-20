@@ -22,6 +22,7 @@ export default function AccountsTab({
         opportunities,
         contacts,
         activities,
+        tasks,
         settings,
         currentUser,
         userRole,

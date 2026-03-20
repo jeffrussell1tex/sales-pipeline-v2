@@ -13,7 +13,9 @@ export default function ContactsTab({
     const {
         contacts, setContacts,
         opportunities,
+        accounts,
         activities,
+        tasks,
         settings,
         currentUser,
         userRole,

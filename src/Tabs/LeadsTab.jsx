@@ -3,7 +3,11 @@ import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
 export default function LeadsTab({ leads, setLeads, setEditingOpp, setShowModal, onImportClick }) {
-    const { settings, currentUser, canSeeAll, softDelete, showConfirm } = useApp();
+    const {
+        contacts,
+        settings, currentUser, canSeeAll, softDelete, showConfirm,
+        addAudit,
+    } = useApp();
     const [leadDragging, setLeadDragging] = React.useState(null); // { leadId, fromStage }
     const [leadDragOver, setLeadDragOver] = React.useState(null); // stage name
     const stageColors = { 'New':'#94a3b8','Contacted':'#0ea5e9','Qualified':'#8b5cf6','Working':'#f59e0b','Converted':'#10b981','Dead':'#ef4444' };
