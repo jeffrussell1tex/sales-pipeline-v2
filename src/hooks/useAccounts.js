@@ -16,7 +16,7 @@ export function useAccounts(deps) {
             .catch(err => console.error('Failed to load accounts:', err));
     };
 
-    const getSubAccounts = (accountId) => (accounts || []).filter(a => a.parentId === accountId);
+    const getSubAccounts = (accountId) => (accounts || []).filter(a => (a.parentAccountId || a.parentId) === accountId);
 
     const getAccountRollup = (acc) => {
         // Rollup is computed in App.jsx using opportunities — keep as pass-through here
@@ -76,14 +76,14 @@ export function useAccounts(deps) {
                 method = 'PUT'; auditAction = 'update'; auditId = editingAccount.id;
                 auditName = formData.name || editingAccount.id; auditDetail = formData.industry || '';
             } else if (editingSubAccount) {
-                payload = { ...formData, id: editingSubAccount.id, parentId: editingSubAccount.parentId };
+                payload = { ...formData, id: editingSubAccount.id, parentAccountId: editingSubAccount.parentAccountId || editingSubAccount.parentId };
                 method = 'PUT'; auditAction = 'update'; auditId = editingSubAccount.id;
                 auditName = formData.name || editingSubAccount.id; auditDetail = '';
             } else if (parentAccountForSub) {
                 const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                payload = { ...formData, id: newId, parentId: parentAccountForSub.id };
+                payload = { ...formData, id: newId, parentAccountId: parentAccountForSub.id };
                 method = 'POST'; auditAction = 'create'; auditId = newId;
-                auditName = formData.name || newId; auditDetail = 'Sub of ' + parentAccountForSub.name;
+                auditName = formData.name || newId; auditDetail = 'Sub-account of ' + parentAccountForSub.name;
             } else {
                 const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
                 payload = { ...formData, id: newId };

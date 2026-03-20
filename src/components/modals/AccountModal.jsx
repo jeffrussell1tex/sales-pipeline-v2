@@ -15,13 +15,10 @@ export default function AccountModal({ account, isSubAccount, settings: settings
         country: '',
         website: '',
         phone: '',
-        accountOwner: ''
     });
 
     const [verticalSearch, setVerticalSearch] = useState(account?.verticalMarket || '');
     const [showVerticalSuggestions, setShowVerticalSuggestions] = useState(false);
-    const [ownerSearch, setOwnerSearch] = useState(account?.accountOwner || '');
-    const [showOwnerSuggestions, setShowOwnerSuggestions] = useState(false);
     const [repSearch, setRepSearch] = useState(account?.assignedRep || '');
     const [showRepSuggestions, setShowRepSuggestions] = useState(false);
     const [territorySearch, setTerritorySearch] = useState(account?.assignedTerritory || '');
@@ -41,7 +38,7 @@ export default function AccountModal({ account, isSubAccount, settings: settings
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        const saveData = { ...formData, verticalMarket: verticalSearch, accountOwner: ownerSearch, assignedRep: repSearch, assignedTerritory: territorySearch };
+        const saveData = { ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch };
         // Fuzzy duplicate check — catches exact, case-insensitive, and near matches
         const normalize = s => (s || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
         const inputNorm = normalize(saveData.name);
@@ -122,47 +119,6 @@ export default function AccountModal({ account, isSubAccount, settings: settings
                                 onChange={e => { handleChange('name', e.target.value); if (duplicateWarning) setDuplicateWarning(null); }}
                                 style={duplicateWarning ? { borderColor: '#f59e0b', background: '#fffbeb' } : {}}
                             />
-                        </div>
-                        <div className="form-group" style={{ position: 'relative' }}>
-                            <label>Account Owner</label>
-                            <input
-                                type="text"
-                                value={ownerSearch}
-                                onChange={e => {
-                                    setOwnerSearch(e.target.value);
-                                    setShowOwnerSuggestions(true);
-                                }}
-                                onFocus={() => setShowOwnerSuggestions(true)}
-                                onBlur={() => setTimeout(() => setShowOwnerSuggestions(false), 200)}
-                                placeholder="Start typing name..."
-                                autoComplete="off"
-                            />
-                            {showOwnerSuggestions && (
-                                <div style={{
-                                    position: 'absolute', top: '100%', left: 0, right: 0,
-                                    background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '6px',
-                                    marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000,
-                                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                                }}>
-                                    {(settings?.users || [])
-                                        .filter(u => !ownerSearch || u.name.toLowerCase().startsWith(ownerSearch.toLowerCase()))
-                                        .map(user => (
-                                            <div key={user.id}
-                                                onMouseDown={e => e.preventDefault()}
-                                                onClick={() => { setOwnerSearch(user.name); setShowOwnerSuggestions(false); }}
-                                                style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', fontWeight: '600', fontSize: '0.875rem' }}
-                                                onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
-                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                            >{user.name}</div>
-                                        ))}
-                                    <div onMouseDown={e => e.preventDefault()}
-                                        onClick={() => { setShowOwnerSuggestions(false); if (onAddRep) onAddRep(); }}
-                                        style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', color: '#2563eb', fontWeight: '600', fontSize: '0.875rem' }}
-                                        onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
-                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                    >+ New Rep</div>
-                                </div>
-                            )}
                         </div>
                         <div className="form-group">
                             <label>Main Phone</label>
@@ -371,7 +327,7 @@ export default function AccountModal({ account, isSubAccount, settings: settings
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                                 <button type="button"
-                                    onClick={() => { setDuplicateWarning(null); onSave({ ...formData, verticalMarket: verticalSearch, accountOwner: ownerSearch, assignedRep: repSearch, assignedTerritory: territorySearch }); }}
+                                    onClick={() => { setDuplicateWarning(null); onSave({ ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch }); }}
                                     style={{ padding: '0.375rem 0.75rem', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit' }}>
                                     Create Anyway
                                 </button>
