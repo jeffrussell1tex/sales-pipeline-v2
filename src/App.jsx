@@ -1779,6 +1779,13 @@ dbFetch('/.netlify/functions/users?me=true')
         allPipelines,
     };
 
+    // Redirect away from leads tab if leads is disabled
+    useEffect(() => {
+        if (settings.leadsEnabled === false && activeTab === 'leads') {
+            setActiveTab('home');
+        }
+    }, [settings.leadsEnabled]);
+
     return (
         <AppProvider value={appContextValue}>
         <div className="app-container">
@@ -2380,6 +2387,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 <button 
                     className={`nav-tab ${activeTab === 'leads' ? 'active' : ''}`}
                     onClick={() => setActiveTab('leads')}
+                    style={{ display: settings.leadsEnabled === false ? 'none' : '' }}
                 >
                     LEADS
                 </button>
@@ -2520,7 +2528,7 @@ dbFetch('/.netlify/functions/users?me=true')
 
 
 
-            {activeTab === 'leads' && (
+            {activeTab === 'leads' && settings.leadsEnabled !== false && (
                 <LeadsTab
                     leads={leads}
                     setLeads={setLeads}
@@ -2531,7 +2539,7 @@ dbFetch('/.netlify/functions/users?me=true')
             )}
 
 
-            {activeTab === 'reports' && <ReportsTab />}
+            {activeTab === 'reports' && <ReportsTab leadsEnabled={settings.leadsEnabled !== false} />}
 
 
             {activeTab === 'salesManager' && <SalesManagerTab />}

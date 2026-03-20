@@ -165,6 +165,7 @@ export default function SettingsTab({
                                         { view: 'pain-points',    icon: '⚠️', title: 'Pain Points Library', desc: 'Customer pain point templates' },
                                         { view: 'products',       icon: '📦', title: 'Products',             desc: 'Products and services offered' },
                                         { group: 'Security & Data' },
+                                        { view: 'features',       icon: '🧩', title: 'Features',             desc: 'Enable or disable app features' },
                                         { view: 'ai-features',    icon: '🤖', title: 'AI Features',          desc: 'Deal scoring & data privacy controls' },
                                         { view: 'field-visibility', icon: '🔒', title: 'Field Visibility',  desc: 'Role-based field access control' },
                                         { view: 'data-storage',   icon: '🗄️', title: 'Data Storage',        desc: 'Storage configuration' },
@@ -1260,6 +1261,38 @@ export default function SettingsTab({
                         
                             <SaveCancelBar />
 </div>
+                    )}
+
+                    {settingsView === 'features' && (
+                        <div className="table-container">
+                            <div className="table-header">
+                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
+                                <h2>FEATURES</h2>
+                            </div>
+                            <div style={{ padding: '1.5rem', maxWidth: '560px' }}>
+                                <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1.5rem', lineHeight: '1.6' }}>
+                                    Enable or disable features for your organization. Disabled features are hidden from the navigation and reports.
+                                </p>
+                                {/* Leads toggle */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', marginBottom: '0.75rem' }}>
+                                    <div>
+                                        <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1e293b', marginBottom: '0.25rem' }}>Leads</div>
+                                        <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>Show the Leads tab and leads-related reports. Disable for teams that manage leads outside the app.</div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1.5rem', flexShrink: 0 }}>
+                                        <button
+                                            onClick={() => setSettings(prev => ({ ...prev, leadsEnabled: !(prev.leadsEnabled !== false) }))}
+                                            style={{ width: '44px', height: '24px', borderRadius: '999px', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', background: settings.leadsEnabled !== false ? '#2563eb' : '#e2e8f0', border: 'none', padding: 0, flexShrink: 0 }}>
+                                            <div style={{ position: 'absolute', width: '18px', height: '18px', background: '#fff', borderRadius: '50%', top: '3px', transition: 'left 0.2s', left: settings.leadsEnabled !== false ? '23px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                                        </button>
+                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: settings.leadsEnabled !== false ? '#2563eb' : '#94a3b8', minWidth: '28px' }}>
+                                            {settings.leadsEnabled !== false ? 'On' : 'Off'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <SaveCancelBar />
+                        </div>
                     )}
 
                     {settingsView === 'ai-features' && (
