@@ -115,13 +115,18 @@ export function useSettings() {
             });
 
         // Load users from dedicated endpoint — wait for token first
+        // Only Admins/Managers can fetch the full list; reps get 403 which we silently ignore
         waitForToken().then(() =>
         dbFetch('/.netlify/functions/users')
-            .then(r => r.ok ? r.json() : { users: [] })
+            .then(r => {
+                if (!r.ok) return null; // 403 for reps — don't touch users array
+                return r.json();
+            })
             .then(data => {
-                if (data.users) {
+                if (data && data.users) {
                     setSettings(prev => ({ ...prev, users: data.users }));
                 }
+                // If data is null (403), leave existing users array untouched
             })
             .catch(() => {})
         );
