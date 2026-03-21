@@ -23,6 +23,14 @@ export default function AccountModal({ account, isSubAccount, settings: settings
     const [showRepSuggestions, setShowRepSuggestions] = useState(false);
     const [territorySearch, setTerritorySearch] = useState(account?.assignedTerritory || '');
     const [showTerritorySuggestions, setShowTerritorySuggestions] = useState(false);
+    const [parentSearch, setParentSearch] = useState(() => {
+        if (account?.parentAccountId && existingAccounts) {
+            const parent = existingAccounts.find(a => a.id === account.parentAccountId);
+            return parent?.name || '';
+        }
+        return '';
+    });
+    const [showParentSuggestions, setShowParentSuggestions] = useState(false);
     const [duplicateWarning, setDuplicateWarning] = useState(null);
 
     const allRepNames = [...new Set([
@@ -38,7 +46,8 @@ export default function AccountModal({ account, isSubAccount, settings: settings
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        const saveData = { ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch };
+        const selectedParent = (existingAccounts || []).find(a => a.name === parentSearch);
+        const saveData = { ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: selectedParent ? selectedParent.id : (formData.parentAccountId || null) };
         // Fuzzy duplicate check — catches exact, case-insensitive, and near matches
         const normalize = s => (s || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
         const inputNorm = normalize(saveData.name);
@@ -120,6 +129,53 @@ export default function AccountModal({ account, isSubAccount, settings: settings
                                 style={duplicateWarning ? { borderColor: '#f59e0b', background: '#fffbeb' } : {}}
                             />
                         </div>
+                        {/* Parent Account — typeahead, makes this a sub-account if set */}
+                        {!isSubAccount && (
+                        <div className="form-group full" style={{ position: 'relative' }}>
+                            <label>Parent Account <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>— leave blank for top-level account</span></label>
+                            <input
+                                type="text"
+                                value={parentSearch}
+                                onChange={e => { setParentSearch(e.target.value); setShowParentSuggestions(true); }}
+                                onFocus={() => setShowParentSuggestions(true)}
+                                onBlur={() => setTimeout(() => setShowParentSuggestions(false), 200)}
+                                placeholder="Type to search accounts..."
+                                autoComplete="off"
+                                style={parentSearch && (existingAccounts || []).find(a => a.name === parentSearch) ? { borderColor: '#16a34a', background: '#f0fdf4' } : {}}
+                            />
+                            {parentSearch && (existingAccounts || []).find(a => a.name === parentSearch) && (
+                                <div style={{ fontSize: '0.75rem', color: '#16a34a', marginTop: '0.25rem', fontWeight: '600' }}>
+                                    ✓ Will be saved as sub-account of {parentSearch}
+                                </div>
+                            )}
+                            {showParentSuggestions && (
+                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                    {(existingAccounts || [])
+                                        .filter(a => a.id !== account?.id && !a.parentAccountId && (!parentSearch || a.name.toLowerCase().includes(parentSearch.toLowerCase())))
+                                        .sort((a, b) => a.name.localeCompare(b.name))
+                                        .slice(0, 10)
+                                        .map(a => (
+                                            <div key={a.id}
+                                                onMouseDown={e => e.preventDefault()}
+                                                onClick={() => { setParentSearch(a.name); setShowParentSuggestions(false); }}
+                                                style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', fontSize: '0.875rem', fontWeight: '600', color: '#1e293b' }}
+                                                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                            >{a.name}</div>
+                                        ))}
+                                    {parentSearch && (
+                                        <div
+                                            onMouseDown={e => e.preventDefault()}
+                                            onClick={() => setParentSearch('')}
+                                            style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', fontSize: '0.8125rem', color: '#94a3b8', borderTop: '1px solid #f1f3f5' }}
+                                            onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                        >✕ Clear parent (save as top-level)</div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                        )}
                         <div className="form-group">
                             <label>Main Phone</label>
                             <input
@@ -327,7 +383,7 @@ export default function AccountModal({ account, isSubAccount, settings: settings
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                                 <button type="button"
-                                    onClick={() => { setDuplicateWarning(null); onSave({ ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch }); }}
+                                    onClick={() => { setDuplicateWarning(null); const p2 = (existingAccounts || []).find(a => a.name === parentSearch); onSave({ ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: p2 ? p2.id : (formData.parentAccountId || null) }); }}
                                     style={{ padding: '0.375rem 0.75rem', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit' }}>
                                     Create Anyway
                                 </button>

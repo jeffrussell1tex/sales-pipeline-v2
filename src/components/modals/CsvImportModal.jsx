@@ -61,7 +61,28 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
     const appFields = importType === 'contacts' ? contactFields : importType === 'opportunities' ? opportunityFields : accountFields;
 
     const parseCSV = (text) => {
-        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        // Split into logical lines — respecting quoted fields that span multiple lines
+        const splitLines = (raw) => {
+            const lines = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < raw.length; i++) {
+                const ch = raw[i];
+                if (ch === '"') {
+                    if (inQuotes && raw[i + 1] === '"') { current += '"'; i++; }
+                    else { inQuotes = !inQuotes; current += ch; }
+                } else if ((ch === '\n' || (ch === '\r' && raw[i + 1] === '\n')) && !inQuotes) {
+                    if (ch === '\r') i++; // skip \n of \r\n
+                    lines.push(current);
+                    current = '';
+                } else {
+                    current += ch;
+                }
+            }
+            if (current) lines.push(current);
+            return lines.filter(l => l.trim());
+        };
+        const lines = splitLines(text);
         if (lines.length < 2) { setParseError('CSV must have a header row and at least one data row.'); return; }
         
         const parseLine = (line) => {
