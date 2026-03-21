@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-function LeadForm({ lead, onSave, onClose, canSeeAll, allReps }) {
+export default function LeadForm({ lead, onSave, onClose, canSeeAll, allReps }) {
     const [form, setForm] = React.useState(lead || { firstName:'', lastName:'', company:'', title:'', email:'', phone:'', source:'', status:'New', score:50, estimatedARR:0, assignedTo:'', notes:'' });
     const set = (k, v) => setForm(f => ({...f, [k]: v}));
     return (
