@@ -1,5 +1,5 @@
-import React from 'react';
-import { OrganizationSwitcher } from '@clerk/clerk-react';
+import React, { useState } from 'react';
+import { OrganizationSwitcher, useOrganizationList } from '@clerk/clerk-react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 
@@ -8,12 +8,14 @@ export default function AppHeader({
     showSearchResults, setShowSearchResults,
     showProfilePanel, setShowProfilePanel,
     profileForm, setProfileForm,
-    myProfile,
+    myProfile, setMyProfile,
     showShortcuts, setShowShortcuts,
     handleLogout,
     setShowModal, setEditingOpp,
     setViewingAccount, setViewingContact,
     dbOffline, setDbOffline,
+    notifications,
+    showNotifications, setShowNotifications,
 }) {
     const {
         settings, currentUser, userRole, isAdmin,
@@ -25,6 +27,9 @@ export default function AppHeader({
     } = useApp();
     const isManager = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
+    const { userMemberships } = useOrganizationList({ userMemberships: { infinite: true } });
+    const [profilePanelTab, setProfilePanelTab] = useState('profile');
+    const [profileSaving, setProfileSaving] = useState(false);
 
     return (
         <>
