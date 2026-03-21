@@ -114,15 +114,22 @@ export default function ContactsTab({
                                 >Clear selection</button>
                             </div>
                             <button onClick={() => {
-                                showConfirm('Delete ' + selectedContacts.length + ' selected contact(s)? This cannot be undone.', () => {
+                                showConfirm('Delete ' + selectedContacts.length + ' selected contact(s)? This cannot be undone.', async () => {
     const contactIdsToDelete = [...selectedContacts];
     const snapshot = [...contacts];
     setContacts(contacts.filter(c => !contactIdsToDelete.includes(c.id)));
     setSelectedContacts([]);
-    contactIdsToDelete.forEach(id => {
-        dbFetch(`/.netlify/functions/contacts?id=${id}`, { method: 'DELETE' })
-            .catch(err => console.error('Failed to delete contact:', err));
+    // Batch deletes with limited concurrency to avoid overwhelming Netlify
+    const CONCURRENCY = 3;
+    const queue = [...contactIdsToDelete];
+    const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+        while (queue.length > 0) {
+            const id = queue.shift();
+            await dbFetch(`/.netlify/functions/contacts?id=${id}`, { method: 'DELETE' })
+                .catch(err => console.error('Failed to delete contact:', err));
+        }
     });
+    await Promise.all(workers);
     softDelete(
         `${contactIdsToDelete.length} contact${contactIdsToDelete.length === 1 ? '' : 's'}`,
         () => {},

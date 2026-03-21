@@ -77,15 +77,21 @@ export default function AccountsTab({
                             {canEdit && <button className="btn" onClick={handleAddAccount}>+ Add Account</button>}
                             {selectedAccounts.length > 0 && (
     <button className="btn" style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '0.5rem 1rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.8125rem', fontFamily: 'inherit' }} onClick={() => {
-        showConfirm('Delete ' + selectedAccounts.length + ' selected account(s)? This cannot be undone.', () => {
+        showConfirm('Delete ' + selectedAccounts.length + ' selected account(s)? This cannot be undone.', async () => {
             const accountIdsToDelete = [...selectedAccounts];
             const snapshot = [...accounts];
             setAccounts(prev => prev.filter(a => !accountIdsToDelete.includes(a.id)));
             setSelectedAccounts([]);
-            accountIdsToDelete.forEach(id => {
-                dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
-                    .catch(err => console.error('Failed to delete account:', err));
+            const CONCURRENCY = 3;
+            const queue = [...accountIdsToDelete];
+            const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+                while (queue.length > 0) {
+                    const id = queue.shift();
+                    await dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
+                        .catch(err => console.error('Failed to delete account:', err));
+                }
             });
+            await Promise.all(workers);
             softDelete(
                 `${accountIdsToDelete.length} account${accountIdsToDelete.length === 1 ? '' : 's'}`,
                 () => {},
