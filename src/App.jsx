@@ -3268,7 +3268,7 @@ dbFetch('/.netlify/functions/users?me=true')
                         }
                     }}
                     onImportAccounts={async (newAccounts) => {
-                        const CONCURRENCY = 3, RETRY = 2, DELAY_MS = 100;
+                        const CONCURRENCY = 3, RETRY = 2;
                         const saveOne = async (item, retriesLeft = RETRY) => {
                             try {
                                 const r = await dbFetch('/.netlify/functions/accounts', { method: 'POST', body: JSON.stringify(item) });
@@ -3279,21 +3279,47 @@ dbFetch('/.netlify/functions/users?me=true')
                                 return false;
                             }
                         };
-                        const accountsWithIds = newAccounts.map((a) => ({ ...a, id: crypto.randomUUID() }));
-                        setAccounts(prev => [...prev, ...accountsWithIds]);
-                        let failed = 0, done = 0;
-                        const queue = [...accountsWithIds];
-                        const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-                            while (queue.length > 0) {
-                                const item = queue.shift();
-                                const ok = await saveOne(item);
-                                if (!ok) failed++;
-                                done++;
-                                if (typeof window.__importProgressCb === 'function') window.__importProgressCb(done, accountsWithIds.length);
-                            }
+                        const saveBatch = async (items, offset, total) => {
+                            let failed = 0, done = 0;
+                            const queue = [...items];
+                            const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+                                while (queue.length > 0) {
+                                    const item = queue.shift();
+                                    const ok = await saveOne(item);
+                                    if (!ok) failed++;
+                                    done++;
+                                    if (typeof window.__importProgressCb === 'function') window.__importProgressCb(offset + done, total);
+                                }
+                            });
+                            await Promise.all(workers);
+                            return failed;
+                        };
+
+                        // Pass 1: save all parent accounts (no parentAccount field)
+                        const parents = newAccounts.filter(a => !a.parentAccount?.trim());
+                        const parentsWithIds = parents.map(a => {
+                            const { parentAccount: _drop, ...rest } = a;
+                            return { ...rest, id: crypto.randomUUID(), parentAccountId: null };
                         });
-                        await Promise.all(workers);
-                        if (failed > 0) throw new Error(`${failed} of ${accountsWithIds.length} accounts failed to save. The rest imported successfully.`);
+                        setAccounts(prev => [...prev, ...parentsWithIds]);
+                        let failed = await saveBatch(parentsWithIds, 0, newAccounts.length);
+
+                        // Pass 2: save sub-accounts — resolve parentAccountId from newly saved parents
+                        const subs = newAccounts.filter(a => a.parentAccount?.trim());
+                        const allAccountsSoFar = [...accounts, ...parentsWithIds];
+                        const subsWithIds = subs.map(a => {
+                            const parentAccountId = allAccountsSoFar.find(
+                                acc => acc.name.toLowerCase() === a.parentAccount.toLowerCase()
+                            )?.id || null;
+                            const { parentAccount: _drop, ...rest } = a;
+                            return { ...rest, id: crypto.randomUUID(), parentAccountId };
+                        });
+                        if (subsWithIds.length > 0) {
+                            setAccounts(prev => [...prev, ...subsWithIds]);
+                            failed += await saveBatch(subsWithIds, parentsWithIds.length, newAccounts.length);
+                        }
+
+                        if (failed > 0) throw new Error(`${failed} of ${newAccounts.length} accounts failed to save. The rest imported successfully.`);
                     }}
                     onImportOpportunities={async (newOpps) => {
                         const CONCURRENCY = 3, RETRY = 2;
