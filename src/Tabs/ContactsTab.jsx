@@ -119,17 +119,23 @@ export default function ContactsTab({
     const snapshot = [...contacts];
     setContacts(contacts.filter(c => !contactIdsToDelete.includes(c.id)));
     setSelectedContacts([]);
-    // Batch deletes with limited concurrency to avoid overwhelming Netlify
-    const CONCURRENCY = 3;
-    const queue = [...contactIdsToDelete];
-    const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-        while (queue.length > 0) {
-            const id = queue.shift();
-            await dbFetch(`/.netlify/functions/contacts?id=${id}`, { method: 'DELETE' })
-                .catch(err => console.error('Failed to delete contact:', err));
-        }
-    });
-    await Promise.all(workers);
+    // If all contacts selected, use clear=true for a single DB call instead of N deletes
+    const deletingAll = contactIdsToDelete.length === contacts.length;
+    if (deletingAll) {
+        await dbFetch('/.netlify/functions/contacts?clear=true', { method: 'DELETE' })
+            .catch(err => console.error('Failed to clear contacts:', err));
+    } else {
+        const CONCURRENCY = 3;
+        const queue = [...contactIdsToDelete];
+        const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+            while (queue.length > 0) {
+                const id = queue.shift();
+                await dbFetch(`/.netlify/functions/contacts?id=${id}`, { method: 'DELETE' })
+                    .catch(err => console.error('Failed to delete contact:', err));
+            }
+        });
+        await Promise.all(workers);
+    }
     softDelete(
         `${contactIdsToDelete.length} contact${contactIdsToDelete.length === 1 ? '' : 's'}`,
         () => {},

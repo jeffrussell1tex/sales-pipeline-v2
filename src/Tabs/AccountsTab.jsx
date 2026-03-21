@@ -82,16 +82,22 @@ export default function AccountsTab({
             const snapshot = [...accounts];
             setAccounts(prev => prev.filter(a => !accountIdsToDelete.includes(a.id)));
             setSelectedAccounts([]);
-            const CONCURRENCY = 3;
-            const queue = [...accountIdsToDelete];
-            const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-                while (queue.length > 0) {
-                    const id = queue.shift();
-                    await dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
-                        .catch(err => console.error('Failed to delete account:', err));
-                }
-            });
-            await Promise.all(workers);
+            const deletingAll = accountIdsToDelete.length === accounts.length;
+            if (deletingAll) {
+                await dbFetch('/.netlify/functions/accounts?clear=true', { method: 'DELETE' })
+                    .catch(err => console.error('Failed to clear accounts:', err));
+            } else {
+                const CONCURRENCY = 3;
+                const queue = [...accountIdsToDelete];
+                const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+                    while (queue.length > 0) {
+                        const id = queue.shift();
+                        await dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
+                            .catch(err => console.error('Failed to delete account:', err));
+                    }
+                });
+                await Promise.all(workers);
+            }
             softDelete(
                 `${accountIdsToDelete.length} account${accountIdsToDelete.length === 1 ? '' : 's'}`,
                 () => {},
