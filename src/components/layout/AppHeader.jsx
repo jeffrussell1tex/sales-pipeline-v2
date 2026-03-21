@@ -23,6 +23,8 @@ export default function AppHeader({
         allPipelines, getQuarter, getQuarterLabel,
         clerkUser,
     } = useApp();
+    const isManager = userRole === 'Manager';
+    const isReadOnly = userRole === 'ReadOnly';
 
     return (
         <>
