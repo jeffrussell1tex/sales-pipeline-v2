@@ -1,7 +1,7 @@
 import React from 'react';
 import { OrganizationSwitcher } from '@clerk/clerk-react';
 import { useApp } from '../../AppContext';
-import { dbFetch } from '../utils/storage';
+import { dbFetch } from '../../utils/storage';
 
 export default function AppHeader({
     globalSearch, setGlobalSearch,

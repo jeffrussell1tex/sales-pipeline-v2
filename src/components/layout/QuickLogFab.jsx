@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../../AppContext';
-import { dbFetch } from '../utils/storage';
+import { dbFetch } from '../../utils/storage';
 
 export default function QuickLogFab({
     quickLogOpen, setQuickLogOpen,
