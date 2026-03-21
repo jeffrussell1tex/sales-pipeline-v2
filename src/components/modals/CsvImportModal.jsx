@@ -30,6 +30,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
 
     const accountFields = [
         { key: 'name', label: 'Account Name', required: true },
+        { key: 'parentAccount', label: 'Parent Account' },
         { key: 'verticalMarket', label: 'Vertical Market' },
         { key: 'accountOwner', label: 'Account Owner' },
         { key: 'phone', label: 'Phone' },
@@ -129,7 +130,8 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
                        (field.key === 'website' && (hLower.includes('website') || hLower.includes('url') || hLower.includes('web'))) ||
                        (field.key === 'zip' && (hLower.includes('zip') || hLower.includes('postal'))) ||
                        (field.key === 'address' && (hLower.includes('address') || hLower.includes('street'))) ||
-                       (field.key === 'verticalMarket' && (hLower.includes('vertical') || hLower.includes('industry') || hLower.includes('sector')));
+                       (field.key === 'verticalMarket' && (hLower.includes('vertical') || hLower.includes('industry') || hLower.includes('sector'))) ||
+                       (field.key === 'parentAccount' && (hLower.includes('parent') || hLower.includes('parentaccount') || hLower.includes('parent account')));
             });
             if (match >= 0) autoMapping[field.key] = match;
         });
