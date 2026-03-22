@@ -107,6 +107,57 @@ function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUs
         const allSorted = [...repStats].sort(sortFn);
         const totalArr  = repStats.reduce((s,r) => s+r.pipelineArr, 0);
         const atRisk    = repStats.filter(r => r.score < 40).length;
+
+        // ── Team-level coaching insights ──────────────────────────────────────
+        const BENCHMARK_WIN_RATE   = 45; // industry benchmark %
+        const BENCHMARK_ACT_DAYS   = 7;  // ideal days between activities
+        const repsWithWinRate = repStats.filter(r => r.winRate !== null);
+        const teamAvgWinRate  = repsWithWinRate.length > 0
+            ? Math.round(repsWithWinRate.reduce((s,r) => s + r.winRate, 0) / repsWithWinRate.length)
+            : null;
+        const repsWithActivity = repStats.filter(r => r.daysSinceAct !== null);
+        const teamAvgActDays   = repsWithActivity.length > 0
+            ? Math.round(repsWithActivity.reduce((s,r) => s + r.daysSinceAct, 0) / repsWithActivity.length)
+            : null;
+        const repsWithAttain = repStats.filter(r => r.attainPct !== null);
+        const teamAvgAttain  = repsWithAttain.length > 0
+            ? Math.round(repsWithAttain.reduce((s,r) => s + r.attainPct, 0) / repsWithAttain.length)
+            : null;
+        const staleDealReps  = repStats.filter(r => r.staleDeals > 0);
+        const topPerformer   = repStats.length > 0 ? [...repStats].sort((a,b) => b.score - a.score)[0] : null;
+        const bottomRep      = repStats.length > 0 ? [...repStats].sort((a,b) => a.score - b.score)[0] : null;
+        const scoreGap       = (topPerformer && bottomRep && repStats.length > 1)
+            ? topPerformer.score - bottomRep.score : 0;
+
+        const teamInsights = [];
+        const hintCfg = {
+            success: { bg:'#EAF3DE', border:'#C0DD97', text:'#27500A', iconBg:'#639922', icon:'★' },
+            warning: { bg:'#FAEEDA', border:'#FAC775', text:'#633806', iconBg:'#BA7517', icon:'!' },
+            info:    { bg:'#E6F1FB', border:'#B5D4F4', text:'#0C447C', iconBg:'#378ADD', icon:'→' },
+        };
+
+        if (teamAvgWinRate !== null) {
+            if (teamAvgWinRate < BENCHMARK_WIN_RATE) {
+                teamInsights.push({ type:'warning', text:`Your team averages a ${teamAvgWinRate}% win rate vs the ${BENCHMARK_WIN_RATE}% benchmark. Focus on discovery quality and tighter qualification to move the needle.` });
+            } else {
+                teamInsights.push({ type:'success', text:`Team win rate is ${teamAvgWinRate}% — ${teamAvgWinRate - BENCHMARK_WIN_RATE}pts above the ${BENCHMARK_WIN_RATE}% benchmark. Strong qualification process; now focus on deal size and cycle speed.` });
+            }
+        }
+        if (teamAvgActDays !== null && teamAvgActDays > BENCHMARK_ACT_DAYS) {
+            teamInsights.push({ type:'warning', text:`Average ${teamAvgActDays} days since last activity across your team — above the ${BENCHMARK_ACT_DAYS}-day ideal. ${staleDealReps.length > 0 ? `${staleDealReps.length} rep${staleDealReps.length>1?'s have':' has'} stale deals.` : ''} Consider a team-wide activity sprint.` });
+        }
+        if (teamAvgAttain !== null && teamAvgAttain < 50) {
+            teamInsights.push({ type:'warning', text:`Team quota attainment is averaging ${teamAvgAttain}%. Review pipeline coverage with reps below 25% — they may need deal strategy support or pipeline top-up.` });
+        }
+        if (teamAvgAttain !== null && teamAvgAttain >= 75) {
+            teamInsights.push({ type:'success', text:`Team is at ${teamAvgAttain}% average quota attainment — on track for a strong quarter. Watch for end-of-quarter slip on deals in late stages.` });
+        }
+        if (scoreGap >= 40 && topPerformer && bottomRep) {
+            teamInsights.push({ type:'info', text:`${scoreGap}-point health gap between ${topPerformer.rep.name} (${topPerformer.score}) and ${bottomRep.rep.name} (${bottomRep.score}). Consider peer shadowing or sharing ${topPerformer.rep.name}'s playbook.` });
+        }
+
+        const shownInsights = teamInsights.slice(0, 3);
+
         return (
             <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', marginBottom:'1.5rem', overflow:'hidden' }}>
                 <div style={{ padding:'0.875rem 1.25rem', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
@@ -118,12 +169,13 @@ function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUs
                         </div>
                     </div>
                     {setActiveTab && (
-                        <button onClick={() => setActiveTab('salesmanager')}
+                        <button onClick={() => setActiveTab('salesManager')}
                             style={{ fontSize:'0.75rem', padding:'4px 12px', border:'0.5px solid #e2e8f0', borderRadius:'6px', background:'transparent', color:'#64748b', cursor:'pointer', fontFamily:'inherit' }}>
                             View detail →
                         </button>
                     )}
                 </div>
+                {/* Rep strip */}
                 <div style={{ padding:'0.875rem 1.25rem', display:'flex', gap:'8px', overflowX:'auto' }}>
                     {allSorted.map(rs => (
                         <div key={rs.rep.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'8px 12px', border:`0.5px solid ${rs.statusColor}40`, borderLeft:`3px solid ${rs.statusColor}`, borderRadius:'0 8px 8px 0', background:'#fafafa', flexShrink:0, minWidth:'145px' }}>
@@ -136,6 +188,25 @@ function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUs
                         </div>
                     ))}
                 </div>
+                {/* Team-level coaching insights */}
+                {shownInsights.length > 0 && (
+                    <div style={{ padding:'0 1.25rem 1rem', borderTop:'1px solid #f1f5f9', paddingTop:'0.75rem' }}>
+                        <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'6px' }}>
+                            Team coaching insights
+                        </div>
+                        <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                            {shownInsights.map((hint, i) => {
+                                const hc = hintCfg[hint.type] || hintCfg.info;
+                                return (
+                                    <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'10px', padding:'10px 12px', background:hc.bg, border:`0.5px solid ${hc.border}`, borderRadius:'8px' }}>
+                                        <div style={{ width:'22px', height:'22px', borderRadius:'50%', background:hc.iconBg, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'700', flexShrink:0 }}>{hc.icon}</div>
+                                        <div style={{ fontSize:'0.8125rem', color:hc.text, lineHeight:1.5 }}>{hint.text}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }
