@@ -44,6 +44,10 @@ import LeadForm from './components/LeadForm';
 import FunnelView from './components/FunnelView';
 import KanbanView from './components/KanbanView';
 import QuotaRepCard from './components/QuotaRepCard';
+import { useModalState } from './hooks/useModalState';
+import { useUIState } from './hooks/useUIState';
+import { useCalendarState } from './hooks/useCalendarState';
+import { useUserHandlers } from './hooks/useUserHandlers';
 
 
 function App() {
@@ -97,18 +101,82 @@ function App() {
             window.clerkManagedReps = meta.managedReps || [];
         }
     }, [clerkUser]);
-    const [activeTab, setActiveTab] = useState('home');
+    // ── State hooks ──
+    const modalState = useModalState();
+    const uiState = useUIState();
+    const calState = useCalendarState();
 
-    // ── Quick-log panel (pipeline floating button) ──
-    const [quickLogOpen, setQuickLogOpen] = useState(false);
-    const [quickLogForm, setQuickLogForm] = useState({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });
-    const [quickLogContactResults, setQuickLogContactResults] = useState([]);
+    // Destructure for use in this component
+    const {
+        activeTab, setActiveTab, activePipelineId, setActivePipelineId,
+        isMobile, setIsMobile,
+        quickLogOpen, setQuickLogOpen, quickLogForm, setQuickLogForm,
+        quickLogContactResults, setQuickLogContactResults,
+        followUpPrompt, setFollowUpPrompt,
+        notifications, setNotifications,
+        showNotifications, setShowNotifications,
+        globalSearch, setGlobalSearch, showSearchResults, setShowSearchResults,
+        showProfilePanel, setShowProfilePanel, myProfile, setMyProfile,
+        profileForm, setProfileForm,
+        viewingRep, setViewingRep, viewingTeam, setViewingTeam, viewingTerritory, setViewingTerritory,
+        viewingContact, setViewingContact, contactShowAllDeals, setContactShowAllDeals,
+        viewingAccount, setViewingAccount, accShowAllClosed, setAccShowAllClosed, accShowAllContacts, setAccShowAllContacts,
+        viewingTask, setViewingTask,
+        expandedAccounts, setExpandedAccounts, expandedIndustry, setExpandedIndustry,
+        accountsSortDir, setAccountsSortDir, accountsViewMode, setAccountsViewMode, selectedAccounts, setSelectedAccounts,
+        contactsSortBy, setContactsSortBy, selectedContacts, setSelectedContacts,
+        feedFilter, setFeedFilter, feedLastRead, setFeedLastRead,
+        pipelineSortField, setPipelineSortField, pipelineSortDir, setPipelineSortDir,
+        quotaForecastFilter, setQuotaForecastFilter, commissionsFilter, setCommissionsFilter,
+        reportOppSortField, setReportOppSortField, reportOppSortDir, setReportOppSortDir,
+        settingsView, setSettingsView, tasksExpandedSections, setTasksExpandedSections,
+        newPainPointInput, setNewPainPointInput, newVerticalMarketInput, setNewVerticalMarketInput,
+        auditSearch, setAuditSearch, auditEntityFilter, setAuditEntityFilter, auditActionFilter, setAuditActionFilter,
+        exportingCSV, setExportingCSV, exportingBackup, setExportingBackup, restoringBackup, setRestoringBackup,
+        dbOffline, setDbOffline,
+    } = uiState;
 
-    // ── Follow-up task prompt (shown after saving an activity) ──
-    const [followUpPrompt, setFollowUpPrompt] = useState(null); // { opportunityId, opportunityName }
+    const {
+        showModal, setShowModal, showSpiffClaimModal, setShowSpiffClaimModal,
+        spiffClaimContext, setSpiffClaimContext,
+        showAccountModal, setShowAccountModal, showUserModal, setShowUserModal,
+        showTaskModal, setShowTaskModal, showContactModal, setShowContactModal,
+        showActivityModal, setShowActivityModal, showShortcuts, setShowShortcuts,
+        showCsvImportModal, setShowCsvImportModal, showLeadImportModal, setShowLeadImportModal,
+        showOutlookImportModal, setShowOutlookImportModal, csvImportType, setCsvImportType,
+        editingOpp, setEditingOpp, editingAccount, setEditingAccount, editingSubAccount, setEditingSubAccount,
+        editingUser, setEditingUser, editingTask, setEditingTask, editingContact, setEditingContact,
+        editingActivity, setEditingActivity, activityInitialContext, setActivityInitialContext,
+        parentAccountForSub, setParentAccountForSub,
+        lastCreatedAccountName, setLastCreatedAccountName,
+        accountCreatedFromOppForm, setAccountCreatedFromOppForm,
+        pendingOppFormData, setPendingOppFormData,
+        lastCreatedRepName, setLastCreatedRepName,
+        confirmModal, setConfirmModal, lostReasonModal, setLostReasonModal,
+        notesPopover, setNotesPopover, undoToast, setUndoToast,
+        taskReminderPopup, setTaskReminderPopup,
+        taskReminderSnoozeH, setTaskReminderSnoozeH, taskReminderSnoozeM, setTaskReminderSnoozeM,
+        taskDuePopup, setTaskDuePopup, taskDueQueue, setTaskDueQueue,
+        taskDueSnoozeH, setTaskDueSnoozeH, taskDueSnoozeM, setTaskDueSnoozeM,
+        dismissedDueTodayAlerts, setDismissedDueTodayAlerts,
+        dismissedReminders, setDismissedReminders,
+    } = modalState;
 
-    // ── Mobile: track viewport for pipeline list view ──
-    const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
+    const {
+        calendarEvents, setCalendarEvents, calendarLoading, setCalendarLoading,
+        calendarError, setCalendarError, calendarConnected, setCalendarConnected,
+        calView, setCalView, calOffset, setCalOffset, showCalConfig, setShowCalConfig,
+        calShowGcal, setCalShowGcal, calShowCalls, setCalShowCalls,
+        calShowMeetings, setCalShowMeetings, calShowWeekends, setCalShowWeekends,
+        calRepFilter, setCalRepFilter, calProvider, setCalProvider,
+        logFromCalOpen, setLogFromCalOpen, logFromCalDateFrom, setLogFromCalDateFrom,
+        logFromCalDateTo, setLogFromCalDateTo, logFromCalEvents, setLogFromCalEvents,
+        logFromCalLoading, setLogFromCalLoading, logFromCalError, setLogFromCalError,
+        loggedCalendarIds, setLoggedCalendarIds, logFromCalLinkingId, setLogFromCalLinkingId,
+        logFromCalOppMap, setLogFromCalOppMap,
+        meetingPrepEvent, setMeetingPrepEvent, meetingPrepOpen, setMeetingPrepOpen,
+        meetingPrepOppId, setMeetingPrepOppId,
+    } = calState;
     useEffect(() => {
         const onResize = () => setIsMobile(window.innerWidth < 640);
         window.addEventListener('resize', onResize);
@@ -184,193 +252,6 @@ function App() {
     } = useActivities({ showConfirm: (...a) => _showConfirmRef.current?.(...a) });
 
     const [leads, setLeads] = React.useState([]);
-    const [showModal, setShowModal] = useState(false);
-    const [showSpiffClaimModal, setShowSpiffClaimModal] = useState(false);
-    const [spiffClaimContext, setSpiffClaimContext] = useState(null); // { opp }
-    const [spiffClaims, setSpiffClaims] = useState([]);
-    const [showAccountModal, setShowAccountModal] = useState(false);
-    const [showUserModal, setShowUserModal] = useState(false);
-    const [showTaskModal, setShowTaskModal] = useState(false);
-    const [showContactModal, setShowContactModal] = useState(false);
-    const [showProfilePanel, setShowProfilePanel] = useState(false);
-    const [myProfile, setMyProfile] = useState(null);
-    const [profileForm, setProfileForm] = useState({ firstName: '', lastName: '', email: '', phone: '', title: '' });
-    const [editingOpp, setEditingOpp] = useState(null);
-    const [editingAccount, setEditingAccount] = useState(null);
-    const [editingSubAccount, setEditingSubAccount] = useState(null);
-    const [parentAccountForSub, setParentAccountForSub] = useState(null);
-    const [editingUser, setEditingUser] = useState(null);
-    const [editingTask, setEditingTask] = useState(null);
-    const [editingContact, setEditingContact] = useState(null);
-    const [lastCreatedAccountName, setLastCreatedAccountName] = useState(null);
-    const [accountCreatedFromOppForm, setAccountCreatedFromOppForm] = useState(false);
-    const [pendingOppFormData, setPendingOppFormData] = useState(null);
-    const [lastCreatedRepName, setLastCreatedRepName] = useState(null);
-    const [expandedAccounts, setExpandedAccounts] = useState({});
-    const [expandedIndustry, setExpandedIndustry] = useState(null);
-    const [accountsSortDir, setAccountsSortDir] = useState('asc');
-    const [accountsViewMode, setAccountsViewMode] = useState('compact');
-    const [selectedAccounts, setSelectedAccounts] = useState([]);
-    const [viewingContact, setViewingContact] = useState(null);
-    const [contactShowAllDeals, setContactShowAllDeals] = useState(false);
-    const [contactsSortBy, setContactsSortBy] = useState('lastName');
-    const [selectedContacts, setSelectedContacts] = useState([]);
-    useEffect(() => { setContactShowAllDeals(false); }, [viewingContact]);
-    const [viewingAccount, setViewingAccount] = useState(null);
-    const [accShowAllClosed, setAccShowAllClosed] = useState(false);
-    const [accShowAllContacts, setAccShowAllContacts] = useState(false);
-    useEffect(() => { setAccShowAllClosed(false); setAccShowAllContacts(false); }, [viewingAccount]);
-    const [quotaForecastFilter, setQuotaForecastFilter] = useState([]);
-    const [commissionsFilter, setCommissionsFilter] = useState([]);
-    const [reportOppSortField, setReportOppSortField] = useState('closeDate');
-    const [reportOppSortDir, setReportOppSortDir] = useState('asc');
-    const [notesPopover, setNotesPopover] = useState(null); // { opp, type: 'notes'|'comments', rect }
-    const [undoToast, setUndoToast] = useState(null); // { label, restore, timerId }
-    const [auditSearch, setAuditSearch] = useState('');
-    const [auditEntityFilter, setAuditEntityFilter] = useState('all');
-    const [auditActionFilter, setAuditActionFilter] = useState('all');
-    const [pipelineSortField, setPipelineSortField] = useState('closeDate');
-    const [pipelineSortDir, setPipelineSortDir] = useState('asc');
-    const [activePipelineId, setActivePipelineId] = useState('default');
-    // Shared Viewing bar — persists across Home / Pipeline / Opportunities / Tasks
-    const [viewingRep, setViewingRep] = useState(null);
-    const [viewingTeam, setViewingTeam] = useState(null);
-    const [viewingTerritory, setViewingTerritory] = useState(null);
-    // Activity Feed state
-    const [feedFilter, setFeedFilter] = useState('all');
-    const [feedLastRead, setFeedLastRead] = useState(() => {
-        try { return safeStorage.getItem('feedLastRead') || new Date(0).toISOString(); } catch(e) { return new Date(0).toISOString(); }
-    });
-    const [viewingTask, setViewingTask] = useState(null);
-    const [taskReminderPopup, setTaskReminderPopup] = useState(null);
-    const [taskReminderSnoozeH, setTaskReminderSnoozeH] = useState(0);
-    const [taskReminderSnoozeM, setTaskReminderSnoozeM] = useState(15);
-    const [dbOffline, setDbOffline] = useState(false);
-    const [taskDuePopup, setTaskDuePopup] = useState(null);
-    const [taskDueQueue, setTaskDueQueue] = useState([]);
-    const [taskDueSnoozeH, setTaskDueSnoozeH] = useState(0);
-    const [taskDueSnoozeM, setTaskDueSnoozeM] = useState(15);
-    const [dismissedDueTodayAlerts, setDismissedDueTodayAlerts] = useState([]);
-    const [dismissedReminders, setDismissedReminders] = useState([]);
-    const [confirmModal, setConfirmModal] = useState(null);
-    const [lostReasonModal, setLostReasonModal] = useState(null); // { pendingFormData, editingOpp }
-
-    const showConfirm = (message, onConfirm, danger = true) => {
-        setConfirmModal({ message, onConfirm, danger });
-    };
-
-    // ── Audit log helper ───────────────────────────────────────
-    const addAudit = (action, entity, entityId, label, detail = '') => {
-        const entry = {
-            id: Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-            action,
-            entityType: entity,
-            entityId,
-            entityName: label,
-            detail,
-            userName: currentUser || 'Unknown',
-            timestamp: new Date().toISOString(),
-        };
-        dbFetch('/.netlify/functions/audit-log', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(entry)
-        }).catch(err => console.error('Failed to save audit entry:', err));
-    };
-
-    // ── Soft delete with undo toast ────────────────────────────────
-    const softDelete = (label, deleteFunc, restoreFunc) => {
-        // Execute delete immediately
-        deleteFunc();
-        // Clear any previous toast
-        if (undoToast) clearTimeout(undoToast.timerId);
-        const timerId = setTimeout(() => setUndoToast(null), 10000);
-        setUndoToast({ label, restore: restoreFunc, timerId });
-    };
-
-    // Populate hook dependency refs now that the functions are defined
-    _addAuditRef.current       = addAudit;
-    _showConfirmRef.current    = showConfirm;
-    _softDeleteRef.current     = softDelete;
-    _setUndoRef.current        = setUndoToast;
-    // Note: getQuarter/getQuarterLabel refs populated below after those functions are defined
-
-    // Dynamic stages from settings funnel stages
-    const stages = (settings.funnelStages && settings.funnelStages.length > 0)
-        ? settings.funnelStages.filter(s => s.name.trim()).map(s => s.name)
-        : ['Qualification', 'Discovery', 'Evaluation (Demo)', 'Proposal', 'Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'];
-
-    const [settingsView, setSettingsView] = useState('menu'); // menu, fiscal-year, logo, users, pain-points, vertical-markets
-
-    const [tasksExpandedSections, setTasksExpandedSections] = useState({
-        inProcess: false,
-        today: true,
-        thisWeek: false,
-        thisMonth: false,
-        all: false,
-        completed: false
-    });
-    const [newPainPointInput, setNewPainPointInput] = useState('');
-    const [newVerticalMarketInput, setNewVerticalMarketInput] = useState('');
-    
-    // Activity Timeline & History
-    // activities managed by useActivities hook
-    const [showActivityModal, setShowActivityModal] = useState(false);
-    const [editingActivity, setEditingActivity] = useState(null);
-    const [showShortcuts, setShowShortcuts] = useState(false);
-    const [activityInitialContext, setActivityInitialContext] = useState(null);
-    
-    // Notifications
-    const [notifications, setNotifications] = useState([]);
-    const [showNotifications, setShowNotifications] = useState(false);
-    const [globalSearch, setGlobalSearch] = useState('');
-    const [showSearchResults, setShowSearchResults] = useState(false);
-    
-    // Outlook Email Import
-    const [showOutlookImportModal, setShowOutlookImportModal] = useState(false);
-    
-    // CSV Import
-    const [showCsvImportModal, setShowCsvImportModal] = useState(false);
-    const [showLeadImportModal, setShowLeadImportModal] = useState(false);
-    const [csvImportType, setCsvImportType] = useState('contacts');
-
-    // Calendar strip state
-    const [calendarEvents, setCalendarEvents] = useState([]);
-    const [calendarLoading, setCalendarLoading] = useState(false);
-    const [calendarError, setCalendarError] = useState(null);
-    const [calendarConnected, setCalendarConnected] = useState(false);
-
-    // Calendar view state
-    const [calView, setCalView] = useState('week'); // 'week' | 'month'
-    const [calOffset, setCalOffset] = useState(0);  // week/month offset from today
-    const [showCalConfig, setShowCalConfig] = useState(false);
-    const [calShowGcal, setCalShowGcal] = useState(true);
-    const [calShowCalls, setCalShowCalls] = useState(true);
-    const [calShowMeetings, setCalShowMeetings] = useState(true);
-    const [calShowWeekends, setCalShowWeekends] = useState(true);
-    const [calRepFilter, setCalRepFilter] = useState('all'); // 'all' or a rep name
-    const [calProvider, setCalProvider] = useState('google'); // 'google' | 'microsoft' | 'yahoo' | 'apple'
-
-    // Log from Calendar state
-    const [logFromCalOpen, setLogFromCalOpen] = useState(false);
-    const [logFromCalDateFrom, setLogFromCalDateFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0]; });
-    const [logFromCalDateTo, setLogFromCalDateTo] = useState(() => [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'));
-    const [logFromCalEvents, setLogFromCalEvents] = useState([]);
-    const [logFromCalLoading, setLogFromCalLoading] = useState(false);
-    const [logFromCalError, setLogFromCalError] = useState(null);
-    const [loggedCalendarIds, setLoggedCalendarIds] = useState(new Set());
-    const [logFromCalLinkingId, setLogFromCalLinkingId] = useState(null);
-    const [logFromCalOppMap, setLogFromCalOppMap] = useState({});
-
-    // Meeting prep panel state
-    const [meetingPrepEvent, setMeetingPrepEvent] = useState(null); // the calendar event being prepped
-    const [meetingPrepOpen, setMeetingPrepOpen] = useState(false);
-    const [meetingPrepOppId, setMeetingPrepOppId] = useState(null); // optional forced opp ID (e.g. from task)
-
-    // Loading states for import/export operations
-    const [exportingCSV, setExportingCSV] = useState(null); // tracks which CSV is exporting by key
-    const [exportingBackup, setExportingBackup] = useState(false);
-    const [restoringBackup, setRestoringBackup] = useState(false);
 
     // Quota & Commission
 
@@ -710,100 +591,11 @@ dbFetch('/.netlify/functions/users?me=true')
         setLastCreatedAccountName(null);
     };
 
-    const handleAddUser = () => {
-        setEditingUser(null);
-        setShowUserModal(true);
-    };
-
-    const handleEditUser = (user) => {
-        setEditingUser(user);
-        setShowUserModal(true);
-    };
-
-    const handleDeleteUser = (userId) => {
-        showConfirm('Are you sure you want to delete this user?', async () => {
-            try {
-                await dbFetch(`/.netlify/functions/users?id=${userId}`, { method: 'DELETE' });
-                setSettings(prev => ({
-                    ...prev,
-                    users: (prev.users || []).filter(u => u.id !== userId)
-                }));
-            } catch (err) {
-                console.error('Failed to delete user:', err);
-            }
-        });
-    };
-
-    const [userModalError, setUserModalError] = useState(null);
-    const [userModalSaving, setUserModalSaving] = useState(false);
-
-    const handleSaveUser = async (userData) => {
-        setUserModalError(null);
-        setUserModalSaving(true);
-        if (editingUser) {
-            const payload = { ...userData, id: editingUser.id, email: userData.email || editingUser.email || '' };
-            try {
-                const res = await dbFetch('/.netlify/functions/users', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-                const data = await res.json();
-                if (!res.ok) {
-                    setUserModalError(data.error || 'Failed to save user. Please try again.');
-                    setUserModalSaving(false);
-                    return;
-                }
-                // Success — update state and close
-                if (data.user) {
-                    setSettings(prev => ({
-                        ...prev,
-                        users: (prev.users || []).map(u => u.id === data.user.id ? data.user : u)
-                    }));
-                }
-                setShowUserModal(false);
-                setEditingUser(null);
-                setUserModalError(null);
-            } catch (err) {
-                console.error('Failed to update user:', err);
-                setUserModalError('Failed to save user. Please check your connection and try again.');
-            } finally {
-                setUserModalSaving(false);
-            }
-        } else {
-            const newId = 'usr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-            const payload = { ...userData, id: newId, email: userData.email || '' };
-            try {
-                const res = await dbFetch('/.netlify/functions/users', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-                const data = await res.json();
-                if (!res.ok) {
-                    setUserModalError(data.error || 'Failed to save user. Please try again.');
-                    setUserModalSaving(false);
-                    return;
-                }
-                // Success — add to state and close
-                const savedUser = data.user || payload;
-                setSettings(prev => ({
-                    ...prev,
-                    users: [...(prev.users || []), savedUser]
-                }));
-                if (showModal) {
-                    setLastCreatedRepName(savedUser.name || payload.name);
-                }
-                setShowUserModal(false);
-                setUserModalError(null);
-            } catch (err) {
-                console.error('Failed to create user:', err);
-                setUserModalError('Failed to save user. Please check your connection and try again.');
-            } finally {
-                setUserModalSaving(false);
-            }
-        }
-    };
+    const {
+        userModalError, setUserModalError,
+        userModalSaving, setUserModalSaving,
+        handleAddUser, handleEditUser, handleDeleteUser, handleSaveUser,
+    } = useUserHandlers({ setSettings, showConfirm, showModal, setLastCreatedRepName, editingUser, setEditingUser, setShowUserModal });
 
     // handleUpdateFiscalYearStart managed by useSettings hook
 
@@ -1484,6 +1276,7 @@ dbFetch('/.netlify/functions/users?me=true')
         userModalError, setUserModalError,
         userModalSaving, setUserModalSaving,
         handleSaveUser,
+        handleAddUser, handleEditUser, handleDeleteUser,
         showActivityModal, setShowActivityModal,
         editingActivity, setEditingActivity,
         activityInitialContext, setActivityInitialContext,
