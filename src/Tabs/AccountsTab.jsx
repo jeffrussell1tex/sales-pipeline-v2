@@ -2,12 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
-export default function AccountsTab({
-    expandedAccounts, setExpandedAccounts,
-    accountsSortDir, setAccountsSortDir,
-    accountsViewMode, setAccountsViewMode,
-    selectedAccounts, setSelectedAccounts,
-}) {
+export default function AccountsTab() {
     const {
         accounts, setAccounts,
         opportunities,
@@ -35,6 +30,10 @@ export default function AccountsTab({
         viewingAccount, setViewingAccount,
         accShowAllClosed, setAccShowAllClosed,
         accShowAllContacts, setAccShowAllContacts,
+        expandedAccounts, setExpandedAccounts,
+        accountsSortDir, setAccountsSortDir,
+        accountsViewMode, setAccountsViewMode,
+        selectedAccounts, setSelectedAccounts,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';

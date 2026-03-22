@@ -2,10 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
-export default function ContactsTab({
-    contactsSortBy, setContactsSortBy,
-    selectedContacts, setSelectedContacts,
-}) {
+export default function ContactsTab() {
     const {
         contacts, setContacts,
         opportunities,
@@ -29,6 +26,8 @@ export default function ContactsTab({
         setCsvImportType, setShowCsvImportModal,
         viewingContact, setViewingContact,
         contactShowAllDeals, setContactShowAllDeals,
+        contactsSortBy, setContactsSortBy,
+        selectedContacts, setSelectedContacts,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';

@@ -3,10 +3,7 @@ import { useApp } from '../AppContext';
 import TaskItem from '../components/ui/TaskItem';
 import ViewingBar from '../components/ui/ViewingBar';
 
-export default function TasksTab({
-    feedFilter, setFeedFilter,
-    feedLastRead, setFeedLastRead,
-}) {
+export default function TasksTab() {
     const {
         tasks, setTasks,
         opportunities,
@@ -58,6 +55,8 @@ export default function TasksTab({
         setActivityInitialContext, setEditingActivity, setShowActivityModal,
         setShowOutlookImportModal,
         viewingTask, setViewingTask,
+        feedFilter, setFeedFilter,
+        feedLastRead, setFeedLastRead,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';

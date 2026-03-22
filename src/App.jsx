@@ -1513,6 +1513,15 @@ dbFetch('/.netlify/functions/users?me=true')
         quickLogOpen, setQuickLogOpen,
         quickLogForm, setQuickLogForm,
         quickLogContactResults, setQuickLogContactResults,
+        // Tab UI state (persists across tab switches)
+        feedFilter, setFeedFilter,
+        feedLastRead, setFeedLastRead,
+        expandedAccounts, setExpandedAccounts,
+        accountsSortDir, setAccountsSortDir,
+        accountsViewMode, setAccountsViewMode,
+        selectedAccounts, setSelectedAccounts,
+        contactsSortBy, setContactsSortBy,
+        selectedContacts, setSelectedContacts,
     };
 
     return (
@@ -1656,34 +1665,15 @@ dbFetch('/.netlify/functions/users?me=true')
             )}
 
             {activeTab === 'tasks' && (
-                <TasksTab
-                    feedFilter={feedFilter}
-                    setFeedFilter={setFeedFilter}
-                    feedLastRead={feedLastRead}
-                    setFeedLastRead={setFeedLastRead}
-                />
+                <TasksTab />
             )}
 
             {activeTab === 'accounts' && (
-                <AccountsTab
-                    expandedAccounts={expandedAccounts}
-                    setExpandedAccounts={setExpandedAccounts}
-                    accountsSortDir={accountsSortDir}
-                    setAccountsSortDir={setAccountsSortDir}
-                    accountsViewMode={accountsViewMode}
-                    setAccountsViewMode={setAccountsViewMode}
-                    selectedAccounts={selectedAccounts}
-                    setSelectedAccounts={setSelectedAccounts}
-                />
+                <AccountsTab />
             )}
 
             {activeTab === 'contacts' && (
-                <ContactsTab
-                    contactsSortBy={contactsSortBy}
-                    setContactsSortBy={setContactsSortBy}
-                    selectedContacts={selectedContacts}
-                    setSelectedContacts={setSelectedContacts}
-                />
+                <ContactsTab />
             )}
 
             {activeTab === 'leads' && settings.leadsEnabled !== false && (
