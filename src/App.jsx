@@ -252,6 +252,7 @@ function App() {
     } = useActivities({ showConfirm: (...a) => _showConfirmRef.current?.(...a) });
 
     const [leads, setLeads] = React.useState([]);
+    const [spiffClaims, setSpiffClaims] = React.useState([]);
 
     // ── Core utility functions ──
     const showConfirm = (message, onConfirm, danger = true) => {
