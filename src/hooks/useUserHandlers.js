@@ -18,7 +18,12 @@ export function useUserHandlers({ setSettings, showConfirm, showModal, setLastCr
     const handleDeleteUser = (userId) => {
         showConfirm('Are you sure you want to delete this user?', async () => {
             try {
-                await dbFetch(`/.netlify/functions/users?id=${userId}`, { method: 'DELETE' });
+                const res = await dbFetch(`/.netlify/functions/users?id=${userId}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    console.error('Failed to delete user:', errData.error || res.status);
+                    return; // Don't remove from local state if DB delete failed
+                }
                 setSettings(prev => ({
                     ...prev,
                     users: (prev.users || []).filter(u => u.id !== userId)

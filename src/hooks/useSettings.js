@@ -66,14 +66,14 @@ export function useSettings() {
     const settingsReady = useRef(false);
 
     const [settings, setSettings] = useState(() => {
+        // Bootstrap non-user settings from localStorage for instant paint,
+        // but NEVER seed users from localStorage — always authoritative from DB.
         try {
             const saved = safeStorage.getItem('salesSettings');
-            const savedUsers = safeStorage.getItem('salesUsers');
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
-                    const users = savedUsers ? JSON.parse(savedUsers) : [];
-                    return { ...parsed, users };
+                    return { ...DEFAULT_SETTINGS, ...parsed, users: [] };
                 } catch(e) {}
             }
         } catch(e) {}
@@ -91,6 +91,8 @@ export function useSettings() {
             try { safeStorage.removeItem('salesSettings'); } catch(e) {}
             try { safeStorage.removeItem('salesUsers'); } catch(e) {}
         }
+        // Always purge the stale users cache — users are authoritative from DB only
+        try { safeStorage.removeItem('salesUsers'); } catch(e) {}
 
         // Load settings and users in parallel, only mark ready when both complete
         const settingsPromise = dbFetch('/.netlify/functions/settings')
@@ -131,16 +133,14 @@ export function useSettings() {
         });
     };
 
-    // Save settings to DB whenever they change (after initial load)
+    // Save settings to DB whenever they change (after initial load).
+    // Users are managed separately via the /users endpoint — never written here.
     useEffect(() => {
         if (!settingsReady.current) return;
         const { users: _stripUsers, ...settingsToSave } = settings;
         try {
             safeStorage.setItem('salesSettings', JSON.stringify(settingsToSave));
-            // Save users separately so reps can see them on reload without hitting /users
-            if (settings.users && settings.users.length > 0) {
-                safeStorage.setItem('salesUsers', JSON.stringify(settings.users));
-            }
+            // Never cache users in localStorage — always read from DB on load
         } catch(e) {}
         dbFetch('/.netlify/functions/settings', {
             method: 'PUT',
