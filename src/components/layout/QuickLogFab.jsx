@@ -2,14 +2,15 @@ import React from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 
-export default function QuickLogFab({
-    quickLogOpen, setQuickLogOpen,
-    quickLogForm, setQuickLogForm,
-    quickLogContactResults, setQuickLogContactResults,
-    followUpPrompt, setFollowUpPrompt,
-    setEditingTask, setShowTaskModal,
-}) {
-    const { activeTab, contacts, opportunities, currentUser, addAudit, activities, setActivities } = useApp();
+export default function QuickLogFab() {
+    const {
+        activeTab, contacts, opportunities, currentUser, addAudit, activities, setActivities,
+        quickLogOpen, setQuickLogOpen,
+        quickLogForm, setQuickLogForm,
+        quickLogContactResults, setQuickLogContactResults,
+        followUpPrompt, setFollowUpPrompt,
+        setEditingTask, setShowTaskModal,
+    } = useApp();
 
     return (
         <>
