@@ -28,6 +28,7 @@ export default function ContactsTab() {
         contactShowAllDeals, setContactShowAllDeals,
         contactsSortBy, setContactsSortBy,
         selectedContacts, setSelectedContacts,
+        isMobile,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';
@@ -287,9 +288,10 @@ export default function ContactsTab() {
                                         <div style={{ 
                                             flex: 1,
                                             display: 'grid',
-                                            gridTemplateColumns: '2fr 2fr 2fr 2fr 3fr',
+                                            gridTemplateColumns: 'minmax(120px,2fr) minmax(100px,2fr) minmax(80px,2fr) minmax(80px,2fr) minmax(100px,3fr)',
                                             gap: '0.375rem',
-                                            alignItems: 'center'
+                                            alignItems: 'center',
+                                            minWidth: '0'
                                         }}>
                                             <div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { useApp } from '../AppContext';
 
 export default function KanbanView({ pipelineFilteredOpps, kanbanDragging, kanbanDragOver, setKanbanDragging, setKanbanDragOver, handleEdit, handleDelete }) {
     const { stages, opportunities, setOpportunities, currentUser, calculateDealHealth } = useApp();
@@ -33,6 +34,8 @@ export default function KanbanView({ pipelineFilteredOpps, kanbanDragging, kanba
                             onDragOver={e => { e.preventDefault(); setKanbanDragOver(stage); }}
                             onDragLeave={e => { setKanbanDragOver(null); }}
                             onDrop={() => handleKanbanDrop(stage)}
+                            onTouchMove={e => { e.preventDefault(); setKanbanDragOver(stage); }}
+                            onTouchEnd={() => handleKanbanDrop(stage)}
                             style={{ width: '200px', flexShrink: 0, flexGrow: 1, minWidth: '160px', maxWidth: '240px', background: isDragOver ? '#eff6ff' : '#f8fafc', border: isDragOver ? '1px solid #93c5fd' : '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', transition: 'all 0.15s' }}>
                             <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid #e2e8f0', borderTop: '3px solid ' + color, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <span style={{ fontSize: '0.6875rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{stage}</span>
@@ -51,6 +54,8 @@ export default function KanbanView({ pipelineFilteredOpps, kanbanDragging, kanba
                                             draggable
                                             onDragStart={() => setKanbanDragging({ oppId: opp.id, fromStage: stage })}
                                             onDragEnd={() => { setKanbanDragging(null); setKanbanDragOver(null); }}
+                                            onTouchStart={e => { e.currentTarget._touchStartY = e.touches[0].clientY; setKanbanDragging({ oppId: opp.id, fromStage: stage }); }}
+                                            onTouchEnd={() => { setKanbanDragging(null); setKanbanDragOver(null); }}
                                             style={{ background: '#fff', borderRadius: '7px', border: '1px solid #e2e8f0', padding: '0.5rem 0.625rem', cursor: 'grab', opacity: isDragging ? 0.5 : 1, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}
                                             onMouseEnter={e => { e.currentTarget.style.borderColor = '#2563eb'; }}
                                             onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; }}>
@@ -65,8 +70,8 @@ export default function KanbanView({ pipelineFilteredOpps, kanbanDragging, kanba
                                                 </div>
                                             </div>
                                             <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.375rem' }}>
-                                                <button className="action-btn" onClick={() => handleEdit(opp)} style={{ flex: 1, padding: '0.15rem 0', fontSize: '0.6rem', textAlign: 'center' }}>Edit</button>
-                                                <button className="action-btn delete" onClick={() => handleDelete(opp.id)} style={{ flex: 1, padding: '0.15rem 0', fontSize: '0.6rem', textAlign: 'center' }}>Del</button>
+                                                <button className="action-btn" onClick={() => handleEdit(opp)} style={{ flex: 1, padding: '0.5rem 0', fontSize: '0.6rem', textAlign: 'center', minHeight: '32px' }}>Edit</button>
+                                                <button className="action-btn delete" onClick={() => handleDelete(opp.id)} style={{ flex: 1, padding: '0.5rem 0', fontSize: '0.6rem', textAlign: 'center', minHeight: '32px' }}>Del</button>
                                             </div>
                                         </div>
                                     );

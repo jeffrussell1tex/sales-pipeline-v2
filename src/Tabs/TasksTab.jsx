@@ -57,6 +57,7 @@ export default function TasksTab() {
         viewingTask, setViewingTask,
         feedFilter, setFeedFilter,
         feedLastRead, setFeedLastRead,
+        isMobile,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';
@@ -529,7 +530,7 @@ export default function TasksTab() {
                                                 <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>{evDate} · {evTime}{ev.attendeeCount > 0 ? ` · ${ev.attendeeCount} attendees` : ''}</div>
                                             </div>
                                             {isLogged ? (
-                                                <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#059669', background: '#dcfce7', padding: '0.15rem 0.5rem', borderRadius: '999px', whiteSpace: 'nowrap', flexShrink: 0 }}>✓ Logged</span>
+                                                <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#059669', background: '#dcfce7', padding: '0.35rem 0.5rem', borderRadius: '999px', whiteSpace: 'nowrap', flexShrink: 0 }}>✓ Logged</span>
                                             ) : isLinking ? (
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', flexShrink: 0 }}>
                                                     <select onChange={e => handleLogFromCalendar(ev, e.target.value)}

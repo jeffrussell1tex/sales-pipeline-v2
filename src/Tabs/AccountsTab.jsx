@@ -34,6 +34,7 @@ export default function AccountsTab() {
         accountsSortDir, setAccountsSortDir,
         accountsViewMode, setAccountsViewMode,
         selectedAccounts, setSelectedAccounts,
+        isMobile,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';
@@ -153,7 +154,7 @@ export default function AccountsTab() {
                             {/* Column header */}
                             <div style={{ display: 'flex', alignItems: 'center', padding: '0.3rem 0.75rem', background: '#f1f5f9', borderRadius: '4px', marginBottom: '0.25rem', border: '1px solid #e2e8f0' }}>
                                 <div style={{ width: '36px', flexShrink: 0 }} />
-                                <span style={{ fontWeight: '700', fontSize: '0.6875rem', textTransform: 'uppercase', color: '#475569', letterSpacing: '0.5px', width: '280px', flexShrink: 0 }}>Account</span>
+                                <span style={{ fontWeight: '700', fontSize: '0.6875rem', textTransform: 'uppercase', color: '#475569', letterSpacing: '0.5px', width: 'clamp(160px, 40vw, 280px)', flexShrink: 0 }}>Account</span>
                                 <span style={{ fontWeight: '700', fontSize: '0.6875rem', textTransform: 'uppercase', color: '#475569', letterSpacing: '0.5px', flex: 1, textAlign: 'center' }}>Account Owner</span>
                                 <div style={{ width: '140px', flexShrink: 0 }} />
                             </div>
@@ -211,7 +212,7 @@ export default function AccountsTab() {
                                                 </button>
                                             ) : <span style={{ width: '12px' }} />}
                                         </div>
-                                        <div style={{ width: '280px', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
+                                        <div style={{ width: 'clamp(160px, 40vw, 280px)', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
                                             onClick={() => setViewingAccount(account)}>
                                             <span style={{ fontWeight: '700', fontSize: '0.75rem', color: '#2563eb' }}>{account.name}</span>
                                             {getSubAccounts(account.id).length > 0 && (
@@ -316,7 +317,7 @@ export default function AccountsTab() {
                                                 </div>
 
                                                 <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                                                    <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0.25rem 0.75rem', fontSize: '0.8125rem', flex: 1, minWidth: '200px' }}>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '0.25rem 0.75rem', fontSize: '0.8125rem', flex: 1, minWidth: '0' }}>
                                                         {(account.address || account.city || account.state || account.zip) && (
                                                             <>
                                                                 <span style={{ color: '#94a3b8', fontWeight: '600' }}>Address</span>

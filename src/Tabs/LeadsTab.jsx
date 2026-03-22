@@ -10,6 +10,7 @@ export default function LeadsTab() {
         contacts,
         settings, currentUser, canSeeAll, softDelete, showConfirm,
         addAudit,
+        isMobile,
     } = useApp();
     const [leadDragging, setLeadDragging] = React.useState(null); // { leadId, fromStage }
     const [leadDragOver, setLeadDragOver] = React.useState(null); // stage name
@@ -206,7 +207,8 @@ export default function LeadsTab() {
                                         <button onClick={() => { setSelectedLeads([]); setAssignTarget(''); }} style={{ marginLeft:'auto', background:'none', border:'none', color:'#64748b', fontSize:'0.75rem', cursor:'pointer', fontWeight:'600', fontFamily:'inherit' }}>Clear ✕</button>
                                     </div>
                                 )}
-                                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                                <table style={{ width:'100%', borderCollapse:'collapse', minWidth: '600px' }}>
                                     <thead>
                                         <tr style={{ background:'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
                                             {canSeeAll && <th style={{ padding:'0.5rem 0.75rem', textAlign:'left', fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', width:'32px' }}><input type="checkbox" onChange={e => setSelectedLeads(e.target.checked ? filtered.map(l => l.id) : [])} checked={selectedLeads.length === filtered.length && filtered.length > 0} /></th>}
@@ -272,6 +274,7 @@ export default function LeadsTab() {
                                         })}
                                     </tbody>
                                 </table>
+                                </div>{/* overflow wrapper */}
                             </div>
                         </div>
                         )}

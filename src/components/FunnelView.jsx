@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useApp } from '../AppContext';
 
 export default function FunnelView({ pipelineFilteredOpps, funnelExpandedStage, setFunnelExpandedStage, handleEdit, handleDelete }) {
     const { stages, settings } = useApp();
@@ -20,7 +21,7 @@ export default function FunnelView({ pipelineFilteredOpps, funnelExpandedStage, 
                             style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.375rem', cursor: 'pointer', padding: '0.25rem 0.5rem', borderRadius: '6px' }}
                             onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9'; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                            <div style={{ width: '170px', flexShrink: 0, textAlign: 'right', paddingRight: '0.75rem' }}>
+                            <div style={{ width: 'clamp(90px, 25vw, 170px)', flexShrink: 0, textAlign: 'right', paddingRight: '0.75rem' }}>
                                 <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#475569', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stage}</div>
                                 <div style={{ fontSize: '0.6875rem', color: color, fontWeight: '700' }}>{Math.round(stageARR/1000)}K - {stageOpps.length} deal{stageOpps.length !== 1 ? 's' : ''}</div>
                             </div>
@@ -35,8 +36,8 @@ export default function FunnelView({ pipelineFilteredOpps, funnelExpandedStage, 
                             </div>
                         </div>
                         {isExpanded && stageOpps.length > 0 && (
-                            <div style={{ marginLeft: '170px', marginBottom: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 90px 110px 110px', padding: '0.375rem 0.75rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', gap: '0.75rem' }}>
+                            <div style={{ marginLeft: 'clamp(90px, 25vw, 170px)', marginBottom: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#fff', overflowX: 'auto' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 80px 90px 80px', padding: '0.375rem 0.75rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', gap: '0.75rem' }}>
                                     <span>Opportunity</span>
                                     <span>Account</span>
                                     <span style={{ textAlign: 'right' }}>ARR</span>
@@ -45,7 +46,7 @@ export default function FunnelView({ pipelineFilteredOpps, funnelExpandedStage, 
                                 </div>
                                 {stageOpps.map(opp => (
                                     <div key={opp.id}
-                                        style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 90px 110px 110px', padding: '0.5rem 0.75rem', borderBottom: '1px solid #f1f5f9', fontSize: '0.8125rem', alignItems: 'center', gap: '0.75rem' }}
+                                        style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 80px 90px 80px', padding: '0.5rem 0.75rem', borderBottom: '1px solid #f1f5f9', fontSize: '0.8125rem', alignItems: 'center', gap: '0.75rem' }}
                                         onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; }}
                                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                                         <span style={{ fontWeight: '600', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp.opportunityName || opp.account}</span>
@@ -61,7 +62,7 @@ export default function FunnelView({ pipelineFilteredOpps, funnelExpandedStage, 
                             </div>
                         )}
                         {isExpanded && stageOpps.length === 0 && (
-                            <div style={{ marginLeft: '170px', marginBottom: '0.75rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '8px', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center', border: '1px dashed #e2e8f0' }}>No deals in this stage</div>
+                            <div style={{ marginLeft: 'clamp(90px, 25vw, 170px)', marginBottom: '0.75rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '8px', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center', border: '1px dashed #e2e8f0' }}>No deals in this stage</div>
                         )}
                     </div>
                 );

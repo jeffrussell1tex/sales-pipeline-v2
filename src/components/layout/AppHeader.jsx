@@ -23,7 +23,7 @@ export default function AppHeader({
         activeTab, setActiveTab,
         activePipelineId, setActivePipelineId,
         allPipelines, getQuarter, getQuarterLabel,
-        clerkUser,
+        clerkUser, isMobile,
     } = useApp();
     const isManager = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
@@ -39,7 +39,7 @@ export default function AppHeader({
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
 
                     {/* LEFT: client logo + date/quarter */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', minWidth: '160px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', minWidth: isMobile ? '80px' : '160px' }}>
                         {settings.logoUrl ? (
                             <img src={settings.logoUrl} alt="Company Logo"
                                 style={{ height: '48px', width: 'auto', maxWidth: '200px', objectFit: 'contain' }} />
@@ -60,7 +60,7 @@ export default function AppHeader({
                     {/* CENTER: search bar on top, Accelerep logo centered below */}
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', padding: '0 1.5rem' }}>
                         <div style={{ position: 'relative', zIndex: 200 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '999px', border: '1px solid #e2e8f0', padding: '0.35rem 1rem', gap: '0.5rem', width: '340px', transition: 'box-shadow 0.15s, border-color 0.15s' }}
+                            <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '999px', border: '1px solid #e2e8f0', padding: '0.35rem 1rem', gap: '0.5rem', width: isMobile ? '100%' : '340px', transition: 'box-shadow 0.15s, border-color 0.15s' }}
                                 onFocusCapture={e => { e.currentTarget.style.borderColor = '#93c5fd'; e.currentTarget.style.background = '#fff'; }}
                                 onBlurCapture={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f1f5f9'; }}>
                                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#94a3b8" strokeWidth="1.5" style={{ flexShrink: 0 }}><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13" strokeLinecap="round"/></svg>
@@ -83,7 +83,7 @@ export default function AppHeader({
                             {showSearchResults && globalSearch.length > 0 && (
                                 <>
                                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} onClick={() => setShowSearchResults(false)} />
-                                <div className="spt-search-results" style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '0.375rem', width: '400px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 9999 }} onClick={e => e.stopPropagation()}>
+                                <div className="spt-search-results" style={{ position: 'absolute', top: '100%', left: isMobile ? '0' : '50%', transform: isMobile ? 'none' : 'translateX(-50%)', marginTop: '0.375rem', width: isMobile ? '100vw' : '400px', maxWidth: isMobile ? '100vw' : '400px', maxHeight: '420px', overflowY: 'auto', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 9999 }} onClick={e => e.stopPropagation()}>
                                     {(() => {
                                         const q = globalSearch.toLowerCase();
                                         const matchedAccounts = accounts.filter(a => (a.name || '').toLowerCase().includes(q) || (a.accountOwner || '').toLowerCase().includes(q)).slice(0, 5);
@@ -128,7 +128,7 @@ export default function AppHeader({
                     </div>
 
                     {/* RIGHT: stacked — user pill on top, icons below, org switcher below that */}
-                    <div className="header-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem', justifyContent: 'center', minWidth: '160px' }}>
+                    <div className="header-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem', justifyContent: 'center', minWidth: isMobile ? '80px' : '160px' }}>
                         {/* ROW A: user pill */}
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                         <div style={{ position: 'relative' }}>
@@ -265,10 +265,17 @@ export default function AppHeader({
                                 <>
                                 <div style={{ position: 'fixed', inset: 0, zIndex: 1099 }} onClick={() => setShowProfilePanel(false)} />
                                 <div className="spt-profile-panel" style={{
-                                    position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-                                    width: '420px', background: '#fff', borderRadius: '12px',
-                                    border: '1px solid #e2e8f0', boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
-                                    zIndex: 1100, overflow: 'hidden',
+                                    position: isMobile ? 'fixed' : 'absolute',
+                                    top: isMobile ? 0 : 'calc(100% + 8px)',
+                                    right: 0, left: isMobile ? 0 : 'auto',
+                                    bottom: isMobile ? 0 : 'auto',
+                                    width: isMobile ? '100%' : '420px',
+                                    background: '#fff',
+                                    borderRadius: isMobile ? 0 : '12px',
+                                    border: '1px solid #e2e8f0',
+                                    boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+                                    zIndex: 1100,
+                                    overflow: 'auto',
                                 }} onClick={e => e.stopPropagation()}>
 
                                     {/* Header */}
@@ -478,16 +485,17 @@ export default function AppHeader({
                         </button>
                         {showNotifications && (
                             <div style={{
-                                position: 'absolute',
-                                top: '50px',
-                                right: '0',
+                                position: isMobile ? 'fixed' : 'absolute',
+                                top: isMobile ? 0 : '50px',
+                                right: 0, left: isMobile ? 0 : 'auto',
+                                bottom: isMobile ? 0 : 'auto',
                                 background: '#ffffff',
                                 border: '1px solid #e2e8f0',
                                 borderRadius: '8px',
                                 boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-                                minWidth: '350px',
-                                maxWidth: '400px',
-                                maxHeight: '500px',
+                                minWidth: isMobile ? 'unset' : '350px',
+                                maxWidth: isMobile ? 'unset' : '400px',
+                                maxHeight: isMobile ? '100%' : '500px',
                                 overflowY: 'auto',
                                 zIndex: 1000
                             }}>

@@ -9,7 +9,7 @@ export default function QuickLogFab() {
         quickLogForm, setQuickLogForm,
         quickLogContactResults, setQuickLogContactResults,
         followUpPrompt, setFollowUpPrompt,
-        setEditingTask, setShowTaskModal,
+        setEditingTask, setShowTaskModal, isMobile,
     } = useApp();
 
     return (
@@ -18,7 +18,7 @@ export default function QuickLogFab() {
             {(activeTab === 'pipeline' || activeTab === 'home' || activeTab === 'opportunities') && (
                 <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9990, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
                     {quickLogOpen && (
-                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.18)', padding: '1rem', width: '300px', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}
+                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: isMobile ? '16px 16px 0 0' : '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.18)', padding: '1rem', width: isMobile ? '100vw' : '300px', display: 'flex', flexDirection: 'column', gap: '0.625rem', position: isMobile ? 'fixed' : 'relative', bottom: isMobile ? '5rem' : 'auto', right: isMobile ? 0 : 'auto', left: isMobile ? 0 : 'auto', maxHeight: isMobile ? '80vh' : 'none', overflowY: isMobile ? 'auto' : 'visible' }}
                             onClick={e => e.stopPropagation()}>
                             <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#0f172a' }}>⚡ Quick Log Activity</div>
 
@@ -167,7 +167,7 @@ export default function QuickLogFab() {
 
             {/* ════ FOLLOW-UP TASK PROMPT (persists across tabs) ════ */}
             {followUpPrompt && (
-                <div style={{ position: 'fixed', bottom: '5.5rem', right: '1.5rem', zIndex: 9991, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', padding: '1rem', width: '260px' }}
+                <div style={{ position: 'fixed', bottom: '5.5rem', right: isMobile ? '0.75rem' : '1.5rem', left: isMobile ? '0.75rem' : 'auto', zIndex: 9991, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', padding: '1rem', width: isMobile ? 'auto' : '260px' }}
                     onClick={e => e.stopPropagation()}>
                     <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#0f172a', marginBottom: '0.375rem' }}>✅ Activity logged!</div>
                     <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.75rem' }}>Create a follow-up task for <strong>{followUpPrompt.opportunityName}</strong>?</div>

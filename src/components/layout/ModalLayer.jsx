@@ -63,6 +63,7 @@ export default function ModalLayer() {
         setActiveTab, activeTab,
         viewingContact, setViewingContact, viewingAccount, setViewingAccount,
         viewingTask, setViewingTask,
+        isMobile,
     } = useApp();
 
     return (
@@ -300,8 +301,8 @@ export default function ModalLayer() {
                     backdropFilter: 'blur(2px)', animation: 'fadeIn 0.15s ease'
                 }}>
                     <div onClick={e => e.stopPropagation()} style={{
-                        background: '#fff', borderRadius: '16px', width: '540px', maxWidth: '95vw',
-                        maxHeight: '85vh', overflowY: 'auto',
+                        background: '#fff', borderRadius: isMobile ? '0' : '16px', width: isMobile ? '100%' : '540px', maxWidth: isMobile ? '100%' : '95vw', height: isMobile ? '100%' : 'auto',
+                        maxHeight: isMobile ? '100%' : '85vh', overflowY: 'auto',
                         boxShadow: '0 25px 60px rgba(0,0,0,0.25)', animation: 'slideUp 0.18s ease'
                     }}>
                         {/* Header */}
@@ -368,7 +369,7 @@ export default function ModalLayer() {
                 <div style={{ position: 'fixed', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 10050,
                     background: '#1e293b', color: '#fff', borderRadius: '10px', padding: '0.75rem 1.25rem',
                     display: 'flex', alignItems: 'center', gap: '1rem', boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
-                    minWidth: '320px', maxWidth: '480px' }}>
+                    minWidth: isMobile ? 'calc(100vw - 2rem)' : '320px', maxWidth: isMobile ? 'calc(100vw - 2rem)' : '480px' }}>
                     <span style={{ fontSize: '0.875rem', flex: 1 }}>
                         🗑 <strong>{undoToast.label}</strong> deleted
                     </span>
@@ -394,7 +395,7 @@ export default function ModalLayer() {
                 return (
                     <>
                         <div onClick={() => setNotesPopover(null)} style={{ position: 'fixed', inset: 0, zIndex: 998 }} />
-                        <div style={{ position: 'fixed', top, left, zIndex: 999, background: '#fff', borderRadius: '10px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', border: '1px solid #e2e8f0', width: '340px', maxHeight: '300px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ position: 'fixed', top, left, zIndex: 999, background: '#fff', borderRadius: '10px', boxShadow: '0 8px 32px rgba(0,0,0,0.16)', border: '1px solid #e2e8f0', width: isMobile ? 'calc(100vw - 2rem)' : '340px', maxHeight: '300px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                             <div style={{ padding: '0.625rem 0.875rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: '10px 10px 0 0' }}>
                                 <div style={{ fontWeight: '700', fontSize: '0.75rem', color: '#1e293b' }}>
                                     {type === 'notes' ? '📝 Notes' : '💬 Team Notes'} · <span style={{ color: '#64748b', fontWeight: '500' }}>{opp.opportunityName || opp.account}</span>
@@ -736,7 +737,7 @@ export default function ModalLayer() {
 
             {confirmModal && (
                 <div className="modal-overlay" onClick={() => setConfirmModal(null)}>
-                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '2rem' }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: isMobile ? 'calc(100vw - 2rem)' : '420px', width: '100%', padding: isMobile ? '1.25rem' : '2rem' }}>
                         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
                             <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: confirmModal.danger !== false ? '#fef2f2' : '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
                                 <span style={{ fontSize: '1.5rem' }}>{confirmModal.danger !== false ? '\u26A0\uFE0F' : '\u2139\uFE0F'}</span>
@@ -764,10 +765,10 @@ export default function ModalLayer() {
 
             {/* Task Reminder Popup */}
             {taskReminderPopup && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center' }}
                     onClick={() => setTaskReminderPopup(null)}
                 >
-                    <div style={{ background: '#ffffff', borderRadius: '12px', padding: '0', width: '420px', maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden' }}
+                    <div style={{ background: '#ffffff', borderRadius: isMobile ? '16px 16px 0 0' : '12px', padding: '0', width: isMobile ? '100%' : '420px', maxWidth: isMobile ? '100%' : '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden' }}
                         onClick={e => e.stopPropagation()}
                     >
                         <div style={{ background: '#f59e0b', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -871,7 +872,7 @@ export default function ModalLayer() {
                         }
                     }}
                 >
-                    <div style={{ background: '#ffffff', borderRadius: '16px', padding: '0', width: '440px', maxWidth: '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.35)', overflow: 'hidden', animation: 'slideUp 0.25s ease' }}
+                    <div style={{ background: '#ffffff', borderRadius: isMobile ? '16px 16px 0 0' : '16px', padding: '0', width: isMobile ? '100%' : '440px', maxWidth: isMobile ? '100%' : '90vw', boxShadow: '0 24px 64px rgba(0,0,0,0.35)', overflow: 'hidden', animation: 'slideUp 0.25s ease' }}
                         onClick={e => e.stopPropagation()}
                     >
                         {/* Red header */}
@@ -1003,7 +1004,7 @@ export default function ModalLayer() {
                 return (
                 <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:10100, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}
                     onClick={() => setShowSpiffClaimModal(false)}>
-                    <div style={{ background:'#fff', borderRadius:'14px', padding:'1.5rem', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}
+                    <div style={{ background:'#fff', borderRadius: isMobile ? '16px 16px 0 0' : '14px', padding:'1.5rem', width:'100%', maxWidth: isMobile ? '100%' : '480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}
                         onClick={e => e.stopPropagation()}>
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'1rem' }}>
                             <div>

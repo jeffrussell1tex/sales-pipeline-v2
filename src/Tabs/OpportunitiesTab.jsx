@@ -37,6 +37,7 @@ export default function OpportunitiesTab() {
         setSpiffClaimContext, setShowSpiffClaimModal,
         setLostReasonModal,
         setCsvImportType, setShowCsvImportModal,
+        isMobile,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';
@@ -424,7 +425,8 @@ export default function OpportunitiesTab() {
                                     </div>
                                 );
                             })()}
-                            <table>
+                            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table>
                                 <thead>
                                     <tr>
                                         <th style={{ width:'36px' }}>
@@ -631,6 +633,7 @@ export default function OpportunitiesTab() {
                                         })}
                                 </tbody>
                             </table>
+                            </div>{/* overflow wrapper */}
                             </div>{/* end opp-desktop-table */}
                             {/* ── Option 5 Detail Panel (Opps Tab) ── */}
                             {selectedOppTabOpp && (() => {
@@ -689,7 +692,7 @@ export default function OpportunitiesTab() {
                                         )}
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                             {[
-                                                { label: 'Stage', value: <span style={{ background: getStageColor(opp.stage).text + '22', color: getStageColor(opp.stage).text, padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600' }}>{opp.stage}</span> },
+                                                { label: 'Stage', value: <span style={{ background: getStageColor(opp.stage).text + '22', color: getStageColor(opp.stage).text, padding: '0.35rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600' }}>{opp.stage}</span> },
                                                 canViewField('arr') && { label: 'ARR', value: '$' + (opp.arr || 0).toLocaleString() },
                                                 canViewField('implCost') && opp.implementationCost > 0 && { label: 'Impl. Cost', value: '$' + (opp.implementationCost || 0).toLocaleString() },
                                                 canViewField('probability') && { label: 'Probability', value: <span style={{ fontWeight: '600', color: isOverridden ? '#f59e0b' : '#475569' }}>{effectiveProb !== null ? effectiveProb + '%' : '—'}{isOverridden ? ' ✎' : ''}</span> },
