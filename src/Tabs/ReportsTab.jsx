@@ -616,6 +616,22 @@ ${bodyHtml}
                           </div>
                         </div>
 
+                        {/* PDF Export */}
+                        <div style={{display:'flex',justifyContent:'flex-end',padding:'0 1.25rem 0.375rem',marginTop:'-0.25rem'}}>
+                          <button onClick={()=>{
+                            const lbl={pipeline:'Pipeline',performance:'Performance',revenue:'Revenue',activity:'Activity',leads:'Leads',actions:'Actions'}[reportSubTab]||'Report';
+                            const win=window.open('','_blank','width=900,height=700');
+                            if(!win){alert('Allow popups to export PDF');return;}
+                            const el=document.querySelector('[data-rpt]');
+                            const body=el?el.innerHTML:'<p>Could not capture report.</p>';
+                            const d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+                            win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Accelerep — '+lbl+'</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#1e293b}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #2563eb;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#94a3b8}button,select{display:none!important}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#f8fafc;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0}td{padding:6px 10px;border-bottom:1px solid #f1f5f9}</style></head><body><div class="hdr"><h1>Accelerep — '+lbl+'</h1><div class="meta">'+d+'</div></div>'+body+'<scr'+'ipt>window.onload=function(){window.print()}<\/script></body></html>');
+                            win.document.close();
+                          }} style={{fontSize:'0.75rem',padding:'0.3rem 0.875rem',border:'1px solid #e2e8f0',borderRadius:'6px',background:'#f8fafc',color:'#475569',cursor:'pointer',fontFamily:'inherit',fontWeight:'600'}}>
+                            &#128424; Export PDF
+                          </button>
+                        </div>
+
                         {/* ── KPI summary strip (always visible, below period filter) ── */}
                         {(() => {
                             const _now = new Date();
@@ -729,6 +745,7 @@ ${bodyHtml}
                             );
                         })()}
 
+                        <div data-rpt="1">
                         {reportSubTab === 'pipeline' && (
                         <div style={{ padding:'1rem 1.25rem 1.5rem' }}>
                           <AnalyticsDashboard opportunities={reportsTimedOpps} settings={settings} quotaData={settings.quotaData} accounts={accounts} users={settings.users || []} />
@@ -979,6 +996,71 @@ ${bodyHtml}
                             );
                           })()}
 
+                          {/* Rep vs Rep Comparison */}
+                          {(() => {
+                            const rLC=[...new Set(reportsOpps.map(o=>o.salesRep||o.assignedTo).filter(Boolean))].sort();
+                            if(rLC.length<2)return null;
+                            const rSC=rLC.map(rep=>{
+                              const rO=reportsOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
+                              const rW=rO.filter(o=>o.stage==='Closed Won');
+                              const rL=rO.filter(o=>o.stage==='Closed Lost');
+                              const rP=rO.filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost');
+                              const wr=(rW.length+rL.length)>0?Math.round(rW.length/(rW.length+rL.length)*100):0;
+                              const vD=rW.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate));
+                              const ad=vD.length>0?Math.round(vD.reduce((s,o)=>{const c=new Date(o.createdDate);const cl=new Date(o.forecastedCloseDate||o.closeDate);return s+Math.max(0,Math.floor((cl-c)/86400000));},0)/vD.length):null;
+                              const wonR=rW.reduce((s,o)=>s+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0),0);
+                              const pipe=rP.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                              return{rep,wonR,wr,ad,pipe};
+                            });
+                            const mxR=Math.max(...rSC.map(r=>r.wonR),1);
+                            const mxP=Math.max(...rSC.map(r=>r.pipe),1);
+                            const mxD=Math.max(...rSC.filter(r=>r.ad!==null).map(r=>r.ad),1);
+                            const fC=v=>v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+Math.round(v/1000)+'K':'$'+Math.round(v);
+                            const mts=[
+                              {k:'wonR', lbl:'Won Revenue',   fmt:fC,              mx:mxR, col:'#10b981', hi:true},
+                              {k:'wr',   lbl:'Win Rate',      fmt:v=>v+'%',        mx:100, col:'#2563eb', hi:true},
+                              {k:'pipe', lbl:'Open Pipeline', fmt:fC,              mx:mxP, col:'#6366f1', hi:true},
+                              {k:'ad',   lbl:'Cycle Days',    fmt:v=>v!=null?v+'d':'-', mx:mxD, col:'#f59e0b', hi:false},
+                            ];
+                            return(
+                              <div style={cardStyle}>
+                                <div style={{fontWeight:'700',fontSize:'0.9375rem',color:'#1e293b',marginBottom:'1rem'}}>&#128202; Rep vs Rep Comparison</div>
+                                <div style={{overflowX:'auto'}}>
+                                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8125rem',minWidth:'480px'}}>
+                                    <thead><tr style={{borderBottom:'2px solid #e2e8f0'}}>
+                                      <th style={{padding:'0.4rem 0.75rem',textAlign:'left',fontSize:'0.6875rem',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',width:'120px'}}>Metric</th>
+                                      {rSC.map(r=><th key={r.rep} style={{padding:'0.4rem 0.75rem',textAlign:'right',fontSize:'0.6875rem',fontWeight:'700',color:'#1e293b',whiteSpace:'nowrap'}}>{r.rep}</th>)}
+                                    </tr></thead>
+                                    <tbody>{mts.map(m=>{
+                                      const vals=rSC.map(r=>r[m.k]);
+                                      const best=m.hi?Math.max(...vals.filter(v=>v!==null)):Math.min(...vals.filter(v=>v!==null));
+                                      return(<tr key={m.k} style={{borderBottom:'1px solid #f1f5f9'}}>
+                                        <td style={{padding:'0.625rem 0.75rem',fontWeight:'600',color:'#475569',fontSize:'0.75rem',whiteSpace:'nowrap'}}>
+                                          <span style={{display:'inline-block',width:'8px',height:'8px',borderRadius:'50%',background:m.col,marginRight:'6px',verticalAlign:'middle'}}/>{m.lbl}
+                                        </td>
+                                        {rSC.map(r=>{
+                                          const val=r[m.k];
+                                          const ib=val!==null&&val===best&&rSC.filter(x=>x[m.k]===best).length<rSC.length;
+                                          const pct=m.mx>0&&val!==null?Math.round((m.k==='ad'?(1-val/m.mx):val/m.mx)*100):0;
+                                          return(<td key={r.rep} style={{padding:'0.5rem 0.75rem',textAlign:'right',verticalAlign:'middle'}}>
+                                            <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'3px'}}>
+                                              <span style={{fontWeight:ib?'800':'600',color:ib?m.col:'#475569'}}>
+                                                {m.fmt(val)}{ib&&rSC.length>1&&<span style={{marginLeft:'4px',fontSize:'0.6rem',background:m.col+'20',color:m.col,padding:'1px 5px',borderRadius:'999px'}}>best</span>}
+                                              </span>
+                                              <div style={{width:'80px',height:'4px',background:'#f1f5f9',borderRadius:'2px',overflow:'hidden'}}>
+                                                <div style={{height:'100%',width:Math.max(pct,2)+'%',background:m.col,borderRadius:'2px'}}/>
+                                              </div>
+                                            </div>
+                                          </td>);
+                                        })}
+                                      </tr>);
+                                    })}</tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
                         </div>
                         )}
 
@@ -1106,6 +1188,47 @@ ${bodyHtml}
                               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem' }}>
                                 {teamNames.length > 0 && <RevTable title="Won Revenue by Team" icon="👥" rows={teamRows} />}
                                 {terrNames.length > 0 && <RevTable title="Won Revenue by Territory" icon="📍" rows={terrRows} />}
+                              </div>
+                            );
+                          })()}
+
+                          {/* YoY Revenue Comparison */}
+                          {(()=>{
+                            const nY=new Date(),tY=nY.getFullYear(),lY=tY-1;
+                            const aW=(reportsOpps||[]).filter(o=>o.stage==='Closed Won');
+                            const gMR=yr=>Array.from({length:12},(_,m)=>{
+                              const rev=aW.filter(o=>{const d=o.forecastedCloseDate||o.closeDate;if(!d)return false;const od=new Date(d+'T12:00:00');return od.getFullYear()===yr&&od.getMonth()===m;}).reduce((s,o)=>s+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0),0);
+                              return{month:new Date(yr,m,1).toLocaleString('default',{month:'short'}),rev};
+                            });
+                            const tD=gMR(tY),lD=gMR(lY);
+                            const tT=tD.reduce((s,m)=>s+m.rev,0),lT=lD.reduce((s,m)=>s+m.rev,0);
+                            if(lT===0&&tT===0)return null;
+                            const yMx=Math.max(...tD.map(m=>m.rev),...lD.map(m=>m.rev),1);
+                            const yDl=lT>0?((tT-lT)/lT*100):null;
+                            const fY=v=>v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+Math.round(v/1000)+'K':'$'+Math.round(v);
+                            return(
+                              <div style={cardStyle}>
+                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.5rem'}}>
+                                  <div style={{fontWeight:'700',fontSize:'0.9375rem',color:'#1e293b'}}>&#128197; Year-over-Year Revenue</div>
+                                  <div style={{display:'flex',gap:'1rem',alignItems:'center',flexWrap:'wrap'}}>
+                                    <span style={{fontSize:'0.75rem',color:'#64748b'}}><span style={{display:'inline-block',width:'10px',height:'3px',background:'#2563eb',borderRadius:'2px',marginRight:'5px',verticalAlign:'middle'}}/>{tY}: <strong>{fY(tT)}</strong></span>
+                                    <span style={{fontSize:'0.75rem',color:'#64748b'}}><span style={{display:'inline-block',width:'10px',height:'3px',background:'#cbd5e1',borderRadius:'2px',marginRight:'5px',verticalAlign:'middle'}}/>{lY}: <strong>{fY(lT)}</strong></span>
+                                    {yDl!==null&&<span style={{fontSize:'0.75rem',fontWeight:'700',color:yDl>=0?'#10b981':'#ef4444',background:yDl>=0?'#dcfce7':'#fee2e2',padding:'2px 8px',borderRadius:'999px'}}>{yDl>=0?'+':''}{yDl.toFixed(1)}% YoY</span>}
+                                  </div>
+                                </div>
+                                <div style={{display:'flex',gap:'4px',alignItems:'flex-end',height:'120px'}}>
+                                  {tD.map((d,i)=>{
+                                    const ly=lD[i].rev;
+                                    const tH=Math.round((d.rev/yMx)*100),lH=Math.round((ly/yMx)*100);
+                                    return(<div key={d.month} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:'2px'}}>
+                                      <div style={{width:'100%',display:'flex',gap:'1px',alignItems:'flex-end',height:'100px'}}>
+                                        <div style={{flex:1,height:Math.max(tH,2)+'%',background:'#2563eb',borderRadius:'2px 2px 0 0',opacity:0.85,minHeight:d.rev>0?'3px':'0'}} title={tY+': '+fY(d.rev)}/>
+                                        <div style={{flex:1,height:Math.max(lH,2)+'%',background:'#cbd5e1',borderRadius:'2px 2px 0 0',minHeight:ly>0?'3px':'0'}} title={lY+': '+fY(ly)}/>
+                                      </div>
+                                      <div style={{fontSize:'0.5rem',color:'#94a3b8'}}>{d.month}</div>
+                                    </div>);
+                                  })}
+                                </div>
                               </div>
                             );
                           })()}
@@ -1518,7 +1641,53 @@ ${bodyHtml}
                         </div>
                         )}
 
-                        {/* ════════════════════════════════════════════
+                                                  {/* Coaching Red Flags */}
+                          {canSeeAll&&(()=>{
+                            const WB=45,AB=7,SD=14;
+                            const rCF=[...new Set(reportsOpps.map(o=>o.salesRep||o.assignedTo).filter(Boolean))].sort();
+                            const aF=[];
+                            rCF.forEach(rep=>{
+                              const rO=reportsOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
+                              const rW=rO.filter(o=>o.stage==='Closed Won');
+                              const rL=rO.filter(o=>o.stage==='Closed Lost');
+                              const rP=rO.filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost');
+                              const cl=rW.length+rL.length;
+                              const wr=cl>0?Math.round(rW.length/cl*100):null;
+                              const rA=(activities||[]).filter(a=>a.salesRep===rep||a.author===rep);
+                              const la=rA.sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0]?.date||null;
+                              const ds=la?Math.floor((new Date()-new Date(la+'T12:00:00'))/86400000):null;
+                              const st=rP.filter(o=>{const la2=(activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];const ds2=la2?.date?Math.floor((new Date()-new Date(la2.date+'T12:00:00'))/86400000):null;return ds2!==null&&ds2>=SD;});
+                              const fl=[];
+                              if(wr!==null&&wr<WB&&cl>=3)fl.push({t:'warning',s:wr+'% win rate vs '+WB+'% benchmark ('+cl+' closed deals)'});
+                              if(ds!==null&&ds>=AB*2)fl.push({t:'danger',s:ds+'d since last activity — above '+AB+'d ideal'});
+                              else if(ds!==null&&ds>=AB)fl.push({t:'warning',s:ds+'d since last activity (ideal is '+AB+'d)'});
+                              else if(ds===null)fl.push({t:'warning',s:'No activities logged in this period'});
+                              if(st.length>0)fl.push({t:'danger',s:st.length+' deal'+(st.length>1?'s':'')+' with no activity in 14+ days: '+st.slice(0,2).map(o=>o.opportunityName||o.account).join(', ')+(st.length>2?' +'+(st.length-2)+' more':'')});
+                              if(rP.length===0&&rW.length===0)fl.push({t:'info',s:'No open or closed deals in this period'});
+                              if(fl.length>0)aF.push({rep,fl});
+                            });
+                            const FC={danger:{bg:'#FCEBEB',border:'#F7C1C1',text:'#A32D2D',dot:'#E24B4A'},warning:{bg:'#FAEEDA',border:'#FAC775',text:'#854F0B',dot:'#BA7517'},info:{bg:'#E6F1FB',border:'#B5D4F4',text:'#0C447C',dot:'#378ADD'}};
+                            return(
+                              <div style={cardStyle}>
+                                <div style={{fontWeight:'700',fontSize:'0.9375rem',color:'#1e293b',marginBottom:'1rem'}}>&#128681; Coaching Red Flags <span style={{fontSize:'0.6875rem',fontWeight:'400',color:'#94a3b8',marginLeft:'6px'}}>Managers only</span></div>
+                                {aF.length===0?(<div style={{fontSize:'0.8125rem',color:'#166534',background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:'8px',padding:'12px 14px'}}>No coaching concerns detected for this period.</div>):(
+                                  <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
+                                    {aF.map(({rep,fl})=>(
+                                      <div key={rep} style={{border:'1px solid #e2e8f0',borderRadius:'8px',overflow:'hidden'}}>
+                                        <div style={{padding:'7px 14px',background:'#f8fafc',borderBottom:'1px solid #e2e8f0',fontWeight:'700',fontSize:'0.8125rem',color:'#1e293b'}}>{rep} <span style={{fontWeight:'400',color:'#94a3b8',fontSize:'0.6875rem'}}>{fl.length} flag{fl.length>1?'s':''}</span></div>
+                                        <div style={{padding:'8px 14px',display:'flex',flexDirection:'column',gap:'5px'}}>
+                                          {fl.map((f,fi)=>{const c=FC[f.t]||FC.info;return(<div key={fi} style={{display:'flex',alignItems:'flex-start',gap:'8px',padding:'6px 10px',background:c.bg,border:'0.5px solid '+c.border,borderRadius:'6px'}}><div style={{width:'7px',height:'7px',borderRadius:'50%',background:c.dot,flexShrink:0,marginTop:'4px'}}/><div style={{fontSize:'0.8125rem',color:c.text,lineHeight:1.5}}>{f.s}</div></div>);})}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+
+{/* ════════════════════════════════════════════
                              TAB: LEADS
                             ════════════════════════════════════════════ */}
                         {reportSubTab === 'leads' && leadsEnabled && (() => {
@@ -1759,6 +1928,7 @@ ${bodyHtml}
                                 settings={settings}
                             />
                         )}
+                        </div>
 
                     </div>
                 );
@@ -1796,8 +1966,15 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
     React.useEffect(() => { fetchData(); }, [fetchData]);
 
     const actionTypeLabels = {
-        stale: 'Stale deal', stuck: 'Stuck in stage', lapsed: 'Date lapsed',
-        coverage: 'Low coverage', velocity: 'High velocity', task: 'Overdue task',
+        stale:            'Stale deal',
+        stuck:            'Stuck in stage',
+        lapsed:           'Date lapsed',
+        coverage:         'Low coverage',
+        velocity:         'High velocity',
+        task:             'Overdue task',
+        silent:           'Deal gone silent',
+        scoreDrop:        'AI score dropped',
+        'score-critical': 'AI score critical',
     };
     const outcomeColors = {
         resolved: { bg: '#EAF3DE', text: '#27500A', label: 'Resolved' },
@@ -1915,7 +2092,7 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
                     </>
                 ) : (
                     <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8', fontSize: '0.875rem', border: '1px dashed #e2e8f0', borderRadius: '8px' }}>
-                        No recommendation actions logged yet. Dismiss actions on the home screen to start tracking outcomes.
+                        No actions logged yet. Actions are recorded when you dismiss recommendations on the home screen, or when pipeline-alerts sends automated alerts.
                     </div>
                 )}
                 </>
