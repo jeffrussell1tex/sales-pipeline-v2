@@ -233,10 +233,20 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 })).filter(s => s.count > 0);
                 const maxStageVal = Math.max(...byStage.map(s => s.value), 1);
 
-                // Top accounts by revenue
+                // Top accounts by revenue — with parent/child rollup
+                // Build a map from account name → parent account name using the accounts list
+                const accountNameToParent = {};
+                (accounts || []).forEach(a => {
+                    if (a.parentAccountId) {
+                        const parent = (accounts || []).find(p => p.id === a.parentAccountId);
+                        if (parent) accountNameToParent[a.name.toLowerCase()] = parent.name;
+                    }
+                });
                 const accountRevMap = {};
                 wonOpps.forEach(o => {
-                    const key = o.account || 'Unknown';
+                    const rawKey = o.account || 'Unknown';
+                    // Roll child account revenue up to the parent if one exists
+                    const key = accountNameToParent[rawKey.toLowerCase()] || rawKey;
                     accountRevMap[key] = (accountRevMap[key] || 0) + (o.arr||0) + (o.implementationCost||0);
                 });
                 const topAccounts = Object.entries(accountRevMap).sort((a,b) => b[1]-a[1]).slice(0, 8);

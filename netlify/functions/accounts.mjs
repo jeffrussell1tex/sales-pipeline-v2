@@ -52,11 +52,16 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'DELETE') {
             if (event.queryStringParameters?.clear === 'true') {
-                await db.delete(accounts);
+                // Scope clear to this org only
+                await db.delete(accounts).where(eq(accounts.orgId, orgId));
                 return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
             }
             const id = event.queryStringParameters?.id;
             if (!id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id or clear=true is required' }) };
+            // Promote children to top-level before deleting parent — prevents orphaned rows
+            await db.update(accounts)
+                .set({ parentAccountId: null })
+                .where(and(eq(accounts.parentAccountId, id), eq(accounts.orgId, orgId)));
             await db.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.orgId, orgId)));
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }

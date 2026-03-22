@@ -232,16 +232,27 @@ export default function AccountsTab() {
                                         </div>
                                     </div>
                                     {expandedAccounts[account.id] && getSubAccounts(account.id).length > 0 && (
-                                        <div style={{ borderTop: '1px solid #e2e8f0', padding: '0.25rem 0.75rem 0.375rem 3rem', background: '#f1f3f5' }}>
-                                            {getSubAccounts(account.id).map(sub => (
-                                                <div key={sub.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.2rem 0', fontSize: '0.75rem' }}>
-                                                    <span style={{ cursor: 'pointer', color: '#1e293b', fontWeight: '500' }} onClick={() => setViewingAccount(sub)}>↳ {sub.name}</span>
-                                                    <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
-                                                        <button onClick={() => handleEditAccount(sub, true)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                                        <button onClick={() => handleDeleteSubAccount(account.id, sub.id, opportunities)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
+                                        <div style={{ borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                                            {getSubAccounts(account.id).map(sub => {
+                                                const subNm = sub.name.toLowerCase();
+                                                const subOpps = opportunities.filter(o => o.account && o.account.toLowerCase() === subNm);
+                                                const subPipe = subOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+                                                const subWon  = subOpps.filter(o => o.stage === 'Closed Won').reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+                                                const fv = v => v >= 1000000 ? '$'+(v/1000000).toFixed(1)+'M' : v >= 1000 ? '$'+Math.round(v/1000)+'K' : '$'+Math.round(v);
+                                                return (
+                                                    <div key={sub.id} style={{ display: 'flex', alignItems: 'center', padding: '0.25rem 0.75rem 0.25rem 3.25rem', borderBottom: '1px solid #edf0f3', gap: '0.5rem' }}>
+                                                        <span style={{ cursor: 'pointer', color: '#2563eb', fontWeight: '600', fontSize: '0.75rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => setViewingAccount(sub)}>↳ {sub.name}</span>
+                                                        {sub.accountOwner && <span style={{ fontSize: '0.6875rem', color: '#64748b', flexShrink: 0 }}>{sub.accountOwner}</span>}
+                                                        {subPipe > 0 && <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#b45309', background: '#fef3c7', padding: '1px 6px', borderRadius: '3px', flexShrink: 0 }}>{fv(subPipe)} pipe</span>}
+                                                        {subWon > 0 && <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#15803d', background: '#dcfce7', padding: '1px 6px', borderRadius: '3px', flexShrink: 0 }}>{fv(subWon)} won</span>}
+                                                        {subOpps.length > 0 && <span style={{ fontSize: '0.6875rem', color: '#94a3b8', flexShrink: 0 }}>{subOpps.length} deal{subOpps.length !== 1 ? 's' : ''}</span>}
+                                                        <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
+                                                            <button onClick={() => handleEditAccount(sub, true)} style={{ padding: '3px 8px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6rem', cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
+                                                            <button onClick={() => handleDeleteSubAccount(account.id, sub.id, opportunities)} style={{ padding: '3px 8px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6rem', cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
@@ -418,7 +429,8 @@ export default function AccountsTab() {
                                                                 {subAccount.accountOwner && <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{subAccount.accountOwner}</span>}
                                                                 {subOpen.length > 0 && <span style={{ background: '#dbeafe', color: '#1e40af', padding: '0.05rem 0.4rem', borderRadius: '4px', fontSize: '0.625rem', fontWeight: '700' }}>{subOpen.length} active</span>}
                                                                 {subWon.length > 0 && <span style={{ background: '#dcfce7', color: '#166534', padding: '0.05rem 0.4rem', borderRadius: '4px', fontSize: '0.625rem', fontWeight: '700' }}>{subWon.length} won</span>}
-                                                                {subPipeline > 0 && <span style={{ background: '#fef3c7', color: '#92400e', padding: '0.05rem 0.4rem', borderRadius: '4px', fontSize: '0.625rem', fontWeight: '700' }}>${subPipeline >= 1000 ? Math.round(subPipeline/1000)+'K' : subPipeline.toLocaleString()}</span>}
+                                                                {subPipeline > 0 && <span style={{ background: '#fef3c7', color: '#92400e', padding: '0.05rem 0.4rem', borderRadius: '4px', fontSize: '0.625rem', fontWeight: '700' }}>{subPipeline >= 1000000 ? '$'+(subPipeline/1000000).toFixed(1)+'M' : subPipeline >= 1000 ? '$'+Math.round(subPipeline/1000)+'K' : '$'+subPipeline.toLocaleString()} pipe</span>}
+                                                                {(() => { const wArr = subWon.reduce((s,o) => s+(parseFloat(o.arr)||0), 0); return wArr > 0 ? <span style={{ background: '#dcfce7', color: '#15803d', padding: '0.05rem 0.4rem', borderRadius: '4px', fontSize: '0.625rem', fontWeight: '700' }}>{wArr >= 1000000 ? '$'+(wArr/1000000).toFixed(1)+'M' : wArr >= 1000 ? '$'+Math.round(wArr/1000)+'K' : '$'+wArr.toLocaleString()} won</span> : null; })()}
                                                             </div>
                                                             {(subAccount.city || subAccount.state) && (
                                                                 <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.2rem' }}>📍 {[subAccount.city, subAccount.state].filter(Boolean).join(', ')}</div>
@@ -426,6 +438,7 @@ export default function AccountsTab() {
                                                         </div>
                                                         <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
                                                             <button onClick={() => handleEditAccount(subAccount, true)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
+                                                            <button onClick={() => handleAddSubAccount(subAccount)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Sub</button>
                                                             <button onClick={() => handleDeleteSubAccount(account.id, subAccount.id, opportunities)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                         </div>
                                                     </div>
