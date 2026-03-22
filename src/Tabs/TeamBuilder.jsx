@@ -25,7 +25,7 @@ export default function TeamBuilder({ onBack }) {
     };
     const closeForm = () => { setShowTeamForm(false); setEditingTeam(null); };
 
-    const saveTeam = () => {
+    const saveTeam = async () => {
         if (!teamForm.name.trim()) return;
         const id = editingTeam ? editingTeam.id : 'team_' + Date.now();
         const saved = { id, name: teamForm.name.trim(), territory: teamForm.territory.trim(), vertical: teamForm.vertical.trim(), managerId: teamForm.managerId, repIds: teamForm.repIds };
@@ -39,13 +39,48 @@ export default function TeamBuilder({ onBack }) {
             return u;
         });
         setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
+
+        // Persist affected user fields to the users DB table
+        const changedUsers = updatedUsers.filter((u, i) => {
+            const orig = (settings.users || [])[i];
+            return orig && (u.team !== orig.team || u.territory !== orig.territory || u.vertical !== orig.vertical || u.teamId !== orig.teamId);
+        });
+        for (const u of changedUsers) {
+            try {
+                await dbFetch(`/.netlify/functions/users/${u.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ team: u.team, territory: u.territory, vertical: u.vertical, teamId: u.teamId }),
+                });
+            } catch (err) {
+                console.error(`TeamBuilder: failed to persist user ${u.name}:`, err.message);
+            }
+        }
+
         closeForm();
     };
 
-    const deleteTeam = (teamId) => {
+    const deleteTeam = async (teamId) => {
         const updatedTeams = teams.filter(t => t.id !== teamId);
         const updatedUsers = (settings.users || []).map(u => u.teamId === teamId ? { ...u, team: '', territory: '', vertical: '', teamId: '' } : u);
         setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
+
+        // Persist cleared fields for users who were on this team
+        const affected = updatedUsers.filter(u => {
+            const orig = (settings.users || []).find(o => o.id === u.id);
+            return orig && orig.teamId === teamId;
+        });
+        for (const u of affected) {
+            try {
+                await dbFetch(`/.netlify/functions/users/${u.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ team: '', territory: '', vertical: '', teamId: '' }),
+                });
+            } catch (err) {
+                console.error(`TeamBuilder: failed to clear user ${u.name}:`, err.message);
+            }
+        }
     };
 
     const toggleRep = (repId) => {

@@ -1291,6 +1291,7 @@ dbFetch('/.netlify/functions/users?me=true')
         accountModalSaving, setAccountModalSaving,
         accountCreatedFromOppForm, setAccountCreatedFromOppForm,
         lastCreatedAccountName, setLastCreatedAccountName,
+        lastCreatedRepName, setLastCreatedRepName,
         parentAccountForSub, setParentAccountForSub,
         showContactModal, setShowContactModal,
         editingContact, setEditingContact,

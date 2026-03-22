@@ -23,6 +23,7 @@ export default function ModalLayer() {
         accountModalError, setAccountModalError, accountModalSaving, setAccountModalSaving,
         accountCreatedFromOppForm, setAccountCreatedFromOppForm,
         lastCreatedAccountName, setLastCreatedAccountName,
+        lastCreatedRepName, setLastCreatedRepName,
         parentAccountForSub, setParentAccountForSub,
         showContactModal, setShowContactModal, editingContact, setEditingContact,
         contactModalError, setContactModalError, contactModalSaving, setContactModalSaving,
