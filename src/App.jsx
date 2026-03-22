@@ -253,6 +253,34 @@ function App() {
 
     const [leads, setLeads] = React.useState([]);
 
+    // ── Core utility functions ──
+    const showConfirm = (message, onConfirm, danger = true) => {
+        setConfirmModal({ message, onConfirm, danger });
+    };
+
+    const addAudit = (action, entity, entityId, label, detail = '') => {
+        const entry = {
+            id: 'audit_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+            action, entity, entityId, label, detail,
+            timestamp: new Date().toISOString(),
+            author: currentUser || 'Unknown',
+        };
+        setSettings(prev => ({ ...prev, auditLog: [...(prev.auditLog || []), entry] }));
+    };
+
+    const softDelete = (label, deleteFunc, restoreFunc) => {
+        if (undoToast) clearTimeout(undoToast.timerId);
+        deleteFunc();
+        const timerId = setTimeout(() => setUndoToast(null), 5000);
+        setUndoToast({ label, restore: restoreFunc, timerId });
+    };
+
+    // Populate refs so data hooks can call these safely
+    _addAuditRef.current    = addAudit;
+    _showConfirmRef.current = showConfirm;
+    _softDeleteRef.current  = softDelete;
+    _setUndoRef.current     = setUndoToast;
+
     // Quota & Commission
 
       useEffect(() => {
@@ -595,7 +623,7 @@ dbFetch('/.netlify/functions/users?me=true')
         userModalError, setUserModalError,
         userModalSaving, setUserModalSaving,
         handleAddUser, handleEditUser, handleDeleteUser, handleSaveUser,
-    } = useUserHandlers({ setSettings, showConfirm, showModal, setLastCreatedRepName, editingUser, setEditingUser, setShowUserModal });
+    } = useUserHandlers({ setSettings, showConfirm: (...a) => _showConfirmRef.current?.(...a), showModal, setLastCreatedRepName, editingUser, setEditingUser, setShowUserModal });
 
     // handleUpdateFiscalYearStart managed by useSettings hook
 
