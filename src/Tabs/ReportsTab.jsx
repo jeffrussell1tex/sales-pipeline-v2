@@ -1061,6 +1061,52 @@ ${bodyHtml}
                             );
                           })()}
 
+{/* Coaching Red Flags */}
+                          {canSeeAll&&(()=>{
+                            const WB=45,AB=7,SD=14;
+                            const rCF=[...new Set(reportsOpps.map(o=>o.salesRep||o.assignedTo).filter(Boolean))].sort();
+                            const aF=[];
+                            rCF.forEach(rep=>{
+                              const rO=reportsOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
+                              const rW=rO.filter(o=>o.stage==='Closed Won');
+                              const rL=rO.filter(o=>o.stage==='Closed Lost');
+                              const rP=rO.filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost');
+                              const cl=rW.length+rL.length;
+                              const wr=cl>0?Math.round(rW.length/cl*100):null;
+                              const rA=(activities||[]).filter(a=>a.salesRep===rep||a.author===rep);
+                              const la=rA.sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0]?.date||null;
+                              const ds=la?Math.floor((new Date()-new Date(la+'T12:00:00'))/86400000):null;
+                              const st=rP.filter(o=>{const la2=(activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];const ds2=la2?.date?Math.floor((new Date()-new Date(la2.date+'T12:00:00'))/86400000):null;return ds2!==null&&ds2>=SD;});
+                              const fl=[];
+                              if(wr!==null&&wr<WB&&cl>=3)fl.push({t:'warning',s:wr+'% win rate vs '+WB+'% benchmark ('+cl+' closed deals)'});
+                              if(ds!==null&&ds>=AB*2)fl.push({t:'danger',s:ds+'d since last activity — above '+AB+'d ideal'});
+                              else if(ds!==null&&ds>=AB)fl.push({t:'warning',s:ds+'d since last activity (ideal is '+AB+'d)'});
+                              else if(ds===null)fl.push({t:'warning',s:'No activities logged in this period'});
+                              if(st.length>0)fl.push({t:'danger',s:st.length+' deal'+(st.length>1?'s':'')+' with no activity in 14+ days: '+st.slice(0,2).map(o=>o.opportunityName||o.account).join(', ')+(st.length>2?' +'+(st.length-2)+' more':'')});
+                              if(rP.length===0&&rW.length===0)fl.push({t:'info',s:'No open or closed deals in this period'});
+                              if(fl.length>0)aF.push({rep,fl});
+                            });
+                            const FC={danger:{bg:'#FCEBEB',border:'#F7C1C1',text:'#A32D2D',dot:'#E24B4A'},warning:{bg:'#FAEEDA',border:'#FAC775',text:'#854F0B',dot:'#BA7517'},info:{bg:'#E6F1FB',border:'#B5D4F4',text:'#0C447C',dot:'#378ADD'}};
+                            return(
+                              <div style={cardStyle}>
+                                <div style={{fontWeight:'700',fontSize:'0.9375rem',color:'#1e293b',marginBottom:'1rem'}}>&#128681; Coaching Red Flags <span style={{fontSize:'0.6875rem',fontWeight:'400',color:'#94a3b8',marginLeft:'6px'}}>Managers only</span></div>
+                                {aF.length===0?(<div style={{fontSize:'0.8125rem',color:'#166534',background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:'8px',padding:'12px 14px'}}>No coaching concerns detected for this period.</div>):(
+                                  <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
+                                    {aF.map(({rep,fl})=>(
+                                      <div key={rep} style={{border:'1px solid #e2e8f0',borderRadius:'8px',overflow:'hidden'}}>
+                                        <div style={{padding:'7px 14px',background:'#f8fafc',borderBottom:'1px solid #e2e8f0',fontWeight:'700',fontSize:'0.8125rem',color:'#1e293b'}}>{rep} <span style={{fontWeight:'400',color:'#94a3b8',fontSize:'0.6875rem'}}>{fl.length} flag{fl.length>1?'s':''}</span></div>
+                                        <div style={{padding:'8px 14px',display:'flex',flexDirection:'column',gap:'5px'}}>
+                                          {fl.map((f,fi)=>{const c=FC[f.t]||FC.info;return(<div key={fi} style={{display:'flex',alignItems:'flex-start',gap:'8px',padding:'6px 10px',background:c.bg,border:'0.5px solid '+c.border,borderRadius:'6px'}}><div style={{width:'7px',height:'7px',borderRadius:'50%',background:c.dot,flexShrink:0,marginTop:'4px'}}/><div style={{fontSize:'0.8125rem',color:c.text,lineHeight:1.5}}>{f.s}</div></div>);})}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+
                         </div>
                         )}
 
@@ -1640,52 +1686,6 @@ ${bodyHtml}
 
                         </div>
                         )}
-
-                                                  {/* Coaching Red Flags */}
-                          {canSeeAll&&(()=>{
-                            const WB=45,AB=7,SD=14;
-                            const rCF=[...new Set(reportsOpps.map(o=>o.salesRep||o.assignedTo).filter(Boolean))].sort();
-                            const aF=[];
-                            rCF.forEach(rep=>{
-                              const rO=reportsOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
-                              const rW=rO.filter(o=>o.stage==='Closed Won');
-                              const rL=rO.filter(o=>o.stage==='Closed Lost');
-                              const rP=rO.filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost');
-                              const cl=rW.length+rL.length;
-                              const wr=cl>0?Math.round(rW.length/cl*100):null;
-                              const rA=(activities||[]).filter(a=>a.salesRep===rep||a.author===rep);
-                              const la=rA.sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0]?.date||null;
-                              const ds=la?Math.floor((new Date()-new Date(la+'T12:00:00'))/86400000):null;
-                              const st=rP.filter(o=>{const la2=(activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];const ds2=la2?.date?Math.floor((new Date()-new Date(la2.date+'T12:00:00'))/86400000):null;return ds2!==null&&ds2>=SD;});
-                              const fl=[];
-                              if(wr!==null&&wr<WB&&cl>=3)fl.push({t:'warning',s:wr+'% win rate vs '+WB+'% benchmark ('+cl+' closed deals)'});
-                              if(ds!==null&&ds>=AB*2)fl.push({t:'danger',s:ds+'d since last activity — above '+AB+'d ideal'});
-                              else if(ds!==null&&ds>=AB)fl.push({t:'warning',s:ds+'d since last activity (ideal is '+AB+'d)'});
-                              else if(ds===null)fl.push({t:'warning',s:'No activities logged in this period'});
-                              if(st.length>0)fl.push({t:'danger',s:st.length+' deal'+(st.length>1?'s':'')+' with no activity in 14+ days: '+st.slice(0,2).map(o=>o.opportunityName||o.account).join(', ')+(st.length>2?' +'+(st.length-2)+' more':'')});
-                              if(rP.length===0&&rW.length===0)fl.push({t:'info',s:'No open or closed deals in this period'});
-                              if(fl.length>0)aF.push({rep,fl});
-                            });
-                            const FC={danger:{bg:'#FCEBEB',border:'#F7C1C1',text:'#A32D2D',dot:'#E24B4A'},warning:{bg:'#FAEEDA',border:'#FAC775',text:'#854F0B',dot:'#BA7517'},info:{bg:'#E6F1FB',border:'#B5D4F4',text:'#0C447C',dot:'#378ADD'}};
-                            return(
-                              <div style={cardStyle}>
-                                <div style={{fontWeight:'700',fontSize:'0.9375rem',color:'#1e293b',marginBottom:'1rem'}}>&#128681; Coaching Red Flags <span style={{fontSize:'0.6875rem',fontWeight:'400',color:'#94a3b8',marginLeft:'6px'}}>Managers only</span></div>
-                                {aF.length===0?(<div style={{fontSize:'0.8125rem',color:'#166534',background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:'8px',padding:'12px 14px'}}>No coaching concerns detected for this period.</div>):(
-                                  <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
-                                    {aF.map(({rep,fl})=>(
-                                      <div key={rep} style={{border:'1px solid #e2e8f0',borderRadius:'8px',overflow:'hidden'}}>
-                                        <div style={{padding:'7px 14px',background:'#f8fafc',borderBottom:'1px solid #e2e8f0',fontWeight:'700',fontSize:'0.8125rem',color:'#1e293b'}}>{rep} <span style={{fontWeight:'400',color:'#94a3b8',fontSize:'0.6875rem'}}>{fl.length} flag{fl.length>1?'s':''}</span></div>
-                                        <div style={{padding:'8px 14px',display:'flex',flexDirection:'column',gap:'5px'}}>
-                                          {fl.map((f,fi)=>{const c=FC[f.t]||FC.info;return(<div key={fi} style={{display:'flex',alignItems:'flex-start',gap:'8px',padding:'6px 10px',background:c.bg,border:'0.5px solid '+c.border,borderRadius:'6px'}}><div style={{width:'7px',height:'7px',borderRadius:'50%',background:c.dot,flexShrink:0,marginTop:'4px'}}/><div style={{fontSize:'0.8125rem',color:c.text,lineHeight:1.5}}>{f.s}</div></div>);})}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
-
 
 {/* ════════════════════════════════════════════
                              TAB: LEADS
