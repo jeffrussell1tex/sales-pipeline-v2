@@ -3,14 +3,7 @@ import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 import { SliceDropdown } from '../components/ui/ViewingBar';
 
-export default function OpportunitiesTab({
-    setEditingOpp, setShowModal,
-    setActivityInitialContext, setEditingActivity, setShowActivityModal,
-    setEditingTask, setShowTaskModal,
-    setSpiffClaimContext, setShowSpiffClaimModal,
-    setLostReasonModal,
-    setCsvImportType, setShowCsvImportModal,
-}) {
+export default function OpportunitiesTab() {
     const {
         opportunities, setOpportunities,
         accounts,
@@ -38,6 +31,12 @@ export default function OpportunitiesTab({
         handleDelete,
         handleSave,
         completeLostSave,
+        setEditingOpp, setShowModal,
+        setActivityInitialContext, setEditingActivity, setShowActivityModal,
+        setEditingTask, setShowTaskModal,
+        setSpiffClaimContext, setShowSpiffClaimModal,
+        setLostReasonModal,
+        setCsvImportType, setShowCsvImportModal,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';

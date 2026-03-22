@@ -3,11 +3,7 @@ import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
 export default function ContactsTab({
-    setEditingContact, setShowContactModal,
-    setCsvImportType, setShowCsvImportModal,
     contactsSortBy, setContactsSortBy,
-    viewingContact, setViewingContact,
-    contactShowAllDeals, setContactShowAllDeals,
     selectedContacts, setSelectedContacts,
 }) {
     const {
@@ -29,6 +25,10 @@ export default function ContactsTab({
         visibleContacts,
         exportingCSV, setExportingCSV,
         handleDeleteContact,
+        setEditingContact, setShowContactModal,
+        setCsvImportType, setShowCsvImportModal,
+        viewingContact, setViewingContact,
+        contactShowAllDeals, setContactShowAllDeals,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';

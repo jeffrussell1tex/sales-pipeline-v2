@@ -2,8 +2,11 @@ import React from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
-export default function LeadsTab({ leads, setLeads, setEditingOpp, setShowModal, onImportClick }) {
+export default function LeadsTab() {
     const {
+        leads, setLeads,
+        setEditingOpp, setShowModal,
+        setShowLeadImportModal,
         contacts,
         settings, currentUser, canSeeAll, softDelete, showConfirm,
         addAudit,
@@ -165,7 +168,7 @@ export default function LeadsTab({ leads, setLeads, setEditingOpp, setShowModal,
                                 </button>
                             ))}
                             <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
-                                {canSeeAll && <button onClick={onImportClick} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#10b981', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>}
+                                {canSeeAll && <button onClick={() => setShowLeadImportModal(true)} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#10b981', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>}
                                 <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
                             </div>
                         </div>

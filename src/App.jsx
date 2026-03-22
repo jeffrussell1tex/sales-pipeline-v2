@@ -1506,6 +1506,7 @@ dbFetch('/.netlify/functions/users?me=true')
         taskDueSnoozeH, setTaskDueSnoozeH,
         taskDueSnoozeM, setTaskDueSnoozeM,
         showShortcuts, setShowShortcuts,
+        csvImportType, setCsvImportType,
         pendingOppFormData, setPendingOppFormData,
         // QuickLog
         followUpPrompt, setFollowUpPrompt,
@@ -1643,60 +1644,19 @@ dbFetch('/.netlify/functions/users?me=true')
             </nav>
 
             {activeTab === 'home' && (
-                <HomeTab
-                    setEditingOpp={setEditingOpp}
-                    setShowModal={setShowModal}
-                    setEditingTask={setEditingTask}
-                    setShowTaskModal={setShowTaskModal}
-                    setActivityInitialContext={setActivityInitialContext}
-                    setEditingActivity={setEditingActivity}
-                    setShowActivityModal={setShowActivityModal}
-                    setShowOutlookImportModal={setShowOutlookImportModal}
-                />
+                <HomeTab />
             )}
 
             {activeTab === 'pipeline' && (
-                <PipelineTab
-                    setEditingOpp={setEditingOpp}
-                    setShowModal={setShowModal}
-                    setActivityInitialContext={setActivityInitialContext}
-                    setEditingActivity={setEditingActivity}
-                    setShowActivityModal={setShowActivityModal}
-                    setSpiffClaimContext={setSpiffClaimContext}
-                    setShowSpiffClaimModal={setShowSpiffClaimModal}
-                    setLostReasonModal={setLostReasonModal}
-                    setCsvImportType={setCsvImportType}
-                    setShowCsvImportModal={setShowCsvImportModal}
-                />
+                <PipelineTab />
             )}
 
             {activeTab === 'opportunities' && (
-                <OpportunitiesTab
-                    setEditingOpp={setEditingOpp}
-                    setShowModal={setShowModal}
-                    setActivityInitialContext={setActivityInitialContext}
-                    setEditingActivity={setEditingActivity}
-                    setShowActivityModal={setShowActivityModal}
-                    setEditingTask={setEditingTask}
-                    setShowTaskModal={setShowTaskModal}
-                    setSpiffClaimContext={setSpiffClaimContext}
-                    setShowSpiffClaimModal={setShowSpiffClaimModal}
-                    setLostReasonModal={setLostReasonModal}
-                    setCsvImportType={setCsvImportType}
-                    setShowCsvImportModal={setShowCsvImportModal}
-                />
+                <OpportunitiesTab />
             )}
 
             {activeTab === 'tasks' && (
                 <TasksTab
-                    setEditingTask={setEditingTask}
-                    setShowTaskModal={setShowTaskModal}
-                    setActivityInitialContext={setActivityInitialContext}
-                    setEditingActivity={setEditingActivity}
-                    setShowActivityModal={setShowActivityModal}
-                    setShowOutlookImportModal={setShowOutlookImportModal}
-                    viewingTask={viewingTask}
-                    setViewingTask={setViewingTask}
                     feedFilter={feedFilter}
                     setFeedFilter={setFeedFilter}
                     feedLastRead={feedLastRead}
@@ -1706,20 +1666,8 @@ dbFetch('/.netlify/functions/users?me=true')
 
             {activeTab === 'accounts' && (
                 <AccountsTab
-                    setEditingAccount={setEditingAccount}
-                    setEditingSubAccount={setEditingSubAccount}
-                    setParentAccountForSub={setParentAccountForSub}
-                    setShowAccountModal={setShowAccountModal}
-                    setCsvImportType={setCsvImportType}
-                    setShowCsvImportModal={setShowCsvImportModal}
                     expandedAccounts={expandedAccounts}
                     setExpandedAccounts={setExpandedAccounts}
-                    viewingAccount={viewingAccount}
-                    setViewingAccount={setViewingAccount}
-                    accShowAllClosed={accShowAllClosed}
-                    setAccShowAllClosed={setAccShowAllClosed}
-                    accShowAllContacts={accShowAllContacts}
-                    setAccShowAllContacts={setAccShowAllContacts}
                     accountsSortDir={accountsSortDir}
                     setAccountsSortDir={setAccountsSortDir}
                     accountsViewMode={accountsViewMode}
@@ -1729,51 +1677,25 @@ dbFetch('/.netlify/functions/users?me=true')
                 />
             )}
 
- 
             {activeTab === 'contacts' && (
                 <ContactsTab
-                    setEditingContact={setEditingContact}
-                    setShowContactModal={setShowContactModal}
-                    setCsvImportType={setCsvImportType}
-                    setShowCsvImportModal={setShowCsvImportModal}
                     contactsSortBy={contactsSortBy}
                     setContactsSortBy={setContactsSortBy}
-                    viewingContact={viewingContact}
-                    setViewingContact={setViewingContact}
-                    contactShowAllDeals={contactShowAllDeals}
-                    setContactShowAllDeals={setContactShowAllDeals}
                     selectedContacts={selectedContacts}
                     setSelectedContacts={setSelectedContacts}
                 />
             )}
 
-
-
-
             {activeTab === 'leads' && settings.leadsEnabled !== false && (
-                <LeadsTab
-                    leads={leads}
-                    setLeads={setLeads}
-                    setEditingOpp={setEditingOpp}
-                    setShowModal={setShowModal}
-                    onImportClick={() => setShowLeadImportModal(true)}
-                />
+                <LeadsTab />
             )}
-
 
             {activeTab === 'reports' && <ReportsTab leadsEnabled={settings.leadsEnabled !== false} />}
 
-
             {activeTab === 'salesManager' && <SalesManagerTab />}
 
-
             {activeTab === 'settings' && isAdmin && (
-                <SettingsTab
-                    setShowUserModal={setShowUserModal}
-                    setEditingUser={setEditingUser}
-                    setCsvImportType={setCsvImportType}
-                    setShowCsvImportModal={setShowCsvImportModal}
-                />
+                <SettingsTab />
             )}
 
             {/* ════ MEETING PREP PANEL ════ */}

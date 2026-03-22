@@ -6,10 +6,7 @@ import TeamBuilder from './TeamBuilder';
 import TerritoriesSettings from './TerritoriesSettings';
 import VerticalsSettings from './VerticalsSettings';
 
-export default function SettingsTab({
-    setShowUserModal, setEditingUser,
-    setCsvImportType, setShowCsvImportModal,
-}) {
+export default function SettingsTab() {
     const {
         settings, setSettings,
         opportunities,
@@ -33,6 +30,8 @@ export default function SettingsTab({
         activePipeline,
         setActiveTab,
         activePipelineId, setActivePipelineId,
+        setShowUserModal, setEditingUser,
+        setCsvImportType, setShowCsvImportModal,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';

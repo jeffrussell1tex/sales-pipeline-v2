@@ -4,11 +4,6 @@ import TaskItem from '../components/ui/TaskItem';
 import ViewingBar from '../components/ui/ViewingBar';
 
 export default function TasksTab({
-    setEditingTask, setShowTaskModal,
-    setActivityInitialContext, setEditingActivity, setShowActivityModal,
-    setShowOutlookImportModal,
-    // State shared with task detail panel / feed
-    viewingTask, setViewingTask,
     feedFilter, setFeedFilter,
     feedLastRead, setFeedLastRead,
 }) {
@@ -45,7 +40,6 @@ export default function TasksTab({
         viewingTeam, setViewingTeam,
         viewingTerritory, setViewingTerritory,
         stages,
-        // Calendar
         logFromCalOpen, setLogFromCalOpen,
         logFromCalDateFrom, setLogFromCalDateFrom,
         logFromCalDateTo, setLogFromCalDateTo,
@@ -60,6 +54,10 @@ export default function TasksTab({
         meetingPrepOpen, setMeetingPrepOpen,
         meetingPrepOppId, setMeetingPrepOppId,
         calendarEvents, calendarConnected, calendarLoading, calendarError,
+        setEditingTask, setShowTaskModal,
+        setActivityInitialContext, setEditingActivity, setShowActivityModal,
+        setShowOutlookImportModal,
+        viewingTask, setViewingTask,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';

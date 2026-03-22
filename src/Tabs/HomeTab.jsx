@@ -628,12 +628,7 @@ function RecommendedActions({ opportunities, activities, tasks, settings, curren
     );
 }
 
-export default function HomeTab({
-    setEditingOpp, setShowModal,
-    setEditingTask, setShowTaskModal,
-    setActivityInitialContext, setEditingActivity, setShowActivityModal,
-    setShowOutlookImportModal,
-}) {
+export default function HomeTab() {
     const {
         opportunities,
         accounts,
@@ -689,6 +684,10 @@ export default function HomeTab({
         allTeamNames,
         allTerritoryNames,
         setUndoToast,
+        setEditingOpp, setShowModal,
+        setEditingTask, setShowTaskModal,
+        setActivityInitialContext, setEditingActivity, setShowActivityModal,
+        setShowOutlookImportModal,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';

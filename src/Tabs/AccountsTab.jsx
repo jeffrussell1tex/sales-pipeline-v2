@@ -3,17 +3,7 @@ import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
 export default function AccountsTab({
-    setEditingAccount,
-    setEditingSubAccount,
-    setParentAccountForSub,
-    setShowAccountModal,
-    setCsvImportType,
-    setShowCsvImportModal,
-    // State shared with account detail panel
     expandedAccounts, setExpandedAccounts,
-    viewingAccount, setViewingAccount,
-    accShowAllClosed, setAccShowAllClosed,
-    accShowAllContacts, setAccShowAllContacts,
     accountsSortDir, setAccountsSortDir,
     accountsViewMode, setAccountsViewMode,
     selectedAccounts, setSelectedAccounts,
@@ -40,6 +30,11 @@ export default function AccountsTab({
         visibleAccounts,
         handleDeleteAccount,
         handleDeleteSubAccount,
+        setEditingAccount, setEditingSubAccount, setParentAccountForSub, setShowAccountModal,
+        setCsvImportType, setShowCsvImportModal,
+        viewingAccount, setViewingAccount,
+        accShowAllClosed, setAccShowAllClosed,
+        accShowAllContacts, setAccShowAllContacts,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';

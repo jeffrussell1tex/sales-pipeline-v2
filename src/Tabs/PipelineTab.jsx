@@ -95,13 +95,7 @@ function KanbanView({ pipelineFilteredOpps, kanbanDragging, kanbanDragOver, setK
     );
 }
 
-export default function PipelineTab({
-    setEditingOpp, setShowModal,
-    setActivityInitialContext, setEditingActivity, setShowActivityModal,
-    setSpiffClaimContext, setShowSpiffClaimModal,
-    setLostReasonModal,
-    setCsvImportType, setShowCsvImportModal,
-}) {
+export default function PipelineTab() {
     const {
         opportunities, setOpportunities,
         accounts,
@@ -132,6 +126,11 @@ export default function PipelineTab({
         handleSave,
         completeLostSave,
         viewingRep, viewingTeam, viewingTerritory,
+        setEditingOpp, setShowModal,
+        setActivityInitialContext, setEditingActivity, setShowActivityModal,
+        setSpiffClaimContext, setShowSpiffClaimModal,
+        setLostReasonModal,
+        setCsvImportType, setShowCsvImportModal,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';
