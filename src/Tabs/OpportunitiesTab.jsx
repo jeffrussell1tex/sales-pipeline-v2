@@ -354,6 +354,20 @@ export default function OpportunitiesTab() {
                             </div>
                         )}
 
+                            {/* VIEW TOGGLE ROW — flush left below pipeline filters */}
+                            <div style={{ display:'flex', alignItems:'center', padding:'0.375rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
+                                <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
+                                    {[{v:'funnel',label:'🔻 Funnel'},{v:'kanban',label:'⬛ Kanban'},{v:'list',label:'☰ List'}].map(({v,label}) => (
+                                        <button key={v} onClick={() => setOppTabView(v)}
+                                            style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
+                                                background: oppTabView===v ? '#fff' : 'transparent',
+                                                color: oppTabView===v ? '#1e293b' : '#64748b',
+                                                boxShadow: oppTabView===v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         <div className="table-wrapper">
                             {/* Mobile cards — Opportunities tab */}
                             <div className="opp-mobile-cards" style={{ padding: '0.75rem' }}>
@@ -383,20 +397,6 @@ export default function OpportunitiesTab() {
                                         </div>
                                     );
                                 })}
-                            </div>
-                            {/* VIEW TOGGLE ROW — flush left below pipeline filters */}
-                            <div style={{ display:'flex', alignItems:'center', padding:'0.375rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
-                                <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
-                                    {[{v:'funnel',label:'🔻 Funnel'},{v:'kanban',label:'⬛ Kanban'},{v:'list',label:'☰ List'}].map(({v,label}) => (
-                                        <button key={v} onClick={() => setOppTabView(v)}
-                                            style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
-                                                background: oppTabView===v ? '#fff' : 'transparent',
-                                                color: oppTabView===v ? '#1e293b' : '#64748b',
-                                                boxShadow: oppTabView===v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
                             </div>
                             {/* Desktop table — list view */}
                             {oppTabView === 'list' && (
@@ -723,6 +723,25 @@ export default function OpportunitiesTab() {
                             </div>
                             )}{/* end oppTabView list */}
 
+
+                            {oppTabView === 'list' && oppFilteredOpps.length === 0 && (
+                                <div style={{ textAlign:'center', padding:'4rem 2rem', display:'flex', flexDirection:'column', alignItems:'center', gap:'1rem' }}>
+                                    <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <rect x="8" y="20" width="56" height="36" rx="6" fill="#eff6ff" stroke="#93c5fd" strokeWidth="1.5"/>
+                                        <rect x="16" y="28" width="14" height="20" rx="3" fill="#93c5fd"/>
+                                        <rect x="34" y="32" width="14" height="16" rx="3" fill="#60a5fa"/>
+                                        <rect x="52" y="36" width="8" height="12" rx="3" fill="#3b82f6"/>
+                                        <circle cx="36" cy="12" r="6" fill="#dbeafe" stroke="#93c5fd" strokeWidth="1.5"/>
+                                        <path d="M36 9v6M33 12h6" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round"/>
+                                    </svg>
+                                    <div>
+                                        <div style={{ fontWeight:'700', fontSize:'1.0625rem', color:'#1e293b', marginBottom:'0.5rem' }}>No opportunities found</div>
+                                        <div style={{ fontSize:'0.875rem', color:'#64748b', marginBottom:'1.25rem' }}>{oppAnyActive ? 'Try adjusting your filters' : 'Add your first opportunity to get started'}</div>
+                                        {canEdit && !oppAnyActive && <button className="btn" onClick={() => { setEditingOpp(null); setShowModal(true); }}>+ New Opportunity</button>}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                             {/* Kanban view */}
                             {oppTabView === 'kanban' && (
                             <div style={{ padding:'0.75rem 1rem' }}>
@@ -899,24 +918,6 @@ export default function OpportunitiesTab() {
                             </div>
                             )}{/* end oppTabView funnel */}
 
-                            {oppTabView === 'list' && oppFilteredOpps.length === 0 && (
-                                <div style={{ textAlign:'center', padding:'4rem 2rem', display:'flex', flexDirection:'column', alignItems:'center', gap:'1rem' }}>
-                                    <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <rect x="8" y="20" width="56" height="36" rx="6" fill="#eff6ff" stroke="#93c5fd" strokeWidth="1.5"/>
-                                        <rect x="16" y="28" width="14" height="20" rx="3" fill="#93c5fd"/>
-                                        <rect x="34" y="32" width="14" height="16" rx="3" fill="#60a5fa"/>
-                                        <rect x="52" y="36" width="8" height="12" rx="3" fill="#3b82f6"/>
-                                        <circle cx="36" cy="12" r="6" fill="#dbeafe" stroke="#93c5fd" strokeWidth="1.5"/>
-                                        <path d="M36 9v6M33 12h6" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round"/>
-                                    </svg>
-                                    <div>
-                                        <div style={{ fontWeight:'700', fontSize:'1.0625rem', color:'#1e293b', marginBottom:'0.5rem' }}>No opportunities found</div>
-                                        <div style={{ fontSize:'0.875rem', color:'#64748b', marginBottom:'1.25rem' }}>{oppAnyActive ? 'Try adjusting your filters' : 'Add your first opportunity to get started'}</div>
-                                        {canEdit && !oppAnyActive && <button className="btn" onClick={() => { setEditingOpp(null); setShowModal(true); }}>+ New Opportunity</button>}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
                     </div>
                 </div>
                 );
