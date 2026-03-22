@@ -129,6 +129,7 @@ export default function LeadsTab() {
             {(newLead !== null) && <LeadForm lead={newLead} onSave={saveLead} onClose={() => setNewLead(null)} canSeeAll={canSeeAll} allReps={allReps} />}
             {editingLead && <LeadForm lead={editingLead} onSave={saveLead} onClose={() => setEditingLead(null)} canSeeAll={canSeeAll} allReps={allReps} />}
 
+            <div className="table-container">
             {/* KPI ROW */}
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(3,1fr)' : 'repeat(5,1fr)', gap:'0.75rem', padding:'1rem 1.25rem 0' }}>
                 {[
@@ -444,6 +445,7 @@ export default function LeadsTab() {
                     </div>
                 )}
             </div>
+            </div>{/* end table-container */}
         </div>
     );
 }
