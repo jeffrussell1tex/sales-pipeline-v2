@@ -36,6 +36,7 @@ const DEFAULT_PREFS = {
     closeLapsed:   { enabled: true  },
     dealMomentum:  { enabled: true  },
     managerAlerts: { enabled: true  },
+    scoreDropAlert: { enabled: true  }, // AI score dropped below threshold
 };
 
 function wantsAlert(profile, alertType) {
@@ -275,6 +276,70 @@ export const handler = async () => {
                     }
                 } else { skipped++; }
             }
+        }
+
+        // ── Signal 5: AI score dropped below threshold ────────────────────────────
+        if (
+            opp.aiScore?.score !== undefined &&
+            opp.aiScore.score < 40 &&
+            wantsAlert(profile, 'scoreDropAlert')
+        ) {
+            const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'scoreDrop');
+            if (!alerted) {
+                try {
+                    const verdictLabel = opp.aiScore.verdict || 'At Risk';
+                    const headline = opp.aiScore.headline || 'Deal health has declined';
+                    await sendEmail({
+                        to: repUser.email,
+                        subject: `⚠️ AI Score Alert: ${name} scored ${opp.aiScore.score}/100 (${verdictLabel})`,
+                        html: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><style>
+                            body{margin:0;padding:0;background:#f4f6f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a2e}
+                            .wrapper{max-width:600px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+                            .header{background:#1a1a2e;padding:24px 32px}.header-title{color:#fff;font-size:16px;font-weight:600;margin:0}
+                            .body{padding:32px}.body h2{font-size:20px;font-weight:700;margin:0 0 8px;color:#1a1a2e}
+                            .body p{font-size:14px;line-height:1.6;color:#4a4a6a;margin:0 0 16px}
+                            .score-box{background:#FCEBEB;border:1px solid #F7C1C1;border-radius:8px;padding:16px 20px;margin:16px 0;display:flex;align-items:center;gap:16px}
+                            .score-num{font-size:36px;font-weight:800;color:#A32D2D;line-height:1}
+                            .score-detail{flex:1}
+                            .score-verdict{font-size:14px;font-weight:700;color:#A32D2D}
+                            .score-headline{font-size:13px;color:#633806;margin-top:4px}
+                            .btn{display:inline-block;background:#3b82f6;color:#fff;text-decoration:none;padding:12px 24px;border-radius:6px;font-size:14px;font-weight:600;margin-top:8px}
+                            .footer{background:#f4f6f8;padding:16px 32px;border-top:1px solid #e5e7eb;font-size:11px;color:#8b92a9;text-align:center}
+                            .footer a{color:#3b82f6;text-decoration:none}
+                        </style></head><body><div class="wrapper">
+                            <div class="header"><p class="header-title">Accelerep — AI Score Alert</p></div>
+                            <div class="body">
+                                <h2>Deal health warning: ${name}</h2>
+                                <p>Hi ${repName}, your deal <strong>${name}</strong> (${opp.account}) has been scored below the attention threshold.</p>
+                                <div class="score-box">
+                                    <div class="score-num">${opp.aiScore.score}</div>
+                                    <div class="score-detail">
+                                        <div class="score-verdict">${verdictLabel}</div>
+                                        <div class="score-headline">${headline}</div>
+                                    </div>
+                                </div>
+                                <p>Stage: ${opp.stage} · ARR: ${Math.round(arr).toLocaleString()}</p>
+                                <a class="btn" href="${process.env.APP_URL || 'https://salespipelinetracker.com'}">Review this deal →</a>
+                            </div>
+                            <div class="footer"><p>AI Score Alert · <a href="${process.env.APP_URL || 'https://salespipelinetracker.com'}/settings">Manage preferences</a></p></div>
+                        </div></body></html>`,
+                    });
+                    await logAlert(orgId, repName, 'scoreDrop', opp, `AI score ${opp.aiScore.score} (${verdictLabel})`);
+                    emailsSent++;
+                    console.log(`scoreDropAlert → ${repUser.email} (${name}, score ${opp.aiScore.score})`);
+
+                    // Escalate to manager if Critical
+                    if (opp.aiScore.score < 25 && manager?.email && wantsAlert(manager.profile || {}, 'managerAlerts')) {
+                        await sendEmail({
+                            to: manager.email,
+                            ...emailTemplates.managerDealAlert({ managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'score-critical', detail: `AI score ${opp.aiScore.score}/100 — ${verdictLabel}: ${headline}`, opportunityId: opp.id }),
+                        });
+                        emailsSent++;
+                    }
+                } catch (err) {
+                    console.error(`scoreDropAlert error (${name}):`, err.message);
+                }
+            } else { skipped++; }
         }
 
         const summary = `${emailsSent} emails sent, ${skipped} skipped (dedup)`;

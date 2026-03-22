@@ -72,6 +72,11 @@ function KanbanView({ pipelineFilteredOpps, kanbanDragging, kanbanDragOver, setK
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                                 <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#2563eb' }}>{Math.round((parseFloat(opp.arr)||0)/1000)}K</span>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                    {opp.aiScore?.verdict && (() => {
+                                                        const aiColors = { 'Strong': '#639922', 'On Track': '#378ADD', 'At Risk': '#BA7517', 'Critical': '#E24B4A' };
+                                                        const aiColor = aiColors[opp.aiScore.verdict] || '#94a3b8';
+                                                        return <div title={`AI: ${opp.aiScore.score} — ${opp.aiScore.verdict}`} style={{ width: '6px', height: '6px', borderRadius: '50%', background: aiColor, flexShrink: 0, outline: `2px solid ${aiColor}40` }} />;
+                                                    })()}
                                                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: healthColor, flexShrink: 0 }}></div>
                                                     <span style={{ fontSize: '0.6rem', color: '#94a3b8' }}>{opp.forecastedCloseDate ? opp.forecastedCloseDate.slice(5) : '-'}</span>
                                                 </div>
@@ -161,8 +166,39 @@ export default function PipelineTab() {
     const [pipelineSortDir, setPipelineSortDir] = useState('asc');
     const [bulkAction, setBulkAction] = useState({ stage: '', rep: '' });
     const [expandedOppActivities, setExpandedOppActivities] = useState({});
+    const [bulkScoring, setBulkScoring] = useState(false);
+    const [bulkScoreProgress, setBulkScoreProgress] = useState(null); // { done, total }
 
     useEffect(() => { localStorage.setItem('pipelineView', pipelineView); }, [pipelineView]);
+
+    // Bulk AI scoring — scores all active deals sequentially
+    const handleBulkScore = async () => {
+        if (bulkScoring) return;
+        const active = visibleOpportunities.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
+        if (active.length === 0) return;
+        setBulkScoring(true);
+        setBulkScoreProgress({ done: 0, total: active.length });
+        let scored = 0;
+        for (const opp of active) {
+            try {
+                const res = await dbFetch('/.netlify/functions/ai-score', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ opportunityId: opp.id, forceRefresh: false }),
+                });
+                const data = await res.json();
+                if (!data.disabled && data.score !== undefined) {
+                    setOpportunities(prev => prev.map(o => o.id === opp.id ? { ...o, aiScore: data } : o));
+                }
+            } catch (err) {
+                console.warn('Bulk score failed for', opp.id, err.message);
+            }
+            scored++;
+            setBulkScoreProgress({ done: scored, total: active.length });
+        }
+        setBulkScoring(false);
+        setBulkScoreProgress(null);
+    };
 
     // Kanban drag/drop
     const handleKanbanDrop = (toStage) => {
@@ -550,6 +586,20 @@ export default function PipelineTab() {
                                 {v.label}
                             </button>
                         ))}
+                    {settings?.aiScoringEnabled && (
+                        <button
+                            onClick={handleBulkScore}
+                            disabled={bulkScoring}
+                            title="Score all active deals with AI"
+                            style={{ padding: '0.3rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: bulkScoring ? '#f1f5f9' : '#fff', color: '#475569', fontSize: '0.75rem', fontWeight: '700', cursor: bulkScoring ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
+                            {bulkScoring ? (
+                                <>
+                                    <span style={{ width: '10px', height: '10px', border: '2px solid #94a3b8', borderTopColor: '#2563eb', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+                                    Scoring {bulkScoreProgress?.done}/{bulkScoreProgress?.total}…
+                                </>
+                            ) : '🤖 Score all deals'}
+                        </button>
+                    )}
                     </div>
 
                     {/* ════ FUNNEL VIEW ════ */}

@@ -365,6 +365,7 @@ function DealHistoryTab({ opportunity, oppActivities, stages, settings, contacts
 // ─────────────────────────────────────────────────────────────
 function AiScoreTab({ opportunity, oppActivities, currentUser, onClose, onUpdate }) {
     const [score, setScore] = React.useState(opportunity.aiScore || null);
+    const [scoreHistory, setScoreHistory] = React.useState(opportunity.aiScoreHistory || []);
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState(null);
 
@@ -385,6 +386,15 @@ function AiScoreTab({ opportunity, oppActivities, currentUser, onClose, onUpdate
             if (data.disabled) {
                 setError('AI scoring is disabled. Enable it in Settings → AI Features.');
             } else {
+                // Append previous score to history before replacing
+                if (forceRefresh && score && score.score !== undefined) {
+                    const histEntry = { score: score.score, verdict: score.verdict, scoredAt: score.scoredAt };
+                    setScoreHistory(prev => {
+                        const updated = [histEntry, ...prev].slice(0, 10);
+                        opportunity.aiScoreHistory = updated;
+                        return updated;
+                    });
+                }
                 setScore(data);
             }
         } catch (err) {
@@ -501,6 +511,45 @@ function AiScoreTab({ opportunity, oppActivities, currentUser, onClose, onUpdate
                             ↻ Refresh score
                         </button>
                     </div>
+                    {/* Score history */}
+                    {scoreHistory.length > 0 && (
+                        <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #f1f5f9' }}>
+                            <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Score history</div>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                {scoreHistory.map((h, i) => {
+                                    const hvc = verdictConfig[h.verdict] || verdictConfig['At Risk'];
+                                    const delta = i < scoreHistory.length - 1
+                                        ? h.score - scoreHistory[i + 1].score
+                                        : score ? h.score - score.score : null;
+                                    const currentDelta = i === 0 && score ? score.score - h.score : null;
+                                    const ageLabel = h.scoredAt ? (() => {
+                                        const m = Math.floor((Date.now() - new Date(h.scoredAt).getTime()) / 60000);
+                                        return m < 60 ? m + 'm ago' : m < 1440 ? Math.floor(m/60) + 'h ago' : Math.floor(m/1440) + 'd ago';
+                                    })() : null;
+                                    return (
+                                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '4px 10px', background: hvc.bg, border: `0.5px solid ${hvc.border}`, borderRadius: '6px' }}>
+                                            <span style={{ fontSize: '0.8125rem', fontWeight: '700', color: hvc.color }}>{h.score}</span>
+                                            <span style={{ fontSize: '0.6875rem', color: hvc.color, opacity: 0.75 }}>{h.verdict}</span>
+                                            {ageLabel && <span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>· {ageLabel}</span>}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            {scoreHistory.length > 0 && score && (() => {
+                                const oldest = scoreHistory[scoreHistory.length - 1];
+                                const delta = score.score - oldest.score;
+                                const arrow = delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
+                                const col = delta > 0 ? '#27500A' : delta < 0 ? '#A32D2D' : '#64748b';
+                                const bg  = delta > 0 ? '#EAF3DE' : delta < 0 ? '#FCEBEB' : '#f8fafc';
+                                return (
+                                    <div style={{ marginTop: '6px', fontSize: '0.75rem', fontWeight: '600', color: col, background: bg, padding: '4px 10px', borderRadius: '6px', display: 'inline-block' }}>
+                                        {arrow} {Math.abs(delta)} pts vs first scored
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    )}
+
                     {/* Cancel / Update buttons */}
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
                         <button type="button" onClick={onClose}

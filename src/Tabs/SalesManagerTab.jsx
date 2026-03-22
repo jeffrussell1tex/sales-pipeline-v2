@@ -1072,6 +1072,125 @@ export default function SalesManagerTab() {
                                     )}
                                 </div>
                             </div>
+
+                            {/* ── AI SCORE DASHBOARD ─────────────────────────── */}
+                            {settings?.aiScoringEnabled && (() => {
+                                const activeOpps = opportunities.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
+                                const scoredOpps = activeOpps.filter(o => o.aiScore?.score !== undefined);
+                                if (scoredOpps.length === 0) return null;
+
+                                const fmtMoney = (v) => {
+                                    const n = parseFloat(v) || 0;
+                                    if (n >= 1000000) return '$' + (n/1000000).toFixed(1) + 'M';
+                                    if (n >= 1000)    return '$' + Math.round(n/1000) + 'K';
+                                    return '$' + Math.round(n);
+                                };
+
+                                const scoreByRep = {};
+                                scoredOpps.forEach(o => {
+                                    if (!o.salesRep) return;
+                                    if (!scoreByRep[o.salesRep]) scoreByRep[o.salesRep] = [];
+                                    scoreByRep[o.salesRep].push(o.aiScore.score);
+                                });
+                                const repScores = Object.entries(scoreByRep).map(([rep, scores]) => ({
+                                    rep,
+                                    avg: Math.round(scores.reduce((a,b) => a+b, 0) / scores.length),
+                                    count: scores.length,
+                                    critical: scores.filter(s => s < 25).length,
+                                })).sort((a,b) => a.avg - b.avg);
+
+                                const scoreByStage = {};
+                                scoredOpps.forEach(o => {
+                                    if (!scoreByStage[o.stage]) scoreByStage[o.stage] = [];
+                                    scoreByStage[o.stage].push(o.aiScore.score);
+                                });
+                                const stageScores = Object.entries(scoreByStage).map(([stage, scores]) => ({
+                                    stage,
+                                    avg: Math.round(scores.reduce((a,b) => a+b, 0) / scores.length),
+                                    count: scores.length,
+                                })).sort((a,b) => a.avg - b.avg);
+
+                                const vColor = (s) => s >= 70 ? '#27500A' : s >= 50 ? '#185FA5' : s >= 30 ? '#854F0B' : '#A32D2D';
+                                const vBg    = (s) => s >= 70 ? '#EAF3DE' : s >= 50 ? '#E6F1FB' : s >= 30 ? '#FAEEDA' : '#FCEBEB';
+                                const vBar   = (s) => s >= 70 ? '#639922' : s >= 50 ? '#378ADD' : s >= 30 ? '#BA7517' : '#E24B4A';
+                                const vLabel = (s) => s >= 70 ? 'Strong'  : s >= 50 ? 'On Track': s >= 30 ? 'At Risk' : 'Critical';
+
+                                const overallAvg = Math.round(scoredOpps.reduce((s,o) => s + o.aiScore.score, 0) / scoredOpps.length);
+                                const criticalDeals = scoredOpps.filter(o => o.aiScore.score < 30).sort((a,b) => a.aiScore.score - b.aiScore.score).slice(0, 5);
+
+                                return (
+                                    <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', marginBottom:'1.5rem', overflow:'hidden' }}>
+                                        <div style={{ padding:'0.875rem 1.25rem', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                            <div>
+                                                <div style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.08em' }}>🤖 AI Deal Score Dashboard</div>
+                                                <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'2px' }}>{scoredOpps.length} of {activeOpps.length} active deals scored</div>
+                                            </div>
+                                            <div style={{ fontSize:'0.75rem', color:'#64748b', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'3px 10px' }}>
+                                                Avg: <strong style={{ color: vColor(overallAvg) }}>{overallAvg}</strong>/100
+                                            </div>
+                                        </div>
+
+                                        <div style={{ padding:'1.25rem', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.25rem' }}>
+                                            {/* By Rep */}
+                                            <div>
+                                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'8px' }}>Avg score by rep</div>
+                                                <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                                                    {repScores.map(r => (
+                                                        <div key={r.rep} style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                                                            <div style={{ fontSize:'0.75rem', fontWeight:'600', color:'#1e293b', minWidth:'90px', maxWidth:'90px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.rep}</div>
+                                                            <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
+                                                                <div style={{ height:'100%', width: r.avg + '%', background: vBar(r.avg), borderRadius:'3px', transition:'width 0.4s' }} />
+                                                            </div>
+                                                            <div style={{ fontSize:'0.75rem', fontWeight:'700', color: vColor(r.avg), minWidth:'28px', textAlign:'right' }}>{r.avg}</div>
+                                                            <div style={{ fontSize:'0.6875rem', padding:'1px 6px', borderRadius:'999px', background: vBg(r.avg), color: vColor(r.avg), fontWeight:'600', minWidth:'56px', textAlign:'center' }}>{vLabel(r.avg)}</div>
+                                                            {r.critical > 0 && <div style={{ fontSize:'0.6875rem', color:'#A32D2D', fontWeight:'700' }}>⚠ {r.critical}</div>}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* By Stage */}
+                                            <div>
+                                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'8px' }}>Avg score by stage</div>
+                                                <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                                                    {stageScores.map(s => (
+                                                        <div key={s.stage} style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                                                            <div style={{ fontSize:'0.75rem', fontWeight:'600', color:'#1e293b', minWidth:'110px', maxWidth:'110px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.stage}</div>
+                                                            <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
+                                                                <div style={{ height:'100%', width: s.avg + '%', background: vBar(s.avg), borderRadius:'3px', transition:'width 0.4s' }} />
+                                                            </div>
+                                                            <div style={{ fontSize:'0.75rem', fontWeight:'700', color: vColor(s.avg), minWidth:'28px', textAlign:'right' }}>{s.avg}</div>
+                                                            <div style={{ fontSize:'0.6875rem', color:'#94a3b8' }}>{s.count}d</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Critical deals */}
+                                        {criticalDeals.length > 0 && (
+                                            <div style={{ borderTop:'1px solid #f1f5f9', padding:'0.875rem 1.25rem' }}>
+                                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#A32D2D', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'8px' }}>
+                                                    ⚠ Critical deals (score below 30)
+                                                </div>
+                                                <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                                                    {criticalDeals.map(o => (
+                                                        <div key={o.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'5px 8px', background:'#FCEBEB', borderRadius:'6px', border:'0.5px solid #F7C1C1' }}>
+                                                            <div style={{ fontSize:'0.8125rem', fontWeight:'800', color:'#A32D2D', minWidth:'24px' }}>{o.aiScore.score}</div>
+                                                            <div style={{ flex:1, minWidth:0 }}>
+                                                                <div style={{ fontSize:'0.8125rem', fontWeight:'600', color:'#1e293b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{o.opportunityName || o.account}</div>
+                                                                <div style={{ fontSize:'0.6875rem', color:'#64748b' }}>{o.salesRep} · {o.stage}</div>
+                                                            </div>
+                                                            <div style={{ fontSize:'0.75rem', fontWeight:'700', color:'#2563eb' }}>{fmtMoney(o.arr)}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
                             </>
                         );
                     })()}
