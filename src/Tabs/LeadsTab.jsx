@@ -130,7 +130,7 @@ export default function LeadsTab() {
             {editingLead && <LeadForm lead={editingLead} onSave={saveLead} onClose={() => setEditingLead(null)} canSeeAll={canSeeAll} allReps={allReps} />}
 
             {/* KPI ROW */}
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'0.75rem', padding:'1rem 1.25rem 0' }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(3,1fr)' : 'repeat(5,1fr)', gap:'0.75rem', padding:'1rem 1.25rem 0' }}>
                 {[
                     { label:'Total Leads', value: visibleLeads.length, sub: counts.New + ' new', accent:'#2563eb' },
                     { label:'Hot Leads', value: counts.hot, sub:'Score 70+', accent:'#ef4444' },
@@ -147,7 +147,7 @@ export default function LeadsTab() {
             </div>
 
             {/* MAIN LAYOUT */}
-            <div style={{ display:'grid', gridTemplateColumns: canSeeAll ? '1fr 300px' : '1fr', gap:'1rem', padding:'1rem 1.25rem' }}>
+            <div style={{ display:'grid', gridTemplateColumns: canSeeAll && !isMobile ? '1fr 300px' : '1fr', gap:'1rem', padding:'1rem 1.25rem' }}>
 
                 {/* LEFT: always-visible card wrapping toolbar + view content */}
                 <div>

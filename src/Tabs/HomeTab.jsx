@@ -166,7 +166,7 @@ function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUs
                                 <div style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1e293b' }}>{teamName}</div>
                                 <div style={{ fontSize:'0.75rem', color:'#94a3b8' }}>{reps.length} rep{reps.length!==1?'s':''} · {fmtArr(teamArr)} pipeline · avg health {avgHealth}</div>
                             </div>
-                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:'10px' }}>
+                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'10px' }}>
                                 {reps.map(rs => (
                                     <div key={rs.rep.id} style={{ background:'#fff', border:'0.5px solid #e2e8f0', borderLeft:`3px solid ${rs.statusColor}`, borderRadius:'0 10px 10px 0', padding:'14px' }}>
                                         <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px' }}>
@@ -662,7 +662,7 @@ export default function HomeTab() {
         calendarLoading,
         calendarError,
         fetchCalendarEvents,
-        setActiveTab,
+        setActiveTab, isMobile,
         fetchLogFromCalEvents,
         logFromCalOpen, setLogFromCalOpen,
         logFromCalDateFrom, setLogFromCalDateFrom,

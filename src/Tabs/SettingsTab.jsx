@@ -32,6 +32,7 @@ export default function SettingsTab() {
         activePipelineId, setActivePipelineId,
         setShowUserModal, setEditingUser,
         setCsvImportType, setShowCsvImportModal,
+        isMobile,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';
@@ -147,7 +148,7 @@ export default function SettingsTab() {
                                 <h2>SETTINGS</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
-                                <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', maxWidth: '560px' }}>
+                                <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', maxWidth: isMobile ? '100%' : '560px' }}>
                                     {[
                                         { group: 'Team' },
                                         { view: 'users',          icon: '👥', title: 'Manage Users',       desc: 'Roles & permissions' },
@@ -215,7 +216,7 @@ export default function SettingsTab() {
                                 </p>
                                 <div style={{ marginBottom: '2rem' }}>
                                     <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>Add New Product</h3>
-                                    <div style={{ display: 'flex', gap: '0.5rem', maxWidth: '500px' }}>
+                                    <div style={{ display: 'flex', gap: '0.5rem', maxWidth: isMobile ? '100%' : '500px' }}>
                                         <input
                                             type="text"
                                             value={newProductInput}
@@ -312,7 +313,8 @@ export default function SettingsTab() {
                                         ℹ️ Toggle a field off for a role to hide it from the pipeline table and the opportunity form for users with that role.
                                     </div>
                                     <div style={{ overflowX: 'auto' }}>
-                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                                        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', minWidth: '500px' }}>
                                             <thead>
                                                 <tr style={{ background: '#f8fafc' }}>
                                                     <th style={{ textAlign: 'left', padding: '0.625rem 0.875rem', fontWeight: '700', color: '#64748b', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '2px solid #e2e8f0', width: '220px' }}>Field</th>
@@ -360,6 +362,7 @@ export default function SettingsTab() {
                                                 ))}
                                             </tbody>
                                         </table>
+            </div>
                                     </div>
                                 </div>
                                 <SaveCancelBar />
@@ -432,7 +435,7 @@ export default function SettingsTab() {
                                     ) : (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
                                             {filtered.map((entry, i) => (
-                                                <div key={entry.id} style={{ display: 'grid', gridTemplateColumns: '150px 110px 90px 100px 1fr auto', gap: '0.75rem', alignItems: 'center',
+                                                <div key={entry.id} style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr auto' : '150px 110px 90px 100px 1fr auto', gap: '0.75rem', alignItems: 'center',
                                                     padding: '0.625rem 0.75rem', background: i % 2 === 0 ? '#fff' : '#f8fafc',
                                                     borderBottom: '1px solid #f1f5f9', fontSize: '0.8125rem' }}>
                                                     <div style={{ color: '#64748b', fontSize: '0.75rem' }}>
@@ -478,7 +481,7 @@ export default function SettingsTab() {
                                 <h2>FISCAL YEAR SETTINGS</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
-                                <div className="form-group" style={{ maxWidth: '400px' }}>
+                                <div className="form-group" style={{ maxWidth: isMobile ? '100%' : '400px' }}>
                                     <label style={{ 
                                         color: '#64748b', 
                                         fontSize: '0.875rem', 
@@ -543,7 +546,7 @@ export default function SettingsTab() {
                                 <h2>COMPANY LOGO</h2>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
-                                <div style={{ maxWidth: '600px' }}>
+                                <div style={{ maxWidth: isMobile ? '100%' : '600px' }}>
                                     <div className="form-group">
                                         <label style={{ 
                                             color: '#64748b', 
@@ -802,7 +805,7 @@ export default function SettingsTab() {
                                     <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>
                                         Add New Pain Point
                                     </h3>
-                                    <div style={{ display: 'flex', gap: '0.5rem', maxWidth: '500px' }}>
+                                    <div style={{ display: 'flex', gap: '0.5rem', maxWidth: isMobile ? '100%' : '500px' }}>
                                         <input
                                             type="text"
                                             value={newPainPointInput}
@@ -937,7 +940,7 @@ export default function SettingsTab() {
                                         <>
                                         <div style={{ marginBottom: '2rem' }}>
                                             <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>Add Primary Industry</h3>
-                                            <div style={{ display: 'flex', gap: '0.5rem', maxWidth: '500px' }}>
+                                            <div style={{ display: 'flex', gap: '0.5rem', maxWidth: isMobile ? '100%' : '500px' }}>
                                                 <input type="text" value={newVerticalMarketInput} onChange={e => setNewVerticalMarketInput(e.target.value)} placeholder="e.g. Oil & Gas, Manufacturing..."
                                                     style={{ flex: 1, background: '#f8f9fa', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.625rem 0.75rem', color: '#1e293b', fontSize: '0.875rem' }}
                                                     onKeyPress={e => { if (e.key === 'Enter') { const v = newVerticalMarketInput.trim(); if (v && !industries.some(i => i.name.toLowerCase() === v.toLowerCase())) { saveIndustries([...industries, { name: v, subs: [] }]); setNewVerticalMarketInput(''); } } }} />
@@ -1004,7 +1007,7 @@ export default function SettingsTab() {
                                 <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
                                 <h2>SALES FUNNEL STAGES</h2>
                             </div>
-                            <div style={{ padding: '1.5rem', maxWidth: '650px' }}>
+                            <div style={{ padding: '1.5rem', maxWidth: isMobile ? '100%' : '650px' }}>
                                 <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
                                     Configure your sales funnel stages and their win probability weightings. These weightings are used to calculate weighted pipeline values in analytics and forecasting.
                                 </p>
@@ -1268,7 +1271,7 @@ export default function SettingsTab() {
                                 <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
                                 <h2>FEATURES</h2>
                             </div>
-                            <div style={{ padding: '1.5rem', maxWidth: '560px' }}>
+                            <div style={{ padding: '1.5rem', maxWidth: isMobile ? '100%' : '560px' }}>
                                 <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1.5rem', lineHeight: '1.6' }}>
                                     Enable or disable features for your organization. Disabled features are hidden from the navigation and reports.
                                 </p>
@@ -1300,7 +1303,7 @@ export default function SettingsTab() {
                                 <button className="btn" onClick={goBackToMenu}>← Back</button>
                                 <h2>AI FEATURES</h2>
                             </div>
-                            <div style={{ padding: '1.5rem', maxWidth: '560px' }}>
+                            <div style={{ padding: '1.5rem', maxWidth: isMobile ? '100%' : '560px' }}>
 
                                 {/* Privacy notice */}
                                 <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
@@ -1395,7 +1398,7 @@ export default function SettingsTab() {
                                 <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
                                 <h2>DATA STORAGE</h2>
                             </div>
-                            <div style={{ padding: '1.5rem', maxWidth: '600px' }}>
+                            <div style={{ padding: '1.5rem', maxWidth: isMobile ? '100%' : '600px' }}>
                                 <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
                                     Choose where your Sales Pipeline Tracker data is stored. This determines how data persists and whether it can be shared across devices.
                                 </p>

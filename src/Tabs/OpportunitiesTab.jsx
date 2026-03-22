@@ -725,8 +725,8 @@ export default function OpportunitiesTab() {
 
                             {/* Kanban view */}
                             {oppTabView === 'kanban' && (
-                            <div style={{ padding:'0.75rem 1rem', overflowX:'auto' }}>
-                                <div style={{ display:'flex', gap:'0.625rem', minWidth:'max-content' }}>
+                            <div style={{ padding:'0.75rem 1rem' }}>
+                                <div style={{ display:'flex', gap:'0.625rem', flexWrap:'wrap' }}>
                                     {stages.filter(s => s !== 'Closed Lost').map(stage => {
                                         const colOpps = oppFilteredOpps.filter(o => o.stage === stage);
                                         const sc = getStageColor(stage);
@@ -735,7 +735,7 @@ export default function OpportunitiesTab() {
                                                 onDragOver={e => { e.preventDefault(); e.stopPropagation(); setKanbanDragOver(stage); }}
                                                 onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setKanbanDragOver(null); }}
                                                 onDrop={e => { e.preventDefault(); handleKanbanDrop(stage); }}
-                                                style={{ width:'220px', flexShrink:0, background: kanbanDragOver === stage ? '#eff6ff' : '#f8fafc', border: kanbanDragOver === stage ? '1px solid #93c5fd' : '1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden', transition:'all 0.15s' }}>
+                                                style={{ width: isMobile ? 'calc(50% - 0.375rem)' : '220px', flexShrink:0, background: kanbanDragOver === stage ? '#eff6ff' : '#f8fafc', border: kanbanDragOver === stage ? '1px solid #93c5fd' : '1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden', transition:'all 0.15s' }}>
                                                 <div style={{ padding:'0.5rem 0.75rem', borderTop:'3px solid '+sc.text, borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', background:'#fff' }}>
                                                     <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:sc.text, textTransform:'uppercase', letterSpacing:'0.04em', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{stage}</span>
                                                     <div style={{ display:'flex', alignItems:'center', gap:'0.375rem', flexShrink:0 }}>

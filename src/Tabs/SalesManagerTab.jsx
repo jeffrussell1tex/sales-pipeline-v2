@@ -229,7 +229,7 @@ function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUs
                                 </div>
                             </div>
                             {/* Rep cards */}
-                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:'10px' }}>
+                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'10px' }}>
                                 {reps.map(rs => (
                                     <div key={rs.rep.id} style={{ background:'#fff', border:`0.5px solid #e2e8f0`, borderLeft:`3px solid ${rs.statusColor}`, borderRadius:'0 10px 10px 0', padding:'14px' }}>
                                         {/* Card top */}
@@ -417,6 +417,7 @@ export default function SalesManagerTab() {
         showConfirm,
         activeTab, setActiveTab,
         spiffClaims, setSpiffClaims,
+        isMobile,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';

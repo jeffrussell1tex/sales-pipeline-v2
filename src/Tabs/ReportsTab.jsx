@@ -30,6 +30,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
         visibleTasks,
         activePipeline,
         allPipelines,
+            isMobile,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';
@@ -452,25 +453,30 @@ ${bodyHtml}
     <div class="card">
       <div class="section-title">Opportunities by Stage</div>
       ${byStage.length === 0 ? '<p style="color:#94a3b8;font-size:11px;">No opportunity data.</p>' : `
-      <table>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+<table>
 <thead><tr><th>Stage</th><th style="text-align:center;">Count</th><th style="text-align:right;">Value</th><th style="text-align:right;">Share</th></tr></thead>
 <tbody>${stageRows}</tbody>
-      </table>`}
+      </table>
+</div>`}
     </div>
     <div class="card">
       <div class="section-title">Top Accounts by Won Revenue</div>
       ${topAccounts.length === 0 ? '<p style="color:#94a3b8;font-size:11px;">No closed won data yet.</p>' : `
-      <table>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+<table>
 <thead><tr><th style="text-align:center;">#</th><th>Account</th><th style="text-align:right;">Won Revenue</th></tr></thead>
 <tbody>${accountRows}</tbody>
-      </table>`}
+      </table>
+</div>`}
     </div>
   </div>
 
   <!-- All Opportunities -->
   <div class="section opps-table">
     <div class="section-title">All Opportunities Summary (${reportsOpps.length} total)</div>
-    <table>
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+<table>
       <thead>
 <tr>
   <th>Opportunity</th><th>Account</th><th>Stage</th>
@@ -480,6 +486,7 @@ ${bodyHtml}
       </thead>
       <tbody>${oppRows || '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:16px;">No opportunities found.</td></tr>'}</tbody>
     </table>
+</div>
   </div>
 
   <div class="footer">
@@ -683,7 +690,7 @@ ${bodyHtml}
                                 );
                             };
                             return (
-                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'0.75rem', padding:'0.75rem 1.25rem' }}>
+                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(90px,1fr))', gap:'0.75rem', padding:'0.75rem 1.25rem' }}>
                                 <div className="kpi-card accent-green" style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.625rem 1.25rem' }}>
                                     <div style={labelStyle}>Won Revenue</div>
                                     <div style={valueStyle}>{'$'+totalWonRevenue.toLocaleString()}</div>
@@ -767,7 +774,7 @@ ${bodyHtml}
                             <div style={cardStyle}>
                               <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b', marginBottom:'1rem' }}>🎯 Quota Attainment</div>
                               {totalQuota === 0 ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem' }}>No quota set. Configure your quota in Settings.</div> : (
-                              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'1rem' }}>
+                              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:'1rem' }}>
                                 {[
                                   { label:'Annual Quota',       value:'$'+totalQuota.toLocaleString(),              color:'#1e293b' },
                                   { label:'Closed Won',         value:'$'+closedWonValue.toLocaleString(),           color:'#10b981' },
@@ -976,7 +983,9 @@ ${bodyHtml}
                             <div style={cardStyle}>
                               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.875rem' }}>
                                 <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b' }}>📆 Won Revenue by Quarter ({currentYear})</div>
-                                <button onClick={() => { const rows=revenueByQuarter.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'}"><td>${r.q}</td><td style="text-align:right;font-weight:700;">$${r.rev.toLocaleString()}</td></tr>`).join(''); printSection('Won Revenue by Quarter',`<table><thead><tr><th>Quarter</th><th style="text-align:right;">Won Revenue</th></tr></thead><tbody>${rows}</tbody></table>`); }} style={printBtnStyle} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>🖨️ Print</button>
+                                <button onClick={() => { const rows=revenueByQuarter.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'}"><td>${r.q}</td><td style="text-align:right;font-weight:700;">$${r.rev.toLocaleString()}</td></tr>`).join(''); printSection('Won Revenue by Quarter',`<div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+<table><thead><tr><th>Quarter</th><th style="text-align:right;">Won Revenue</th></tr></thead><tbody>${rows}</tbody></table>
+</div>`); }} style={printBtnStyle} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>🖨️ Print</button>
                               </div>
                               {revenueByQuarter.map(({q,rev})=>(
                                 <div key={q} style={{ marginBottom:'0.625rem' }}>
@@ -993,7 +1002,9 @@ ${bodyHtml}
                             <div style={cardStyle}>
                               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.875rem' }}>
                                 <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b' }}>📈 Monthly Won Revenue (Last 6 Mo.)</div>
-                                <button onClick={() => { const rows=monthlyData.map((m,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'}"><td>${m.label}</td><td style="text-align:right;font-weight:700;">$${m.rev.toLocaleString()}</td><td style="text-align:center;">${m.count}</td></tr>`).join(''); printSection('Monthly Won Revenue — Last 6 Months',`<table><thead><tr><th>Month</th><th style="text-align:right;">Won Revenue</th><th style="text-align:center;">Deals</th></tr></thead><tbody>${rows}</tbody></table>`); }} style={printBtnStyle} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>🖨️ Print</button>
+                                <button onClick={() => { const rows=monthlyData.map((m,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'}"><td>${m.label}</td><td style="text-align:right;font-weight:700;">$${m.rev.toLocaleString()}</td><td style="text-align:center;">${m.count}</td></tr>`).join(''); printSection('Monthly Won Revenue — Last 6 Months',`<div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+<table><thead><tr><th>Month</th><th style="text-align:right;">Won Revenue</th><th style="text-align:center;">Deals</th></tr></thead><tbody>${rows}</tbody></table>
+</div>`); }} style={printBtnStyle} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>🖨️ Print</button>
                               </div>
                               <div style={{ display:'flex', alignItems:'flex-end', gap:'0.5rem', height:'120px' }}>
                                 {monthlyData.map((m,i)=>(
@@ -1162,7 +1173,9 @@ ${bodyHtml}
                               const win = window.open('','_blank','width=820,height=600');
                               const headers = hasSpiffs ? '<th>Rep</th><th style="text-align:center">Deals Won</th><th style="text-align:right">Won Revenue</th><th style="text-align:right">Quota</th><th style="text-align:right">Attainment</th><th style="text-align:right">Commission</th><th style="text-align:right">SPIFFs</th><th style="text-align:right">Total</th>' : '<th>Rep</th><th style="text-align:center">Deals Won</th><th style="text-align:right">Won Revenue</th><th style="text-align:right">Quota</th><th style="text-align:right">Attainment</th><th style="text-align:right">Commission</th>';
                               const rows = repRows2.map(r=>hasSpiffs?`<tr><td>${r.name}</td><td style="text-align:center">${r.deals}</td><td style="text-align:right">$${r.rev.toLocaleString()}</td><td style="text-align:right">${r.quot>0?'$'+r.quot.toLocaleString():'—'}</td><td style="text-align:right">${r.attain!=null?r.attain.toFixed(1)+'%':'—'}</td><td style="text-align:right;font-weight:700;color:#059669">$${Math.round(r.comm).toLocaleString()}</td><td style="text-align:right;color:#7c3aed">$${Math.round(r.spiff).toLocaleString()}</td><td style="text-align:right;font-weight:800">$${Math.round(r.total).toLocaleString()}</td></tr>`:`<tr><td>${r.name}</td><td style="text-align:center">${r.deals}</td><td style="text-align:right">$${r.rev.toLocaleString()}</td><td style="text-align:right">${r.quot>0?'$'+r.quot.toLocaleString():'—'}</td><td style="text-align:right">${r.attain!=null?r.attain.toFixed(1)+'%':'—'}</td><td style="text-align:right;font-weight:700;color:#059669">$${Math.round(r.comm).toLocaleString()}</td></tr>`).join('');
-                              win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Commissions — ${periodLabel}</title><style>body{font-family:system-ui,sans-serif;padding:2rem;color:#1e293b}h1{font-size:1.25rem;font-weight:800}table{width:100%;border-collapse:collapse;margin-top:1rem}th,td{padding:.5rem .75rem;border:1px solid #e2e8f0;font-size:.875rem}th{background:#f8fafc;font-weight:700}tfoot td{font-weight:700;background:#f1f5f9}</style></head><body><h1>Commissions Report — ${periodLabel}</h1><p style="color:#64748b;font-size:.875rem">Generated ${meta} · Sales Pipeline Tracker</p><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td>Total</td><td></td><td style="text-align:right">$${totals.rev.toLocaleString()}</td><td></td><td></td><td style="text-align:right">$${Math.round(totals.commission).toLocaleString()}</td>${hasSpiffs?`<td style="text-align:right">$${Math.round(totals.spiff).toLocaleString()}</td><td style="text-align:right">$${Math.round(totals.total).toLocaleString()}</td>`:''}</tr></tfoot></table></body></html>`);
+                              win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Commissions — ${periodLabel}</title><style>body{font-family:system-ui,sans-serif;padding:2rem;color:#1e293b}h1{font-size:1.25rem;font-weight:800}table{width:100%;border-collapse:collapse;margin-top:1rem}th,td{padding:.5rem .75rem;border:1px solid #e2e8f0;font-size:.875rem}th{background:#f8fafc;font-weight:700}tfoot td{font-weight:700;background:#f1f5f9}</style></head><body><h1>Commissions Report — ${periodLabel}</h1><p style="color:#64748b;font-size:.875rem">Generated ${meta} · Sales Pipeline Tracker</p><div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td>Total</td><td></td><td style="text-align:right">$${totals.rev.toLocaleString()}</td><td></td><td></td><td style="text-align:right">$${Math.round(totals.commission).toLocaleString()}</td>${hasSpiffs?`<td style="text-align:right">$${Math.round(totals.spiff).toLocaleString()}</td><td style="text-align:right">$${Math.round(totals.total).toLocaleString()}</td>`:''}</tr></tfoot></table>
+</div></body></html>`);
                               win.document.close(); setTimeout(()=>win.print(),500);
                             };
                             const exportCommissionsCSV = () => {
@@ -1224,7 +1237,7 @@ ${bodyHtml}
                                   <button onClick={exportCommissionsCSV} style={printBtnStyle} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>📤 Export CSV</button>
                                 </div>
                               </div>
-                              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:'0.75rem', marginBottom:'1rem' }}>
+                              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:'0.75rem', marginBottom:'1rem' }}>
                                 {[
                                   { label:'Deals Won',        value: periodOpps.length },
                                   { label:'Won Revenue',      value: '$'+periodOpps.reduce((s,o)=>s+(o.arr||0)+(o.implementationCost||0),0).toLocaleString() },
@@ -1323,7 +1336,7 @@ ${bodyHtml}
                                   ))}
                                 </div>
                               </div>
-                              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(100px,1fr))', gap:'0.75rem', marginBottom:'1.25rem' }}>
+                              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(90px,1fr))', gap:'0.75rem', marginBottom:'1.25rem' }}>
                                 {[
                                   { label:'Total Activities', value: filtActs.length },
                                   { label:'Unique Types',     value: typeRows.length },
@@ -1412,7 +1425,7 @@ ${bodyHtml}
                             return (
                             <div style={cardStyle}>
                               <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b', marginBottom:'1rem' }}>✔️ Task Completion Rate</div>
-                              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:'0.75rem', marginBottom:'1.25rem' }}>
+                              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(90px,1fr))', gap:'0.75rem', marginBottom:'1.25rem' }}>
                                 {[
                                   { label:'Total Tasks',    value: allTasks.length,   color:'#1e293b' },
                                   { label:'Completed',      value: completed.length,   color:'#10b981' },
@@ -1429,7 +1442,8 @@ ${bodyHtml}
                               {repTaskRows.length >= 2 && (
                               <div style={{ overflowX:'auto' }}>
                                 <div style={labelStyle}>By Rep</div>
-                                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem', marginTop:'0.5rem' }}>
+                                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+<table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem', marginTop:'0.5rem' }}>
                                   <thead><tr>
                                     {['Rep','Total','Completed','Overdue','Completion %'].map(h=>(
                                       <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign:h==='Rep'?'left':'right', fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', whiteSpace:'nowrap' }}>{h}</th>
@@ -1450,6 +1464,7 @@ ${bodyHtml}
                                     })}
                                   </tbody>
                                 </table>
+</div>
                               </div>
                               )}
                             </div>
@@ -1811,7 +1826,7 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
                 {/* Summary cards */}
                 {data.summary && data.summary.total > 0 ? (
                     <>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '10px', marginBottom: '1.5rem' }}>
                         {[
                             { val: data.summary.total, lbl: 'Total actions', color: '#1e293b' },
                             { val: data.summary.resolveRate != null ? data.summary.resolveRate + '%' : '—', lbl: 'Resolution rate', color: data.summary.resolveRate >= 60 ? '#27500A' : data.summary.resolveRate >= 35 ? '#854F0B' : '#A32D2D' },
@@ -1829,7 +1844,7 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
                     {Object.keys(data.summary.byType || {}).length > 0 && (
                         <div style={{ marginBottom: '1.5rem' }}>
                             <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Effectiveness by action type</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '8px' }}>
                                 {Object.entries(data.summary.byType).map(([type, stats]) => {
                                     const rate = stats.total > 0 ? Math.round((stats.resolved / stats.total) * 100) : 0;
                                     return (
@@ -1852,7 +1867,8 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
                     {/* Log table */}
                     <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Action history</div>
                     <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+<table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
                             <thead>
                                 <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                                     {['Date', 'Rep', 'Type', 'Deal', 'ARR', 'Signal', 'Outcome', 'Days'].map(h => (
@@ -1884,6 +1900,7 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
                                 })}
                             </tbody>
                         </table>
+</div>
                     </div>
                     </>
                 ) : (
