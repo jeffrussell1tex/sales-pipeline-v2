@@ -242,14 +242,23 @@ export default function AppHeader({
                                 const updated = { ...(myProfile || {}), ...updates };
                                 setMyProfile(updated);
                                 try {
-                                    // Find user's DB record id
-                                    const myDbUser = (settings.users || []).find(u => u.name === currentUser);
-                                    if (myDbUser) {
-                                        await dbFetch('/.netlify/functions/users?me=true', {
-                                            method: 'PUT',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ ...myDbUser, ...updates }),
-                                        });
+                                    // Resolve the user record — match by id first, then name.
+                                    // Always call the ?me=true endpoint regardless; the server
+                                    // resolves the Clerk userId server-side so name mismatch
+                                    // is not a problem. Silently skipping was the save bug.
+                                    const myDbUser = (settings.users || []).find(u =>
+                                        (myProfile?.id && u.id === myProfile.id) ||
+                                        u.name === currentUser
+                                    );
+                                    const basePayload = myDbUser || myProfile || {};
+                                    const res = await dbFetch('/.netlify/functions/users?me=true', {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ ...basePayload, ...updates }),
+                                    });
+                                    if (!res.ok) {
+                                        const errData = await res.json().catch(() => ({}));
+                                        console.error('saveProfile: server error', res.status, errData.error || '');
                                     }
                                 } catch (err) {
                                     console.error('Failed to save profile:', err);
