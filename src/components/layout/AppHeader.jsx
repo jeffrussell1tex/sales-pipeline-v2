@@ -211,6 +211,12 @@ export default function AppHeader({
                                 commentAdded:       { enabled: true,  mode: 'instant' },
                                 taskDigest:         { enabled: true,  mode: 'digest'  },
                                 overdueTaskNudge:   { enabled: true,  mode: 'digest'  },
+                                // ── Pipeline health alerts (pipeline-alerts.mjs) ─
+                                dealSilent:         { enabled: true,  mode: 'instant' },
+                                dealStuck:          { enabled: true,  mode: 'instant' },
+                                closeLapsed:        { enabled: true,  mode: 'instant' },
+                                dealMomentum:       { enabled: true,  mode: 'instant' },
+                                managerAlerts:      { enabled: true,  mode: 'instant' },
                             };
                             const ALERT_LABELS = {
                                 stageChanged:       'Deal stage changed',
@@ -221,6 +227,12 @@ export default function AppHeader({
                                 commentAdded:       'Comment added to deal',
                                 taskDigest:         'Daily task digest',
                                 overdueTaskNudge:   'Overdue task reminder',
+                                // ── Pipeline health alerts ─
+                                dealSilent:         'Deal gone silent (no activity 14d)',
+                                dealStuck:          'Deal stuck in stage too long',
+                                closeLapsed:        'Close date lapsed',
+                                dealMomentum:       'Deal momentum (stage advance)',
+                                managerAlerts:      'Manager escalation alerts',
                             };
                             const prefs = myProfile?.notificationPrefs || DEFAULT_PREFS;
                             const digestTime = myProfile?.digestTime || '08:00';
@@ -351,12 +363,24 @@ export default function AppHeader({
 
                                                 {/* Alert rows */}
                                                 {Object.entries(ALERT_LABELS).map(([alertType, label]) => {
-                                                    const pref = prefs[alertType] || DEFAULT_PREFS[alertType];
+                                                    // manager-only alerts — hide for reps
+                                                    if (alertType === 'managerAlerts' && !isManager && !isAdmin) return null;
+                                                    const pref = prefs[alertType] || DEFAULT_PREFS[alertType] || { enabled: true, mode: 'instant' };
                                                     const isDigestOnly = alertType === 'taskDigest' || alertType === 'overdueTaskNudge';
+                                                    // Section dividers
+                                                    const isPipelineAlert = ['dealSilent','dealStuck','closeLapsed','dealMomentum','managerAlerts'].includes(alertType);
+                                                    const isFirstPipeline = alertType === 'dealSilent';
                                                     return (
-                                                        <div key={alertType} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0', borderBottom: '1px solid #f1f3f5' }}>
+                                                        <React.Fragment key={alertType}>
+                                                        {isFirstPipeline && (
+                                                            <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0', marginBottom: '0.375rem' }}>Pipeline health alerts</div>
+                                                        )}
+                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0', borderBottom: '1px solid #f1f3f5' }}>
                                                             <div style={{ flex: 1 }}>
-                                                                <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{label}</div>
+                                                                <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>
+                                                                    {label}
+                                                                    {alertType === 'managerAlerts' && <span style={{ fontSize: '0.625rem', fontWeight: '700', background: '#ede9fe', color: '#6d28d9', padding: '1px 6px', borderRadius: '999px', marginLeft: '6px' }}>Manager</span>}
+                                                                </div>
                                                                 {isDigestOnly && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>Digest only</div>}
                                                             </div>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -386,6 +410,7 @@ export default function AppHeader({
                                                                 )}
                                                             </div>
                                                         </div>
+                                                        </React.Fragment>
                                                     );
                                                 })}
                                                 <button
