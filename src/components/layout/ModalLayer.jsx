@@ -34,7 +34,7 @@ export default function ModalLayer() {
         showActivityModal, setShowActivityModal, editingActivity, setEditingActivity,
         activityInitialContext, setActivityInitialContext,
         activityModalError, setActivityModalError, activityModalSaving, setActivityModalSaving,
-        showCsvImportModal, setShowCsvImportModal,
+        showCsvImportModal, setShowCsvImportModal, csvImportType,
         showLeadImportModal, setShowLeadImportModal,
         showOutlookImportModal, setShowOutlookImportModal,
         showSpiffClaimModal, setShowSpiffClaimModal, spiffClaimContext, setSpiffClaimContext,
