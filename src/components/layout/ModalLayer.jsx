@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../../AppContext';
+import { dbFetch } from '../../utils/storage';
 import OpportunityModal from '../modals/OpportunityModal';
 import ContactModal from '../modals/ContactModal';
 import AccountModal from '../modals/AccountModal';
