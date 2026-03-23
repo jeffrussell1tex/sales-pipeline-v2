@@ -257,6 +257,9 @@ export default function AccountsTab() {
                                                 const subWon  = subOpps.filter(o => o.stage === 'Closed Won').reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
                                                 const fv = v => v >= 1000000 ? '$'+(v/1000000).toFixed(1)+'M' : v >= 1000 ? '$'+Math.round(v/1000)+'K' : '$'+Math.round(v);
                                                 const subSites = getSubAccounts(sub.id);
+                                                // BU = has child accounts. Site = no children AND accountTier is 'site'
+                                                // For backwards compat: no children + no accountTier = BU (old behavior)
+                                                const badgeIsSite = subSites.length === 0 && sub.accountTier === 'site';
                                                 return (
                                                     <React.Fragment key={sub.id}>
                                                     <div style={{ display: 'flex', alignItems: 'center', padding: '0.25rem 0.75rem 0.25rem 2.75rem', borderBottom: '1px solid #edf0f3', gap: '0.5rem' }}>
@@ -265,15 +268,18 @@ export default function AccountsTab() {
                                                                 {expandedAccounts[sub.id] ? '▼' : '▶'}
                                                             </button>
                                                         )}
-                                                        <span style={{ cursor: 'pointer', color: '#2563eb', fontWeight: '600', fontSize: '0.75rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => setViewingAccount(sub)}>↳ {sub.name}</span>
-                                                        <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.5rem', fontWeight: '700', padding: '0.05rem 0.3rem', borderRadius: '3px', flexShrink: 0 }}>BU</span>
+                                                        <span style={{ cursor: 'pointer', color: '#2563eb', fontWeight: '600', fontSize: '0.75rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} onClick={() => setViewingAccount(sub)}>{badgeIsSite ? '⇢' : '↳'} {sub.name}</span>
+                                                        {badgeIsSite
+                                                            ? <span style={{ background: '#f0fdf4', color: '#16a34a', fontSize: '0.5rem', fontWeight: '700', padding: '0.05rem 0.3rem', borderRadius: '3px', flexShrink: 0 }}>Site</span>
+                                                            : <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.5rem', fontWeight: '700', padding: '0.05rem 0.3rem', borderRadius: '3px', flexShrink: 0 }}>BU</span>
+                                                        }
                                                         {sub.accountOwner && <span style={{ fontSize: '0.6875rem', color: '#64748b', flexShrink: 0 }}>{sub.accountOwner}</span>}
                                                         {subSites.length > 0 && <span style={{ fontSize: '0.6rem', color: '#64748b', background: '#f1f5f9', padding: '1px 5px', borderRadius: '3px', flexShrink: 0 }}>{subSites.length} site{subSites.length !== 1 ? 's' : ''}</span>}
                                                         {subPipe > 0 && <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#b45309', background: '#fef3c7', padding: '1px 6px', borderRadius: '3px', flexShrink: 0 }}>{fv(subPipe)} pipe</span>}
                                                         {subWon > 0 && <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#15803d', background: '#dcfce7', padding: '1px 6px', borderRadius: '3px', flexShrink: 0 }}>{fv(subWon)} won</span>}
                                                         <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
                                                             <button onClick={() => handleEditAccount(sub, true)} style={{ padding: '3px 8px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6rem', cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
-                                                            <button onClick={() => handleAddSubAccount(sub)} style={{ padding: '3px 8px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6rem', cursor: 'pointer', fontFamily: 'inherit' }}>+ Site</button>
+                                                            {!badgeIsSite && <button onClick={() => handleAddSubAccount(sub)} style={{ padding: '3px 8px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6rem', cursor: 'pointer', fontFamily: 'inherit' }}>+ Site</button>}
                                                             <button onClick={() => handleDeleteSubAccount(account.id, sub.id, opportunities)} style={{ padding: '3px 8px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6rem', cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
                                                         </div>
                                                     </div>
@@ -455,9 +461,11 @@ export default function AccountsTab() {
                                                 const sites = getSubAccounts(subAccount.id);
                                                 const isBuExpanded = expandedAccounts[subAccount.id];
                                                 const subTier = getTier(subAccount);
+                                                // Site = no children AND saved as site tier
+                                                const detailBadgeIsSite = sites.length === 0 && subAccount.accountTier === 'site';
                                                 return (
                                                 <div key={subAccount.id} style={{ marginBottom: '0.625rem' }}>
-                                                    {/* Business Unit row */}
+                                                    {/* Business Unit or Site row */}
                                                     <div style={{ 
                                                         padding: '0.75rem 1rem',
                                                         background: '#ffffff', borderRadius: sites.length > 0 && isBuExpanded ? '6px 6px 0 0' : '6px', border: '1px solid #e2e8f0',
@@ -476,7 +484,10 @@ export default function AccountsTab() {
                                                                         onMouseEnter={e => e.target.style.textDecoration = 'underline'}
                                                                         onMouseLeave={e => e.target.style.textDecoration = 'none'}
                                                                     >↳ {subAccount.name}</span>
-                                                                    <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.5rem', fontWeight: '700', padding: '0.1rem 0.35rem', borderRadius: '3px', textTransform: 'uppercase' }}>BU</span>
+                                                                    {detailBadgeIsSite
+                                                                        ? <span style={{ background: '#f0fdf4', color: '#16a34a', fontSize: '0.5rem', fontWeight: '700', padding: '0.1rem 0.35rem', borderRadius: '3px', textTransform: 'uppercase' }}>Site</span>
+                                                                        : <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.5rem', fontWeight: '700', padding: '0.1rem 0.35rem', borderRadius: '3px', textTransform: 'uppercase' }}>BU</span>
+                                                                    }
                                                                     {subAccount.accountOwner && <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{subAccount.accountOwner}</span>}
                                                                     {sites.length > 0 && <span style={{ background: '#f1f5f9', color: '#64748b', padding: '0.05rem 0.4rem', borderRadius: '4px', fontSize: '0.625rem', fontWeight: '700' }}>{sites.length} site{sites.length !== 1 ? 's' : ''}</span>}
                                                                     {subOpen.length > 0 && <span style={{ background: '#dbeafe', color: '#1e40af', padding: '0.05rem 0.4rem', borderRadius: '4px', fontSize: '0.625rem', fontWeight: '700' }}>{subOpen.length} active</span>}
@@ -490,7 +501,7 @@ export default function AccountsTab() {
                                                             </div>
                                                             <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
                                                                 <button onClick={() => handleEditAccount(subAccount, true)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                                                <button onClick={() => handleAddSubAccount(subAccount)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Site</button>
+                                                                {!detailBadgeIsSite && <button onClick={() => handleAddSubAccount(subAccount)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Site</button>}
                                                                 <button onClick={() => handleDeleteSubAccount(account.id, subAccount.id, opportunities)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                             </div>
                                                         </div>
