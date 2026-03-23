@@ -568,58 +568,45 @@ export default function ModalLayer() {
                         }
                     }}
                     onImportAccounts={async (newAccounts) => {
-                        const CONCURRENCY = 3, RETRY = 2;
-                        const saveOne = async (item, retriesLeft = RETRY) => {
-                            try {
-                                const r = await dbFetch('/.netlify/functions/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) });
-                                if (!r || !r.ok) throw new Error('failed');
-                                return true;
-                            } catch {
-                                if (retriesLeft > 0) { await new Promise(res => setTimeout(res, 300)); return saveOne(item, retriesLeft - 1); }
-                                return false;
-                            }
-                        };
-                        const saveBatch = async (items, offset, total) => {
-                            let failed = 0, done = 0;
-                            const queue = [...items];
-                            const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-                                while (queue.length > 0) {
-                                    const item = queue.shift();
-                                    const ok = await saveOne(item);
-                                    if (!ok) failed++;
-                                    done++;
-                                    if (typeof window.__importProgressCb === 'function') window.__importProgressCb(offset + done, total);
-                                }
-                            });
-                            await Promise.all(workers);
-                            return failed;
-                        };
-
-                        // Pass 1: save all parent accounts (no parentAccount field)
+                        // Pass 1: parents (no parentAccount field)
                         const parents = newAccounts.filter(a => !a.parentAccount?.trim());
                         const parentsWithIds = parents.map(a => {
                             const { parentAccount: _drop, ...rest } = a;
                             return { ...rest, id: crypto.randomUUID(), parentAccountId: null };
                         });
-                        setAccounts(prev => [...prev, ...parentsWithIds]);
-                        let failed = await saveBatch(parentsWithIds, 0, newAccounts.length);
 
-                        // Pass 2: save sub-accounts — resolve parentAccountId from newly saved parents
+                        // Pass 2: sub-accounts — resolve parentAccountId from parents
                         const subs = newAccounts.filter(a => a.parentAccount?.trim());
                         const allAccountsSoFar = [...accounts, ...parentsWithIds];
                         const subsWithIds = subs.map(a => {
                             const parentAccountId = allAccountsSoFar.find(
-                                acc => acc.name.toLowerCase() === a.parentAccount.toLowerCase()
+                                acc => acc.name?.toLowerCase() === a.parentAccount.toLowerCase()
                             )?.id || null;
                             const { parentAccount: _drop, ...rest } = a;
                             return { ...rest, id: crypto.randomUUID(), parentAccountId };
                         });
-                        if (subsWithIds.length > 0) {
-                            setAccounts(prev => [...prev, ...subsWithIds]);
-                            failed += await saveBatch(subsWithIds, parentsWithIds.length, newAccounts.length);
-                        }
 
-                        if (failed > 0) throw new Error(`${failed} of ${newAccounts.length} accounts failed to save. The rest imported successfully.`);
+                        const allWithIds = [...parentsWithIds, ...subsWithIds];
+                        if (allWithIds.length === 0) return;
+
+                        // Optimistic UI update
+                        setAccounts(prev => [...prev, ...allWithIds]);
+                        if (typeof window.__importProgressCb === 'function') window.__importProgressCb(0, allWithIds.length);
+
+                        // Single bulk POST — one auth check, one DB call
+                        const r = await dbFetch('/.netlify/functions/accounts', {
+                            method: 'POST',
+                            body: JSON.stringify(allWithIds),
+                        });
+                        const result = await r.json();
+
+                        if (typeof window.__importProgressCb === 'function') window.__importProgressCb(allWithIds.length, allWithIds.length);
+
+                        if (!r.ok) throw new Error(result.error || 'Bulk import failed. Please try again.');
+
+                        const insertedCount = result.inserted ?? result.accounts?.length ?? allWithIds.length;
+                        const failedCount = allWithIds.length - insertedCount;
+                        if (failedCount > 0) throw new Error(`${failedCount} of ${allWithIds.length} accounts failed to save. The rest imported successfully.`);
                     }}
                     onImportOpportunities={async (newOpps) => {
                         const CONCURRENCY = 3, RETRY = 2;
