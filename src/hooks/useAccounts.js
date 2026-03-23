@@ -18,6 +18,18 @@ export function useAccounts(deps) {
 
     const getSubAccounts = (accountId) => (accounts || []).filter(a => (a.parentAccountId || a.parentId) === accountId);
 
+    // Tier derived purely from hierarchy depth — no accountTier DB column needed
+    // depth 0 = Account, depth 1 = Business Unit, depth 2 = Site
+    const getAccountDepth = (accountId) => {
+        const acc = accounts.find(a => a.id === accountId);
+        if (!acc || !acc.parentAccountId) return 0;
+        const parent = accounts.find(a => a.id === acc.parentAccountId);
+        if (!parent || !parent.parentAccountId) return 1;
+        return 2;
+    };
+
+    const getTierFromDepth = (depth) => depth === 0 ? 'account' : depth === 1 ? 'business_unit' : 'site';
+
     const getAccountRollup = (acc) => {
         // Rollup is computed in App.jsx using opportunities — keep as pass-through here
         return acc;
@@ -81,9 +93,20 @@ export function useAccounts(deps) {
                 auditName = formData.name || editingSubAccount.id; auditDetail = '';
             } else if (parentAccountForSub) {
                 const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                const parentIsBU = parentAccountForSub.accountTier === 'business_unit' || !!parentAccountForSub.parentAccountId;
-                // _forceTier injected into formData by ModalLayer onSave — wins over everything
-                const tier = formData._forceTier || formData.accountTier || (parentIsBU ? 'site' : 'business_unit');
+                // Determine tier from parent's depth in hierarchy — no DB column needed
+                // Parent depth 0 (top-level account) + forceTier='site' → site (depth 2, skip BU)
+                // Parent depth 0 + forceTier='business_unit' or no force → business_unit (depth 1)
+                // Parent depth 1 (BU) → always site (depth 2)
+                const parentDepth = getAccountDepth(parentAccountForSub.id);
+                const forceTier = parentAccountForSub._forceTier || formData._forceTier;
+                let tier;
+                if (parentDepth >= 1) {
+                    tier = 'site'; // child of BU is always a site
+                } else if (forceTier === 'site') {
+                    tier = 'site'; // explicitly forced to site from parent account
+                } else {
+                    tier = 'business_unit'; // default child of top-level account
+                }
                 const { _forceTier: _drop, ...cleanFormData } = formData;
                 payload = { ...cleanFormData, id: newId, parentAccountId: parentAccountForSub.id, accountTier: tier };
                 method = 'POST'; auditAction = 'create'; auditId = newId;

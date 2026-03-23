@@ -58,8 +58,15 @@ export default function AccountsTab() {
         setShowAccountModal(true);
     };
     const toggleAccountExpanded = (accountId) => setExpandedAccounts(prev => ({ ...prev, [accountId]: !prev[accountId] }));
-    // Tier helpers
-    const getTier = (acc) => acc?.accountTier || (acc?.parentAccountId ? 'business_unit' : 'account');
+    // Tier helpers — derived from hierarchy depth, not accountTier field
+    // This works even if accountTier column is null/missing in DB
+    const getDepth = (acc) => {
+        if (!acc?.parentAccountId) return 0;
+        const parent = accounts.find(a => a.id === acc.parentAccountId);
+        if (!parent?.parentAccountId) return 1;
+        return 2;
+    };
+    const getTier = (acc) => { const d = getDepth(acc); return d === 0 ? 'account' : d === 1 ? 'business_unit' : 'site'; };
     const tierLabel = { account: 'Account', business_unit: 'Business Unit', site: 'Site' };
 
     return (
