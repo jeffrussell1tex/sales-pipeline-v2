@@ -767,6 +767,8 @@ export default function OpportunityModal({ opportunity, accounts, contacts, sett
     const [showContactSuggestions, setShowContactSuggestions] = useState(false);
     const [accountSearch, setAccountSearch] = useState(opportunity?.account || '');
     const [showAccountSuggestions, setShowAccountSuggestions] = useState(false);
+    const [siteSearch, setSiteSearch] = useState(opportunity?.site || '');
+    const [showSiteSuggestions, setShowSiteSuggestions] = useState(false);
     const [repSearch, setRepSearch] = useState(opportunity?.salesRep || '');
     const [showRepSuggestions, setShowRepSuggestions] = useState(false);
 
@@ -827,14 +829,40 @@ export default function OpportunityModal({ opportunity, accounts, contacts, sett
 
     const closeQuarter = calculateCloseQuarter(formData.forecastedCloseDate);
 
-    // Create flat list of all accounts and sub-accounts for dropdown
+    // Build flat account options list — all tiers, using parentAccountId
     const allAccountOptions = [];
-    accounts.forEach(account => {
-        allAccountOptions.push({ value: account.name, label: account.name });
-        (accounts || []).filter(a => a.parentId === account.id).forEach(sub => {
-            allAccountOptions.push({ value: sub.name, label: `${account.name} - ${sub.name}` });
+    const topLevel = (accounts || []).filter(a => !a.parentAccountId);
+    topLevel.forEach(account => {
+        allAccountOptions.push({ value: account.name, label: account.name, tier: 'account', id: account.id });
+        const bus = (accounts || []).filter(a => a.parentAccountId === account.id);
+        bus.forEach(bu => {
+            allAccountOptions.push({ value: bu.name, label: `${account.name} › ${bu.name}`, tier: 'business_unit', id: bu.id, parentName: account.name });
+            const sites = (accounts || []).filter(a => a.parentAccountId === bu.id);
+            sites.forEach(site => {
+                allAccountOptions.push({ value: site.name, label: `${account.name} › ${bu.name} › ${site.name}`, tier: 'site', id: site.id, parentName: bu.name });
+            });
+        });
+        // Sites directly under the account (no BU layer)
+        const directSites = (accounts || []).filter(a => a.parentAccountId === account.id && a.accountTier === 'site');
+        directSites.forEach(site => {
+            if (!allAccountOptions.find(o => o.id === site.id)) {
+                allAccountOptions.push({ value: site.name, label: `${account.name} › ${site.name}`, tier: 'site', id: site.id, parentName: account.name });
+            }
         });
     });
+
+    // Get sites available for the currently selected account
+    const getSitesForAccount = (accountName) => {
+        if (!accountName) return [];
+        const matched = (accounts || []).find(a => a.name.toLowerCase() === accountName.toLowerCase());
+        if (!matched) return [];
+        // Direct children that are sites
+        const direct = (accounts || []).filter(a => a.parentAccountId === matched.id && a.accountTier === 'site');
+        // Sites under BUs of this account
+        const bus = (accounts || []).filter(a => a.parentAccountId === matched.id && a.accountTier !== 'site');
+        const viaBU = bus.flatMap(bu => (accounts || []).filter(a => a.parentAccountId === bu.id && a.accountTier === 'site'));
+        return [...direct, ...viaBU];
+    };
 
     const handleChange = (field, value) => {
         if (validationErrors[field]) setValidationErrors(prev => { const n = {...prev}; delete n[field]; return n; });
@@ -1236,7 +1264,14 @@ if (formData.account && formData.account.trim()) {
                                         .map(opt => (
                                             <div key={opt.value}
                                                 onMouseDown={e => e.preventDefault()}
-                                                onClick={() => { setAccountSearch(opt.label); handleChange('account', opt.value); setShowAccountSuggestions(false); }}
+                                                onClick={() => {
+                                    setAccountSearch(opt.label);
+                                    handleChange('account', opt.value);
+                                    setShowAccountSuggestions(false);
+                                    // Clear site when account changes
+                                    setSiteSearch('');
+                                    handleChange('site', '');
+                                }}
                                                 style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', fontWeight: '600', fontSize: '0.875rem' }}
                                                 onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
                                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -1251,13 +1286,49 @@ if (formData.account && formData.account.trim()) {
                                 </div>
                             )}
                         </div>
-                        <div className="form-group">
+                        <div className="form-group" style={{ position: 'relative' }}>
                             <label>Site Name</label>
                             <input
                                 type="text"
-                                value={formData.site}
-                                onChange={e => handleChange('site', e.target.value)}
+                                value={siteSearch}
+                                onChange={e => {
+                                    setSiteSearch(e.target.value);
+                                    handleChange('site', e.target.value);
+                                    setShowSiteSuggestions(true);
+                                }}
+                                onFocus={() => setShowSiteSuggestions(true)}
+                                onBlur={() => setTimeout(() => setShowSiteSuggestions(false), 200)}
+                                placeholder="Site name or plant/location..."
+                                autoComplete="off"
                             />
+                            {showSiteSuggestions && (() => {
+                                const available = getSitesForAccount(formData.account);
+                                const filtered = available.filter(s =>
+                                    !siteSearch || s.name.toLowerCase().includes(siteSearch.toLowerCase())
+                                );
+                                if (filtered.length === 0) return null;
+                                return (
+                                    <div style={{
+                                        position: 'absolute', top: '100%', left: 0, right: 0,
+                                        background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px',
+                                        marginTop: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000,
+                                        boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                                    }}>
+                                        {filtered.map(site => (
+                                            <div key={site.id}
+                                                onMouseDown={e => e.preventDefault()}
+                                                onClick={() => { setSiteSearch(site.name); handleChange('site', site.name); setShowSiteSuggestions(false); }}
+                                                style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', fontSize: '0.875rem', fontWeight: '600', color: '#1e293b' }}
+                                                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                            >
+                                                {site.name}
+                                                {site.city && <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: '0.5rem' }}>📍 {[site.city, site.state].filter(Boolean).join(', ')}</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
                         </div>
                         <div className="form-group" style={{ position: 'relative' }}>
                             <label>Sales Rep*</label>
