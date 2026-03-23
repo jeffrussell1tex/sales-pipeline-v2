@@ -3,6 +3,7 @@ import { useApp } from '../AppContext';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import AnalyticsDashboard from '../components/ui/AnalyticsDashboard';
 import { dbFetch } from '../utils/storage';
+import CustomDashboard from '../components/ui/CustomDashboard';
 
 export default function ReportsTab({ leadsEnabled = true }) {
     const {
@@ -600,6 +601,7 @@ ${bodyHtml}
                               { key:'activity',    label:'Activity' },
                               ...(leadsEnabled ? [{ key:'leads', label:'Leads' }] : []),
                               { key:'actions',     label:'Actions' },
+                              { key:'custom',      label:'Custom' },
                             ].map(({ key, label }) => (
                               <button key={key} onClick={() => setReportSubTab(key)} style={{
                                 padding: '0.5rem 1.25rem',
@@ -2098,6 +2100,11 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
                     </div>
                 )}
                 </>
+            )}
+
+            {/* ── CUSTOM DASHBOARD ── */}
+            {reportSubTab === 'custom' && (
+                <CustomDashboard />
             )}
         </div>
     );

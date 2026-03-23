@@ -268,3 +268,14 @@ export const leads = pgTable('leads', {
     orgId:        text('org_id').notNull(),
     updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ── DASHBOARD CONFIGS ─────────────────────────────────────────────────────────
+// Per-user custom dashboard widget configuration
+export const dashboardConfigs = pgTable('dashboard_configs', {
+    id:        text('id').primaryKey(),           // e.g. "dash_<userId>_<orgId>"
+    userId:    text('user_id').notNull(),
+    orgId:     text('org_id').notNull(),
+    widgets:   jsonb('widgets').notNull().default('[]'), // [{id, position, visible}]
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
