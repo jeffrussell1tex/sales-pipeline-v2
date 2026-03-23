@@ -422,8 +422,23 @@ export default function SalesManagerTab() {
 
     const isAdmin = userRole === 'Admin';
     const isManager = userRole === 'Manager';
+    const [smSubTab, setSmSubTab] = React.useState('performance');
 
     if (!isAdmin && !isManager) return null;
+
+    const subTabStyle = (tab) => ({
+        padding: '0.5rem 1.25rem',
+        border: 'none',
+        borderBottom: smSubTab === tab ? '2px solid #2563eb' : '2px solid transparent',
+        background: 'transparent',
+        color: smSubTab === tab ? '#2563eb' : '#64748b',
+        fontWeight: smSubTab === tab ? '700' : '500',
+        fontSize: '0.875rem',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        transition: 'all 0.15s',
+        whiteSpace: 'nowrap',
+    });
 
     return (
 
@@ -432,20 +447,17 @@ export default function SalesManagerTab() {
                         <div className="tab-page-header-bar"></div>
                         <div>
                             <h2>Sales Manager</h2>
-                            <p>Set rep quotas by territory — territory totals roll up automatically</p>
+                            <p>Monitor team performance and manage compensation plans</p>
                         </div>
                     </div>
 
-                    {/* ── TEAM HEALTH PANEL ── */}
-                    <TeamHealthPanel
-                        opportunities={opportunities}
-                        activities={activities}
-                        tasks={tasks}
-                        settings={settings}
-                        currentUser={currentUser}
-                        userRole={userRole}
-                        compact={false}
-                    />
+                    {/* ── SUB-TAB NAV ── */}
+                    <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', marginBottom:'1.5rem', gap:'0' }}>
+                        <button style={subTabStyle('performance')} onClick={() => setSmSubTab('performance')}>Performance</button>
+                        <button style={subTabStyle('administration')} onClick={() => setSmSubTab('administration')}>Administration</button>
+                    </div>
+
+                    {/* ══ PERFORMANCE & ADMINISTRATION TABS ══ */}
                     {(() => {
                         const allUsers = (settings.users || []).filter(u => u.name && u.userType !== 'ReadOnly');
                         const quarters = ['Q1','Q2','Q3','Q4'];
@@ -571,6 +583,7 @@ export default function SalesManagerTab() {
 
                         return (
                             <>
+                            {smSubTab === 'administration' && (<>
                             {/* ── UNASSIGNED WARNING (admin only) ─────────── */}
                             {unassignedReps.length > 0 && (
                                 <div style={{ background:'#fffbeb', border:'1.5px solid #fbbf24', borderRadius:'10px', padding:'0.875rem 1.25rem', marginBottom:'1.25rem', display:'flex', alignItems:'center', gap:'0.875rem' }}>
@@ -1073,8 +1086,10 @@ export default function SalesManagerTab() {
                                 </div>
                             </div>
 
+                            </>)} {/* end smSubTab === 'administration' */}
+
                             {/* ── AI SCORE DASHBOARD ─────────────────────────── */}
-                            {settings?.aiScoringEnabled && (() => {
+                            {smSubTab === 'performance' && settings?.aiScoringEnabled && (() => {
                                 const activeOpps = opportunities.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
                                 const scoredOpps = activeOpps.filter(o => o.aiScore?.score !== undefined);
                                 if (scoredOpps.length === 0) return null;
@@ -1191,9 +1206,23 @@ export default function SalesManagerTab() {
                                 );
                             })()}
 
+                            {/* ── TEAM PIPELINE HEALTH (Performance tab) ── */}
+                            {smSubTab === 'performance' && (
+                                <TeamHealthPanel
+                                    opportunities={opportunities}
+                                    activities={activities}
+                                    tasks={tasks}
+                                    settings={settings}
+                                    currentUser={currentUser}
+                                    userRole={userRole}
+                                    compact={false}
+                                />
+                            )}
+
                             </>
                         );
                     })()}
+
                 </div>
             
     );
