@@ -53,9 +53,12 @@ export default function AccountModal({ account, isSubAccount, parentTier, settin
     const allRepNames = [...new Set([
         ...(settings?.users || []).filter(u => u.name).map(u => u.name)
     ])].sort();
-    const allTerritories = [...new Set(
-        (settings?.users || []).filter(u => u.territory).map(u => u.territory)
-    )].sort();
+    const allTerritories = [...new Set([
+        // First pull from settings.territories (the defined list)
+        ...((settings?.territories || []).map(t => typeof t === 'string' ? t : t.name).filter(Boolean)),
+        // Also include any territories assigned to users that may not be in the list
+        ...((settings?.users || []).filter(u => u.territory).map(u => u.territory)),
+    ])].sort();
 
     const handleChange = (field, value) => {
         setFormData({ ...formData, [field]: value });
