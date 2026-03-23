@@ -140,6 +140,14 @@ export const handler = async (event) => {
         // ── POST (create) ─────────────────────────────────────────────────────
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body);
+            // Bulk insert — body is an array
+            if (Array.isArray(data)) {
+                if (data.length === 0) return { statusCode: 200, headers, body: JSON.stringify({ opportunities: [], inserted: 0 }) };
+                const rows = data.map(d => ({ ...sanitize(d), orgId }));
+                const inserted = await db.insert(opportunities).values(rows).onConflictDoNothing().returning();
+                return { statusCode: 201, headers, body: JSON.stringify({ opportunities: inserted, inserted: inserted.length }) };
+            }
+            // Single insert
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }

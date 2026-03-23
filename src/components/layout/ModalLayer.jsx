@@ -610,7 +610,6 @@ export default function ModalLayer() {
                         if (failedCount > 0) throw new Error(`${failedCount} of ${allWithIds.length} accounts failed to save. The rest imported successfully.`);
                     }}
                     onImportOpportunities={async (newOpps) => {
-                        const CONCURRENCY = 3, RETRY = 2;
                         const today = new Date().toISOString().split('T')[0];
                         const activePipelineId = allPipelines?.[0]?.id || 'default';
                         const oppsWithIds = newOpps.map((o) => ({
@@ -635,30 +634,25 @@ export default function ModalLayer() {
                             comments:             [],
                             contactIds:           [],
                         }));
+
+                        // Optimistic UI update
                         setOpportunities(prev => [...prev, ...oppsWithIds]);
-                        const saveOne = async (item, retriesLeft = RETRY) => {
-                            try {
-                                const r = await dbFetch('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) });
-                                if (!r || !r.ok) throw new Error('failed');
-                                return true;
-                            } catch {
-                                if (retriesLeft > 0) { await new Promise(res => setTimeout(res, 300)); return saveOne(item, retriesLeft - 1); }
-                                return false;
-                            }
-                        };
-                        let failed = 0, done = 0;
-                        const queue = [...oppsWithIds];
-                        const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-                            while (queue.length > 0) {
-                                const item = queue.shift();
-                                const ok = await saveOne(item);
-                                if (!ok) failed++;
-                                done++;
-                                if (typeof window.__importProgressCb === 'function') window.__importProgressCb(done, oppsWithIds.length);
-                            }
+                        if (typeof window.__importProgressCb === 'function') window.__importProgressCb(0, oppsWithIds.length);
+
+                        // Single bulk POST
+                        const r = await dbFetch('/.netlify/functions/opportunities', {
+                            method: 'POST',
+                            body: JSON.stringify(oppsWithIds),
                         });
-                        await Promise.all(workers);
-                        if (failed > 0) throw new Error(`${failed} of ${oppsWithIds.length} opportunities failed to save. The rest imported successfully.`);
+                        const result = await r.json();
+
+                        if (typeof window.__importProgressCb === 'function') window.__importProgressCb(oppsWithIds.length, oppsWithIds.length);
+
+                        if (!r.ok) throw new Error(result.error || 'Bulk import failed. Please try again.');
+
+                        const insertedCount = result.inserted ?? result.opportunities?.length ?? oppsWithIds.length;
+                        const failedCount = oppsWithIds.length - insertedCount;
+                        if (failedCount > 0) throw new Error(`${failedCount} of ${oppsWithIds.length} opportunities failed to save. The rest imported successfully.`);
                     }}
                 />
             )}
