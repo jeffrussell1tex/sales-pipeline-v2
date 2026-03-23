@@ -718,7 +718,41 @@ dbFetch('/.netlify/functions/users?me=true')
 
     // handleSaveAccount managed by useAccounts hook
 
-    // Stage color palette - unique color for each stage
+    // ── CSV batch import handlers ────────────────────────────────────
+    const handleImportAccounts = async (data) => {
+        let failed = 0;
+        for (let i = 0; i < data.length; i++) {
+            try {
+                await handleSaveAccount({ ...data[i], id: 'acc_' + Date.now() + '_' + i }, true);
+            } catch { failed++; }
+            window.__importProgressCb?.(i + 1, data.length);
+        }
+        if (failed > 0) throw new Error(`${failed} of ${data.length} failed to save`);
+    };
+
+    const handleImportContacts = async (data) => {
+        let failed = 0;
+        for (let i = 0; i < data.length; i++) {
+            try {
+                await handleSaveContact({ ...data[i], id: 'con_' + Date.now() + '_' + i }, true);
+            } catch { failed++; }
+            window.__importProgressCb?.(i + 1, data.length);
+        }
+        if (failed > 0) throw new Error(`${failed} of ${data.length} failed to save`);
+    };
+
+    const handleImportOpportunities = async (data) => {
+        let failed = 0;
+        for (let i = 0; i < data.length; i++) {
+            try {
+                await handleSave({ ...data[i], id: 'opp_' + Date.now() + '_' + i }, true);
+            } catch { failed++; }
+            window.__importProgressCb?.(i + 1, data.length);
+        }
+        if (failed > 0) throw new Error(`${failed} of ${data.length} failed to save`);
+    };
+
+
     const stageColorPalette = [
         { bg: '#dbeafe', text: '#1e40af' },   // blue
         { bg: '#e9d5ff', text: '#7c3aed' },   // purple
@@ -1723,6 +1757,18 @@ dbFetch('/.netlify/functions/users?me=true')
                     </>
                 );
             })()}
+
+            {showCsvImportModal && (
+                <CsvImportModal
+                    importType={csvImportType}
+                    contacts={contacts}
+                    accounts={accounts}
+                    onClose={() => setShowCsvImportModal(false)}
+                    onImportAccounts={handleImportAccounts}
+                    onImportContacts={handleImportContacts}
+                    onImportOpportunities={handleImportOpportunities}
+                />
+            )}
 
             <ModalLayer />
             <QuickLogFab />
