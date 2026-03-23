@@ -231,9 +231,16 @@ export default function AccountsTab() {
                                         <div style={{ width: 'clamp(160px, 40vw, 280px)', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
                                             onClick={() => setViewingAccount(account)}>
                                             <span style={{ fontWeight: '700', fontSize: '0.75rem', color: '#2563eb' }}>{account.name}</span>
-                                            {getSubAccounts(account.id).length > 0 && (
-                                                <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.5rem', fontWeight: '700', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>{getSubAccounts(account.id).length} BU</span>
-                                            )}
+                                            {(() => {
+                                                const children = getSubAccounts(account.id);
+                                                if (children.length === 0) return null;
+                                                const buCount = children.filter(c => c.accountTier !== 'site').length;
+                                                const siteCount = children.filter(c => c.accountTier === 'site').length;
+                                                return <>
+                                                    {buCount > 0 && <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.5rem', fontWeight: '700', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>{buCount} BU</span>}
+                                                    {siteCount > 0 && <span style={{ background: '#f0fdf4', color: '#16a34a', fontSize: '0.5rem', fontWeight: '700', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>{siteCount} Site</span>}
+                                                </>;
+                                            })()}
                                             {getSubAccounts(account.id).length > 0 && (() => {
                                                 const rollup = getAccountRollup(account);
                                                 if (rollup.pipeline === 0) return null;
@@ -356,9 +363,15 @@ export default function AccountsTab() {
                                                     <div>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
                                                             <h3 style={{ fontSize: '1.0625rem', fontWeight: '700', color: '#2563eb', margin: 0, cursor: 'pointer' }} onClick={() => setViewingAccount(account)}>{account.name}</h3>
-                                                            {subCount > 0 && (
-                                                                <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.625rem', fontWeight: '700', padding: '0.125rem 0.4rem', borderRadius: '4px' }}>{subCount} BU</span>
-                                                            )}
+                                                            {subCount > 0 && (() => {
+                                                                const children = getSubAccounts(account.id);
+                                                                const buCount = children.filter(c => c.accountTier !== 'site').length;
+                                                                const siteCount = children.filter(c => c.accountTier === 'site').length;
+                                                                return <>
+                                                                    {buCount > 0 && <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.625rem', fontWeight: '700', padding: '0.125rem 0.4rem', borderRadius: '4px' }}>{buCount} BU</span>}
+                                                                    {siteCount > 0 && <span style={{ background: '#f0fdf4', color: '#16a34a', fontSize: '0.625rem', fontWeight: '700', padding: '0.125rem 0.4rem', borderRadius: '4px' }}>{siteCount} Site</span>}
+                                                                </>;
+                                                            })()}
                                                         </div>
                                                         {account.accountOwner && (
                                                             <div style={{ color: '#2563eb', fontSize: '0.8125rem', fontWeight: '600', marginTop: '0.125rem' }}>{account.accountOwner}</div>
