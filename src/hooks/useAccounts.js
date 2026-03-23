@@ -81,11 +81,11 @@ export function useAccounts(deps) {
                 auditName = formData.name || editingSubAccount.id; auditDetail = '';
             } else if (parentAccountForSub) {
                 const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                // Determine tier: _forceTier wins, then formData.accountTier, then infer from parent
                 const parentIsBU = parentAccountForSub.accountTier === 'business_unit' || !!parentAccountForSub.parentAccountId;
-                const forcedTier = parentAccountForSub._forceTier;
-                const tier = forcedTier || formData.accountTier || (parentIsBU ? 'site' : 'business_unit');
-                payload = { ...formData, id: newId, parentAccountId: parentAccountForSub.id, accountTier: tier };
+                // _forceTier injected into formData by ModalLayer onSave — wins over everything
+                const tier = formData._forceTier || formData.accountTier || (parentIsBU ? 'site' : 'business_unit');
+                const { _forceTier: _drop, ...cleanFormData } = formData;
+                payload = { ...cleanFormData, id: newId, parentAccountId: parentAccountForSub.id, accountTier: tier };
                 method = 'POST'; auditAction = 'create'; auditId = newId;
                 auditName = formData.name || newId; auditDetail = 'Sub-account of ' + parentAccountForSub.name;
             } else {

@@ -167,7 +167,10 @@ export default function ModalLayer() {
                     settings={settings}
                     onClose={() => { setShowAccountModal(false); setAccountModalError(null); setAccountModalSaving(false); }}
                     onDismissError={() => setAccountModalError(null)}
-                    onSave={(formData) => handleSaveAccount(formData, { editingAccount, editingSubAccount, parentAccountForSub, accountCreatedFromOppForm, pendingOppFormData, setShowAccountModal, setLastCreatedAccountName, setEditingOpp, setShowModal, setAccountCreatedFromOppForm, setPendingOppFormData })}
+                    onSave={(formData) => handleSaveAccount(
+                        { ...formData, _forceTier: parentAccountForSub?._forceTier },
+                        { editingAccount, editingSubAccount, parentAccountForSub, accountCreatedFromOppForm, pendingOppFormData, setShowAccountModal, setLastCreatedAccountName, setEditingOpp, setShowModal, setAccountCreatedFromOppForm, setPendingOppFormData }
+                    )}
                     onAddRep={() => { setShowUserModal(true); setEditingUser(null); }}
                     existingAccounts={accounts}
                     errorMessage={accountModalError}
