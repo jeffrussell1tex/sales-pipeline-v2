@@ -81,7 +81,11 @@ export function useAccounts(deps) {
                 auditName = formData.name || editingSubAccount.id; auditDetail = '';
             } else if (parentAccountForSub) {
                 const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                payload = { ...formData, id: newId, parentAccountId: parentAccountForSub.id };
+                // accountTier comes from formData (set by AccountModal's derivedTier)
+                // Fall back: if parent is a BU, child must be a site; if parent is an account, default to business_unit
+                const parentIsBU = parentAccountForSub.accountTier === 'business_unit' || !!parentAccountForSub.parentAccountId;
+                const fallbackTier = parentIsBU ? 'site' : 'business_unit';
+                payload = { ...formData, id: newId, parentAccountId: parentAccountForSub.id, accountTier: formData.accountTier || fallbackTier };
                 method = 'POST'; auditAction = 'create'; auditId = newId;
                 auditName = formData.name || newId; auditDetail = 'Sub-account of ' + parentAccountForSub.name;
             } else {

@@ -400,7 +400,7 @@ export default function AccountModal({ account, isSubAccount, parentTier, settin
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                                 <button type="button"
-                                    onClick={() => { setDuplicateWarning(null); const p2 = (existingAccounts || []).find(a => a.name === parentSearch); onSave({ ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: p2 ? p2.id : (formData.parentAccountId || null) }); }}
+                                    onClick={() => { setDuplicateWarning(null); const p2 = (existingAccounts || []).find(a => a.name === parentSearch); onSave({ ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: p2 ? p2.id : (formData.parentAccountId || null), accountTier: derivedTier }); }}
                                     style={{ padding: '0.375rem 0.75rem', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit' }}>
                                     Create Anyway
                                 </button>
