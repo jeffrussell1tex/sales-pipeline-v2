@@ -67,7 +67,7 @@ function KanbanView({ pipelineFilteredOpps, kanbanDragging, kanbanDragOver, setK
                                             onMouseEnter={e => { e.currentTarget.style.borderColor = '#2563eb'; }}
                                             onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; }}>
                                             <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#1e293b', marginBottom: '0.2rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.opportunityName || opp.account}</div>
-                                            <div style={{ fontSize: '0.6375rem', color: '#64748b', marginBottom: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.account}</div>
+                                            <div style={{ fontSize: '0.6375rem', color: '#64748b', marginBottom: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{opp.account}{opp.site ? ' · ' + opp.site : ''}</div>
                                             {opp.salesRep && <div style={{ fontSize: '0.6rem', color: '#94a3b8', marginBottom: '0.25rem' }}>{'\u{1F464} ' + opp.salesRep}</div>}
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                                 <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#2563eb' }}>{Math.round((parseFloat(opp.arr)||0)/1000)}K</span>
@@ -553,7 +553,7 @@ export default function PipelineTab() {
                                                     <div className="mobile-card-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                         {opp.opportunityName || opp.account || 'Unnamed'}
                                                     </div>
-                                                    <div className="mobile-card-sub">{opp.account}{opp.salesRep ? ` · ${opp.salesRep}` : ''}</div>
+                                                    <div className="mobile-card-sub">{opp.account}{opp.site ? ' · ' + opp.site : ''}{opp.salesRep ? ` · ${opp.salesRep}` : ''}</div>
                                                 </div>
                                                 {canViewField('arr') && (
                                                     <div className="mobile-card-arr">${((parseFloat(opp.arr)||0)/1000).toFixed(0)}K</div>
@@ -673,7 +673,7 @@ export default function PipelineTab() {
                                     <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'0.5rem' }}>
                                         <div>
                                             <div style={{ fontSize:'0.875rem', fontWeight:'700', color:'#0f172a', lineHeight:1.3 }}>{opp.opportunityName || opp.account}</div>
-                                            <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:'0.2rem' }}>{opp.account}</div>
+                                            <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:'0.2rem' }}>{opp.account}{opp.site ? ' · ' + opp.site : ''}</div>
                                         </div>
                                         <button onClick={() => setSelectedPipelineOpp(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'1.1rem', lineHeight:1, padding:'0', flexShrink:0 }}>×</button>
                                     </div>
@@ -870,7 +870,7 @@ export default function PipelineTab() {
                                             <div className="mobile-card-top">
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                     <div className="mobile-card-title" style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{opp.opportunityName || opp.account}</div>
-                                                    <div className="mobile-card-sub">{opp.account}{opp.salesRep ? ` · ${opp.salesRep}` : ''}</div>
+                                                    <div className="mobile-card-sub">{opp.account}{opp.site ? ' · ' + opp.site : ''}{opp.salesRep ? ` · ${opp.salesRep}` : ''}</div>
                                                 </div>
                                                 {canViewField('arr') && <div className="mobile-card-arr">${(parseFloat(opp.arr)||0).toLocaleString()}</div>}
                                             </div>
@@ -1059,7 +1059,7 @@ export default function PipelineTab() {
                                                 )}
                                             </td>
                                             <td style={{ whiteSpace: 'nowrap' }}>{opp.salesRep || '-'}</td>
-                                            <td>{opp.account}</td>
+                                            <td>{opp.account}{opp.site ? ' · ' + opp.site : ''}</td>
                                             <td><span style={{ cursor: 'pointer', color: '#2563eb', fontWeight: '600' }} onClick={(e) => { e.stopPropagation(); setEditingOpp(opp); setShowModal(true); }}>{opp.opportunityName || '-'}</span></td>
                                             <td onClick={e => e.stopPropagation()}>
                                                 {inlineEdit && inlineEdit.oppId === opp.id && inlineEdit.field === 'stage' ? (
@@ -1192,7 +1192,7 @@ export default function PipelineTab() {
                                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
                                             <div>
                                                 <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#0f172a', lineHeight: 1.3 }}>{opp.opportunityName || opp.account}</div>
-                                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>{opp.account}</div>
+                                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>{opp.account}{opp.site ? ' · ' + opp.site : ''}</div>
                                             </div>
                                             <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(null); }}
                                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1.1rem', lineHeight: 1, padding: '0', flexShrink: 0 }}>×</button>

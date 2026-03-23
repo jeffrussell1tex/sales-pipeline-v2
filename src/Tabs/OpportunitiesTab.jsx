@@ -380,7 +380,7 @@ export default function OpportunitiesTab() {
                                             <div className="mobile-card-top">
                                                 <div style={{ flex:1, minWidth:0 }}>
                                                     <div className="mobile-card-title" style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{opp.opportunityName || opp.account}</div>
-                                                    <div className="mobile-card-sub">{opp.account}{opp.salesRep ? ` · ${opp.salesRep}` : ''}</div>
+                                                    <div className="mobile-card-sub">{opp.account}{opp.site ? ' · ' + opp.site : ''}{opp.salesRep ? ` · ${opp.salesRep}` : ''}</div>
                                                 </div>
                                                 {canViewField('arr') && <div className="mobile-card-arr">${(parseFloat(opp.arr)||0).toLocaleString()}</div>}
                                             </div>
@@ -508,7 +508,7 @@ export default function OpportunitiesTab() {
                                                 )}
                                             </td>
                                             <td style={{ whiteSpace:'nowrap' }}>{opp.salesRep || '-'}</td>
-                                            <td>{opp.account}</td>
+                                            <td>{opp.account}{opp.site ? ' · ' + opp.site : ''}</td>
                                             <td><span style={{ cursor:'pointer', color:'#2563eb', fontWeight:'600' }} onClick={e => { e.stopPropagation(); setEditingOpp(opp); setShowModal(true); }}>{opp.opportunityName || '-'}</span></td>
                                             <td onClick={e => e.stopPropagation()}>
                                                 {inlineEdit && inlineEdit.oppId === opp.id && inlineEdit.field === 'stage' ? (
@@ -656,7 +656,7 @@ export default function OpportunitiesTab() {
                                         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
                                             <div>
                                                 <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#0f172a', lineHeight: 1.3 }}>{opp.opportunityName || opp.account}</div>
-                                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>{opp.account}</div>
+                                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>{opp.account}{opp.site ? ' · ' + opp.site : ''}</div>
                                             </div>
                                             <button onClick={e => { e.stopPropagation(); setSelectedOppTabOpp(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1.1rem', lineHeight: 1, padding: '0', flexShrink: 0 }}>×</button>
                                         </div>
@@ -777,7 +777,7 @@ export default function OpportunitiesTab() {
                                                                 <div style={{ fontSize:'0.75rem', fontWeight:'700', color:'#1e293b', marginBottom:'0.2rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                                                                     {opp.opportunityName || opp.account || '—'}
                                                                 </div>
-                                                                {opp.account && opp.opportunityName && <div style={{ fontSize:'0.625rem', color:'#64748b', marginBottom:'0.2rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{opp.account}</div>}
+                                                                {opp.account && opp.opportunityName && <div style={{ fontSize:'0.625rem', color:'#64748b', marginBottom:'0.2rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{opp.account}{opp.site ? ' · ' + opp.site : ''}</div>}
                                                                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'0.25rem' }}>
                                                                     <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#1e293b' }}>${(parseFloat(opp.arr)||0).toLocaleString()}</span>
                                                                     <div style={{ width:'20px', height:'20px', borderRadius:'50%', background: health.score >= 70 ? '#dcfce7' : health.score >= 40 ? '#fef3c7' : '#fee2e2', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.5rem', fontWeight:'800', color: health.score >= 70 ? '#16a34a' : health.score >= 40 ? '#d97706' : '#dc2626', flexShrink:0 }}>{health.score}</div>
@@ -865,7 +865,7 @@ export default function OpportunitiesTab() {
                                         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'0.5rem' }}>
                                             <div>
                                                 <div style={{ fontSize:'0.875rem', fontWeight:'700', color:'#0f172a', lineHeight:1.3 }}>{opp.opportunityName || opp.account}</div>
-                                                <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:'0.2rem' }}>{opp.account}</div>
+                                                <div style={{ fontSize:'0.75rem', color:'#64748b', marginTop:'0.2rem' }}>{opp.account}{opp.site ? ' · ' + opp.site : ''}</div>
                                             </div>
                                             <button onClick={() => setSelectedOppTabOpp(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'1.1rem', lineHeight:1, padding:'0', flexShrink:0 }}>×</button>
                                         </div>

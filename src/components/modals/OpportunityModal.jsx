@@ -1260,6 +1260,7 @@ if (formData.account && formData.account.trim()) {
                                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                                 }}>
                                     {allAccountOptions
+                                        .filter(opt => opt.tier !== 'site') // Sites only appear in the Site Name field
                                         .filter(opt => !accountSearch || opt.value.toLowerCase().includes(accountSearch.toLowerCase()) || opt.label.toLowerCase().includes(accountSearch.toLowerCase()))
                                         .map(opt => (
                                             <div key={opt.id || opt.value}
