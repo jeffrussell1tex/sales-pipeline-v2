@@ -501,7 +501,7 @@ export default function ModalLayer() {
 
                         const saveOne = async (url, item, retriesLeft = RETRY) => {
                             try {
-                                const r = await dbFetch(url, { method: 'POST', body: JSON.stringify(item) });
+                                const r = await dbFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) });
                                 if (!r || !r.ok) throw new Error('HTTP ' + (r?.status || 'no response'));
                                 return true;
                             } catch (e) {
@@ -571,7 +571,7 @@ export default function ModalLayer() {
                         const CONCURRENCY = 3, RETRY = 2;
                         const saveOne = async (item, retriesLeft = RETRY) => {
                             try {
-                                const r = await dbFetch('/.netlify/functions/accounts', { method: 'POST', body: JSON.stringify(item) });
+                                const r = await dbFetch('/.netlify/functions/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) });
                                 if (!r || !r.ok) throw new Error('failed');
                                 return true;
                             } catch {
@@ -650,7 +650,7 @@ export default function ModalLayer() {
                         setOpportunities(prev => [...prev, ...oppsWithIds]);
                         const saveOne = async (item, retriesLeft = RETRY) => {
                             try {
-                                const r = await dbFetch('/.netlify/functions/opportunities', { method: 'POST', body: JSON.stringify(item) });
+                                const r = await dbFetch('/.netlify/functions/opportunities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) });
                                 if (!r || !r.ok) throw new Error('failed');
                                 return true;
                             } catch {

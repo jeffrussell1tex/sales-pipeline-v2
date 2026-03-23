@@ -349,18 +349,20 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
                     <div style={{ textAlign: 'center', padding: '2rem 0' }}>
                         {importStats?.error ? (
                             <>
-                                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>{importStats.partial ? '⚠️' : '❌'}</div>
-                                <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem', color: importStats.partial ? '#d97706' : '#ef4444' }}>
-                                    {importStats.partial ? 'Partially Imported' : 'Import Failed'}
+                                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>{importStats.partial && importStats.savedCount > 0 ? '⚠️' : '❌'}</div>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem', color: importStats.partial && importStats.savedCount > 0 ? '#d97706' : '#ef4444' }}>
+                                    {importStats.partial && importStats.savedCount > 0 ? 'Partially Imported' : 'Import Failed'}
                                 </h3>
                                 <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>
                                     {importStats.partial && importStats.savedCount != null
-                                        ? `${importStats.savedCount} of ${importStats.total} records saved successfully. ${importStats.error}`
+                                        ? importStats.savedCount > 0
+                                            ? `${importStats.savedCount} of ${importStats.total} records saved. The remaining ${importStats.total - importStats.savedCount} failed — try re-importing them.`
+                                            : `All ${importStats.total} records failed to save. This is likely a server error — please try again.`
                                         : importStats.error}
                                 </p>
                                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-                                    {!importStats.partial && <button className="btn btn-secondary" onClick={() => setStep('preview')}>← Back</button>}
-                                    <button className="btn" onClick={onClose}>{importStats.partial ? 'Done' : 'Close'}</button>
+                                    <button className="btn btn-secondary" onClick={() => setStep('preview')}>← Back</button>
+                                    <button className="btn" onClick={onClose}>Close</button>
                                 </div>
                             </>
                         ) : (
