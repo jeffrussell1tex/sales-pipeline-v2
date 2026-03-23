@@ -852,16 +852,29 @@ export default function OpportunityModal({ opportunity, accounts, contacts, sett
     });
 
     // Get sites available for the currently selected account
+    // Works regardless of whether accountTier is set — uses parentAccountId depth
     const getSitesForAccount = (accountName) => {
         if (!accountName) return [];
         const matched = (accounts || []).find(a => a.name.toLowerCase() === accountName.toLowerCase());
         if (!matched) return [];
-        // Direct children that are sites
-        const direct = (accounts || []).filter(a => a.parentAccountId === matched.id && a.accountTier === 'site');
-        // Sites under BUs of this account
-        const bus = (accounts || []).filter(a => a.parentAccountId === matched.id && a.accountTier !== 'site');
-        const viaBU = bus.flatMap(bu => (accounts || []).filter(a => a.parentAccountId === bu.id && a.accountTier === 'site'));
-        return [...direct, ...viaBU];
+        // Any child of this account that is itself a leaf (has no children) or has accountTier==='site'
+        const directChildren = (accounts || []).filter(a => a.parentAccountId === matched.id);
+        // If matched is a BU (has a parent itself), its direct children are sites
+        if (matched.parentAccountId) {
+            return directChildren; // all children of a BU are sites
+        }
+        // Matched is a top-level account — direct children that are sites (have accountTier==='site' OR are leaves)
+        const directSites = directChildren.filter(a =>
+            a.accountTier === 'site' ||
+            !(accounts || []).some(x => x.parentAccountId === a.id) // leaf = no children
+        );
+        // Also get sites under BUs
+        const bus = directChildren.filter(a =>
+            a.accountTier === 'business_unit' ||
+            (accounts || []).some(x => x.parentAccountId === a.id) // has children = BU
+        );
+        const viaBU = bus.flatMap(bu => (accounts || []).filter(a => a.parentAccountId === bu.id));
+        return [...directSites, ...viaBU];
     };
 
     const handleChange = (field, value) => {
@@ -1273,6 +1286,9 @@ if (formData.account && formData.account.trim()) {
                                                     // Clear site when account changes
                                                     setSiteSearch('');
                                                     handleChange('site', '');
+                                                    // Auto-open site suggestions if this account has sites
+                                                    const sites = getSitesForAccount(opt.value);
+                                                    if (sites.length > 0) setShowSiteSuggestions(true);
                                                 }}
                                                 style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', fontSize: '0.875rem' }}
                                                 onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
