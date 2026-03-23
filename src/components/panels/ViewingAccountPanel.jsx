@@ -22,7 +22,7 @@ export default function ViewingAccountPanel({
         handleDeleteContact, handleSaveContact,
         handleDeleteTask, handleCompleteTask,
         handleSaveActivity, handleDeleteActivity,
-        handleDeleteAccount, handleDeleteSubAccount, getSubAccounts,
+        handleDeleteAccount, handleDeleteSubAccount, getSubAccounts, getAccountRollup,
         visibleOpportunities, stages,
         viewingContact, setViewingContact,
         viewingAccount, setViewingAccount,

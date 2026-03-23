@@ -44,7 +44,13 @@ export default function AccountsTab() {
 
     // UI handlers (open modals)
     const handleAddAccount = () => { setEditingAccount(null); setEditingSubAccount(null); setParentAccountForSub(null); setShowAccountModal(true); };
-    const handleAddSubAccount = (parentAccount) => { setEditingAccount(null); setEditingSubAccount(null); setParentAccountForSub(parentAccount); setShowAccountModal(true); };
+    const handleAddSubAccount = (parentAccount, forceTier) => {
+        setEditingAccount(null);
+        setEditingSubAccount(null);
+        // _forceTier lets ModalLayer override tier derivation
+        setParentAccountForSub(forceTier ? { ...parentAccount, _forceTier: forceTier } : parentAccount);
+        setShowAccountModal(true);
+    };
     const handleEditAccount = (account, isSubAccount = false) => {
         if (isSubAccount) { setEditingSubAccount(account); setEditingAccount(null); }
         else { setEditingAccount(account); setEditingSubAccount(null); }
@@ -230,7 +236,8 @@ export default function AccountsTab() {
                                         <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: '500', flex: 1, textAlign: 'center' }}>{account.accountOwner || '—'}</span>
                                         <div style={{ flexShrink: 0, textAlign: 'right', display: 'flex', gap: '4px' }}>
                                             <button onClick={() => handleEditAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                            <button onClick={() => handleAddSubAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ BU</button>
+                                            <button onClick={() => handleAddSubAccount(account, 'business_unit')} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ BU</button>
+                                            <button onClick={() => handleAddSubAccount(account, 'site')} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Site</button>
                                             <button onClick={() => handleDeleteAccount(account.id, opportunities)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                         </div>
                                     </div>
@@ -337,7 +344,7 @@ export default function AccountsTab() {
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
                                                             <h3 style={{ fontSize: '1.0625rem', fontWeight: '700', color: '#2563eb', margin: 0, cursor: 'pointer' }} onClick={() => setViewingAccount(account)}>{account.name}</h3>
                                                             {subCount > 0 && (
-                                                                <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.625rem', fontWeight: '700', padding: '0.125rem 0.4rem', borderRadius: '4px' }}>{subCount} sub</span>
+                                                                <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.625rem', fontWeight: '700', padding: '0.125rem 0.4rem', borderRadius: '4px' }}>{subCount} BU</span>
                                                             )}
                                                         </div>
                                                         {account.accountOwner && (
@@ -346,7 +353,8 @@ export default function AccountsTab() {
                                                     </div>
                                                     <div style={{ flexShrink: 0, display: 'flex', gap: '4px' }}>
                                                         <button onClick={() => handleEditAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                                        <button onClick={() => handleAddSubAccount(account)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Sub</button>
+                                                        <button onClick={() => handleAddSubAccount(account, 'business_unit')} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ BU</button>
+                                                        <button onClick={() => handleAddSubAccount(account, 'site')} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>+ Site</button>
                                                         <button onClick={() => handleDeleteAccount(account.id, opportunities)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
                                                     </div>
                                                 </div>

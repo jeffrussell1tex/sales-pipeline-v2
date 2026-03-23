@@ -7,15 +7,18 @@ export default function AccountModal({ account, isSubAccount, parentTier, settin
     const settings = { ...settingsProp, users: contextSettings?.users?.length ? contextSettings.users : (settingsProp?.users || []) };
 
     // Determine tier labels based on context
-    // parentTier: 'account' → creating a Business Unit; 'business_unit' → creating a Site; null → top-level Account
+    // parentTier can be: 'account' → creating BU, 'business_unit' → creating Site,
+    // 'site' → forced direct Site under an account (skipping BU), null → top-level Account
     const tierLabel = account?.accountTier === 'site' ? 'Site'
         : account?.accountTier === 'business_unit' ? 'Business Unit'
         : parentTier === 'business_unit' ? 'Site'
+        : parentTier === 'site' ? 'Site'
         : parentTier === 'account' ? 'Business Unit'
         : 'Account';
 
     const derivedTier = account?.accountTier
         || (parentTier === 'business_unit' ? 'site'
+            : parentTier === 'site' ? 'site'
             : parentTier === 'account' ? 'business_unit'
             : 'account');
 
