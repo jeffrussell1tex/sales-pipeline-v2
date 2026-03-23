@@ -1932,6 +1932,11 @@ ${bodyHtml}
                                 settings={settings}
                             />
                         )}
+
+                        {/* ── CUSTOM DASHBOARD ── */}
+                        {reportSubTab === 'custom' && (
+                            <CustomDashboard />
+                        )}
                         </div>
 
                     </div>
@@ -2100,11 +2105,6 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
                     </div>
                 )}
                 </>
-            )}
-
-            {/* ── CUSTOM DASHBOARD ── */}
-            {reportSubTab === 'custom' && (
-                <CustomDashboard />
             )}
         </div>
     );
