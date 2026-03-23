@@ -54,12 +54,12 @@ const closedOpps = accOpps.filter(o => o.stage === 'Closed Won' || o.stage === '
 const wonOpps = accOpps.filter(o => o.stage === 'Closed Won');
 const wonValue = wonOpps.reduce((sum, o) => sum + (parseFloat(o.arr) || 0) + (parseFloat(o.implementationCost) || 0), 0);
 
-// Rollup across all sub-accounts
+// Rollup across all business units & sites
 const subs = getSubAccounts(acc.id);
 const hasSubs = subs.length > 0;
 const rollup = hasSubs ? getAccountRollup(acc) : null;
 
-// Sub-account enriched data
+// Business Unit & Site data
 const subData = subs.map(sub => {
   const sn = sub.name.toLowerCase();
   const subOpps = opportunities.filter(o => o.account && o.account.toLowerCase() === sn);
@@ -205,7 +205,7 @@ const CONTACT_LIMIT = 8;
                   <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: '#0f172a' }}>
                           Open Opportunities ({allOpenOpps.length})
-                          {hasSubs && allOpenOpps.length !== openOpps.length && <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '500', marginLeft: '0.5rem' }}>across all sub-accounts</span>}
+                          {hasSubs && allOpenOpps.length !== openOpps.length && <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '500', marginLeft: '0.5rem' }}>across all business units & sites</span>}
                       </h3>
                       {totalPipeline > 0 && <span style={{ fontSize: '0.875rem', fontWeight: '700', color: '#b45309' }}>${totalPipeline >= 1000 ? Math.round(totalPipeline/1000)+'K' : totalPipeline.toLocaleString()} pipeline</span>}
                   </div>
@@ -286,7 +286,7 @@ const CONTACT_LIMIT = 8;
                   <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: '#0f172a' }}>
                           Contacts ({totalContacts.length})
-                          {hasSubs && totalContacts.length !== accContacts.length && <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '500', marginLeft: '0.5rem' }}>across all sub-accounts</span>}
+                          {hasSubs && totalContacts.length !== accContacts.length && <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '500', marginLeft: '0.5rem' }}>across all business units & sites</span>}
                       </h3>
                   </div>
                   {totalContacts.length === 0 ? (

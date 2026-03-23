@@ -161,6 +161,7 @@ export default function ModalLayer() {
                 <AccountModal
                     account={editingAccount || editingSubAccount}
                     isSubAccount={!!parentAccountForSub || !!editingSubAccount}
+                    parentTier={parentAccountForSub?.accountTier || (parentAccountForSub?.parentAccountId ? 'business_unit' : parentAccountForSub ? 'account' : null)}
                     settings={settings}
                     onClose={() => { setShowAccountModal(false); setAccountModalError(null); setAccountModalSaving(false); }}
                     onDismissError={() => setAccountModalError(null)}

@@ -1,10 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../AppContext';
 
-export default function AccountModal({ account, isSubAccount, settings: settingsProp, onClose, onSave, onAddRep, existingAccounts, errorMessage, onDismissError, saving }) {
+export default function AccountModal({ account, isSubAccount, parentTier, settings: settingsProp, onClose, onSave, onAddRep, existingAccounts, errorMessage, onDismissError, saving }) {
     const { settings: contextSettings } = useApp();
     // Always use context settings for users — they're the most up-to-date
     const settings = { ...settingsProp, users: contextSettings?.users?.length ? contextSettings.users : (settingsProp?.users || []) };
+
+    // Determine tier labels based on context
+    // parentTier: 'account' → creating a Business Unit; 'business_unit' → creating a Site; null → top-level Account
+    const tierLabel = account?.accountTier === 'site' ? 'Site'
+        : account?.accountTier === 'business_unit' ? 'Business Unit'
+        : parentTier === 'business_unit' ? 'Site'
+        : parentTier === 'account' ? 'Business Unit'
+        : 'Account';
+
+    const derivedTier = account?.accountTier
+        || (parentTier === 'business_unit' ? 'site'
+            : parentTier === 'account' ? 'business_unit'
+            : 'account');
+
     const [formData, setFormData] = useState(account || {
         name: '',
         verticalMarket: '',
@@ -47,7 +61,7 @@ export default function AccountModal({ account, isSubAccount, settings: settings
     const handleSubmit = (e) => {
         e.preventDefault();
         const selectedParent = (existingAccounts || []).find(a => a.name === parentSearch);
-        const saveData = { ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: selectedParent ? selectedParent.id : (formData.parentAccountId || null) };
+        const saveData = { ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: selectedParent ? selectedParent.id : (formData.parentAccountId || null), accountTier: derivedTier };
         // Fuzzy duplicate check — catches exact, case-insensitive, and near matches
         const normalize = s => (s || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
         const inputNorm = normalize(saveData.name);
@@ -117,7 +131,7 @@ export default function AccountModal({ account, isSubAccount, settings: settings
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div className="modal-overlay">
             <div className="modal" onClick={e => e.stopPropagation()}>
-                <h2>{account ? (isSubAccount ? 'Edit Sub-Account' : 'Edit Account') : (isSubAccount ? 'New Sub-Account' : 'New Account')}</h2>
+                <h2>{account ? `Edit ${tierLabel}` : `New ${tierLabel}`}</h2>
                 <form onSubmit={handleSubmit}>
                     <div className="form-grid">
                         <div className="form-group full">
@@ -145,7 +159,7 @@ export default function AccountModal({ account, isSubAccount, settings: settings
                             />
                             {parentSearch && (existingAccounts || []).find(a => a.name === parentSearch) && (
                                 <div style={{ fontSize: '0.75rem', color: '#16a34a', marginTop: '0.25rem', fontWeight: '600' }}>
-                                    ✓ Will be saved as sub-account of {parentSearch}
+                                    ✓ Will be saved as Business Unit under {parentSearch}
                                 </div>
                             )}
                             {showParentSuggestions && (

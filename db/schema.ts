@@ -46,6 +46,7 @@ export const accounts = pgTable('accounts', {
     assignedRep:       varchar('assigned_rep', { length: 255 }),
     assignedTerritory: varchar('assigned_territory', { length: 255 }),
     parentAccountId:   text('parent_account_id'),                    // for sub-accounts
+    accountTier:       varchar('account_tier', { length: 20 }).default('account'), // 'account' | 'business_unit' | 'site'
     notes:             text('notes'),
     createdAt:         timestamp('created_at').notNull().defaultNow(),
     orgId:             text('org_id').notNull(),

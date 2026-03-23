@@ -26,6 +26,7 @@ export const handler = async (event) => {
         assignedRep:       d.assignedRep       || null,
         assignedTerritory: d.assignedTerritory || null,
         parentAccountId:   d.parentAccountId   || d.parentId || null,
+        accountTier:       d.accountTier       || (d.parentAccountId ? 'business_unit' : 'account'),
         notes:             d.notes             || null,
     });
 
