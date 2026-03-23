@@ -591,28 +591,30 @@ ${bodyHtml}
                             </div>
                           </div>
 
-                          {/* ── Report selector dropdown ── */}
-                          <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.75rem 1.25rem', borderBottom:'1px solid #e2e8f0', background:'#fafbfc' }}>
-                            <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Report:</span>
-                            <select
-                              value={reportSubTab}
-                              onChange={e => setReportSubTab(e.target.value)}
-                              style={{ fontSize:'0.875rem', fontWeight:'600', padding:'0.375rem 2rem 0.375rem 0.75rem', border:'1px solid #e2e8f0', borderRadius:'8px', background:'#fff', color:'#1e293b', cursor:'pointer', fontFamily:'inherit', appearance:'none', backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")", backgroundRepeat:'no-repeat', backgroundPosition:'right 8px center', minWidth:'160px' }}>
-                              <option value="pipeline">📊 Pipeline</option>
-                              <option value="performance">🎯 Performance</option>
-                              <option value="revenue">💰 Revenue</option>
-                              <option value="activity">📋 Activity</option>
-                              {leadsEnabled && <option value="leads">🎯 Leads</option>}
-                              <option value="actions">⚡ Actions</option>
-                            </select>
-                            <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>
-                              {reportSubTab === 'pipeline'    ? 'Funnel · Forecast · Stage · Team' :
-                               reportSubTab === 'performance' ? 'Quota · Velocity · Win/Loss' :
-                               reportSubTab === 'revenue'     ? 'Closed Won · Commissions · Forecast' :
-                               reportSubTab === 'activity'    ? 'Tasks · Activities · Leaderboard' :
-                               reportSubTab === 'leads'       ? 'Funnel · Sources · Rep · Trend' :
-                               'Recommendations · Outcomes · Rate'}
-                            </span>
+                          {/* ── Report selector tabs ── */}
+                          <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', background:'#fafbfc', overflowX:'auto' }}>
+                            {[
+                              { key:'pipeline',    label:'Pipeline' },
+                              { key:'performance', label:'Performance' },
+                              { key:'revenue',     label:'Revenue' },
+                              { key:'activity',    label:'Activity' },
+                              ...(leadsEnabled ? [{ key:'leads', label:'Leads' }] : []),
+                              { key:'actions',     label:'Actions' },
+                            ].map(({ key, label }) => (
+                              <button key={key} onClick={() => setReportSubTab(key)} style={{
+                                padding: '0.5rem 1.25rem',
+                                border: 'none',
+                                borderBottom: reportSubTab === key ? '2px solid #2563eb' : '2px solid transparent',
+                                background: 'transparent',
+                                color: reportSubTab === key ? '#2563eb' : '#64748b',
+                                fontWeight: reportSubTab === key ? '700' : '500',
+                                fontSize: '0.875rem',
+                                cursor: 'pointer',
+                                fontFamily: 'inherit',
+                                transition: 'all 0.15s',
+                                whiteSpace: 'nowrap',
+                              }}>{label}</button>
+                            ))}
                           </div>
                         </div>
 
