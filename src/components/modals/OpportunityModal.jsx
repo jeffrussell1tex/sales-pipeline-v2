@@ -1260,27 +1260,34 @@ if (formData.account && formData.account.trim()) {
                                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                                 }}>
                                     {allAccountOptions
-                                        .filter(opt => opt.label.toLowerCase().startsWith(accountSearch.toLowerCase()))
+                                        .filter(opt => !accountSearch || opt.value.toLowerCase().includes(accountSearch.toLowerCase()) || opt.label.toLowerCase().includes(accountSearch.toLowerCase()))
                                         .map(opt => (
-                                            <div key={opt.value}
+                                            <div key={opt.id || opt.value}
                                                 onMouseDown={e => e.preventDefault()}
                                                 onClick={() => {
-                                    setAccountSearch(opt.label);
-                                    handleChange('account', opt.value);
-                                    setShowAccountSuggestions(false);
-                                    // Clear site when account changes
-                                    setSiteSearch('');
-                                    handleChange('site', '');
-                                }}
-                                                style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', fontWeight: '600', fontSize: '0.875rem' }}
-                                                onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
+                                                    // Store just the account name, not the breadcrumb label
+                                                    setAccountSearch(opt.value);
+                                                    handleChange('account', opt.value);
+                                                    setShowAccountSuggestions(false);
+                                                    // Clear site when account changes
+                                                    setSiteSearch('');
+                                                    handleChange('site', '');
+                                                }}
+                                                style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', fontSize: '0.875rem' }}
+                                                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
                                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                            >{opt.label}</div>
+                                            >
+                                                {/* Show just the name in bold, with breadcrumb context below if it has a parent */}
+                                                <div style={{ fontWeight: '600', color: '#1e293b' }}>{opt.value}</div>
+                                                {opt.parentName && (
+                                                    <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{opt.label}</div>
+                                                )}
+                                            </div>
                                         ))}
                                     <div onMouseDown={e => e.preventDefault()}
                                         onClick={() => { setShowAccountSuggestions(false); onAddAccount(formData); }}
                                         style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', color: '#2563eb', fontWeight: '600', fontSize: '0.875rem' }}
-                                        onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
+                                        onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
                                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                     >+ New Account</div>
                                 </div>
