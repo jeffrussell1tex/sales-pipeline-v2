@@ -61,6 +61,9 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
 
     const appFields = importType === 'contacts' ? contactFields : importType === 'opportunities' ? opportunityFields : accountFields;
 
+    // Helper so auto-mapping always uses the correct field set for the current importType
+    const getAppFields = () => importType === 'contacts' ? contactFields : importType === 'opportunities' ? opportunityFields : accountFields;
+
     const parseCSV = (text) => {
         // Split into logical lines — respecting quoted fields that span multiple lines
         const splitLines = (raw) => {
@@ -112,7 +115,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
         
         // Auto-map fields based on header name similarity
         const autoMapping = {};
-        appFields.forEach(field => {
+        getAppFields().forEach(field => {
             const fieldLower = field.label.toLowerCase().replace(/[^a-z]/g, '');
             const keyLower = field.key.toLowerCase();
             const match = headers.findIndex(h => {
@@ -173,14 +176,22 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
                 await onImportContacts(data);
             } else if (importType === 'opportunities') {
                 await onImportOpportunities(data);
-            } else {
+            } else if (importType === 'accounts') {
                 await onImportAccounts(data);
+            } else {
+                throw new Error(`Unknown import type: "${importType}"`);
             }
             setImportStats({ total: data.length, error: null, partial: false });
         } catch (err) {
             const msg = err.message || '';
             const isPartial = msg.includes('of') && msg.includes('failed to save');
-            setImportStats({ total: data.length, error: msg || 'Import failed. Please try again.', partial: isPartial });
+            // Extract how many actually saved on a partial import (e.g. "2 of 5 failed to save" → 3 saved)
+            let savedCount = null;
+            if (isPartial) {
+                const m = msg.match(/(\d+)\s+of\s+(\d+)/);
+                if (m) savedCount = parseInt(m[2]) - parseInt(m[1]);
+            }
+            setImportStats({ total: data.length, error: msg || 'Import failed. Please try again.', partial: isPartial, savedCount });
         }
         window.__importProgressCb = null;
         setImporting(false);
@@ -342,7 +353,11 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
                                 <h3 style={{ fontSize: '1.25rem', fontWeight: '700', marginBottom: '0.5rem', color: importStats.partial ? '#d97706' : '#ef4444' }}>
                                     {importStats.partial ? 'Partially Imported' : 'Import Failed'}
                                 </h3>
-                                <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>{importStats.error}</p>
+                                <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>
+                                    {importStats.partial && importStats.savedCount != null
+                                        ? `${importStats.savedCount} of ${importStats.total} records saved successfully. ${importStats.error}`
+                                        : importStats.error}
+                                </p>
                                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
                                     {!importStats.partial && <button className="btn btn-secondary" onClick={() => setStep('preview')}>← Back</button>}
                                     <button className="btn" onClick={onClose}>{importStats.partial ? 'Done' : 'Close'}</button>
