@@ -19,17 +19,12 @@ export default function ContactModal({ contact, contacts, accounts, settings, on
     const [showReportSuggestions, setShowReportSuggestions] = useState(false);
     const [contactRepSearch, setContactRepSearch] = useState(contact?.assignedRep || '');
     const [showContactRepSuggestions, setShowContactRepSuggestions] = useState(false);
-    const [contactTerritorySearch, setContactTerritorySearch] = useState(contact?.assignedTerritory || '');
-    const [showContactTerritorySuggestions, setShowContactTerritorySuggestions] = useState(false);
+
     const [nestedModal, setNestedModal] = useState(null);
 
     const contactAllRepNames = [...new Set([
         ...(settings?.users || []).filter(u => u.name).map(u => u.name)
     ])].sort();
-    const contactAllTerritories = [...new Set(
-        (settings?.users || []).filter(u => u.territory).map(u => u.territory)
-    )].sort();
-
     const handleChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
@@ -58,7 +53,7 @@ export default function ContactModal({ contact, contacts, accounts, settings, on
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        const saveData = { ...formData, company: companySearch, assignedRep: contactRepSearch, assignedTerritory: contactTerritorySearch };
+        const saveData = { ...formData, company: companySearch, assignedRep: contactRepSearch };
         // Check for duplicate contact (only for new contacts)
         if (!contact && contacts) {
             const dup = contacts.find(c =>
@@ -232,30 +227,6 @@ export default function ContactModal({ contact, contacts, accounts, settings, on
                         <div className="form-group"><label>State</label><input type="text" value={formData.state} onChange={e => handleChange('state', e.target.value)} /></div>
                         <div className="form-group"><label>ZIP Code</label><input type="text" value={formData.zip} onChange={e => handleChange('zip', e.target.value)} /></div>
                         <div className="form-group"><label>Country</label><input type="text" value={formData.country} onChange={e => handleChange('country', e.target.value)} /></div>
-
-                        {/* Assign Territory */}
-                        <div className="form-group" style={{ position: 'relative' }}>
-                            <label>Assign Territory</label>
-                            <input type="text" value={contactTerritorySearch}
-                                onChange={e => { setContactTerritorySearch(e.target.value); setShowContactTerritorySuggestions(true); }}
-                                onFocus={() => setShowContactTerritorySuggestions(true)}
-                                onBlur={() => setTimeout(() => setShowContactTerritorySuggestions(false), 200)}
-                                placeholder="Type or select territory..." autoComplete="off" />
-                            {showContactTerritorySuggestions && (
-                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                                    {contactAllTerritories.filter(t => t.toLowerCase().includes(contactTerritorySearch.toLowerCase())).map((t, i) => (
-                                        <div key={i} onMouseDown={e => e.preventDefault()}
-                                            onClick={() => { setContactTerritorySearch(t); setShowContactTerritorySuggestions(false); }}
-                                            style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', fontSize: '0.875rem' }}
-                                            onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
-                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>{t}</div>
-                                    ))}
-                                    {contactAllTerritories.filter(t => t.toLowerCase().includes(contactTerritorySearch.toLowerCase())).length === 0 && (
-                                        <div style={{ padding: '0.625rem 0.75rem', color: '#94a3b8', fontSize: '0.8125rem' }}>No territories found — add in Settings</div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
 
                         {/* Assign Rep */}
                         <div className="form-group" style={{ position: 'relative' }}>
