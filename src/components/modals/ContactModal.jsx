@@ -35,7 +35,18 @@ export default function ContactModal({ contact, contacts, accounts, settings, on
     };
 
     const handleSelectCompany = (companyName) => {
-        setFormData(prev => ({ ...prev, company: companyName }));
+        // Find the matching account and inherit address fields (excluding phone)
+        const matchedAccount = (accounts || []).find(a => a.name === companyName);
+        setFormData(prev => ({
+            ...prev,
+            company: companyName,
+            // Only auto-fill if field is currently empty (don't overwrite existing data)
+            address:  prev.address  || matchedAccount?.address  || '',
+            city:     prev.city     || matchedAccount?.city     || '',
+            state:    prev.state    || matchedAccount?.state    || '',
+            zip:      prev.zip      || matchedAccount?.zip      || '',
+            country:  prev.country  || matchedAccount?.country  || '',
+        }));
         setCompanySearch(companyName);
         setShowCompanySuggestions(false);
     };
