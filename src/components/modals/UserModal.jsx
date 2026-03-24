@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
+import { useApp } from '../../AppContext';
 
-export default function UserModal({ user, settings, onClose, onSave, errorMessage, onDismissError, saving }) {
+export default function UserModal({ user, settings: settingsProp, onClose, onSave, errorMessage, onDismissError, saving }) {
+    // Always use context settings to ensure territories/teams/verticals are current
+    const { settings: contextSettings } = useApp();
+    const settings = contextSettings || settingsProp;
     const [formData, setFormData] = useState(user || {
         prefix: '', firstName: '', middleName: '', lastName: '', suffix: '', nickName: '',
         name: '', title: '', company: '', department: '', workLocation: '',
