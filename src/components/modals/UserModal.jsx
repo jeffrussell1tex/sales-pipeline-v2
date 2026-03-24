@@ -96,22 +96,31 @@ export default function UserModal({ user, settings, onClose, onSave, errorMessag
                         <div className="form-group"><label>Work Phone</label><input type="tel" value={formData.phone || ''} onChange={e => handleChange('phone', e.target.value)} /></div>
                         <div className="form-group"><label>Mobile</label><input type="tel" value={formData.mobile || ''} onChange={e => handleChange('mobile', e.target.value)} /></div>
                         <div className="form-group"><label>Territory</label>
-                            {formData.territory
-                                ? <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', background: '#f8fafc', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>📍 {formData.territory}</div>
-                                : <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', background: '#f8fafc', color: '#94a3b8' }}>Assigned via Team Builder</div>
-                            }
+                            <select value={formData.territory || ''} onChange={e => handleChange('territory', e.target.value)}>
+                                <option value="">— unassigned —</option>
+                                {(settings?.territories || []).map(t => {
+                                    const name = typeof t === 'string' ? t : t.name;
+                                    return <option key={name} value={name}>{name}</option>;
+                                })}
+                            </select>
                         </div>
                         <div className="form-group"><label>Team</label>
-                            {formData.team
-                                ? <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', background: '#f8fafc', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>👥 {formData.team}</div>
-                                : <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', background: '#f8fafc', color: '#94a3b8' }}>Assigned via Team Builder</div>
-                            }
+                            <select value={formData.team || ''} onChange={e => handleChange('team', e.target.value)}>
+                                <option value="">— unassigned —</option>
+                                {(settings?.teams || []).map(t => {
+                                    const name = typeof t === 'string' ? t : t.name;
+                                    return <option key={name} value={name}>{name}</option>;
+                                })}
+                            </select>
                         </div>
                         <div className="form-group"><label>Vertical</label>
-                            {formData.vertical
-                                ? <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', background: '#f8fafc', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>🏭 {formData.vertical}</div>
-                                : <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', background: '#f8fafc', color: '#94a3b8' }}>Assigned via Team Builder</div>
-                            }
+                            <select value={formData.vertical || ''} onChange={e => handleChange('vertical', e.target.value)}>
+                                <option value="">— unassigned —</option>
+                                {(settings?.verticals || []).map(v => {
+                                    const name = typeof v === 'string' ? v : v.name;
+                                    return <option key={name} value={name}>{name}</option>;
+                                })}
+                            </select>
                         </div>
                     </div>
                     )}
