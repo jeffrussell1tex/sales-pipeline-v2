@@ -197,6 +197,12 @@ export default function OpportunitiesTab() {
 
                 return (
                 <div className="tab-page" onClick={() => healthPopover && setHealthPopover(null)}>
+                    <div className="tab-page-header">
+                        <div className="tab-page-header-bar"></div>
+                        <div>
+                            <h2>Opportunities</h2>
+                        </div>
+                    </div>
                     <div className="table-container">
                         {/* ── Header: filters left, actions right ── */}
                         <div style={{ display:'flex', alignItems:'center', gap:'0.375rem', padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>

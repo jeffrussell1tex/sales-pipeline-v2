@@ -825,8 +825,7 @@ export default function HomeTab() {
                     <div className="tab-page-header">
                         <div className="tab-page-header-bar"></div>
                         <div>
-                            <h2>Dashboard</h2>
-                            <p>Your sales pipeline at a glance</p>
+                            <h2>Home</h2>
                         </div>
                     </div>
                     <ViewingBar

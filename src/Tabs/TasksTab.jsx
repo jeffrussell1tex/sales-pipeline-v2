@@ -150,8 +150,7 @@ export default function TasksTab() {
                     <div className="tab-page-header">
                         <div className="tab-page-header-bar"></div>
                         <div>
-                            <h2>Tasks &amp; Activities</h2>
-                            <p>Track follow-ups, calls, and team activities</p>
+                            <h2>Tasks</h2>
                         </div>
                     </div>
                     <ViewingBar
@@ -166,20 +165,14 @@ export default function TasksTab() {
                 <div className="table-container">
                     <div className="table-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 0, padding: 0 }}>
                         {/* ── Row 1: sub-view tabs ── */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 1rem', borderBottom: '1px solid #e2e8f0' }}>
-                            <div style={{ display: 'flex', background: '#f1f3f5', borderRadius: '6px', padding: '3px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1rem', borderBottom: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'flex' }}>
                                 <button onClick={() => setTasksSubView('tasks')}
-                                    style={{ padding: '0.5rem 1.25rem', borderRadius: '4px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '0.8125rem', fontFamily: 'inherit', transition: 'all 0.2s',
-                                        background: tasksSubView === 'tasks' ? '#ffffff' : 'transparent', color: tasksSubView === 'tasks' ? '#1e293b' : '#64748b',
-                                        boxShadow: tasksSubView === 'tasks' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>TASKS</button>
+                                    style={{ padding: '0.5rem 1.25rem', border: 'none', borderBottom: tasksSubView === 'tasks' ? '2px solid #2563eb' : '2px solid transparent', background: 'transparent', color: tasksSubView === 'tasks' ? '#2563eb' : '#64748b', fontWeight: tasksSubView === 'tasks' ? '700' : '500', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>Tasks</button>
                                 <button onClick={() => setTasksSubView('activities')}
-                                    style={{ padding: '0.5rem 1.25rem', borderRadius: '4px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '0.8125rem', fontFamily: 'inherit', transition: 'all 0.2s',
-                                        background: tasksSubView === 'activities' ? '#ffffff' : 'transparent', color: tasksSubView === 'activities' ? '#1e293b' : '#64748b',
-                                        boxShadow: tasksSubView === 'activities' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>COMPLETED</button>
+                                    style={{ padding: '0.5rem 1.25rem', border: 'none', borderBottom: tasksSubView === 'activities' ? '2px solid #2563eb' : '2px solid transparent', background: 'transparent', color: tasksSubView === 'activities' ? '#2563eb' : '#64748b', fontWeight: tasksSubView === 'activities' ? '700' : '500', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>Completed</button>
                                 <button onClick={() => { setTasksSubView('feed'); const now = new Date().toISOString(); setFeedLastRead(now); try { safeStorage.setItem('feedLastRead', now); } catch(e) {} }}
-                                    style={{ position: 'relative', padding: '0.5rem 1.25rem', borderRadius: '4px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '0.8125rem', fontFamily: 'inherit', transition: 'all 0.2s',
-                                        background: tasksSubView === 'feed' ? '#ffffff' : 'transparent', color: tasksSubView === 'feed' ? '#1e293b' : '#64748b',
-                                        boxShadow: tasksSubView === 'feed' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>FEED</button>
+                                    style={{ position: 'relative', padding: '0.5rem 1.25rem', border: 'none', borderBottom: tasksSubView === 'feed' ? '2px solid #2563eb' : '2px solid transparent', background: 'transparent', color: tasksSubView === 'feed' ? '#2563eb' : '#64748b', fontWeight: tasksSubView === 'feed' ? '700' : '500', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>Feed</button>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                 {tasksSubView === 'tasks' && canEdit && <button className="btn" onClick={handleAddTask}>+ ADD TASK</button>}

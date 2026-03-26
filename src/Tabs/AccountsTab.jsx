@@ -76,7 +76,7 @@ export default function AccountsTab() {
                         <div className="tab-page-header-bar"></div>
                         <div>
                             <h2>Accounts</h2>
-                            <p>Manage your customer and prospect accounts</p>
+                            
                         </div>
                     </div>
                 <div className="table-container">

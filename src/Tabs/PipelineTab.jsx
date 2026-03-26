@@ -264,6 +264,12 @@ export default function PipelineTab() {
     return (
 
                 <div className="tab-page" onClick={() => healthPopover && setHealthPopover(null)}>
+                    <div className="tab-page-header">
+                        <div className="tab-page-header-bar"></div>
+                        <div>
+                            <h2>Pipeline</h2>
+                        </div>
+                    </div>
                     {/* ════ HORIZONTAL SUMMARY PANEL ════ */}
                     <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'visible', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
 

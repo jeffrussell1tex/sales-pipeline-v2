@@ -49,7 +49,7 @@ export default function ContactsTab() {
                         <div className="tab-page-header-bar"></div>
                         <div>
                             <h2>Contacts</h2>
-                            <p>Manage your contacts and relationships</p>
+                            
                         </div>
                     </div>
                 <div className="table-container">

@@ -447,7 +447,6 @@ export default function SalesManagerTab() {
                         <div className="tab-page-header-bar"></div>
                         <div>
                             <h2>Sales Manager</h2>
-                            <p>Monitor team performance and manage compensation plans</p>
                         </div>
                     </div>
 

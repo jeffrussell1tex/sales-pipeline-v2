@@ -540,15 +540,6 @@ ${bodyHtml}
                               <div style={{ width:'4px', height:'24px', background:'linear-gradient(to bottom,#2563eb,#7c3aed)', borderRadius:'2px' }}/>
                               <div>
                                 <h2 style={{ fontSize:'1.125rem', fontWeight:'700', color:'#1e293b', margin:0 }}>Reports</h2>
-                                <p style={{ fontSize:'0.75rem', color:'#64748b', margin:0 }}>
-                                  {reportSubTab === 'pipeline' ? 'Pipeline health and stage analysis' :
-                                   reportSubTab === 'performance' ? 'Quota, velocity and win/loss insights' :
-                                   reportSubTab === 'revenue' ? 'Closed revenue and commission tracking' :
-                                   reportSubTab === 'leads' ? 'Lead funnel · sources · rep performance · trend' :
-                                   reportSubTab === 'actions' ? 'Recommended action outcomes · resolution rate · rep coaching' :
-                                   'Team activity and task completion'}
-                                  {(reportsRep || reportsTeam || reportsTerritory) ? ` · ${reportsRep || reportsTeam || reportsTerritory}` : ''}
-                                </p>
                               </div>
                             </div>
                             {hasReportsSlicing && (
