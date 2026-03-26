@@ -436,77 +436,68 @@ export default function AppHeader({
 
                                         {/* ── Import / Export Tab ───────────────────── */}
                                         {profilePanelTab === 'importexport' && (() => {
-                                            const sectionHead = (icon, title, desc) => (
-                                                <div style={{ marginBottom: '0.75rem' }}>
-                                                    <div style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b', marginBottom: '0.2rem' }}>{icon} {title}</div>
-                                                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{desc}</div>
-                                                </div>
+                                            const sectionHead = (icon, title) => (
+                                                <div style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>{icon} {title}</div>
                                             );
-                                            const importBtn = (label, type) => (
+                                            const importBtn = (type) => (
                                                 <button
                                                     onClick={() => {
                                                         setCsvImportType(type);
                                                         setShowCsvImportModal(true);
                                                         setShowProfilePanel(false);
                                                     }}
-                                                    style={{ flex: 1, padding: '0.5rem 0.625rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', color: '#1e293b', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
+                                                    style={{ padding: '0.35rem 0.875rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', color: '#1e293b', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
                                                     onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#2563eb'; e.currentTarget.style.color = '#2563eb'; }}
                                                     onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#1e293b'; }}
-                                                >{label}</button>
+                                                >📥 Import</button>
                                             );
-                                            const exportBtn = (label, exportKey, filename, headers, rows) => (
+                                            const exportBtn = (exportKey, filename, headers, rows) => (
                                                 <button
                                                     disabled={exportingCSV === exportKey}
                                                     onClick={() => exportToCSV(filename, headers, rows, exportKey)}
-                                                    style={{ flex: 1, padding: '0.5rem 0.625rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', color: exportingCSV === exportKey ? '#94a3b8' : '#1e293b', fontSize: '0.8125rem', fontWeight: '600', cursor: exportingCSV === exportKey ? 'default' : 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
+                                                    style={{ padding: '0.35rem 0.875rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', color: exportingCSV === exportKey ? '#94a3b8' : '#1e293b', fontSize: '0.75rem', fontWeight: '600', cursor: exportingCSV === exportKey ? 'default' : 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
                                                     onMouseEnter={e => { if (exportingCSV !== exportKey) { e.currentTarget.style.background = '#f0fdf4'; e.currentTarget.style.borderColor = '#059669'; e.currentTarget.style.color = '#059669'; }}}
                                                     onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = exportingCSV === exportKey ? '#94a3b8' : '#1e293b'; }}
-                                                >{exportingCSV === exportKey ? '⏳ Exporting…' : label}</button>
+                                                >{exportingCSV === exportKey ? '⏳…' : '📤 Export'}</button>
                                             );
 
-                                            const row = (children) => (
-                                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>{children}</div>
+                                            const row = (type, exportKey, filename, headers, rows) => (
+                                                <div style={{ display: 'flex', gap: '0.375rem', justifyContent: 'flex-end' }}>
+                                                    {importBtn(type)}
+                                                    {exportBtn(exportKey, filename, headers, rows)}
+                                                </div>
                                             );
 
                                             return (
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
                                                     {/* Contacts */}
-                                                    <div style={{ padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa' }}>
-                                                        {sectionHead('👤', 'Contacts', 'Import from CSV or export all contacts.')}
-                                                        {row(
-                                                            importBtn('📥 Import CSV', 'contacts'),
-                                                            exportBtn('📤 Export CSV', 'contacts',
-                                                                `contacts-${new Date().toISOString().slice(0,10)}.csv`,
-                                                                ['First Name','Last Name','Email','Phone','Mobile','Title','Company','Address','City','State','ZIP','Country'],
-                                                                contacts.map(c => [c.firstName,c.lastName,c.email,c.phone,c.mobile,c.title,c.company,c.address,c.city,c.state,c.zip,c.country])
-                                                            )
+                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                        {sectionHead('👤', 'Contacts')}
+                                                        {row('contacts', 'contacts',
+                                                            `contacts-${new Date().toISOString().slice(0,10)}.csv`,
+                                                            ['First Name','Last Name','Email','Phone','Mobile','Title','Company','Address','City','State','ZIP','Country'],
+                                                            contacts.map(c => [c.firstName,c.lastName,c.email,c.phone,c.mobile,c.title,c.company,c.address,c.city,c.state,c.zip,c.country])
                                                         )}
                                                     </div>
 
                                                     {/* Accounts */}
-                                                    <div style={{ padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa' }}>
-                                                        {sectionHead('🏢', 'Accounts', 'Import from CSV or export all accounts.')}
-                                                        {row(
-                                                            importBtn('📥 Import CSV', 'accounts'),
-                                                            exportBtn('📤 Export CSV', 'accounts',
-                                                                `accounts-${new Date().toISOString().slice(0,10)}.csv`,
-                                                                ['Account Name','Vertical Market','Account Owner','Phone','Website','Address','City','State','ZIP','Country'],
-                                                                accounts.map(a => [a.name,a.verticalMarket,a.accountOwner,a.phone,a.website,a.address,a.city,a.state,a.zip,a.country])
-                                                            )
+                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                        {sectionHead('🏢', 'Accounts')}
+                                                        {row('accounts', 'accounts',
+                                                            `accounts-${new Date().toISOString().slice(0,10)}.csv`,
+                                                            ['Account Name','Vertical Market','Account Owner','Phone','Website','Address','City','State','ZIP','Country'],
+                                                            accounts.map(a => [a.name,a.verticalMarket,a.accountOwner,a.phone,a.website,a.address,a.city,a.state,a.zip,a.country])
                                                         )}
                                                     </div>
 
                                                     {/* Opportunities */}
-                                                    <div style={{ padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa' }}>
-                                                        {sectionHead('💼', 'Opportunities', 'Import from CSV or export all opportunities.')}
-                                                        {row(
-                                                            importBtn('📥 Import CSV', 'opportunities'),
-                                                            exportBtn('📤 Export CSV', 'opportunities',
-                                                                `opportunities-${new Date().toISOString().slice(0,10)}.csv`,
-                                                                ['Opportunity Name','Account','Sales Rep','Stage','ARR','Impl. Cost','Close Date','Products','Notes','Territory','Vertical'],
-                                                                opportunities.map(o => [o.opportunityName,o.account,o.salesRep,o.stage,o.arr,o.implementationCost,o.forecastedCloseDate,o.products,o.notes,o.territory,o.vertical])
-                                                            )
+                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                        {sectionHead('💼', 'Opportunities')}
+                                                        {row('opportunities', 'opportunities',
+                                                            `opportunities-${new Date().toISOString().slice(0,10)}.csv`,
+                                                            ['Opportunity Name','Account','Sales Rep','Stage','ARR','Impl. Cost','Close Date','Products','Notes','Territory','Vertical'],
+                                                            opportunities.map(o => [o.opportunityName,o.account,o.salesRep,o.stage,o.arr,o.implementationCost,o.forecastedCloseDate,o.products,o.notes,o.territory,o.vertical])
                                                         )}
                                                     </div>
 
