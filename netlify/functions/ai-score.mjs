@@ -21,6 +21,28 @@ import { db } from '../../db/index.js';
 import { opportunities, activities, settings } from '../../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { createDecipheriv, createHash } from 'crypto';
+
+// ── Decrypt org-level BYOK key (mirrors settings.mjs decrypt helper) ──────────
+function decryptOrgKey(stored) {
+    if (!stored) return null;
+    try {
+        const raw = process.env.SETTINGS_ENCRYPTION_KEY || '';
+        if (!raw) return null;
+        const key    = createHash('sha256').update(raw).digest();
+        const parts  = stored.split(':');
+        if (parts.length !== 3) return null;
+        const iv        = Buffer.from(parts[0], 'hex');
+        const tag       = Buffer.from(parts[1], 'hex');
+        const encrypted = Buffer.from(parts[2], 'hex');
+        const decipher  = createDecipheriv('aes-256-gcm', key, iv);
+        decipher.setAuthTag(tag);
+        return decipher.update(encrypted) + decipher.final('utf8');
+    } catch (err) {
+        console.error('ai-score: org key decryption failed:', err.message);
+        return null;
+    }
+}
 
 const headers = {
     'Content-Type': 'application/json',
@@ -37,20 +59,26 @@ export const handler = async (event) => {
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
     const { orgId } = auth;
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) return { statusCode: 503, headers, body: JSON.stringify({ error: 'ANTHROPIC_API_KEY is not configured' }) };
+    // Prefer org-level BYOK key; fall back to shared env var
+    const [orgSettingsRow] = await db.select({ extra: settings.extra })
+        .from(settings)
+        .where(eq(settings.orgId, orgId))
+        .limit(1);
+    const orgApiKey = orgSettingsRow?.extra?.anthropicApiKey
+        ? decryptOrgKey(orgSettingsRow.extra.anthropicApiKey)
+        : null;
+    const apiKey = orgApiKey || process.env.ANTHROPIC_API_KEY || null;
+    const usingOrgKey = !!orgApiKey;
+
+    if (!apiKey) return { statusCode: 503, headers, body: JSON.stringify({ error: 'No Anthropic API key configured. Add your key in Settings → AI Features, or contact your administrator.' }) };
 
     try {
         const body = JSON.parse(event.body || '{}');
         const { opportunityId, forceRefresh } = body;
         if (!opportunityId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'opportunityId required' }) };
 
-        // ── Check feature gate ────────────────────────────────────────────────
-        const [orgSettings] = await db.select({ extra: settings.extra })
-            .from(settings)
-            .where(eq(settings.orgId, orgId))
-            .limit(1);
-        const aiEnabled = orgSettings?.extra?.aiScoringEnabled ?? false;
+        // ── Check feature gate (reuse orgSettingsRow fetched above) ─────────
+        const aiEnabled = orgSettingsRow?.extra?.aiScoringEnabled ?? false;
         if (!aiEnabled) return { statusCode: 200, headers, body: JSON.stringify({ disabled: true }) };
 
         // ── Load opportunity ──────────────────────────────────────────────────
@@ -187,7 +215,7 @@ Provide 3-5 signals. Be specific — reference actual days, stage names, contact
             // Non-fatal — still return the score
         }
 
-        return { statusCode: 200, headers, body: JSON.stringify(scoreData) };
+        return { statusCode: 200, headers, body: JSON.stringify({ ...scoreData, usingOrgKey }) };
 
     } catch (err) {
         console.error('ai-score error:', err.message);

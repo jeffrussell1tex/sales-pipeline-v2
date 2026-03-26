@@ -1374,16 +1374,154 @@ export default function SettingsTab() {
                                 </div>
 
                                 {/* Score freshness */}
-                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem 1.25rem' }}>
+                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
                                     <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#1e293b', marginBottom: '6px' }}>How scoring works</div>
                                     <ul style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: 1.8, margin: 0, paddingLeft: '1.25rem' }}>
                                         <li>Scores are generated on demand — reps click "Score this deal" inside the deal modal</li>
                                         <li>Each score is cached for 24 hours to minimize API usage</li>
                                         <li>Reps can force a refresh at any time</li>
                                         <li>Scores are powered by Claude Haiku (fast and cost-efficient)</li>
-                                        <li>API costs are billed to the <code style={{ fontSize: '0.6875rem', background: '#f1f5f9', padding: '1px 5px', borderRadius: '3px' }}>ANTHROPIC_API_KEY</code> in your Netlify environment</li>
+                                        <li>Without a custom key, API costs are billed to the shared <code style={{ fontSize: '0.6875rem', background: '#f1f5f9', padding: '1px 5px', borderRadius: '3px' }}>ANTHROPIC_API_KEY</code> in Netlify</li>
                                     </ul>
                                 </div>
+
+                                {/* BYOK — Bring Your Own API Key */}
+                                {(() => {
+                                    const [byokKey, setByokKey] = React.useState(settings.anthropicApiKey || '');
+                                    const [byokVisible, setByokVisible] = React.useState(false);
+                                    const [byokSaving, setByokSaving] = React.useState(false);
+                                    const [byokError, setByokError] = React.useState(null);
+                                    const [byokSaved, setByokSaved] = React.useState(false);
+                                    const hasKey = !!(settings.anthropicApiKey);
+
+                                    const saveByokKey = async () => {
+                                        setByokSaving(true);
+                                        setByokError(null);
+                                        setByokSaved(false);
+                                        try {
+                                            const res = await dbFetch('/.netlify/functions/settings', {
+                                                method: 'PUT',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ anthropicApiKey: byokKey.trim() || null }),
+                                            });
+                                            if (!res.ok) {
+                                                const d = await res.json().catch(() => ({}));
+                                                setByokError(d.error || 'Failed to save key.');
+                                            } else {
+                                                setSettings(prev => ({ ...prev, anthropicApiKey: byokKey.trim() || null }));
+                                                setByokSaved(true);
+                                                setTimeout(() => setByokSaved(false), 3000);
+                                            }
+                                        } catch (err) {
+                                            setByokError('Network error — please try again.');
+                                        } finally {
+                                            setByokSaving(false);
+                                        }
+                                    };
+
+                                    const removeKey = async () => {
+                                        setByokKey('');
+                                        setByokSaving(true);
+                                        setByokError(null);
+                                        try {
+                                            const res = await dbFetch('/.netlify/functions/settings', {
+                                                method: 'PUT',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ anthropicApiKey: null }),
+                                            });
+                                            if (!res.ok) {
+                                                const d = await res.json().catch(() => ({}));
+                                                setByokError(d.error || 'Failed to remove key.');
+                                            } else {
+                                                setSettings(prev => ({ ...prev, anthropicApiKey: null }));
+                                            }
+                                        } catch (err) {
+                                            setByokError('Network error — please try again.');
+                                        } finally {
+                                            setByokSaving(false);
+                                        }
+                                    };
+
+                                    return (
+                                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                                            {/* Header */}
+                                            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                                                <div>
+                                                    <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        🔑 Bring Your Own API Key
+                                                        {hasKey && (
+                                                            <span style={{ fontSize: '0.625rem', fontWeight: '700', background: '#d1fae5', color: '#065f46', padding: '1px 8px', borderRadius: '999px' }}>USING YOUR KEY</span>
+                                                        )}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px' }}>
+                                                        {hasKey
+                                                            ? 'AI scoring is using your Anthropic API key. Usage costs go directly to your account.'
+                                                            : 'Add your own Anthropic API key for direct cost visibility and to keep deal data out of shared billing.'
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Key input */}
+                                            <div style={{ padding: '1rem 1.25rem' }}>
+                                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Anthropic API Key</div>
+                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                    <div style={{ flex: 1, position: 'relative' }}>
+                                                        <input
+                                                            type={byokVisible ? 'text' : 'password'}
+                                                            value={byokKey}
+                                                            onChange={e => setByokKey(e.target.value)}
+                                                            placeholder="sk-ant-api03-..."
+                                                            style={{
+                                                                width: '100%', padding: '0.5rem 2.5rem 0.5rem 0.75rem',
+                                                                border: '1px solid #d1d5db', borderRadius: '6px',
+                                                                fontSize: '0.8125rem', fontFamily: 'monospace',
+                                                                outline: 'none', boxSizing: 'border-box',
+                                                                background: '#f8fafc',
+                                                            }}
+                                                        />
+                                                        <button
+                                                            onClick={() => setByokVisible(v => !v)}
+                                                            style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', color: '#94a3b8', padding: '2px' }}
+                                                            title={byokVisible ? 'Hide key' : 'Show key'}
+                                                        >
+                                                            {byokVisible ? '🙈' : '👁️'}
+                                                        </button>
+                                                    </div>
+                                                    <button
+                                                        onClick={saveByokKey}
+                                                        disabled={byokSaving || byokKey.trim() === (settings.anthropicApiKey || '')}
+                                                        style={{
+                                                            padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer',
+                                                            background: byokSaved ? '#10b981' : '#2563eb', color: '#fff',
+                                                            fontSize: '0.8125rem', fontWeight: '700', fontFamily: 'inherit',
+                                                            opacity: (byokSaving || byokKey.trim() === (settings.anthropicApiKey || '')) ? 0.5 : 1,
+                                                            minWidth: '64px', transition: 'background 0.2s',
+                                                        }}
+                                                    >
+                                                        {byokSaving ? '…' : byokSaved ? '✓ Saved' : 'Save'}
+                                                    </button>
+                                                    {hasKey && (
+                                                        <button
+                                                            onClick={removeKey}
+                                                            disabled={byokSaving}
+                                                            style={{ padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #fecaca', cursor: 'pointer', background: 'transparent', color: '#dc2626', fontSize: '0.8125rem', fontWeight: '600', fontFamily: 'inherit' }}
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {byokError && (
+                                                    <div style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '6px' }}>{byokError}</div>
+                                                )}
+                                                <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '8px', lineHeight: 1.5 }}>
+                                                    Your key is encrypted with AES-256 before being stored. It is never logged or exposed in responses.
+                                                    Get your key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>console.anthropic.com</a>.
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
 
                             </div>
                         
