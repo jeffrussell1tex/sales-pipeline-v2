@@ -1916,8 +1916,6 @@ export default function SettingsTab() {
                                     </ul>
                                 </div>
 
-                                {/* BYOK — Bring Your Own API Key */}
-                                <ByokKeySection settings={settings} setSettings={setSettings} />
 
                             </div>
                         
