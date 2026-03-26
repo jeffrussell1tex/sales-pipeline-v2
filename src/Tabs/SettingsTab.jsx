@@ -1666,30 +1666,44 @@ export default function SettingsTab() {
                                                                 for (const { url } of endpoints) {
                                                                     await dbFetch(`${url}?clear=true`, { method: 'DELETE' }).catch(() => {});
                                                                 }
-                                                                // Also clear users
-                                                                await dbFetch('/.netlify/functions/users?clear=true', { method: 'DELETE' }).catch(() => {});
-                                                                // Step 2: Insert records per table
+                                                                // Step 2: Insert records per table — use PUT if record has an id (restore preserves IDs)
                                                                 let insertOk = 0, insertFail = 0;
                                                                 for (const { key, url } of endpoints) {
                                                                     if (!d[key] || d[key].length === 0) continue;
                                                                     for (const record of d[key]) {
+                                                                        const method = record.id ? 'PUT' : 'POST';
                                                                         const r = await dbFetch(url, {
-                                                                            method: 'POST',
+                                                                            method,
+                                                                            headers: { 'Content-Type': 'application/json' },
                                                                             body: JSON.stringify(record)
                                                                         }).catch(() => null);
                                                                         if (r && r.ok) insertOk++;
                                                                         else { insertFail++; console.error('Restore insert failed', key, r?.status, record.id); }
                                                                     }
                                                                 }
-                                                                // Step 3: Restore settings
+                                                                // Step 3: Restore users (skipped during clear to avoid locking yourself out — only re-insert non-current-user records)
+                                                                if (d.settings?.users?.length > 0) {
+                                                                    for (const u of d.settings.users) {
+                                                                        await dbFetch('/.netlify/functions/users', {
+                                                                            method: 'POST',
+                                                                            headers: { 'Content-Type': 'application/json' },
+                                                                            body: JSON.stringify(u)
+                                                                        }).catch(() => {});
+                                                                    }
+                                                                }
+                                                                // Step 4: Restore settings (strip users — managed separately)
                                                                 if (d.settings) {
+                                                                    const { users: _u, ...settingsOnly } = d.settings;
                                                                     await dbFetch('/.netlify/functions/settings', {
                                                                         method: 'PUT',
-                                                                        body: JSON.stringify(d.settings)
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify(settingsOnly)
                                                                     }).catch(() => {});
                                                                 }
-                                                                console.log(`Restore complete: ${insertOk} ok, ${insertFail} failed`);
-                                                            } catch(e) { console.error('DB sync after restore failed:', e); }
+                                                                if (insertFail > 0) {
+                                                                    alert(`Restore mostly complete: ${insertOk} records restored, ${insertFail} failed. The page will now reload.`);
+                                                                }
+                                                            } catch(e) { console.error('DB sync after restore failed:', e); alert('Restore encountered an error. The page will reload — check your data after.'); }
                                                             finally { setRestoringBackup(false); }
                                                         };
                                                         // After DB sync, reload the page so all React state is fresh from DB

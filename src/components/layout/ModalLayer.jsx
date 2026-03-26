@@ -60,6 +60,7 @@ export default function ModalLayer() {
         spiffClaims, setSpiffClaims,
         handleSave, handleSaveAccount, handleSaveContact, handleSaveTask, handleSaveActivity,
         handleDeleteActivity, handleDeleteTask, handleCompleteTask,
+        handleAddAccountFromOpportunity, handleAddTaskType,
         addAudit, softDelete, showConfirm, loadOpportunities, loadAccounts,
         loadContacts, loadTasks, loadActivities,
         setActiveTab, activeTab,

@@ -1212,6 +1212,7 @@ dbFetch('/.netlify/functions/users?me=true')
         handleDelete,
         handleSave,
         completeLostSave,
+        handleAddAccountFromOpportunity,
         handleDeleteAccount,
         handleDeleteSubAccount,
         handleSaveAccount,
