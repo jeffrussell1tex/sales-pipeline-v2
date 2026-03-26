@@ -584,9 +584,10 @@ ${bodyHtml}
                                 ); })()}
                             </div>
                           </div>
+                        </div>
 
-                          {/* ── Row 3: Sub-tab nav — Pipeline / Performance / Revenue / etc. ── */}
-                          <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', overflowX:'auto' }}>
+                        {/* ── Sub-tab nav — Pipeline / Performance / Revenue / etc. ── */}
+                        <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', overflowX:'auto', marginBottom:'0' }}>
                             {[
                               { key:'pipeline',    label:'Pipeline' },
                               { key:'performance', label:'Performance' },
@@ -610,7 +611,6 @@ ${bodyHtml}
                                 whiteSpace: 'nowrap',
                               }}>{label}</button>
                             ))}
-                          </div>
                         </div>
 
                         {/* PDF Export */}
