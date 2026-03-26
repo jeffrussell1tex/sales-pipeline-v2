@@ -324,7 +324,7 @@ export default function AppHeader({
                                         {panelTabBtn('importexport', '⇅ Import / Export')}
                                     </div>
 
-                                    <div style={{ padding: '1.25rem 1.5rem', maxHeight: '460px', overflowY: 'auto' }}>
+                                    <div style={{ padding: '1.25rem 1.5rem', maxHeight: '560px', overflowY: 'auto' }}>
 
                                         {/* ── Profile Tab ─────────────────────────────── */}
                                         {profilePanelTab === 'profile' && (() => {

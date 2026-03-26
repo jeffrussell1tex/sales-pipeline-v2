@@ -168,8 +168,7 @@ export default function SettingsTab() {
                                         { view: 'features',       icon: '🧩', title: 'Features',             desc: 'Enable or disable app features' },
                                         { view: 'ai-features',    icon: '🤖', title: 'AI Features',          desc: 'Deal scoring & data privacy controls' },
                                         { view: 'field-visibility', icon: '🔒', title: 'Field Visibility',  desc: 'Role-based field access control' },
-                                        { view: 'data-storage',   icon: '🗄️', title: 'Data Storage',        desc: 'Storage configuration' },
-                                        { view: 'data-management', icon: '💾', title: 'Data Management',    desc: 'Export, import & backup' },
+                                        { view: 'data-management', icon: '💾', title: 'Data Management',    desc: 'Backup & restore' },
                                         { view: 'audit-log',      icon: '📋', title: 'Audit Log',           desc: 'Change history across all records' },
                                     ].map((item, idx, arr) => {
                                         if (item.group) return (() => {
@@ -1386,102 +1385,6 @@ export default function SettingsTab() {
                                     </ul>
                                 </div>
 
-                            </div>
-                        
-                            <SaveCancelBar />
-</div>
-                    )}
-
-                    {settingsView === 'data-storage' && (
-                        <div className="table-container">
-                            <div className="table-header">
-                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
-                                <h2>DATA STORAGE</h2>
-                            </div>
-                            <div style={{ padding: '1.5rem', maxWidth: isMobile ? '100%' : '600px' }}>
-                                <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-                                    Choose where your Sales Pipeline Tracker data is stored. This determines how data persists and whether it can be shared across devices.
-                                </p>
-
-                                {[
-                                    {
-                                        id: 'local',
-                                        title: 'Browser Local Storage',
-                                        desc: 'Data is saved in this browser on this device only. Fast and works offline. Data is lost if browser cache is cleared.',
-                                        status: 'Active',
-                                        badge: 'Current',
-                                        badgeColor: '#10b981'
-                                    },
-                                    {
-                                        id: 'json-export',
-                                        title: 'JSON File Export/Import',
-                                        desc: 'Manually export data to a JSON file and import on another device. Use Data Management to export/import.',
-                                        status: 'Available',
-                                        badge: 'Manual',
-                                        badgeColor: '#f59e0b'
-                                    },
-                                    {
-                                        id: 'cloud-api',
-                                        title: 'Cloud Database (API)',
-                                        desc: 'Connect to an external database via REST API for multi-user, multi-device access. Requires a backend server.',
-                                        status: 'Coming Soon',
-                                        badge: 'Planned',
-                                        badgeColor: '#6366f1'
-                                    },
-                                    {
-                                        id: 'google-sheets',
-                                        title: 'Google Sheets',
-                                        desc: 'Sync data to a Google Sheets spreadsheet for easy viewing and sharing. Requires Google API integration.',
-                                        status: 'Coming Soon',
-                                        badge: 'Planned',
-                                        badgeColor: '#6366f1'
-                                    }
-                                ].map(opt => (
-                                    <div key={opt.id} style={{
-                                        padding: '1.25rem', border: opt.id === (settings.dataStorage || 'local') ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                                        borderRadius: '8px', marginBottom: '1rem', background: opt.id === (settings.dataStorage || 'local') ? '#eff6ff' : '#ffffff',
-                                        cursor: opt.status === 'Active' || opt.status === 'Available' ? 'pointer' : 'default',
-                                        opacity: opt.status === 'Coming Soon' ? 0.6 : 1, transition: 'all 0.2s'
-                                    }}
-                                        onClick={() => {
-                                            if (opt.id === 'local') setSettings(prev => ({ ...prev, dataStorage: 'local' }));
-                                            if (opt.id === 'json-export') setSettings(prev => ({ ...prev, dataStorage: 'json-export' }));
-                                        }}
-                                    >
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                            <h4 style={{ fontSize: '1rem', fontWeight: '700' }}>{opt.title}</h4>
-                                            <span style={{
-                                                fontSize: '0.6875rem', fontWeight: '700', padding: '0.2rem 0.6rem',
-                                                borderRadius: '10px', background: opt.badgeColor + '20', color: opt.badgeColor,
-                                                textTransform: 'uppercase', letterSpacing: '0.05em'
-                                            }}>{opt.badge}</span>
-                                        </div>
-                                        <p style={{ fontSize: '0.8125rem', color: '#64748b', lineHeight: 1.5 }}>{opt.desc}</p>
-                                    </div>
-                                ))}
-
-                                {(settings.dataStorage || 'local') === 'cloud-api' && (
-                                    <div style={{ padding: '1rem', background: '#f8f9fa', borderRadius: '8px', marginTop: '1rem' }}>
-                                        <label style={{ fontWeight: '600', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>API Endpoint URL</label>
-                                        <input type="url" placeholder="https://your-api.com/pipeline-data"
-                                            value={settings.apiEndpoint || ''}
-                                            onChange={e => setSettings(prev => ({ ...prev, apiEndpoint: e.target.value }))}
-                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px' }}
-                                        />
-                                        <label style={{ fontWeight: '600', fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem', marginTop: '1rem' }}>API Key</label>
-                                        <input type="password" placeholder="Your API key..."
-                                            value={settings.apiKey || ''}
-                                            onChange={e => setSettings(prev => ({ ...prev, apiKey: e.target.value }))}
-                                            style={{ width: '100%', padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px' }}
-                                        />
-                                    </div>
-                                )}
-
-                                <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#fffbeb', borderRadius: '8px', border: '1px solid #fde68a' }}>
-                                    <div style={{ fontSize: '0.8125rem', color: '#92400e' }}>
-                                        <strong>Note:</strong> All data is stored securely in your cloud Postgres database (Neon) and accessed via authenticated API calls. Each session is verified using your Clerk login token.
-                                    </div>
-                                </div>
                             </div>
                         
                             <SaveCancelBar />
