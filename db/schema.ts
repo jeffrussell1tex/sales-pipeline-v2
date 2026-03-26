@@ -23,9 +23,11 @@ export const users = pgTable('users', {
 // Named pipelines (e.g. "Enterprise", "SMB")
 export const pipelines = pgTable('pipelines', {
     id:        text('id').primaryKey(),
+    orgId:     text('org_id').notNull(),                             // tenant scope
     name:      varchar('name', { length: 255 }).notNull(),
     isDefault: boolean('is_default').notNull().default(false),
     createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 
 // ── ACCOUNTS ──────────────────────────────────────────────────────────────────
