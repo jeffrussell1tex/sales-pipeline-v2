@@ -6,8 +6,7 @@ export function useAccounts(deps) {
 
     const [accounts, setAccounts] = useState([]);
     const [accountModalError, setAccountModalError] = useState(null);
-    const [accountModalSaving,
-        setAccountModalSaving] = useState(false);
+    const [accountModalSaving, setAccountModalSaving] = useState(false);
 
     const loadAccounts = (setDbOffline) => {
         dbFetch('/.netlify/functions/accounts')
@@ -18,8 +17,6 @@ export function useAccounts(deps) {
 
     const getSubAccounts = (accountId) => (accounts || []).filter(a => (a.parentAccountId || a.parentId) === accountId);
 
-    // Tier derived purely from hierarchy depth — no accountTier DB column needed
-    // depth 0 = Account, depth 1 = Business Unit, depth 2 = Site
     const getAccountDepth = (accountId) => {
         const acc = accounts.find(a => a.id === accountId);
         if (!acc || !acc.parentAccountId) return 0;
@@ -31,7 +28,6 @@ export function useAccounts(deps) {
     const getTierFromDepth = (depth) => depth === 0 ? 'account' : depth === 1 ? 'business_unit' : 'site';
 
     const getAccountRollup = (acc) => {
-        // Rollup is computed in App.jsx using opportunities — keep as pass-through here
         return acc;
     };
 
@@ -52,12 +48,29 @@ export function useAccounts(deps) {
 
         const subMsg = subs.length > 0 ? ` This will also delete ${subs.length} sub-account${subs.length > 1 ? 's' : ''}.` : '';
         showConfirm(`Are you sure you want to delete "${account.name}"?${subMsg}`, () => {
-            const snapshot = [...accounts];
-            setAccounts(accounts.filter(a => !allIds.includes(a.id)));
-            allIds.forEach(id => {
-                dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
-                    .catch(err => console.error('Failed to delete account:', err));
+            // Snapshot captured inside confirm callback — fresh state at time of confirmation
+            let snapshot;
+            setAccounts(prev => {
+                snapshot = prev.slice();
+                return prev.filter(a => !allIds.includes(a.id));
             });
+
+            // Fire deletes for all IDs and restore if any fail
+            const deletePromises = allIds.map(id =>
+                dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
+                    .then(res => {
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                    })
+            );
+
+            Promise.allSettled(deletePromises).then(results => {
+                const anyFailed = results.some(r => r.status === 'rejected');
+                if (anyFailed) {
+                    console.error('One or more account deletes failed — restoring accounts');
+                    setAccounts(snapshot);
+                }
+            });
+
             addAudit('delete', 'account', accountId, account.name, '');
             softDelete(
                 `Account "${account.name}"`,
@@ -93,19 +106,15 @@ export function useAccounts(deps) {
                 auditName = formData.name || editingSubAccount.id; auditDetail = '';
             } else if (parentAccountForSub) {
                 const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                // Determine tier from parent's depth in hierarchy — no DB column needed
-                // Parent depth 0 (top-level account) + forceTier='site' → site (depth 2, skip BU)
-                // Parent depth 0 + forceTier='business_unit' or no force → business_unit (depth 1)
-                // Parent depth 1 (BU) → always site (depth 2)
                 const parentDepth = getAccountDepth(parentAccountForSub.id);
                 const forceTier = parentAccountForSub._forceTier || formData._forceTier;
                 let tier;
                 if (parentDepth >= 1) {
-                    tier = 'site'; // child of BU is always a site
+                    tier = 'site';
                 } else if (forceTier === 'site') {
-                    tier = 'site'; // explicitly forced to site from parent account
+                    tier = 'site';
                 } else {
-                    tier = 'business_unit'; // default child of top-level account
+                    tier = 'business_unit';
                 }
                 const { _forceTier: _drop, ...cleanFormData } = formData;
                 payload = { ...cleanFormData, id: newId, parentAccountId: parentAccountForSub.id, accountTier: tier };
@@ -122,9 +131,9 @@ export function useAccounts(deps) {
             if (!res.ok) { setAccountModalError(data.error || 'Failed to save account. Please try again.'); setAccountModalSaving(false); return; }
             const saved = data.account || payload;
             if (method === 'PUT') {
-                setAccounts(accounts.map(acc => acc.id === saved.id ? saved : acc));
+                setAccounts(prev => prev.map(acc => acc.id === saved.id ? saved : acc));
             } else {
-                setAccounts([...accounts, saved]);
+                setAccounts(prev => [...prev, saved]);
                 if (accountCreatedFromOppForm) {
                     setLastCreatedAccountName(formData.name);
                     setEditingOpp(pendingOppFormData);

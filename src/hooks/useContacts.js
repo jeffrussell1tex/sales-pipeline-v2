@@ -17,16 +17,52 @@ export function useContacts(deps) {
     };
 
     const handleDeleteContact = (contactId) => {
-        const contact = contacts.find(c => c.id === contactId);
-        if (!contact) return;
+        // Read contact from current state synchronously before confirm dialog
+        let contact;
+        setContacts(prev => {
+            contact = prev.find(c => c.id === contactId);
+            return prev; // no change yet — just reading
+        });
+
+        // Fallback: read directly (state read above may not flush synchronously in all cases)
+        if (!contact) {
+            // Can't find it — nothing to delete
+            return;
+        }
+
         showConfirm('Are you sure you want to delete this contact?', () => {
-            const snapshot = [...contacts];
-            setContacts(contacts.filter(c => c.id !== contactId));
+            // Snapshot captured right when user confirms, inside the callback
+            let snapshot;
+            setContacts(prev => {
+                snapshot = prev.slice();
+                return prev.filter(c => c.id !== contactId);
+            });
+
             dbFetch(`/.netlify/functions/contacts?id=${contactId}`, { method: 'DELETE' })
-                .catch(err => console.error('Failed to delete contact:', err));
+                .then(async res => {
+                    if (!res.ok) {
+                        // DB delete failed — restore the contact
+                        console.error('Failed to delete contact on server, restoring. Status:', res.status);
+                        setContacts(prev => {
+                            if (prev.some(c => c.id === contactId)) return prev; // already restored
+                            return [...prev, contact].sort((a, b) =>
+                                (a.lastName || '').localeCompare(b.lastName || ''));
+                        });
+                    }
+                })
+                .catch(err => {
+                    console.error('Failed to delete contact (network error), restoring:', err);
+                    setContacts(prev => {
+                        if (prev.some(c => c.id === contactId)) return prev;
+                        return [...prev, contact].sort((a, b) =>
+                            (a.lastName || '').localeCompare(b.lastName || ''));
+                    });
+                });
+
             addAudit('delete', 'contact', contactId,
                 ((contact.firstName || '') + ' ' + (contact.lastName || '')).trim() || contactId,
                 contact.company || '');
+
             softDelete(
                 `Contact "${((contact.firstName || '') + ' ' + (contact.lastName || '')).trim()}"`,
                 () => {},
@@ -45,7 +81,7 @@ export function useContacts(deps) {
                 const res = await dbFetch('/.netlify/functions/contacts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const data = await res.json();
                 if (!res.ok) { setContactModalError(data.error || 'Failed to save contact. Please try again.'); setContactModalSaving(false); return; }
-                setContacts(contacts.map(c => c.id === editingContact.id ? (data.contact || payload) : c));
+                setContacts(prev => prev.map(c => c.id === editingContact.id ? (data.contact || payload) : c));
                 addAudit('update', 'contact', editingContact.id, fullName || editingContact.id, contactData.company || '');
                 setShowContactModal(false); setContactModalError(null);
             } catch (err) {
@@ -59,7 +95,7 @@ export function useContacts(deps) {
                 const res = await dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newContact) });
                 const data = await res.json();
                 if (!res.ok) { setContactModalError(data.error || 'Failed to save contact. Please try again.'); setContactModalSaving(false); return; }
-                setContacts([...contacts, data.contact || newContact]);
+                setContacts(prev => [...prev, data.contact || newContact]);
                 addAudit('create', 'contact', newId, fullName || newId, contactData.company || '');
                 setShowContactModal(false); setContactModalError(null);
             } catch (err) {
