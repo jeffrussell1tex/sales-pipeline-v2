@@ -471,12 +471,13 @@ export default function AppHeader({
                                             return (
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
+                                                    {/* Accounts */}
                                                     <div style={{ padding: '0.75rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                        {sectionHead('✅', 'Tasks')}
-                                                        {row('tasks', 'tasks',
-                                                            `tasks-${new Date().toISOString().slice(0,10)}.csv`,
-                                                            ['Title','Type','Status','Due Date','Priority','Assigned To','Account','Notes'],
-                                                            tasks.map(t => [t.title||'',t.type||'',t.status||'',t.dueDate||'',t.priority||'',t.assignedTo||'',t.account||'',t.notes||''])
+                                                        {sectionHead('🏢', 'Accounts')}
+                                                        {row('accounts', 'accounts',
+                                                            `accounts-${new Date().toISOString().slice(0,10)}.csv`,
+                                                            ['Account Name','Vertical Market','Account Owner','Phone','Website','Address','City','State','ZIP','Country'],
+                                                            accounts.map(a => [a.name,a.verticalMarket,a.accountOwner,a.phone,a.website,a.address,a.city,a.state,a.zip,a.country])
                                                         )}
                                                     </div>
 
@@ -490,16 +491,6 @@ export default function AppHeader({
                                                         )}
                                                     </div>
 
-                                                    {/* Accounts */}
-                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                        {sectionHead('🏢', 'Accounts')}
-                                                        {row('accounts', 'accounts',
-                                                            `accounts-${new Date().toISOString().slice(0,10)}.csv`,
-                                                            ['Account Name','Vertical Market','Account Owner','Phone','Website','Address','City','State','ZIP','Country'],
-                                                            accounts.map(a => [a.name,a.verticalMarket,a.accountOwner,a.phone,a.website,a.address,a.city,a.state,a.zip,a.country])
-                                                        )}
-                                                    </div>
-
                                                     {/* Opportunities */}
                                                     <div style={{ padding: '0.75rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                                         {sectionHead('💼', 'Opportunities')}
@@ -507,6 +498,16 @@ export default function AppHeader({
                                                             `opportunities-${new Date().toISOString().slice(0,10)}.csv`,
                                                             ['Opportunity Name','Account','Sales Rep','Stage','ARR','Impl. Cost','Close Date','Products','Notes','Territory','Vertical'],
                                                             opportunities.map(o => [o.opportunityName,o.account,o.salesRep,o.stage,o.arr,o.implementationCost,o.forecastedCloseDate,o.products,o.notes,o.territory,o.vertical])
+                                                        )}
+                                                    </div>
+
+                                                    {/* Tasks */}
+                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                        {sectionHead('✅', 'Tasks')}
+                                                        {row('tasks', 'tasks',
+                                                            `tasks-${new Date().toISOString().slice(0,10)}.csv`,
+                                                            ['Title','Type','Status','Due Date','Priority','Assigned To','Account','Notes'],
+                                                            tasks.map(t => [t.title||'',t.type||'',t.status||'',t.dueDate||'',t.priority||'',t.assignedTo||'',t.account||'',t.notes||''])
                                                         )}
                                                     </div>
 
