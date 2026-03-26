@@ -13,7 +13,7 @@
 
 import { db } from '../../db/index.js';
 import { users, opportunities, tasks, activities } from '../../db/schema.js';
-import { gte, eq } from 'drizzle-orm';
+import { gte, eq, and } from 'drizzle-orm';
 import { sendEmail, emailTemplates } from './send-email.mjs';
 
 const DEFAULT_PREFS = {
@@ -68,7 +68,7 @@ export const handler = async () => {
             // ── Tasks due today ────────────────────────────────────────────────
             if (wantsDigest(profile, 'taskDigest')) {
                 const todayTasks = await db.select().from(tasks)
-                    .where(eq(tasks.assignedTo, user.name));
+                    .where(and(eq(tasks.orgId, user.orgId), eq(tasks.assignedTo, user.name)));
                 const dueTodayTasks = todayTasks.filter(t =>
                     t.dueDate === today && !t.completed
                 );
@@ -96,7 +96,7 @@ export const handler = async () => {
             // ── Overdue tasks ─────────────────────────────────────────────────
             if (wantsDigest(profile, 'overdueTaskNudge')) {
                 const allTasks = await db.select().from(tasks)
-                    .where(eq(tasks.assignedTo, user.name));
+                    .where(and(eq(tasks.orgId, user.orgId), eq(tasks.assignedTo, user.name)));
                 const overdueTasks = allTasks.filter(t =>
                     t.dueDate && t.dueDate < today && !t.completed
                 );
@@ -129,7 +129,7 @@ export const handler = async () => {
             // ── Opportunity updates digest ─────────────────────────────────────
             if (wantsDigest(profile, 'opportunityUpdated') || wantsDigest(profile, 'stageChanged') || wantsDigest(profile, 'commentAdded')) {
                 const recentOpps = await db.select().from(opportunities)
-                    .where(eq(opportunities.salesRep, user.name));
+                    .where(and(eq(opportunities.orgId, user.orgId), eq(opportunities.salesRep, user.name)));
 
                 const updatedRecently = recentOpps.filter(o =>
                     o.updatedAt && new Date(o.updatedAt) >= since24h
@@ -204,9 +204,9 @@ export const handler = async () => {
                     );
                     if (visibleReps.length === 0) continue;
 
-                    const allOpps = await db.select().from(opportunities);
-                    const allTasks = await db.select().from(tasks);
-                    const allActs  = await db.select().from(activities);
+                    const allOpps = await db.select().from(opportunities).where(eq(opportunities.orgId, mgr.orgId));
+                    const allTasks = await db.select().from(tasks).where(eq(tasks.orgId, mgr.orgId));
+                    const allActs  = await db.select().from(activities).where(eq(activities.orgId, mgr.orgId));
                     const today    = now.toISOString().slice(0, 10);
                     const since7d  = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 

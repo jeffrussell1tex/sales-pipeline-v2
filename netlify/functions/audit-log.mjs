@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { auditLog } from '../../db/schema.js';
-import { desc, and } from 'drizzle-orm';
+import { desc, and, eq } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 
 export const handler = async (event) => {
@@ -8,6 +8,7 @@ export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
     const auth = await verifyAuth(event);
     if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
+    const { orgId } = auth;
 
     try {
         if (event.httpMethod === 'GET') {

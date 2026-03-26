@@ -153,6 +153,8 @@ export const handler = async () => {
             if (!repUser?.email || !repUser.active) continue;
 
             const orgId   = opp.orgId;
+            // Cross-tenant safety: skip if the matched user belongs to a different org
+            if (repUser.orgId && repUser.orgId !== orgId) continue;
             const profile = repUser.profile || {};
             const arr     = parseFloat(opp.arr) || 0;
             const name    = opp.opportunityName || opp.account || 'Unnamed deal';
@@ -276,14 +278,13 @@ export const handler = async () => {
                     }
                 } else { skipped++; }
             }
-        }
 
-        // ── Signal 5: AI score dropped below threshold ────────────────────────────
-        if (
-            opp.aiScore?.score !== undefined &&
-            opp.aiScore.score < 40 &&
-            wantsAlert(profile, 'scoreDropAlert')
-        ) {
+            // ── Signal 5: AI score dropped below threshold ──────────────────────
+            if (
+                opp.aiScore?.score !== undefined &&
+                opp.aiScore.score < 40 &&
+                wantsAlert(profile, 'scoreDropAlert')
+            ) {
             const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'scoreDrop');
             if (!alerted) {
                 try {
@@ -340,7 +341,8 @@ export const handler = async () => {
                     console.error(`scoreDropAlert error (${name}):`, err.message);
                 }
             } else { skipped++; }
-        }
+        }  // end Signal 5 if
+        }  // end for loop
 
         const summary = `${emailsSent} emails sent, ${skipped} skipped (dedup)`;
         console.log('pipeline-alerts: complete —', summary);
