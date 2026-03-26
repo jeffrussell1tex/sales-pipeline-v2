@@ -1,6 +1,6 @@
 import { db } from '../../db/index.js';
 import { tasks } from '../../db/schema.js';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 
 export const handler = async (event) => {
@@ -53,7 +53,7 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'DELETE') {
             if (event.queryStringParameters?.clear === 'true') {
-                await db.delete(tasks);
+                await db.delete(tasks).where(eq(tasks.orgId, orgId));
                 return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
             }
             const id = event.queryStringParameters?.id;

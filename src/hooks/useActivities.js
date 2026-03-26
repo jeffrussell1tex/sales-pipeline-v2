@@ -6,8 +6,7 @@ export function useActivities(deps) {
 
     const [activities, setActivities] = useState([]);
     const [activityModalError, setActivityModalError] = useState(null);
-    const [activityModalSaving,
-        setActivityModalSaving] = useState(false);
+    const [activityModalSaving, setActivityModalSaving] = useState(false);
 
     const loadActivities = (setDbOffline) => {
         dbFetch('/.netlify/functions/activities')
@@ -17,10 +16,30 @@ export function useActivities(deps) {
     };
 
     const handleDeleteActivity = (activityId) => {
+        let activity;
+        setActivities(prev => { activity = prev.find(a => a.id === activityId); return prev; });
+        if (!activity) return;
+
         showConfirm('Are you sure you want to delete this activity?', () => {
-            setActivities(activities.filter(a => a.id !== activityId));
+            setActivities(prev => prev.filter(a => a.id !== activityId));
+
             dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
-                .catch(err => console.error('Failed to delete activity:', err));
+                .then(res => {
+                    if (!res.ok) {
+                        console.error('Failed to delete activity on server, restoring. Status:', res.status);
+                        setActivities(prev => {
+                            if (prev.some(a => a.id === activityId)) return prev;
+                            return [...prev, activity].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+                        });
+                    }
+                })
+                .catch(err => {
+                    console.error('Failed to delete activity (network error), restoring:', err);
+                    setActivities(prev => {
+                        if (prev.some(a => a.id === activityId)) return prev;
+                        return [...prev, activity].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+                    });
+                });
         });
     };
 
@@ -59,7 +78,6 @@ export function useActivities(deps) {
     ) => {
         setActivityModalError(null);
         setActivityModalSaving(true);
-        console.log('[useActivities] saving activityData.date:', activityData.date);
 
         if (editingActivity) {
             const payload = { ...activityData, id: editingActivity.id };
@@ -67,7 +85,7 @@ export function useActivities(deps) {
                 const res = await dbFetch('/.netlify/functions/activities', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const data = await res.json();
                 if (!res.ok) { setActivityModalError(data.error || 'Failed to save activity. Please try again.'); setActivityModalSaving(false); return; }
-                setActivities(activities.map(a => a.id === editingActivity.id ? (data.activity || payload) : a));
+                setActivities(prev => prev.map(a => a.id === editingActivity.id ? (data.activity || payload) : a));
                 fireActivityCalendarEvent(payload, opportunities);
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) {
@@ -81,7 +99,7 @@ export function useActivities(deps) {
                 const res = await dbFetch('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) });
                 const data = await res.json();
                 if (!res.ok) { setActivityModalError(data.error || 'Failed to save activity. Please try again.'); setActivityModalSaving(false); return; }
-                setActivities([...activities, data.activity || newActivity]);
+                setActivities(prev => [...prev, data.activity || newActivity]);
                 fireActivityCalendarEvent(newActivity, opportunities);
                 setShowActivityModal(false); setActivityModalError(null);
             } catch (err) {
@@ -90,7 +108,6 @@ export function useActivities(deps) {
             } finally { setActivityModalSaving(false); }
         }
 
-        // Show follow-up task prompt if linked to an opportunity
         if (activityData.opportunityId) {
             const linkedOpp = (opportunities || []).find(o => o.id === activityData.opportunityId);
             setFollowUpPrompt({

@@ -130,8 +130,18 @@ export const handler = async (event) => {
         if (event.httpMethod === 'GET') {
             let results = await db.select().from(opportunities).where(eq(opportunities.orgId, orgId)).orderBy(asc(opportunities.createdAt));
             if (!canSeeAll(userRole)) {
-                results = results.filter(o => !o.salesRep || o.salesRep === userId);
+                // salesRep is stored as a display name (e.g. "Jeff Russell"), not a Clerk userId.
+                // Look up the current user's display name from the users table so we can filter correctly.
+                let repDisplayName = null;
+                try {
+                    const [repRow] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));
+                    repDisplayName = repRow?.name || null;
+                } catch (e) {
+                    console.warn('Could not look up rep display name for filtering:', e.message);
+                }
+                results = results.filter(o => !o.salesRep || o.salesRep === repDisplayName);
             } else if (isManager(userRole) && managedReps.length > 0) {
+                // managedReps are stored as display names in Clerk publicMetadata — this comparison is correct
                 results = results.filter(o => !o.salesRep || managedReps.includes(o.salesRep));
             }
             return { statusCode: 200, headers, body: JSON.stringify({ opportunities: results }) };

@@ -71,7 +71,7 @@ export const handler = async (event) => {
         }
         if (event.httpMethod === 'DELETE') {
             if (event.queryStringParameters?.clear === 'true') {
-                await db.delete(contacts);
+                await db.delete(contacts).where(eq(contacts.orgId, orgId));
                 return { statusCode: 200, headers, body: JSON.stringify({ success: true, cleared: true }) };
             }
             const id = event.queryStringParameters?.id;

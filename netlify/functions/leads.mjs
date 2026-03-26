@@ -1,5 +1,5 @@
 import { db } from '../../db/index.js';
-import { leads } from '../../db/schema.js';
+import { leads, users } from '../../db/schema.js';
 import { eq, asc } from 'drizzle-orm';
 import { verifyAuth, canSeeAll } from './auth.mjs';
 
@@ -31,7 +31,15 @@ export const handler = async (event) => {
         if (event.httpMethod === 'GET') {
             let results = await db.select().from(leads).where(eq(leads.orgId, orgId)).orderBy(asc(leads.createdAt));
             if (!canSeeAll(userRole)) {
-                results = results.filter(l => !l.assignedTo || l.assignedTo === userId);
+                // assignedTo is stored as a display name, not a Clerk userId — look up the current user's name
+                let repDisplayName = null;
+                try {
+                    const [repRow] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId));
+                    repDisplayName = repRow?.name || null;
+                } catch (e) {
+                    console.warn('Could not look up rep display name for leads filtering:', e.message);
+                }
+                results = results.filter(l => !l.assignedTo || l.assignedTo === repDisplayName);
             }
             return { statusCode: 200, headers, body: JSON.stringify({ leads: results }) };
         }

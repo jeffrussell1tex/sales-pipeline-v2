@@ -120,17 +120,22 @@ export const handler = async (event) => {
         try {
             const data = JSON.parse(event.body || '{}');
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+            // Security: only allow a user to update their own row
+            if (data.id !== userId) {
+                return { statusCode: 403, headers, body: JSON.stringify({ error: 'Forbidden: cannot update another user\'s profile' }) };
+            }
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
             let upsertResult;
             try {
-                const [ins] = await db.insert(users).values(clean).returning();
+                // Include orgId so the row is properly scoped to this tenant
+                const [ins] = await db.insert(users).values({ ...clean, orgId }).returning();
                 upsertResult = ins;
             } catch {
                 const [upd] = await db
                     .update(users)
                     .set({ ...updateData, updatedAt: new Date() })
-                    .where(eq(users.id, data.id))
+                    .where(and(eq(users.id, data.id), eq(users.orgId, orgId)))
                     .returning();
                 upsertResult = upd;
             }

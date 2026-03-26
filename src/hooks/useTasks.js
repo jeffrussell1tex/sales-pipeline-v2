@@ -6,8 +6,7 @@ export function useTasks(deps) {
 
     const [tasks, setTasks] = useState([]);
     const [taskModalError, setTaskModalError] = useState(null);
-    const [taskModalSaving,
-        setTaskModalSaving] = useState(false);
+    const [taskModalSaving, setTaskModalSaving] = useState(false);
     const [calendarAddingTaskId, setCalendarAddingTaskId] = useState(null);
     const [calendarAddFeedback, setCalendarAddFeedback] = useState({});
 
@@ -19,13 +18,35 @@ export function useTasks(deps) {
     };
 
     const handleDeleteTask = (taskId) => {
-        const task = tasks.find(t => t.id === taskId);
+        let task;
+        setTasks(prev => { task = prev.find(t => t.id === taskId); return prev; });
         if (!task) return;
+
         showConfirm('Are you sure you want to delete this task?', () => {
-            const snapshot = [...tasks];
-            setTasks(tasks.filter(t => t.id !== taskId));
+            let snapshot;
+            setTasks(prev => {
+                snapshot = prev.slice();
+                return prev.filter(t => t.id !== taskId);
+            });
+
             dbFetch(`/.netlify/functions/tasks?id=${taskId}`, { method: 'DELETE' })
-                .catch(err => console.error('Failed to delete task:', err));
+                .then(res => {
+                    if (!res.ok) {
+                        console.error('Failed to delete task on server, restoring. Status:', res.status);
+                        setTasks(prev => {
+                            if (prev.some(t => t.id === taskId)) return prev;
+                            return snapshot;
+                        });
+                    }
+                })
+                .catch(err => {
+                    console.error('Failed to delete task (network error), restoring:', err);
+                    setTasks(prev => {
+                        if (prev.some(t => t.id === taskId)) return prev;
+                        return snapshot;
+                    });
+                });
+
             addAudit('delete', 'task', taskId, task.title || task.subject || taskId, '');
             softDelete(
                 `Task "${task.title || task.subject || 'Untitled'}"`,
@@ -66,7 +87,7 @@ export function useTasks(deps) {
                 const res = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const data = await res.json();
                 if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
-                setTasks(tasks.map(t => t.id === editingTask.id ? (data.task || payload) : t));
+                setTasks(prev => prev.map(t => t.id === editingTask.id ? (data.task || payload) : t));
                 addAudit('update', 'task', editingTask.id, taskData.title || editingTask.id, taskData.type || '');
                 fireCalendarEvent(payload, opportunities);
                 setShowTaskModal(false); setTaskModalError(null);
@@ -81,7 +102,7 @@ export function useTasks(deps) {
                 const res = await dbFetch('/.netlify/functions/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTask) });
                 const data = await res.json();
                 if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
-                setTasks([...tasks, data.task || newTask]);
+                setTasks(prev => [...prev, data.task || newTask]);
                 addAudit('create', 'task', newId, taskData.title || newId, taskData.type || '');
                 fireCalendarEvent(newTask, opportunities);
                 setShowTaskModal(false); setTaskModalError(null);
@@ -93,13 +114,14 @@ export function useTasks(deps) {
     };
 
     const handleCompleteTask = (taskId, newStatus) => {
-        setTasks(tasks.map(t => {
+        const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
+        setTasks(prev => prev.map(t => {
             if (t.id !== taskId) return t;
             if (newStatus !== undefined) {
-                return { ...t, status: newStatus, completed: newStatus === 'Completed', completedDate: newStatus === 'Completed' ? [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-') : t.completedDate };
+                return { ...t, status: newStatus, completed: newStatus === 'Completed', completedDate: newStatus === 'Completed' ? today : t.completedDate };
             }
             const wasCompleted = t.completed || t.status === 'Completed';
-            return { ...t, completed: !wasCompleted, status: wasCompleted ? 'Open' : 'Completed', completedDate: wasCompleted ? t.completedDate : [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-') };
+            return { ...t, completed: !wasCompleted, status: wasCompleted ? 'Open' : 'Completed', completedDate: wasCompleted ? t.completedDate : today };
         }));
     };
 
