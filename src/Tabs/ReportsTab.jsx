@@ -533,15 +533,17 @@ ${bodyHtml}
                 return (
                     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
-                        {/* ── Top bar: title + viewing slice ── */}
-                        <div className="table-container">
-                          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.75rem 1.25rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap', gap:'0.5rem' }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
-                              <div style={{ width:'4px', height:'24px', background:'linear-gradient(to bottom,#2563eb,#7c3aed)', borderRadius:'2px' }}/>
-                              <div>
-                                <h2 style={{ fontSize:'1.125rem', fontWeight:'700', color:'#1e293b', margin:0 }}>Reports</h2>
-                              </div>
+                        {/* ── Row 1: Title — matches Sales Manager tab-page-header style ── */}
+                        <div className="tab-page-header">
+                            <div className="tab-page-header-bar"></div>
+                            <div>
+                                <h2>Reports</h2>
                             </div>
+                        </div>
+
+                        {/* ── Row 2: Viewing + Period filters ── */}
+                        <div className="table-container">
+                          <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', padding:'0.625rem 1.25rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap', gap:'0.5rem' }}>
                             {hasReportsSlicing && (
                               <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap' }}>
                                 <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em' }}>Viewing:</span>
@@ -552,11 +554,11 @@ ${bodyHtml}
                                   <button onClick={() => { setReportsRep(null); setReportsTeam(null); setReportsTerritory(null); }}
                                     style={{ padding:'0.2rem 0.5rem', borderRadius:'4px', border:'1px solid #e2e8f0', background:'#fff', color:'#94a3b8', fontSize:'0.625rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>✕ Clear</button>
                                 )}
+                                <div style={{ width:'1px', height:'16px', background:'#e2e8f0', flexShrink:0 }} />
                               </div>
                             )}
-                            {/* Period filter — always visible for all subtabs */}
+                            {/* Period filter */}
                             <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap' }}>
-                                <div style={{ width:'1px', height:'16px', background:'#e2e8f0', flexShrink:0 }} />
                                 <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Period:</span>
                                 {(() => { const now = new Date(); const fy = now.getFullYear(); return (
                                 <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
@@ -583,8 +585,8 @@ ${bodyHtml}
                             </div>
                           </div>
 
-                          {/* ── Report selector tabs ── */}
-                          <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', background:'#fafbfc', overflowX:'auto' }}>
+                          {/* ── Row 3: Sub-tab nav — Pipeline / Performance / Revenue / etc. ── */}
+                          <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', overflowX:'auto' }}>
                             {[
                               { key:'pipeline',    label:'Pipeline' },
                               { key:'performance', label:'Performance' },
