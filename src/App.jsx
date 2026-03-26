@@ -48,6 +48,7 @@ import { useModalState } from './hooks/useModalState';
 import { useUIState } from './hooks/useUIState';
 import { useCalendarState } from './hooks/useCalendarState';
 import { useUserHandlers } from './hooks/useUserHandlers';
+import ErrorBoundary from './components/ErrorBoundary';
 
 
 function App() {
@@ -1476,39 +1477,63 @@ dbFetch('/.netlify/functions/users?me=true')
             </nav>
 
             {activeTab === 'home' && (
-                <HomeTab />
+                <ErrorBoundary tabName="Home">
+                    <HomeTab />
+                </ErrorBoundary>
             )}
 
             {activeTab === 'pipeline' && (
-                <PipelineTab />
+                <ErrorBoundary tabName="Pipeline">
+                    <PipelineTab />
+                </ErrorBoundary>
             )}
 
             {activeTab === 'opportunities' && (
-                <OpportunitiesTab />
+                <ErrorBoundary tabName="Opportunities">
+                    <OpportunitiesTab />
+                </ErrorBoundary>
             )}
 
             {activeTab === 'tasks' && (
-                <TasksTab />
+                <ErrorBoundary tabName="Tasks">
+                    <TasksTab />
+                </ErrorBoundary>
             )}
 
             {activeTab === 'accounts' && (
-                <AccountsTab />
+                <ErrorBoundary tabName="Accounts">
+                    <AccountsTab />
+                </ErrorBoundary>
             )}
 
             {activeTab === 'contacts' && (
-                <ContactsTab />
+                <ErrorBoundary tabName="Contacts">
+                    <ContactsTab />
+                </ErrorBoundary>
             )}
 
             {activeTab === 'leads' && settings.leadsEnabled !== false && (
-                <LeadsTab />
+                <ErrorBoundary tabName="Leads">
+                    <LeadsTab />
+                </ErrorBoundary>
             )}
 
-            {activeTab === 'reports' && <ReportsTab leadsEnabled={settings.leadsEnabled !== false} />}
+            {activeTab === 'reports' && (
+                <ErrorBoundary tabName="Reports">
+                    <ReportsTab leadsEnabled={settings.leadsEnabled !== false} />
+                </ErrorBoundary>
+            )}
 
-            {activeTab === 'salesManager' && <SalesManagerTab />}
+            {activeTab === 'salesManager' && (
+                <ErrorBoundary tabName="Sales Manager">
+                    <SalesManagerTab />
+                </ErrorBoundary>
+            )}
 
             {activeTab === 'settings' && isAdmin && (
-                <SettingsTab />
+                <ErrorBoundary tabName="Settings">
+                    <SettingsTab />
+                </ErrorBoundary>
             )}
 
             {/* ════ MEETING PREP PANEL ════ */}
