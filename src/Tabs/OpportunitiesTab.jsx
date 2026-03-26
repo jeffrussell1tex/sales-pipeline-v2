@@ -273,22 +273,6 @@ export default function OpportunitiesTab() {
                             {/* Right side: count + CSV + New */}
                             <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginLeft:'auto', flexShrink:0 }}>
                                 <span style={{ fontSize:'0.6875rem', color:'#94a3b8', fontWeight:'600' }}>{oppFilteredOpps.length} deals</span>
-                                <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} disabled={exportingCSV === 'opps'} onClick={() => {
-                                    exportToCSV(
-                                        `opportunities-${new Date().toISOString().slice(0,10)}.csv`,
-                                        ['Account','Site','Stage','ARR','Impl Cost','Total Value','Close Date','Quarter','Rep','Team','Territory','Probability','Deal Health','Notes','Next Steps'],
-                                        oppFilteredOpps.map(o => [
-                                            o.account, o.site, o.stage,
-                                            o.arr||0, o.implementationCost||0, (o.arr||0)+(o.implementationCost||0),
-                                            o.forecastedCloseDate, o.closeQuarter, o.salesRep||o.assignedTo,
-                                            (settings.users||[]).find(u=>u.name===(o.salesRep||o.assignedTo))?.team||'',
-                                            (settings.users||[]).find(u=>u.name===(o.salesRep||o.assignedTo))?.territory||'',
-                                            o.probability||'', calculateDealHealth(o).score,
-                                            o.notes||'', o.nextSteps||''
-                                        ])
-                                    , 'opps');
-                                }}>{exportingCSV === 'opps' ? '⏳ Exporting…' : '📤 Export'}</button>
-                                <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} onClick={() => { setCsvImportType('opportunities'); setShowCsvImportModal(true); }}>Import</button>
                                 <button className="btn" onClick={handleAddNew} style={{ padding:'0.3rem 0.75rem', fontSize:'0.6875rem', fontWeight:'700' }}>+ New</button>
                             </div>
                         </div>

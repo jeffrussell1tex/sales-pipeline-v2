@@ -117,16 +117,7 @@ export default function AccountsTab() {
         });
     }}>Delete ({selectedAccounts.length})</button>
 )}
-                            <button className="btn" style={{ background: exportingCSV === 'accounts' ? '#7dd3fc' : '#0ea5e9', color: '#fff', padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} disabled={exportingCSV === 'accounts'} onClick={() => exportToCSV(
-                                'accounts-' + new Date().toISOString().slice(0,10) + '.csv',
-                                ['Name','Industry','Phone','Website','Account Owner','Parent Account','Billing Address','Annual Revenue','Employees','Notes'],
-                                visibleAccounts.map(a => [a.name||'',a.industry||'',a.phone||'',a.website||'',a.accountOwner||'',
-                                    a.parentAccountId ? (accounts.find(p => p.id === a.parentAccountId) || {}).name || '' : '',
-                                    a.billingAddress||'', a.annualRevenue||'', a.employees||'', a.notes||''])
-                            , 'accounts')}>{exportingCSV === 'accounts' ? '⏳ Exporting…' : '📤 Export'}</button>
-                            {canEdit && (
-                                <button className="btn" style={{ background:'#10b981', padding:'0.3rem 0.625rem', fontSize:'0.6875rem', fontWeight:'700' }} onClick={() => { setCsvImportType('accounts'); setShowCsvImportModal(true); }}>📥 Import</button>
-                            )}
+
                         </div>
                     </div>
                     <div style={{ padding: '1.5rem' }}>

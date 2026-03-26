@@ -471,6 +471,15 @@ export default function AppHeader({
                                             return (
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
+                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                        {sectionHead('✅', 'Tasks')}
+                                                        {row('tasks', 'tasks',
+                                                            `tasks-${new Date().toISOString().slice(0,10)}.csv`,
+                                                            ['Title','Type','Status','Due Date','Priority','Assigned To','Account','Notes'],
+                                                            tasks.map(t => [t.title||'',t.type||'',t.status||'',t.dueDate||'',t.priority||'',t.assignedTo||'',t.account||'',t.notes||''])
+                                                        )}
+                                                    </div>
+
                                                     {/* Contacts */}
                                                     <div style={{ padding: '0.75rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                                         {sectionHead('👤', 'Contacts')}

@@ -297,49 +297,7 @@ export default function TasksTab() {
                             );
                         })()}
 
-                        {/* ── Row 3: right-side action buttons (CSV + Import) ── */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem', padding: '0.5rem 1rem', borderBottom: '1px solid #e2e8f0' }}>
-                            {tasksSubView === 'tasks' && (
-                                <button className="btn btn-secondary" style={{ padding: '0.3rem 0.625rem', fontSize: '0.6875rem' }} disabled={exportingCSV === 'tasks'} onClick={() => {
-                                    const today = new Date(); today.setHours(0,0,0,0);
-                                    const getStatus = (t) => t.status || (t.completed ? 'Completed' : 'Open');
-                                    const isOverdue = (t) => { const s = getStatus(t); return (s === 'Open' || s === 'In-Process') && t.dueDate && new Date(t.dueDate + 'T12:00:00') < today; };
-                                    const rows = [...visibleTasks]
-                                        .filter(t => {
-                                            if (taskStatusFilter.length === 0) return true;
-                                            const st = getStatus(t);
-                                            if (taskStatusFilter.includes('Overdue') && isOverdue(t)) return true;
-                                            if (taskStatusFilter.includes('Open') && st === 'Open' && !isOverdue(t)) return true;
-                                            if (taskStatusFilter.includes('In-Process') && st === 'In-Process') return true;
-                                            return false;
-                                        })
-                                        .sort((a, b) => new Date(a.dueDate || '9999') - new Date(b.dueDate || '9999'));
-                                    exportToCSV(
-                                        `tasks-${new Date().toISOString().slice(0,10)}.csv`,
-                                        ['Title','Type','Status','Due Date','Priority','Assigned To','Account','Related To','Notes'],
-                                        rows.map(t => {
-                                            const ro = t.opportunityId ? (opportunities||[]).find(o => o.id === t.opportunityId) : null;
-                                            const rc = t.contactId ? contacts.find(c => c.id === t.contactId) : null;
-                                            const ra = t.accountId ? (accounts||[]).find(a => a.id === t.accountId) : null;
-                                            const related = ro ? (ro.opportunityName||ro.account) : rc ? (rc.firstName+' '+rc.lastName) : ra ? ra.name : t.relatedTo||'';
-                                            return [t.title||'', t.type||'', getStatus(t), t.dueDate||'', t.priority||'', t.assignedTo||'', t.account||'', related, t.notes||''];
-                                        })
-                                    , 'tasks');
-                                }}>{exportingCSV === 'tasks' ? '⏳ Exporting…' : '📤 Export'}</button>
-                            )}
-                            {tasksSubView === 'activities' && (
-                                <button className="btn btn-secondary" style={{ padding: '0.3rem 0.625rem', fontSize: '0.6875rem' }} disabled={exportingCSV === 'activities'} onClick={() => {
-                                    const rows = [...(activities||[])]
-                                        .sort((a,b) => new Date((b.date||'1970-01-01') + 'T12:00:00') - new Date((a.date||'1970-01-01') + 'T12:00:00'));
-                                    exportToCSV(
-                                        `activities-${new Date().toISOString().slice(0,10)}.csv`,
-                                        ['Date','Type','Subject','Account','Rep','Duration (min)','Notes'],
-                                        rows.map(a => [a.date||'', a.type||'', a.subject||'', a.account||'', a.rep||a.salesRep||'', a.duration||'', a.notes||''])
-                                    , 'activities');
-                                }}>{exportingCSV === 'activities' ? '⏳ Exporting…' : '📤 Export'}</button>
-                            )}
-                            <button className="btn" style={{ background: '#10b981', color: '#fff', padding: '0.3rem 0.625rem', fontSize: '0.6875rem', fontWeight: '700' }} onClick={() => setShowOutlookImportModal(true)}>📥 Import</button>
-                        </div>
+
                     </div>
 
                     {tasksSubView === 'tasks' && (

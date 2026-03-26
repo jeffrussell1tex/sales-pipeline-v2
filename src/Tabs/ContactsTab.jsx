@@ -82,24 +82,7 @@ export default function ContactsTab() {
                                     <option value="company">Company</option>
                                 </select>
                             </div>
-                            <button className="btn btn-secondary" style={{ padding:'0.3rem 0.625rem', fontSize:'0.6875rem' }} disabled={exportingCSV === 'contacts'} onClick={() => {
-                                const sorted = [...visibleContacts].sort((a, b) => {
-                                    if (contactsSortBy === 'lastName') return (a.lastName||'').localeCompare(b.lastName||'');
-                                    if (contactsSortBy === 'firstName') return (a.firstName||'').localeCompare(b.firstName||'');
-                                    const cmp = (a.company||'').localeCompare(b.company||'');
-                                    return cmp !== 0 ? cmp : (a.lastName||'').localeCompare(b.lastName||'');
-                                });
-                                exportToCSV(
-                                    `contacts-${new Date().toISOString().slice(0,10)}.csv`,
-                                    ['First Name','Last Name','Title','Company','Email','Phone','Mobile','LinkedIn','Notes'],
-                                    sorted.map(c => [
-                                        c.firstName||'', c.lastName||'', c.title||'', c.company||'',
-                                        c.email||'', c.phone||'', c.mobile||'',
-                                        c.linkedin||'', c.notes||''
-                                    ])
-                                , 'contacts');
-                            }}>{exportingCSV === 'contacts' ? '⏳ Exporting…' : '📤 Export'}</button>
-                            <button className="btn" style={{ background:'#10b981', padding:'0.3rem 0.625rem', fontSize:'0.6875rem', fontWeight:'700' }} onClick={() => { setCsvImportType('contacts'); setShowCsvImportModal(true); }}>📥 Import</button>
+
                         </div>
                     </div>
                     {/* Bulk action bar */}
