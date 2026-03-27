@@ -294,7 +294,6 @@ export default function SettingsTab() {
                         <div className="tab-page-header-bar"></div>
                         <div>
                             <h2>Settings</h2>
-                            <p>Manage users, configuration, and system preferences</p>
                         </div>
                     </div>
 
