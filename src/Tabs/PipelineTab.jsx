@@ -546,7 +546,7 @@ export default function PipelineTab() {
 
                         </div>
                     </div>
-                    </div>{/* ════ END SUMMARY PANEL ════ */}
+                    {/* ════ END SUMMARY PANEL ════ */}
 
                     {/* ════ MOBILE PIPELINE CARD LIST (≤640px only) ════ */}
                     <div className="spt-pipeline-mobile" style={{ padding: '0.75rem' }}>
