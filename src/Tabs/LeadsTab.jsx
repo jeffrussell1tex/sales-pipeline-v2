@@ -436,7 +436,7 @@ export default function LeadsTab() {
                                     });
                                     setLeads(updated);
                                     updated.filter(l => !leads.find(ol => ol.id === l.id && ol.assignedTo === l.assignedTo)).forEach(l => dbFetch('/.netlify/functions/leads', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(l) }).catch(console.error));
-                                }} style={{ flex:1, padding:'0.4rem 0', border:'none', borderRadius:'6px', background:'#1c1917', color:'#f5f1eb', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }>⚡ Auto-assign All</button>
+                                }} style={{ flex:1, padding:'0.4rem 0', border:'none', borderRadius:'6px', background:'#1c1917', color:'#f5f1eb', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>⚡ Auto-assign All</button>
                             </div>
                         </div>
 
