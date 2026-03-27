@@ -162,31 +162,23 @@ export default function TasksTab() {
                         visibleCount={visibleTasks.length} totalCount={(canSeeAll ? (tasks||[]) : (tasks||[]).filter(t => !t.assignedTo || t.assignedTo === currentUser)).length} countLabel="tasks"
                         isAdmin={isAdmin}
                     />
-                <div className="table-container">
-                    <div className="table-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 0, padding: 0 }}>
-                        {/* ── Row 1: sub-view tabs ── */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1rem', borderBottom: '1px solid #e2e8f0' }}>
-                            <div style={{ display: 'flex' }}>
-                                <button onClick={() => setTasksSubView('tasks')}
-                                    style={{ padding: '0.5rem 1.25rem', border: 'none', borderBottom: tasksSubView === 'tasks' ? '2px solid #2563eb' : '2px solid transparent', background: 'transparent', color: tasksSubView === 'tasks' ? '#2563eb' : '#64748b', fontWeight: tasksSubView === 'tasks' ? '700' : '500', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>Tasks</button>
-                                <button onClick={() => setTasksSubView('activities')}
-                                    style={{ padding: '0.5rem 1.25rem', border: 'none', borderBottom: tasksSubView === 'activities' ? '2px solid #2563eb' : '2px solid transparent', background: 'transparent', color: tasksSubView === 'activities' ? '#2563eb' : '#64748b', fontWeight: tasksSubView === 'activities' ? '700' : '500', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>Completed</button>
-                                <button onClick={() => { setTasksSubView('feed'); const now = new Date().toISOString(); setFeedLastRead(now); try { safeStorage.setItem('feedLastRead', now); } catch(e) {} }}
-                                    style={{ position: 'relative', padding: '0.5rem 1.25rem', border: 'none', borderBottom: tasksSubView === 'feed' ? '2px solid #2563eb' : '2px solid transparent', background: 'transparent', color: tasksSubView === 'feed' ? '#2563eb' : '#64748b', fontWeight: tasksSubView === 'feed' ? '700' : '500', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>Feed</button>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                {tasksSubView === 'tasks' && canEdit && <button className="btn" onClick={handleAddTask}>+ ADD TASK</button>}
-                                {tasksSubView === 'activities' && <button className="btn" onClick={() => handleAddActivity()}>+ LOG ACTIVITY</button>}
-                                {tasksSubView === 'activities' && (
-                                    <button className="btn" onClick={fetchLogFromCalEvents} disabled={logFromCalLoading}
-                                        style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}>
-                                        {logFromCalLoading ? 'Loading…' : '📋 Log from Calendar'}
-                                    </button>
-                                )}
-                            </div>
-                        </div>
+                {/* ── Sub-tabs (Sales Manager style) ── */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex' }}>
+                        <button onClick={() => setTasksSubView('tasks')}
+                            style={{ padding: '0.5rem 1.25rem', border: 'none', borderBottom: tasksSubView === 'tasks' ? '2px solid #2563eb' : '2px solid transparent', background: 'transparent', color: tasksSubView === 'tasks' ? '#2563eb' : '#64748b', fontWeight: tasksSubView === 'tasks' ? '700' : '500', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>Tasks</button>
+                        <button onClick={() => setTasksSubView('activities')}
+                            style={{ padding: '0.5rem 1.25rem', border: 'none', borderBottom: tasksSubView === 'activities' ? '2px solid #2563eb' : '2px solid transparent', background: 'transparent', color: tasksSubView === 'activities' ? '#2563eb' : '#64748b', fontWeight: tasksSubView === 'activities' ? '700' : '500', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>Completed</button>
+                        <button onClick={() => { setTasksSubView('feed'); const now = new Date().toISOString(); setFeedLastRead(now); try { safeStorage.setItem('feedLastRead', now); } catch(e) {} }}
+                            style={{ position: 'relative', padding: '0.5rem 1.25rem', border: 'none', borderBottom: tasksSubView === 'feed' ? '2px solid #2563eb' : '2px solid transparent', background: 'transparent', color: tasksSubView === 'feed' ? '#2563eb' : '#64748b', fontWeight: tasksSubView === 'feed' ? '700' : '500', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>Feed</button>
+                    </div>
+                </div>
 
-                        {/* ── Row 2: filter bar (opp-style) — only on Tasks sub-view ── */}
+                {/* ── Toolbar container: Filter + view toggle + action buttons ── */}
+                <div className="table-container" style={{ marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', padding: '0.625rem 1rem', flexWrap: 'wrap' }}>
+
+                        {/* Filter — only on Tasks sub-view */}
                         {tasksSubView === 'tasks' && (() => {
                             const TaskDD = ({ label, icon, options, selected, onToggle, onClear, renderOption }) => {
                                 const [open, setOpen] = React.useState(false);
@@ -253,10 +245,9 @@ export default function TasksTab() {
                             ];
                             const anyTaskFilter = taskStatusFilter.length > 0;
                             return (
-                                <div style={{ display:'flex', alignItems:'center', gap:'0.375rem', padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
+                                <>
                                     <div style={{ width:'3px', height:'18px', background:'linear-gradient(to bottom, #2563eb, #7c3aed)', borderRadius:'2px', flexShrink:0, marginRight:'0.25rem' }} />
                                     <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#0f172a', marginRight:'0.5rem', flexShrink:0 }}>Filter:</span>
-
                                     <TaskDD label="Status" icon="🔖"
                                         options={taskStatusOpts}
                                         selected={taskStatusFilter}
@@ -268,30 +259,45 @@ export default function TasksTab() {
                                                 <span>{opt.label}</span>
                                             </span>
                                         )} />
-
                                     {anyTaskFilter && (
                                         <button onClick={() => setTaskStatusFilter([])}
                                             style={{ padding:'0.2rem 0.5rem', borderRadius:'4px', border:'1px solid #e2e8f0', background:'#fff', color:'#94a3b8', fontSize:'0.625rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
                                             ✕ Clear all
                                         </button>
                                     )}
-
-                                    <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginLeft:'auto', flexShrink:0 }}>
-                                        <div style={{ display:'flex', background:'#f1f3f5', borderRadius:'6px', padding:'2px' }}>
-                                            {['card', 'table'].map(mode => (
-                                                <button key={mode} onClick={() => setTaskViewMode(mode)}
-                                                    style={{ padding:'0.3rem 0.875rem', borderRadius:'4px', border:'none', cursor:'pointer', fontWeight:'700', fontSize:'0.6875rem', fontFamily:'inherit', transition:'all 0.2s', textTransform:'capitalize',
-                                                        background: taskViewMode === mode ? '#ffffff' : 'transparent', color: taskViewMode === mode ? '#1e293b' : '#64748b',
-                                                        boxShadow: taskViewMode === mode ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>{mode}</button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
+                                </>
                             );
                         })()}
 
+                        {/* Card/table toggle — only on Tasks sub-view */}
+                        {tasksSubView === 'tasks' && (
+                            <div style={{ display:'flex', background:'#f1f3f5', borderRadius:'6px', padding:'2px' }}>
+                                {['card', 'table'].map(mode => (
+                                    <button key={mode} onClick={() => setTaskViewMode(mode)}
+                                        style={{ padding:'0.3rem 0.875rem', borderRadius:'4px', border:'none', cursor:'pointer', fontWeight:'700', fontSize:'0.6875rem', fontFamily:'inherit', transition:'all 0.2s', textTransform:'capitalize',
+                                            background: taskViewMode === mode ? '#ffffff' : 'transparent', color: taskViewMode === mode ? '#1e293b' : '#64748b',
+                                            boxShadow: taskViewMode === mode ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>{mode}</button>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Action buttons — right side */}
+                        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginLeft:'auto', flexShrink:0 }}>
+                            {tasksSubView === 'tasks' && canEdit && <button className="btn" onClick={handleAddTask}>+ Add Task</button>}
+                            {tasksSubView === 'activities' && <button className="btn" onClick={() => handleAddActivity()}>+ Log Activity</button>}
+                            {tasksSubView === 'activities' && (
+                                <button className="btn" onClick={fetchLogFromCalEvents} disabled={logFromCalLoading}
+                                    style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}>
+                                    {logFromCalLoading ? 'Loading…' : '📋 Log from Calendar'}
+                                </button>
+                            )}
+                        </div>
 
                     </div>
+                </div>
+
+                {/* ── Tasks list container ── */}
+                <div className="table-container">
 
                     {tasksSubView === 'tasks' && (
                     <div style={{ padding: '1.5rem' }}>
