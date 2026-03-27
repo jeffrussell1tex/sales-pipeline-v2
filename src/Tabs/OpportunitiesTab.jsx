@@ -358,7 +358,7 @@ export default function OpportunitiesTab() {
                     </div>{/* end toolbar container */}
 
                     {/* ── Content container ── */}
-                    <div className="table-container">
+                    <div className="table-container" style={{ overflow:'hidden' }}>
                         <div className="table-wrapper">
                             {/* Mobile cards — Opportunities tab */}
                             <div className="opp-mobile-cards" style={{ padding: '0.75rem' }}>

@@ -594,23 +594,23 @@ export default function PipelineTab() {
                     {/* ════ DESKTOP VIEWS: VIEW TOGGLE + FUNNEL / KANBAN / TABLE ════ */}
                     <div className="spt-pipeline-desktop">
 
-                    {/* ════ VIEW TOGGLE — handled by sub-tabs above ════ */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                    {/* AI bulk score button — no longer wrapped in styled bar */}
                     {settings?.aiScoringEnabled && (
-                        <button
-                            onClick={handleBulkScore}
-                            disabled={bulkScoring}
-                            title="Score all active deals with AI"
-                            style={{ padding: '0.3rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: bulkScoring ? '#f1f5f9' : '#fff', color: '#475569', fontSize: '0.75rem', fontWeight: '700', cursor: bulkScoring ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
-                            {bulkScoring ? (
-                                <>
-                                    <span style={{ width: '10px', height: '10px', border: '2px solid #94a3b8', borderTopColor: '#2563eb', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-                                    Scoring {bulkScoreProgress?.done}/{bulkScoreProgress?.total}…
-                                </>
-                            ) : '🤖 Score all deals'}
-                        </button>
+                        <div style={{ padding:'0.375rem 1rem 0' }}>
+                            <button
+                                onClick={handleBulkScore}
+                                disabled={bulkScoring}
+                                title="Score all active deals with AI"
+                                style={{ padding: '0.3rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: bulkScoring ? '#f1f5f9' : '#fff', color: '#475569', fontSize: '0.75rem', fontWeight: '700', cursor: bulkScoring ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
+                                {bulkScoring ? (
+                                    <>
+                                        <span style={{ width: '10px', height: '10px', border: '2px solid #94a3b8', borderTopColor: '#2563eb', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+                                        Scoring {bulkScoreProgress?.done}/{bulkScoreProgress?.total}…
+                                    </>
+                                ) : '🤖 Score all deals'}
+                            </button>
+                        </div>
                     )}
-                    </div>
 
                     {/* ════ FUNNEL VIEW ════ */}
                     {pipelineView === 'funnel' && (
