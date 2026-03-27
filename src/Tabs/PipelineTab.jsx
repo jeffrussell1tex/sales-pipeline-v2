@@ -270,11 +270,19 @@ export default function PipelineTab() {
                             <h2>Pipeline</h2>
                         </div>
                     </div>
-                    {/* ════ HORIZONTAL SUMMARY PANEL ════ */}
-                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'visible', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+                {/* ── Sub-tabs: Funnel | Kanban | List ── */}
+                <div style={{ display:'flex', alignItems:'center', borderBottom:'1px solid #e2e8f0' }}>
+                    <button onClick={() => { setPipelineView('funnel'); localStorage.setItem('pipelineView','funnel'); setFunnelExpandedStage(null); }}
+                        style={{ padding:'0.5rem 1.25rem', border:'none', borderBottom: pipelineView==='funnel' ? '2px solid #2563eb' : '2px solid transparent', background:'transparent', color: pipelineView==='funnel' ? '#2563eb' : '#64748b', fontWeight: pipelineView==='funnel' ? '700' : '500', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>Funnel</button>
+                    <button onClick={() => { setPipelineView('kanban'); localStorage.setItem('pipelineView','kanban'); setFunnelExpandedStage(null); }}
+                        style={{ padding:'0.5rem 1.25rem', border:'none', borderBottom: pipelineView==='kanban' ? '2px solid #2563eb' : '2px solid transparent', background:'transparent', color: pipelineView==='kanban' ? '#2563eb' : '#64748b', fontWeight: pipelineView==='kanban' ? '700' : '500', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>Kanban</button>
+                    <button onClick={() => { setPipelineView('table'); localStorage.setItem('pipelineView','table'); setFunnelExpandedStage(null); }}
+                        style={{ padding:'0.5rem 1.25rem', border:'none', borderBottom: pipelineView==='table' ? '2px solid #2563eb' : '2px solid transparent', background:'transparent', color: pipelineView==='table' ? '#2563eb' : '#64748b', fontWeight: pipelineView==='table' ? '700' : '500', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>List</button>
+                </div>
 
-                        {/* ── Panel header: title + all filters ── */}
-                        {(() => {
+                {/* ── Filter toolbar container ── */}
+                <div className="table-container" style={{ marginBottom:'0.75rem' }}>
+                    {(() => {
                             const todayDate = new Date();
                             const currentQ2 = getQuarter(todayDate.toISOString().split('T')[0]);
                             const currentQL2 = getQuarterLabel(currentQ2, todayDate.toISOString().split('T')[0]);
@@ -448,7 +456,10 @@ export default function PipelineTab() {
                                 </div>
                             );
                         })()}
+                </div>{/* end filter toolbar container */}
 
+                    {/* ════ HORIZONTAL SUMMARY PANEL (KPIs only) ════ */}
+                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'visible', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom:'0.75rem' }}>
                         {/* Two-column body: KPIs left | Stage bars right */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1px 1fr' }}>
 
@@ -535,7 +546,7 @@ export default function PipelineTab() {
 
                         </div>
                     </div>
-                    {/* ════ END SUMMARY PANEL ════ */}
+                    </div>{/* ════ END SUMMARY PANEL ════ */}
 
                     {/* ════ MOBILE PIPELINE CARD LIST (≤640px only) ════ */}
                     <div className="spt-pipeline-mobile" style={{ padding: '0.75rem' }}>
@@ -583,15 +594,8 @@ export default function PipelineTab() {
                     {/* ════ DESKTOP VIEWS: VIEW TOGGLE + FUNNEL / KANBAN / TABLE ════ */}
                     <div className="spt-pipeline-desktop">
 
-                    {/* ════ VIEW TOGGLE ════ */}
+                    {/* ════ VIEW TOGGLE — handled by sub-tabs above ════ */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                        <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.25rem' }}>View:</span>
-                        {[{key:'funnel',label:'🔻 Funnel'},{key:'kanban',label:'🗂 Kanban'},{key:'table',label:'☰ List'}].map(v => (
-                            <button key={v.key} onClick={() => { setPipelineView(v.key); localStorage.setItem('pipelineView', v.key); setFunnelExpandedStage(null); }}
-                                style={{ padding: '0.3rem 0.75rem', border: '1px solid ' + (pipelineView === v.key ? '#2563eb' : '#e2e8f0'), borderRadius: '6px', background: pipelineView === v.key ? '#2563eb' : '#fff', color: pipelineView === v.key ? '#fff' : '#64748b', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
-                                {v.label}
-                            </button>
-                        ))}
                     {settings?.aiScoringEnabled && (
                         <button
                             onClick={handleBulkScore}
