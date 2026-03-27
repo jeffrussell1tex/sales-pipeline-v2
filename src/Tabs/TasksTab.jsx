@@ -163,7 +163,7 @@ export default function TasksTab() {
                         isAdmin={isAdmin}
                     />
                 {/* ── Sub-tabs (Sales Manager style) ── */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', marginBottom: '0.25rem' }}>
                     <div style={{ display: 'flex' }}>
                         <button onClick={() => { setTasksSubView('tasks'); localStorage.setItem('tab:tasks:subView','tasks'); }}
                             style={{ padding: '0.5rem 1.25rem', border: 'none', borderBottom: tasksSubView === 'tasks' ? '2px solid #2563eb' : '2px solid transparent', background: 'transparent', color: tasksSubView === 'tasks' ? '#2563eb' : '#64748b', fontWeight: tasksSubView === 'tasks' ? '700' : '500', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>Tasks</button>

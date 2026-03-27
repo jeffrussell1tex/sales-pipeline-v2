@@ -542,7 +542,7 @@ ${bodyHtml}
                         </div>
 
                         {/* ── Sub-tab nav — Pipeline / Performance / Revenue / etc. ── */}
-                        <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', overflowX:'auto', marginBottom:'0' }}>
+                        <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', overflowX:'auto', marginBottom:'0.25rem' }}>
                             {[
                               { key:'pipeline',    label:'Pipeline' },
                               { key:'performance', label:'Performance' },

@@ -53,7 +53,7 @@ export default function ContactsTab() {
                         </div>
                     </div>
                 {/* ── Sub-tabs (Sales Manager style) + Add Contact ── */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', marginBottom: '0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', marginBottom: '0.25rem' }}>
                     <div style={{ display: 'flex' }}>
                         {[
                             { key: 'lastName',  label: 'Last Name' },

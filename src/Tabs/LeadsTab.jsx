@@ -136,7 +136,7 @@ export default function LeadsTab() {
                 </div>
             </div>
             {/* ── Sub-tabs (Sales Manager style) + action buttons ── */}
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid #e2e8f0', marginBottom:'0' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid #e2e8f0', marginBottom:'0.25rem' }}>
                 <div style={{ display:'flex', overflowX:'auto' }}>
                     {[
                         { key:'all',     label:'All',        count: counts.all },

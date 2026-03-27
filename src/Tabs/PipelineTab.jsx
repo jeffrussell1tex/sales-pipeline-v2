@@ -271,7 +271,7 @@ export default function PipelineTab() {
                         </div>
                     </div>
                 {/* ── Sub-tabs: Funnel | Kanban | List ── */}
-                <div style={{ display:'flex', alignItems:'center', borderBottom:'1px solid #e2e8f0' }}>
+                <div style={{ display:'flex', alignItems:'center', borderBottom:'1px solid #e2e8f0', marginBottom:'0.25rem' }}>
                     <button onClick={() => { setPipelineView('funnel'); localStorage.setItem('pipelineView','funnel'); setFunnelExpandedStage(null); }}
                         style={{ padding:'0.5rem 1.25rem', border:'none', borderBottom: pipelineView==='funnel' ? '2px solid #2563eb' : '2px solid transparent', background:'transparent', color: pipelineView==='funnel' ? '#2563eb' : '#64748b', fontWeight: pipelineView==='funnel' ? '700' : '500', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>Funnel</button>
                     <button onClick={() => { setPipelineView('kanban'); localStorage.setItem('pipelineView','kanban'); setFunnelExpandedStage(null); }}
