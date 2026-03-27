@@ -79,47 +79,73 @@ export default function AccountsTab() {
                             
                         </div>
                     </div>
-                <div className="table-container">
-                    <div className="table-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <h2>ACCOUNTS</h2>
+                {/* ── Toolbar bar ── */}
+                <div className="table-container" style={{ marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {/* Left: alphabet nav */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px' }}>
+                            {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => {
+                                const hasMatch = visibleAccounts.some(a => ((a.name || '')[0] || '').toUpperCase() === letter);
+                                return (
+                                    <div key={letter}
+                                        onClick={() => {
+                                            if (!hasMatch) return;
+                                            const el = document.getElementById('account-letter-' + letter);
+                                            if (el) el.scrollIntoView({ block: 'start' });
+                                        }}
+                                        style={{
+                                            fontSize: '0.6875rem', fontWeight: '700', width: '22px', height: '20px',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            color: hasMatch ? '#2563eb' : '#cbd5e1',
+                                            cursor: hasMatch ? 'pointer' : 'default',
+                                            borderRadius: '3px', transition: 'all 0.1s', userSelect: 'none'
+                                        }}
+                                        onMouseEnter={e => { if (hasMatch) { e.target.style.background = '#dbeafe'; e.target.style.color = '#1e40af'; } }}
+                                        onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = hasMatch ? '#2563eb' : '#cbd5e1'; }}
+                                    >{letter}</div>
+                                );
+                            })}
                         </div>
-                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                            {canEdit && <button className="btn" onClick={handleAddAccount}>+ Add Account</button>}
+                        {/* Right: action buttons */}
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
                             {selectedAccounts.length > 0 && (
-    <button className="btn" style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '0.5rem 1rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.8125rem', fontFamily: 'inherit' }} onClick={() => {
-        showConfirm('Delete ' + selectedAccounts.length + ' selected account(s)? This cannot be undone.', async () => {
-            const accountIdsToDelete = [...selectedAccounts];
-            const snapshot = [...accounts];
-            setAccounts(prev => prev.filter(a => !accountIdsToDelete.includes(a.id)));
-            setSelectedAccounts([]);
-            const deletingAll = accountIdsToDelete.length === accounts.length;
-            if (deletingAll) {
-                await dbFetch('/.netlify/functions/accounts?clear=true', { method: 'DELETE' })
-                    .catch(err => console.error('Failed to clear accounts:', err));
-            } else {
-                const CONCURRENCY = 3;
-                const queue = [...accountIdsToDelete];
-                const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-                    while (queue.length > 0) {
-                        const id = queue.shift();
-                        await dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
-                            .catch(err => console.error('Failed to delete account:', err));
-                    }
-                });
-                await Promise.all(workers);
-            }
-            softDelete(
-                `${accountIdsToDelete.length} account${accountIdsToDelete.length === 1 ? '' : 's'}`,
-                () => {},
-                () => { setAccounts(snapshot); setUndoToast(null); }
-            );
-        });
-    }}>Delete ({selectedAccounts.length})</button>
-)}
-
+                                <button className="btn" style={{ background: '#ef4444', border: 'none' }} onClick={() => {
+                                    showConfirm('Delete ' + selectedAccounts.length + ' selected account(s)? This cannot be undone.', async () => {
+                                        const accountIdsToDelete = [...selectedAccounts];
+                                        const snapshot = [...accounts];
+                                        setAccounts(prev => prev.filter(a => !accountIdsToDelete.includes(a.id)));
+                                        setSelectedAccounts([]);
+                                        const deletingAll = accountIdsToDelete.length === accounts.length;
+                                        if (deletingAll) {
+                                            await dbFetch('/.netlify/functions/accounts?clear=true', { method: 'DELETE' })
+                                                .catch(err => console.error('Failed to clear accounts:', err));
+                                        } else {
+                                            const CONCURRENCY = 3;
+                                            const queue = [...accountIdsToDelete];
+                                            const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+                                                while (queue.length > 0) {
+                                                    const id = queue.shift();
+                                                    await dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' })
+                                                        .catch(err => console.error('Failed to delete account:', err));
+                                                }
+                                            });
+                                            await Promise.all(workers);
+                                        }
+                                        softDelete(
+                                            `${accountIdsToDelete.length} account${accountIdsToDelete.length === 1 ? '' : 's'}`,
+                                            () => {},
+                                            () => { setAccounts(snapshot); setUndoToast(null); }
+                                        );
+                                    });
+                                }}>Delete ({selectedAccounts.length})</button>
+                            )}
+                            {canEdit && <button className="btn" onClick={handleAddAccount}>+ Add Account</button>}
                         </div>
                     </div>
+                </div>
+
+                {/* ── Accounts list ── */}
+                <div className="table-container">
                     <div style={{ padding: '1.5rem' }}>
                         {visibleAccounts.length === 0 ? (
                             <div style={{ textAlign: 'center', padding: '4rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
@@ -165,30 +191,7 @@ export default function AccountsTab() {
                                 <span style={{ fontWeight: '700', fontSize: '0.6875rem', textTransform: 'uppercase', color: '#475569', letterSpacing: '0.5px', flex: 1, textAlign: 'center' }}>Account Owner</span>
                                 <div style={{ width: '140px', flexShrink: 0 }} />
                             </div>
-                            {/* Letter jump bar */}
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', padding: '0.375rem 0.5rem', background: '#f8fafc', borderRadius: '6px', marginBottom: '0.375rem', border: '1px solid #e9ecef' }}>
-                                {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => {
-                                    const hasMatch = visibleAccounts.some(a => ((a.name || '')[0] || '').toUpperCase() === letter);
-                                    return (
-                                        <div key={letter}
-                                            onClick={() => {
-                                                if (!hasMatch) return;
-                                                const el = document.getElementById('account-letter-' + letter);
-                                                if (el) el.scrollIntoView({ block: 'start' });
-                                            }}
-                                            style={{
-                                                fontSize: '0.6875rem', fontWeight: '700', width: '22px', height: '20px',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                color: hasMatch ? '#2563eb' : '#cbd5e1',
-                                                cursor: hasMatch ? 'pointer' : 'default',
-                                                borderRadius: '3px', transition: 'all 0.1s', userSelect: 'none'
-                                            }}
-                                            onMouseEnter={e => { if (hasMatch) { e.target.style.background = '#dbeafe'; e.target.style.color = '#1e40af'; } }}
-                                            onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = hasMatch ? '#2563eb' : '#cbd5e1'; }}
-                                        >{letter}</div>
-                                    );
-                                })}
-                            </div>
+
                             <div style={{ position: 'relative' }}>
                             {accountsViewMode === 'compact' && (() => {
                                 const sorted = [...visibleAccounts].sort((a, b) => {
