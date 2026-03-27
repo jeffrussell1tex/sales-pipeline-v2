@@ -281,6 +281,35 @@ export default function TasksTab() {
                             </div>
                         )}
 
+                        {/* Completed: date filters — far left */}
+                        {tasksSubView === 'activities' && (
+                            <div style={{ display:'flex', alignItems:'center', gap:'0.375rem', flexWrap:'wrap' }}>
+                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Filter:</span>
+                                <input type="date" value={completedDateFrom} onChange={e => setCompletedDateFrom(e.target.value)}
+                                    style={{ padding:'0.3rem 0.5rem', border:'1px solid #e2e8f0', borderRadius:'4px', fontSize:'0.75rem', fontFamily:'inherit' }} />
+                                <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>to</span>
+                                <input type="date" value={completedDateTo} onChange={e => setCompletedDateTo(e.target.value)}
+                                    style={{ padding:'0.3rem 0.5rem', border:'1px solid #e2e8f0', borderRadius:'4px', fontSize:'0.75rem', fontFamily:'inherit' }} />
+                                {(completedDateFrom || completedDateTo) && (
+                                    <button onClick={() => { setCompletedDateFrom(''); setCompletedDateTo(''); }}
+                                        style={{ background:'none', border:'none', color:'#ef4444', cursor:'pointer', fontSize:'0.75rem', fontWeight:'600', fontFamily:'inherit' }}>Clear</button>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Feed: filter pills — far left */}
+                        {tasksSubView === 'feed' && (
+                            <div style={{ display:'flex', gap:'0.375rem', flexWrap:'wrap', alignItems:'center' }}>
+                                {feedFilterButtons.map(f => (
+                                    <button key={f.key} onClick={() => setFeedFilter(f.key)}
+                                        style={{ padding:'0.3rem 0.75rem', borderRadius:'999px', border: feedFilter === f.key ? '1.5px solid #2563eb' : '1.5px solid #e2e8f0', background: feedFilter === f.key ? '#eff6ff' : '#fff', color: feedFilter === f.key ? '#2563eb' : '#64748b', fontWeight: feedFilter === f.key ? '700' : '500', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s' }}>
+                                        {f.label}
+                                    </button>
+                                ))}
+                                <span style={{ fontSize:'0.6875rem', color:'#94a3b8', marginLeft:'0.5rem' }}>{feedFiltered.length} events</span>
+                            </div>
+                        )}
+
                         {/* Action buttons — right side */}
                         <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginLeft:'auto', flexShrink:0 }}>
                             {tasksSubView === 'tasks' && canEdit && <button className="btn" onClick={handleAddTask}>+ Add Task</button>}
@@ -559,22 +588,8 @@ export default function TasksTab() {
                             return (
                                 <>
                                 <div style={{ marginBottom: '1.5rem' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                            <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', margin: 0 }}>Completed Tasks ({filteredCompleted.length})</h3>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                            <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#64748b' }}>Filter:</span>
-                                            <input type="date" value={completedDateFrom} onChange={e => setCompletedDateFrom(e.target.value)}
-                                                style={{ padding: '0.3rem 0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.75rem', fontFamily: 'inherit' }} />
-                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>to</span>
-                                            <input type="date" value={completedDateTo} onChange={e => setCompletedDateTo(e.target.value)}
-                                                style={{ padding: '0.3rem 0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.75rem', fontFamily: 'inherit' }} />
-                                            {(completedDateFrom || completedDateTo) && (
-                                                <button onClick={() => { setCompletedDateFrom(''); setCompletedDateTo(''); }}
-                                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600', fontFamily: 'inherit' }}>Clear</button>
-                                            )}
-                                        </div>
+                                    <div style={{ marginBottom: '0.75rem' }}>
+                                        <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', margin: 0 }}>Completed Tasks ({filteredCompleted.length})</h3>
                                     </div>
                                     {filteredCompleted.length === 0 ? (
                                         <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.875rem' }}>No completed tasks{(completedDateFrom || completedDateTo) ? ' in this date range' : ''}</div>
@@ -595,15 +610,7 @@ export default function TasksTab() {
 
                     {tasksSubView === 'feed' && (
                     <div style={{ padding: '1.5rem' }}>
-                        <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                            {feedFilterButtons.map(f => (
-                                <button key={f.key} onClick={() => setFeedFilter(f.key)}
-                                    style={{ padding: '0.3rem 0.75rem', borderRadius: '999px', border: feedFilter === f.key ? '1.5px solid #2563eb' : '1.5px solid #e2e8f0', background: feedFilter === f.key ? '#eff6ff' : '#fff', color: feedFilter === f.key ? '#2563eb' : '#64748b', fontWeight: feedFilter === f.key ? '700' : '500', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
-                                    {f.label}
-                                </button>
-                            ))}
-                            <span style={{ marginLeft: 'auto', fontSize: '0.6875rem', color: '#94a3b8' }}>{feedFiltered.length} events</span>
-                        </div>
+
                         {feedFiltered.length === 0 ? (
                             <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8', border: '1px dashed #e2e8f0', borderRadius: '10px' }}>
                                 No activity yet
