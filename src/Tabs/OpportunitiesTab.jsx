@@ -67,7 +67,7 @@ export default function OpportunitiesTab() {
     const handleEdit = (opp) => { setEditingOpp(opp); setShowModal(true); };
 
     // Local state
-    const [oppTabView, setOppTabView] = useState('list');
+    const [oppTabView, setOppTabView] = useState(() => localStorage.getItem('tab:opps:view') || 'list');
     const [oppTabFunnelExpanded, setOppTabFunnelExpanded] = useState(null);
     const [oppQuarterFilter, setOppQuarterFilter] = useState([]);
     const [oppStageFilter, setOppStageFilter] = useState([]);
@@ -205,11 +205,11 @@ export default function OpportunitiesTab() {
                     </div>
                 {/* ── Sub-tabs: Funnel | Kanban | List ── */}
                 <div style={{ display:'flex', alignItems:'center', borderBottom:'1px solid #e2e8f0' }}>
-                    <button onClick={() => setOppTabView('funnel')}
+                    <button onClick={() => { setOppTabView('funnel'); localStorage.setItem('tab:opps:view','funnel'); }}
                         style={{ padding:'0.5rem 1.25rem', border:'none', borderBottom: oppTabView==='funnel' ? '2px solid #2563eb' : '2px solid transparent', background:'transparent', color: oppTabView==='funnel' ? '#2563eb' : '#64748b', fontWeight: oppTabView==='funnel' ? '700' : '500', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>Funnel</button>
-                    <button onClick={() => setOppTabView('kanban')}
+                    <button onClick={() => { setOppTabView('kanban'); localStorage.setItem('tab:opps:view','kanban'); }}
                         style={{ padding:'0.5rem 1.25rem', border:'none', borderBottom: oppTabView==='kanban' ? '2px solid #2563eb' : '2px solid transparent', background:'transparent', color: oppTabView==='kanban' ? '#2563eb' : '#64748b', fontWeight: oppTabView==='kanban' ? '700' : '500', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>Kanban</button>
-                    <button onClick={() => setOppTabView('list')}
+                    <button onClick={() => { setOppTabView('list'); localStorage.setItem('tab:opps:view','list'); }}
                         style={{ padding:'0.5rem 1.25rem', border:'none', borderBottom: oppTabView==='list' ? '2px solid #2563eb' : '2px solid transparent', background:'transparent', color: oppTabView==='list' ? '#2563eb' : '#64748b', fontWeight: oppTabView==='list' ? '700' : '500', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>List</button>
                 </div>
 

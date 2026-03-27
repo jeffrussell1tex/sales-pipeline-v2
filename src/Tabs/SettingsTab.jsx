@@ -179,7 +179,7 @@ export default function SettingsTab() {
     if (!isAdmin) return null;
 
     // Local state
-    const [settingsTab, setSettingsTab] = useState('team');
+    const [settingsTab, setSettingsTab] = useState(() => localStorage.getItem('tab:settings:subTab') || 'team');
     const [settingsView, setSettingsView] = useState('default');
     const [savedToast, setSavedToast] = useState(false);
     const [settingsSnapshot, setSettingsSnapshot] = useState(null);
@@ -285,6 +285,7 @@ export default function SettingsTab() {
         setSettingsTab(tab);
         setSettingsView('default');
         setSettingsSnapshot(null);
+        localStorage.setItem('tab:settings:subTab', tab);
     };
 
     return (

@@ -422,7 +422,7 @@ export default function SalesManagerTab() {
 
     const isAdmin = userRole === 'Admin';
     const isManager = userRole === 'Manager';
-    const [smSubTab, setSmSubTab] = React.useState('performance');
+    const [smSubTab, setSmSubTab] = React.useState(() => localStorage.getItem('tab:salesmgr:subTab') || 'performance');
 
     if (!isAdmin && !isManager) return null;
 
@@ -452,8 +452,8 @@ export default function SalesManagerTab() {
 
                     {/* ── SUB-TAB NAV ── */}
                     <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', marginBottom:'1.5rem', gap:'0' }}>
-                        <button style={subTabStyle('performance')} onClick={() => setSmSubTab('performance')}>Performance</button>
-                        <button style={subTabStyle('administration')} onClick={() => setSmSubTab('administration')}>Administration</button>
+                        <button style={subTabStyle('performance')} onClick={() => { setSmSubTab('performance'); localStorage.setItem('tab:salesmgr:subTab','performance'); }}>Performance</button>
+                        <button style={subTabStyle('administration')} onClick={() => { setSmSubTab('administration'); localStorage.setItem('tab:salesmgr:subTab','administration'); }}>Administration</button>
                     </div>
 
                     {/* ══ PERFORMANCE & ADMINISTRATION TABS ══ */}

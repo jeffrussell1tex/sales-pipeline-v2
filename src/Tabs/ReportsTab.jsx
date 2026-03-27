@@ -39,7 +39,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
     const canSeeAll = isAdmin || isManager;
 
     // Local report filter state
-    const [reportSubTab, setReportSubTab] = useState('pipeline');
+    const [reportSubTab, setReportSubTab] = useState(() => localStorage.getItem('tab:reports:subTab') || 'pipeline');
     const [reportTimePeriod, setReportTimePeriod] = useState('all');
     const [reportDateFrom, setReportDateFrom] = useState('');
     const [reportDateTo, setReportDateTo] = useState('');
@@ -552,7 +552,7 @@ ${bodyHtml}
                               { key:'actions',     label:'Actions' },
                               { key:'custom',      label:'Custom' },
                             ].map(({ key, label }) => (
-                              <button key={key} onClick={() => setReportSubTab(key)} style={{
+                              <button key={key} onClick={() => { setReportSubTab(key); localStorage.setItem('tab:reports:subTab', key); }} style={{
                                 padding: '0.5rem 1.25rem',
                                 border: 'none',
                                 borderBottom: reportSubTab === key ? '2px solid #2563eb' : '2px solid transparent',
