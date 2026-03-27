@@ -26,6 +26,7 @@ export default function AppHeader({
         clerkUser, isMobile,
         exportToCSV, exportingCSV,
         setCsvImportType, setShowCsvImportModal,
+        quickLogOpen, setQuickLogOpen,
     } = useApp();
     const isManager = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
@@ -202,38 +203,6 @@ export default function AppHeader({
                                 Logout
                             </button>
                         </div>
-
-                        {/* ── ⚡ AI Score button — right of user pill ── */}
-                        {settings?.aiScoringEnabled && (
-                            <button
-                                onClick={() => {
-                                    // Dispatch a custom event that PipelineTab listens for
-                                    document.dispatchEvent(new CustomEvent('accelerep:bulkScore'));
-                                }}
-                                title="AI score all active deals"
-                                style={{
-                                    marginLeft: '0.5rem',
-                                    padding: '0.3rem 0.625rem',
-                                    background: '#c8b99a',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    color: '#1c1917',
-                                    fontSize: '0.75rem',
-                                    fontWeight: '700',
-                                    cursor: 'pointer',
-                                    fontFamily: 'inherit',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.25rem',
-                                    transition: 'background 0.15s',
-                                    flexShrink: 0,
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.background = '#b8a88a'}
-                                onMouseLeave={e => e.currentTarget.style.background = '#c8b99a'}
-                            >
-                                ⚡ Score
-                            </button>
-                        )}
 
                         {/* ── Profile Panel ─────────────────────────────────── */}
                         {showProfilePanel && (() => {
@@ -561,8 +530,15 @@ export default function AppHeader({
                         </div>{/* end profile panel relative wrapper */}
                         </div>{/* end ROW A: user pill */}
 
-                        {/* ROW B: org switcher + keyboard + bell — all centered under user pill */}
+                        {/* ROW B: ⚡ log + org switcher + keyboard + bell */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                        <button
+                            onClick={() => setQuickLogOpen(v => !v)}
+                            title="Quick-log an activity"
+                            style={{ padding:'0.2rem 0.625rem', borderRadius:'12px', border:'1px solid rgba(255,255,255,0.2)', background: quickLogOpen ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)', color:'#fff', fontSize:'0.6875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem', transition:'all 0.15s', flexShrink:0 }}
+                            onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.25)'}
+                            onMouseLeave={e => e.currentTarget.style.background = quickLogOpen ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)'}
+                        >⚡ Log</button>
                         {userMemberships?.data?.length > 1 && (
                             <OrganizationSwitcher
                                 appearance={{

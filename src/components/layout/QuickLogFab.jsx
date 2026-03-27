@@ -4,7 +4,7 @@ import { dbFetch } from '../../utils/storage';
 
 export default function QuickLogFab() {
     const {
-        activeTab, contacts, opportunities, currentUser, addAudit, activities, setActivities,
+        activeTab, contacts, opportunities, visibleOpportunities, currentUser, addAudit, activities, setActivities,
         quickLogOpen, setQuickLogOpen,
         quickLogForm, setQuickLogForm,
         quickLogContactResults, setQuickLogContactResults,
@@ -15,9 +15,12 @@ export default function QuickLogFab() {
     return (
         <>
             {/* ════ QUICK-LOG FLOATING BUTTON (home, pipeline, opportunities tabs) ════ */}
-            {(activeTab === 'pipeline' || activeTab === 'home' || activeTab === 'opportunities') && (
-                <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9990, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
-                    {quickLogOpen && (
+            {quickLogOpen && (
+                <div style={{ position: 'fixed', bottom: 0, right: 0, top: 0, left: 0, zIndex: 9989 }} onClick={() => setQuickLogOpen(false)} />
+            )}
+            {quickLogOpen && (
+                <div style={{ position: 'fixed', top: '4.5rem', right: '1.5rem', zIndex: 9990 }}>
+                    {true && (
                         <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: isMobile ? '16px 16px 0 0' : '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.18)', padding: '1rem', width: isMobile ? '100vw' : '300px', display: 'flex', flexDirection: 'column', gap: '0.625rem', position: isMobile ? 'fixed' : 'relative', bottom: isMobile ? '5rem' : 'auto', right: isMobile ? 0 : 'auto', left: isMobile ? 0 : 'auto', maxHeight: isMobile ? '80vh' : 'none', overflowY: isMobile ? 'auto' : 'visible' }}
                             onClick={e => e.stopPropagation()}>
                             <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#0f172a' }}>⚡ Quick Log Activity</div>
@@ -137,31 +140,36 @@ export default function QuickLogFab() {
                                     style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     Cancel
                                 </button>
-                                <button onClick={() => {
+                                <button onClick={async () => {
                                     const linkedOpp = quickLogForm.opportunityId ? (opportunities || []).find(o => o.id === quickLogForm.opportunityId) : null;
-                                    handleSaveActivity({
+                                    const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
+                                    const newActivity = {
+                                        id: 'act_' + Date.now(),
                                         type: quickLogForm.type,
                                         notes: quickLogForm.notes,
-                                        date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
+                                        date: today,
                                         opportunityId: quickLogForm.opportunityId || null,
                                         opportunityName: linkedOpp?.opportunityName || linkedOpp?.account || '',
                                         companyName: linkedOpp?.account || '',
                                         contactId: quickLogForm.contactId || null,
-                                        contactName: quickLogForm.contactSearch || '',
                                         salesRep: currentUser,
-                                        addToCalendar: !!quickLogForm.addToCalendar,
-                                    }, { editingActivity: null, currentUser, opportunities, setShowActivityModal, setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults });
-                                }} style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                        author: currentUser,
+                                        createdAt: new Date().toISOString(),
+                                    };
+                                    setActivities(prev => [newActivity, ...(prev || [])]);
+                                    try {
+                                        await dbFetch('/.netlify/functions/activities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newActivity) });
+                                    } catch(e) { console.error('Quick log save failed:', e); }
+                                    if (linkedOpp) setFollowUpPrompt({ opportunityId: linkedOpp.id, opportunityName: linkedOpp.opportunityName || linkedOpp.account });
+                                    setQuickLogOpen(false);
+                                    setQuickLogForm({ type: 'Call', notes: '', opportunityId: '', contactId: '', contactSearch: '', addToCalendar: false });
+                                    setQuickLogContactResults([]);
+                                }} style={{ flex: 1, padding: '0.35rem', borderRadius: '6px', border: 'none', background: '#1c1917', color: '#f5f1eb', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     Save
                                 </button>
                             </div>
                         </div>
                     )}
-                    <button onClick={() => setQuickLogOpen(v => !v)}
-                        style={{ width: '52px', height: '52px', borderRadius: '50%', background: quickLogOpen ? '#1d4ed8' : 'linear-gradient(135deg,#2563eb,#7c3aed)', color: '#fff', border: 'none', boxShadow: '0 4px 20px rgba(37,99,235,0.5)', fontSize: '1.375rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s', lineHeight: '1' }}
-                        title="Quick-log an activity">
-                        {quickLogOpen ? '✕' : '⚡'}
-                    </button>
                 </div>
             )}
 

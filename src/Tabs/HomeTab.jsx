@@ -908,12 +908,7 @@ export default function HomeTab() {
                             <span>Pipeline: {fmtArr(myPipelineARR)}</span>
                         </div>
                     </div>
-                    {canEdit && (
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button onClick={handleAddNew} style={{ padding: '0.45rem 1rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>+ New Opportunity</button>
-                            <button onClick={handleAddTask} style={{ padding: '0.45rem 1rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>+ Task</button>
-                        </div>
-                    )}
+
                 </div>
             </div>
 
