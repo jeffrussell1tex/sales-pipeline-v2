@@ -863,6 +863,32 @@ export default function HomeTab() {
     // Quick log handlers
     const quickLogCall = () => { setActivityInitialContext(null); setEditingActivity(null); setShowActivityModal(true); };
 
+    // ── Only show current user's opps (not all visible — admin sees their own on Home) ──
+    const myOpps = visibleOpportunities.filter(o =>
+        !canSeeAll || !o.salesRep || o.salesRep === currentUser
+    );
+    const myActiveOpps = myOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
+    const myPipelineARR = myActiveOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+    const myClosedWonARR = myOpps.filter(o => o.stage === 'Closed Won').reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+
+    // Today's calendar events
+    const todayCalEvents = calendarConnected && calendarEvents
+        ? calendarEvents.filter(ev => {
+            const d = ev.start?.date || ev.start?.dateTime?.split('T')[0];
+            return d === todayStr;
+          }).sort((a,b) => (a.start?.dateTime||'').localeCompare(b.start?.dateTime||''))
+        : [];
+
+    // "On your plate" — unified list for left sidebar
+    const plate = [];
+    overdueTasks.forEach(t => plate.push({ type: 'task', urgency: 'overdue', label: t.title, sub: 'Overdue', color: '#ef4444', item: t }));
+    todayTasks.filter(t => !overdueTasks.includes(t)).forEach(t => plate.push({ type: 'task', urgency: 'today', label: t.title, sub: 'Due today', color: '#f59e0b', item: t }));
+    todayCalEvents.forEach(ev => {
+        const timeStr = ev.start?.dateTime ? new Date(ev.start.dateTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : 'All day';
+        plate.push({ type: 'meeting', urgency: 'today', label: ev.summary, sub: timeStr, color: '#7c3aed', item: ev });
+    });
+    priorityDeals.filter(d => d.priority >= 7).forEach(d => plate.push({ type: 'deal', urgency: d.tagColor === '#ef4444' ? 'overdue' : 'today', label: d.opportunityName || d.account, sub: d.tag, color: d.tagColor, item: d }));
+
     return (
         <div className="tab-page" style={{ gap: 0, padding: 0 }}>
 
@@ -876,250 +902,321 @@ export default function HomeTab() {
                         </h1>
                         <div style={{ fontSize: '0.875rem', color: '#64748b', marginTop: '0.375rem' }}>
                             {overdueTasks.length > 0 && <span style={{ color: '#ef4444', fontWeight: '600' }}>{overdueTasks.length} task{overdueTasks.length>1?'s':''} overdue</span>}
-                            {overdueTasks.length > 0 && priorityDeals.length > 0 && <span style={{ color: '#cbd5e1' }}> · </span>}
-                            {priorityDeals.filter(d => d.priority >= 7).length > 0 && <span>{priorityDeals.filter(d => d.priority >= 7).length} deal{priorityDeals.filter(d => d.priority >= 7).length>1?'s':''} need attention</span>}
+                            {overdueTasks.length > 0 && priorityDeals.filter(d=>d.priority>=7).length > 0 && <span style={{ color: '#cbd5e1' }}> · </span>}
+                            {priorityDeals.filter(d => d.priority >= 7).length > 0 && <span>{priorityDeals.filter(d => d.priority >= 7).length} deal{priorityDeals.filter(d=>d.priority>=7).length>1?'s':''} need attention</span>}
                             {(overdueTasks.length > 0 || priorityDeals.filter(d=>d.priority>=7).length > 0) && <span style={{ color: '#cbd5e1' }}> · </span>}
-                            <span>Pipeline: {fmtArr(pipelineARR)}</span>
+                            <span>Pipeline: {fmtArr(myPipelineARR)}</span>
                         </div>
                     </div>
                     {canEdit && (
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button onClick={handleAddNew} style={{ padding: '0.45rem 1rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>+ New deal</button>
-                            <button onClick={handleAddTask} style={{ padding: '0.45rem 1rem', background: 'transparent', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>+ Task</button>
+                            <button onClick={handleAddNew} style={{ padding: '0.45rem 1rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>+ New Opportunity</button>
+                            <button onClick={handleAddTask} style={{ padding: '0.45rem 1rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>+ Task</button>
                         </div>
                     )}
                 </div>
             </div>
 
-            <div style={{ padding: '1.25rem 2rem 2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {/* ── Main layout: left sidebar + right main ── */}
+            <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', minHeight: '600px' }}>
 
-                {/* ── KPI strip ── */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: '0.75rem' }}>
-                    {[
-                        { label: 'Pipeline ARR', value: fmtArr(pipelineARR), sub: activeOppsArr.length+' active deals', accent: '#2563eb' },
-                        { label: 'Closed won', value: fmtArr(closedWonARR), sub: 'this period', accent: '#10b981' },
-                        { label: 'Open tasks', value: String(openTasks.length), sub: overdueTasks.length > 0 ? overdueTasks.length+' overdue' : 'all on track', subColor: overdueTasks.length > 0 ? '#ef4444' : '#10b981', accent: overdueTasks.length > 0 ? '#ef4444' : '#f59e0b' },
-                        { label: nextQuarter ? nextQuarter[0]+' forecast' : 'Next qtr forecast', value: fmtArr(fv), sub: 'forecasted close', accent: '#7c3aed' },
-                    ].map(kpi => (
-                        <div key={kpi.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderLeft: '3px solid '+kpi.accent, borderRadius: '10px', padding: '0.875rem 1rem' }}>
-                            <div style={{ fontSize: '0.6rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.3rem' }}>{kpi.label}</div>
-                            <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.02em', lineHeight: 1 }}>{kpi.value}</div>
-                            <div style={{ fontSize: '0.6875rem', color: kpi.subColor || '#64748b', marginTop: '0.25rem', fontWeight: kpi.subColor ? '600' : '400' }}>{kpi.sub}</div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* ── Priority deals ── */}
-                {priorityDeals.length > 0 && (
+                {/* ── Left sidebar: On your plate today ── */}
+                <div style={{ borderRight: '1px solid #e2e8f0', padding: '1.25rem 1rem', display: 'flex', flexDirection: 'column', gap: '1rem', background: '#fafaf9' }}>
                     <div>
-                        <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.625rem' }}>Priority deals — needs attention</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: '0.75rem' }}>
-                            {priorityDeals.map(deal => {
-                                const sc = getStageColor ? getStageColor(deal.stage) : { text: '#64748b' };
-                                const arr = fmtArr(parseFloat(deal.arr)||0);
-                                return (
-                                    <div key={deal.id} onClick={() => { setEditingOpp(deal); setShowModal(true); }}
-                                        style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', cursor: 'pointer', transition: 'all 0.15s', position: 'relative', overflow: 'hidden' }}
-                                        onMouseEnter={e => { e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)'; e.currentTarget.style.borderColor='#cbd5e1'; }}
-                                        onMouseLeave={e => { e.currentTarget.style.boxShadow='none'; e.currentTarget.style.borderColor='#e2e8f0'; }}>
-                                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: deal.tagColor }} />
-                                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                            <div style={{ fontSize: '0.5625rem', fontWeight: '700', padding: '2px 7px', borderRadius: '4px', background: deal.tagColor+'18', color: deal.tagColor, textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>
-                                                {deal.tag}
-                                            </div>
-                                        </div>
-                                        <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1e293b', marginBottom: '0.2rem', lineHeight: 1.3 }}>
-                                            {deal.opportunityName || deal.account}
-                                        </div>
-                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.75rem' }}>
-                                            <span style={{ background: sc.text+'18', color: sc.text, padding: '1px 6px', borderRadius: '4px', fontWeight: '600', fontSize: '0.6875rem' }}>{deal.stage}</span>
-                                            {deal.account && deal.opportunityName && <span style={{ marginLeft: '0.375rem' }}>{deal.account}</span>}
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <span style={{ fontSize: '1.125rem', fontWeight: '800', color: '#1e293b' }}>{arr}</span>
-                                            <span style={{ fontSize: '0.75rem', color: '#2563eb', fontWeight: '600' }}>View deal →</span>
+                        <div style={{ fontSize: '0.6rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.75rem' }}>Today's focus</div>
+                        {plate.length === 0 ? (
+                            <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic', padding: '0.5rem 0' }}>All clear — nothing urgent today</div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                {plate.map((item, idx) => (
+                                    <div key={idx}
+                                        onClick={() => {
+                                            if (item.type === 'task') { setEditingTask(item.item); setShowTaskModal(true); }
+                                            else if (item.type === 'deal') { setEditingOpp(item.item); setShowModal(true); }
+                                        }}
+                                        style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.45rem 0.625rem', borderRadius: '7px', cursor: item.type !== 'meeting' ? 'pointer' : 'default', transition: 'background 0.1s' }}
+                                        onMouseEnter={e => { if (item.type !== 'meeting') e.currentTarget.style.background='#f0ece4'; }}
+                                        onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: item.color, flexShrink: 0 }} />
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontSize: '0.8125rem', color: '#1c1917', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</div>
+                                            <div style={{ fontSize: '0.6875rem', color: item.urgency === 'overdue' ? item.color : '#94a3b8', fontWeight: item.urgency === 'overdue' ? '600' : '400' }}>{item.sub}</div>
                                         </div>
                                     </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {/* ── Two-column: tasks + pipeline ── */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-
-                    {/* Tasks due today */}
-                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.875rem 1rem', borderBottom: '1px solid #f1f5f9' }}>
-                            <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>Tasks due today</span>
-                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                {canEdit && <button onClick={handleAddTask} style={{ fontSize: '0.75rem', color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '600' }}>+ Add task</button>}
-                                <button onClick={() => setActiveTab('tasks')} style={{ fontSize: '0.75rem', color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>View all →</button>
-                            </div>
-                        </div>
-                        {sortedTasks.slice(0,6).length === 0 ? (
-                            <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>No open tasks</div>
-                        ) : (
-                            <div>
-                                {sortedTasks.slice(0,6).map(task => {
-                                    const isOvr = task.dueDate && new Date(task.dueDate+'T12:00:00') < today12;
-                                    const isToday = task.dueDate === todayStr;
-                                    const dueLabel = isOvr ? 'Overdue' : isToday ? 'Today' : task.dueDate ? new Date(task.dueDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
-                                    const dueColor = isOvr ? '#ef4444' : isToday ? '#f59e0b' : '#94a3b8';
-                                    return (
-                                        <div key={task.id} onClick={() => { setEditingTask(task); setShowTaskModal(true); }}
-                                            style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 1rem', borderBottom: '1px solid #f8fafc', cursor: 'pointer' }}
-                                            onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
-                                            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                                            <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: '1.5px solid '+(isOvr?'#fca5a5':'#d1d5db'), flexShrink: 0 }} />
-                                            <div style={{ flex: 1, fontSize: '0.8125rem', color: '#1e293b', lineHeight: 1.4 }}>{task.title}</div>
-                                            {dueLabel && <div style={{ fontSize: '0.6875rem', fontWeight: '600', color: dueColor, flexShrink: 0 }}>{dueLabel}</div>}
-                                        </div>
-                                    );
-                                })}
+                                ))}
                             </div>
                         )}
                     </div>
 
-                    {/* My pipeline */}
-                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.875rem 1rem', borderBottom: '1px solid #f1f5f9' }}>
-                            <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>My pipeline</span>
-                            <button onClick={() => setActiveTab('pipeline')} style={{ fontSize: '0.75rem', color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>View all →</button>
+                    {/* Pipelines list */}
+                    {allPipelines.length > 1 && (
+                        <div>
+                            <div style={{ fontSize: '0.6rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.625rem' }}>Pipelines</div>
+                            {allPipelines.map(p => (
+                                <div key={p.id} onClick={() => setActivePipelineId(p.id)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0.625rem', borderRadius: '6px', cursor: 'pointer', marginBottom: '2px',
+                                        background: p.id === activePipeline.id ? '#f0ece4' : 'transparent',
+                                        fontWeight: p.id === activePipeline.id ? '700' : '400' }}
+                                    onMouseEnter={e => e.currentTarget.style.background='#f0ece4'}
+                                    onMouseLeave={e => e.currentTarget.style.background = p.id === activePipeline.id ? '#f0ece4' : 'transparent'}>
+                                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: p.color, flexShrink: 0 }} />
+                                    <span style={{ fontSize: '0.8125rem', color: '#1c1917' }}>{p.name}</span>
+                                </div>
+                            ))}
                         </div>
-                        {activeOppsArr.length === 0 ? (
-                            <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>No active deals</div>
-                        ) : (
-                            <div>
-                                {activeOppsArr.slice(0,6).map(opp => {
-                                    const sc = getStageColor ? getStageColor(opp.stage) : { text: '#64748b' };
-                                    return (
-                                        <div key={opp.id} onClick={() => { setEditingOpp(opp); setShowModal(true); }}
-                                            style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 1rem', borderBottom: '1px solid #f8fafc', cursor: 'pointer' }}
-                                            onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
-                                            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                                            <div style={{ fontSize: '0.625rem', fontWeight: '700', padding: '2px 7px', borderRadius: '4px', background: sc.text+'18', color: sc.text, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.03em', minWidth: '80px', textAlign: 'center' }}>{opp.stage}</div>
-                                            <div style={{ flex: 1, fontSize: '0.8125rem', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp.opportunityName || opp.account}</div>
-                                            <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#1e293b', flexShrink: 0 }}>{fmtArr(parseFloat(opp.arr)||0)}</div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
+                    )}
+
+                    {/* Quick log */}
+                    {canEdit && (
+                        <div>
+                            <div style={{ fontSize: '0.6rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.625rem' }}>Quick log</div>
+                            {[
+                                { label: '+ Log a call', fn: () => { setActivityInitialContext(null); setEditingActivity(null); setShowActivityModal(true); } },
+                                { label: '+ Add activity', fn: () => { setActivityInitialContext(null); setEditingActivity(null); setShowActivityModal(true); } },
+                                { label: '+ New task', fn: handleAddTask },
+                            ].map(a => (
+                                <button key={a.label} onClick={a.fn} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.3rem 0.625rem', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8125rem', color: '#57534e', borderRadius: '6px', transition: 'background 0.1s' }}
+                                    onMouseEnter={e => e.currentTarget.style.background='#f0ece4'}
+                                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                    {a.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
-                {/* ── Team health + Recommended actions (preserved from current) ── */}
-                {(isManager || isAdmin) && (
-                    <TeamHealthPanel
+                {/* ── Right main content ── */}
+                <div style={{ padding: '1.25rem 1.5rem 2rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto' }}>
+
+                    {/* KPI strip */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: '0.75rem' }}>
+                        {[
+                            { label: 'Pipeline ARR', value: fmtArr(myPipelineARR), sub: myActiveOpps.length+' active deals', accent: '#2563eb' },
+                            { label: 'Closed won', value: fmtArr(myClosedWonARR), sub: 'this period', accent: '#10b981' },
+                            { label: 'Open tasks', value: String(openTasks.length), sub: overdueTasks.length > 0 ? overdueTasks.length+' overdue' : 'all on track', subColor: overdueTasks.length > 0 ? '#ef4444' : '#10b981', accent: overdueTasks.length > 0 ? '#ef4444' : '#f59e0b' },
+                            { label: nextQuarter ? nextQuarter[0]+' forecast' : 'Next qtr forecast', value: fmtArr(fv), sub: 'forecasted close', accent: '#7c3aed' },
+                        ].map(kpi => (
+                            <div key={kpi.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderLeft: '3px solid '+kpi.accent, borderRadius: '10px', padding: '0.875rem 1rem' }}>
+                                <div style={{ fontSize: '0.6rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.3rem' }}>{kpi.label}</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.02em', lineHeight: 1 }}>{kpi.value}</div>
+                                <div style={{ fontSize: '0.6875rem', color: kpi.subColor || '#64748b', marginTop: '0.25rem', fontWeight: kpi.subColor ? '600' : '400' }}>{kpi.sub}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Priority deals */}
+                    {priorityDeals.length > 0 && (
+                        <div>
+                            <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.625rem' }}>Priority deals — needs attention</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0,1fr))', gap: '0.75rem' }}>
+                                {priorityDeals.map(deal => {
+                                    const sc = getStageColor ? getStageColor(deal.stage) : { text: '#64748b' };
+                                    return (
+                                        <div key={deal.id} onClick={() => { setEditingOpp(deal); setShowModal(true); }}
+                                            style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', cursor: 'pointer', transition: 'all 0.15s', position: 'relative', overflow: 'hidden' }}
+                                            onMouseEnter={e => { e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)'; e.currentTarget.style.borderColor='#cbd5e1'; }}
+                                            onMouseLeave={e => { e.currentTarget.style.boxShadow='none'; e.currentTarget.style.borderColor='#e2e8f0'; }}>
+                                            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: deal.tagColor }} />
+                                            <div style={{ fontSize: '0.5625rem', fontWeight: '700', padding: '2px 7px', borderRadius: '4px', background: deal.tagColor+'18', color: deal.tagColor, textTransform: 'uppercase', letterSpacing: '0.04em', display: 'inline-block', marginBottom: '0.5rem' }}>{deal.tag}</div>
+                                            <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1e293b', marginBottom: '0.2rem', lineHeight: 1.3 }}>{deal.opportunityName || deal.account}</div>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.75rem' }}>
+                                                <span style={{ background: sc.text+'18', color: sc.text, padding: '1px 6px', borderRadius: '4px', fontWeight: '600', fontSize: '0.6875rem' }}>{deal.stage}</span>
+                                                {deal.account && deal.opportunityName && <span style={{ marginLeft: '0.375rem' }}>{deal.account}</span>}
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <span style={{ fontSize: '1.125rem', fontWeight: '800', color: '#1e293b' }}>{fmtArr(parseFloat(deal.arr)||0)}</span>
+                                                <span style={{ fontSize: '0.75rem', color: '#2563eb', fontWeight: '600' }}>View deal →</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Tasks + Pipeline two-col */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                        {/* Tasks */}
+                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.875rem 1rem', borderBottom: '1px solid #f1f5f9' }}>
+                                <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>Tasks due today</span>
+                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                    {canEdit && <button onClick={handleAddTask} style={{ fontSize: '0.75rem', color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '600' }}>+ Add task</button>}
+                                    <button onClick={() => setActiveTab('tasks')} style={{ fontSize: '0.75rem', color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>View all →</button>
+                                </div>
+                            </div>
+                            {sortedTasks.slice(0,6).length === 0 ? (
+                                <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>No open tasks</div>
+                            ) : (
+                                <div>
+                                    {sortedTasks.slice(0,6).map(task => {
+                                        const isOvr = task.dueDate && new Date(task.dueDate+'T12:00:00') < today12;
+                                        const isToday = task.dueDate === todayStr;
+                                        const dueLabel = isOvr ? 'Overdue' : isToday ? 'Today' : task.dueDate ? new Date(task.dueDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+                                        const dueColor = isOvr ? '#ef4444' : isToday ? '#f59e0b' : '#94a3b8';
+                                        return (
+                                            <div key={task.id} onClick={() => { setEditingTask(task); setShowTaskModal(true); }}
+                                                style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 1rem', borderBottom: '1px solid #f8fafc', cursor: 'pointer' }}
+                                                onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
+                                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: '1.5px solid '+(isOvr?'#fca5a5':'#d1d5db'), flexShrink: 0 }} />
+                                                <div style={{ flex: 1, fontSize: '0.8125rem', color: '#1e293b', lineHeight: 1.4 }}>{task.title}</div>
+                                                {dueLabel && <div style={{ fontSize: '0.6875rem', fontWeight: '600', color: dueColor, flexShrink: 0 }}>{dueLabel}</div>}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* My pipeline */}
+                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.875rem 1rem', borderBottom: '1px solid #f1f5f9' }}>
+                                <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>My pipeline</span>
+                                <button onClick={() => setActiveTab('pipeline')} style={{ fontSize: '0.75rem', color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>View all →</button>
+                            </div>
+                            {myActiveOpps.length === 0 ? (
+                                <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>No active deals</div>
+                            ) : (
+                                <div>
+                                    {myActiveOpps.slice(0,6).map(opp => {
+                                        const sc = getStageColor ? getStageColor(opp.stage) : { text: '#64748b' };
+                                        return (
+                                            <div key={opp.id} onClick={() => { setEditingOpp(opp); setShowModal(true); }}
+                                                style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 1rem', borderBottom: '1px solid #f8fafc', cursor: 'pointer' }}
+                                                onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
+                                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                <div style={{ fontSize: '0.625rem', fontWeight: '700', padding: '2px 7px', borderRadius: '4px', background: sc.text+'18', color: sc.text, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.03em', minWidth: '80px', textAlign: 'center' }}>{opp.stage}</div>
+                                                <div style={{ flex: 1, fontSize: '0.8125rem', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp.opportunityName || opp.account}</div>
+                                                <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#1e293b', flexShrink: 0 }}>{fmtArr(parseFloat(opp.arr)||0)}</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Today's meetings — always shows when calendar connected */}
+                    {calendarConnected && (
+                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                            <div style={{ padding: '0.875rem 1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>Today's meetings</span>
+                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{todayCalEvents.length} event{todayCalEvents.length!==1?'s':''}</span>
+                            </div>
+                            {todayCalEvents.length === 0 ? (
+                                <div style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>No meetings today</div>
+                            ) : (
+                                <div>
+                                    {todayCalEvents.map((ev, idx) => {
+                                        const timeStr = ev.start?.dateTime ? new Date(ev.start.dateTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : 'All day';
+                                        return (
+                                            <div key={ev.id||idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 1rem', borderBottom: idx < todayCalEvents.length-1 ? '1px solid #f8fafc' : 'none' }}>
+                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', width: '56px', flexShrink: 0 }}>{timeStr}</div>
+                                                <div style={{ width: '3px', height: '32px', borderRadius: '2px', background: '#7c3aed', flexShrink: 0 }} />
+                                                <div style={{ flex: 1 }}>
+                                                    <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{ev.summary}</div>
+                                                    {ev.attendeeCount > 0 && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{ev.attendeeCount} attendee{ev.attendeeCount!==1?'s':''}</div>}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Calendar connect prompt when not connected */}
+                    {!calendarConnected && (
+                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                            <div>
+                                <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.875rem', marginBottom: '0.2rem' }}>Connect your Google Calendar</div>
+                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>See today's meetings alongside your pipeline</div>
+                            </div>
+                            <button onClick={fetchCalendarEvents} style={{ padding: '0.45rem 1rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Connect Google Calendar</button>
+                        </div>
+                    )}
+
+                    {/* Team health (managers/admins) */}
+                    {(isManager || isAdmin) && (
+                        <TeamHealthPanel
+                            opportunities={visibleOpportunities}
+                            activities={activities}
+                            tasks={visibleTasks}
+                            settings={settings}
+                            currentUser={currentUser}
+                            userRole={userRole}
+                            compact={true}
+                            setActiveTab={setActiveTab}
+                        />
+                    )}
+
+                    {/* Recommended actions */}
+                    <RecommendedActions
                         opportunities={visibleOpportunities}
                         activities={activities}
                         tasks={visibleTasks}
                         settings={settings}
                         currentUser={currentUser}
                         userRole={userRole}
-                        compact={true}
+                        isManager={isManager}
+                        isAdmin={isAdmin}
+                        canSeeAll={canSeeAll}
+                        stages={stages}
+                        setEditingOpp={setEditingOpp}
+                        setShowModal={setShowModal}
+                        setEditingTask={setEditingTask}
+                        setShowTaskModal={setShowTaskModal}
                         setActiveTab={setActiveTab}
                     />
-                )}
 
-                <RecommendedActions
-                    opportunities={visibleOpportunities}
-                    activities={activities}
-                    tasks={visibleTasks}
-                    settings={settings}
-                    currentUser={currentUser}
-                    userRole={userRole}
-                    isManager={isManager}
-                    isAdmin={isAdmin}
-                    canSeeAll={canSeeAll}
-                    stages={stages}
-                    setEditingOpp={setEditingOpp}
-                    setShowModal={setShowModal}
-                    setEditingTask={setEditingTask}
-                    setShowTaskModal={setShowTaskModal}
-                    setActiveTab={setActiveTab}
-                />
-
-                {/* ── Calendar section (preserved) ── */}
-                {calendarConnected && calendarEvents && calendarEvents.length > 0 && (() => {
-                    const todayEvts = calendarEvents.filter(ev => {
-                        const evDate = ev.start?.date || ev.start?.dateTime?.split('T')[0];
-                        return evDate === todayStr;
-                    });
-                    if (todayEvts.length === 0) return null;
-                    return (
-                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
-                            <div style={{ padding: '0.875rem 1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>Today\'s meetings</span>
-                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{todayEvts.length} event{todayEvts.length!==1?'s':''}</span>
-                            </div>
-                            <div>
-                                {todayEvts.map((ev, idx) => {
-                                    const timeStr = ev.start?.dateTime ? new Date(ev.start.dateTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : 'All day';
-                                    return (
-                                        <div key={ev.id||idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 1rem', borderBottom: idx < todayEvts.length-1 ? '1px solid #f8fafc' : 'none' }}>
-                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', width: '56px', flexShrink: 0 }}>{timeStr}</div>
-                                            <div style={{ width: '3px', height: '32px', borderRadius: '2px', background: '#7c3aed', flexShrink: 0 }} />
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{ev.summary}</div>
-                                                {ev.attendeeCount > 0 && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{ev.attendeeCount} attendee{ev.attendeeCount!==1?'s':''}</div>}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    );
-                })()}
-
-                {/* ── Multi-pipeline summary (preserved) ── */}
-                {allPipelines.length > 1 && (() => {
-                    const allVisibleOpps = canSeeAll ? (opportunities||[]) : (opportunities||[]).filter(o => !o.salesRep || o.salesRep === currentUser);
-                    return (
-                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
-                            <div style={{ padding: '0.875rem 1.5rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <span style={{ fontSize: '0.6875rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em' }}>All Pipelines</span>
-                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Org total across all pipelines</span>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat('+allPipelines.length+', 1fr)', gap: 0 }}>
-                                {allPipelines.map((p, idx) => {
-                                    const pOpps = allVisibleOpps.filter(o => (o.pipelineId||'default') === p.id);
-                                    const active = pOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
-                                    const won = pOpps.filter(o => o.stage === 'Closed Won');
-                                    const pARR = active.reduce((s,o) => s+(o.arr||0), 0);
-                                    const wARR = won.reduce((s,o) => s+(o.arr||0)+(o.implementationCost||0), 0);
-                                    const isCurrent = p.id === activePipeline.id;
-                                    return (
-                                        <div key={p.id} onClick={() => setActivePipelineId(p.id)} style={{ padding: '1rem 1.5rem', cursor: 'pointer', transition: 'background 0.15s', borderRight: idx < allPipelines.length-1 ? '1px solid #f1f5f9' : 'none', background: isCurrent ? '#fafbff' : '#fff', borderTop: isCurrent ? '3px solid '+p.color : '3px solid transparent' }}
-                                            onMouseEnter={e => { if (!isCurrent) e.currentTarget.style.background='#f8fafc'; }}
-                                            onMouseLeave={e => { if (!isCurrent) e.currentTarget.style.background='#fff'; }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                                                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: p.color }} />
-                                                <span style={{ fontWeight: '800', fontSize: '0.875rem', color: '#1e293b' }}>{p.name}</span>
-                                                {isCurrent && <span style={{ fontSize: '0.5625rem', fontWeight: '700', background: p.color, color: '#fff', padding: '0.0625rem 0.375rem', borderRadius: '999px' }}>ACTIVE</span>}
-                                            </div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                                                <div>
-                                                    <div style={{ fontSize: '0.625rem', fontWeight: '600', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Active ARR</div>
-                                                    <div style={{ fontSize: '1.125rem', fontWeight: '800', color: '#1e293b' }}>{fmtArr(pARR)}</div>
-                                                    <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>{active.length} deal{active.length!==1?'s':''}</div>
+                    {/* Multi-pipeline summary */}
+                    {allPipelines.length > 1 && (() => {
+                        const allVisibleOpps = canSeeAll ? (opportunities||[]) : (opportunities||[]).filter(o => !o.salesRep || o.salesRep === currentUser);
+                        return (
+                            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                                <div style={{ padding: '0.875rem 1.5rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span style={{ fontSize: '0.6875rem', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.08em' }}>All Pipelines</span>
+                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Org total across all pipelines</span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat('+allPipelines.length+', 1fr)', gap: 0 }}>
+                                    {allPipelines.map((p, idx) => {
+                                        const pOpps = allVisibleOpps.filter(o => (o.pipelineId||'default') === p.id);
+                                        const active = pOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
+                                        const won = pOpps.filter(o => o.stage === 'Closed Won');
+                                        const pARR = active.reduce((s,o) => s+(o.arr||0), 0);
+                                        const wARR = won.reduce((s,o) => s+(o.arr||0)+(o.implementationCost||0), 0);
+                                        const isCurrent = p.id === activePipeline.id;
+                                        return (
+                                            <div key={p.id} onClick={() => setActivePipelineId(p.id)} style={{ padding: '1rem 1.5rem', cursor: 'pointer', transition: 'background 0.15s', borderRight: idx < allPipelines.length-1 ? '1px solid #f1f5f9' : 'none', background: isCurrent ? '#fafbff' : '#fff', borderTop: isCurrent ? '3px solid '+p.color : '3px solid transparent' }}
+                                                onMouseEnter={e => { if (!isCurrent) e.currentTarget.style.background='#f8fafc'; }}
+                                                onMouseLeave={e => { if (!isCurrent) e.currentTarget.style.background='#fff'; }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: p.color }} />
+                                                    <span style={{ fontWeight: '800', fontSize: '0.875rem', color: '#1e293b' }}>{p.name}</span>
+                                                    {isCurrent && <span style={{ fontSize: '0.5625rem', fontWeight: '700', background: p.color, color: '#fff', padding: '0.0625rem 0.375rem', borderRadius: '999px' }}>ACTIVE</span>}
                                                 </div>
-                                                <div>
-                                                    <div style={{ fontSize: '0.625rem', fontWeight: '600', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Closed Won</div>
-                                                    <div style={{ fontSize: '1.125rem', fontWeight: '800', color: '#10b981' }}>{fmtArr(wARR)}</div>
-                                                    <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>{won.length} deal{won.length!==1?'s':''}</div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                                    <div>
+                                                        <div style={{ fontSize: '0.625rem', fontWeight: '600', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Active ARR</div>
+                                                        <div style={{ fontSize: '1.125rem', fontWeight: '800', color: '#1e293b' }}>{fmtArr(pARR)}</div>
+                                                        <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>{active.length} deal{active.length!==1?'s':''}</div>
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontSize: '0.625rem', fontWeight: '600', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Closed Won</div>
+                                                        <div style={{ fontSize: '1.125rem', fontWeight: '800', color: '#10b981' }}>{fmtArr(wARR)}</div>
+                                                        <div style={{ fontSize: '0.6875rem', color: '#64748b' }}>{won.length} deal{won.length!==1?'s':''}</div>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    })}
+                                </div>
                             </div>
-                        </div>
-                    );
-                })()}
+                        );
+                    })()}
 
+                </div>
             </div>
         </div>
     );
