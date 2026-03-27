@@ -531,9 +531,8 @@ ${bodyHtml}
                 );
 
                 return (
-                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    <div className="tab-page">
 
-                        {/* ── Row 1: Title — matches Sales Manager tab-page-header style ── */}
                         <div className="tab-page-header">
                             <div className="tab-page-header-bar"></div>
                             <div>
@@ -542,7 +541,7 @@ ${bodyHtml}
                         </div>
 
                         {/* ── Sub-tab nav — Pipeline / Performance / Revenue / etc. ── */}
-                        <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', overflowX:'auto', marginBottom:'0.25rem' }}>
+                        <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', overflowX:'auto' }}>
                             {[
                               { key:'pipeline',    label:'Pipeline' },
                               { key:'performance', label:'Performance' },
@@ -569,7 +568,7 @@ ${bodyHtml}
                         </div>
 
                         {/* ── Row 2: Viewing + Period filters (left) + Export PDF (right) ── */}
-                        <div className="table-container" style={{ marginTop: '0.75rem' }}>
+                        <div className="table-container">
                           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.625rem 1.25rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap', gap:'0.5rem' }}>
 
                             {/* Left side: Viewing slice + Period filter */}
