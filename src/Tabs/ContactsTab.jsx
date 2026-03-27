@@ -52,32 +52,34 @@ export default function ContactsTab() {
                             
                         </div>
                     </div>
-                {/* ── Toolbar bar — matches Reports period bar style ── */}
-                <div className="table-container" style={{ marginBottom: '0.75rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        {/* Left: Sort by */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>Sort by:</span>
-                            {['lastName', 'firstName', 'company'].map(opt => (
-                                <button key={opt} onClick={() => setContactsSortBy(opt)}
-                                    style={{
-                                        padding: '3px 12px', borderRadius: '999px', border: '1px solid',
-                                        cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.6875rem', fontWeight: '600', transition: 'all 0.15s',
-                                        background: contactsSortBy === opt ? '#1c1917' : '#f8fafc',
-                                        color:      contactsSortBy === opt ? '#f5f1eb' : '#475569',
-                                        borderColor: contactsSortBy === opt ? '#1c1917' : '#e2e8f0',
-                                    }}>
-                                    {opt === 'lastName' ? 'Last Name' : opt === 'firstName' ? 'First Name' : 'Company'}
-                                </button>
-                            ))}
-                        </div>
-                        {/* Right: Add Contact */}
-                        {canEdit && (
-                            <button className="btn" onClick={handleAddContact} style={{ flexShrink: 0 }}>
-                                + Add Contact
-                            </button>
-                        )}
+                {/* ── Sub-tabs (Sales Manager style) + Add Contact ── */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', marginBottom: '0' }}>
+                    <div style={{ display: 'flex' }}>
+                        {[
+                            { key: 'lastName',  label: 'Last Name' },
+                            { key: 'firstName', label: 'First Name' },
+                            { key: 'company',   label: 'Company' },
+                        ].map(opt => (
+                            <button key={opt.key} onClick={() => setContactsSortBy(opt.key)} style={{
+                                padding: '0.5rem 1.25rem',
+                                border: 'none',
+                                borderBottom: contactsSortBy === opt.key ? '2px solid #2563eb' : '2px solid transparent',
+                                background: 'transparent',
+                                color: contactsSortBy === opt.key ? '#2563eb' : '#64748b',
+                                fontWeight: contactsSortBy === opt.key ? '700' : '500',
+                                fontSize: '0.875rem',
+                                cursor: 'pointer',
+                                fontFamily: 'inherit',
+                                transition: 'all 0.15s',
+                                whiteSpace: 'nowrap',
+                            }}>{opt.label}</button>
+                        ))}
                     </div>
+                    {canEdit && (
+                        <div style={{ paddingRight: '0.75rem', flexShrink: 0 }}>
+                            <button className="btn" onClick={handleAddContact}>+ Add Contact</button>
+                        </div>
+                    )}
                 </div>
 
                 {/* ── Contacts list ── */}
