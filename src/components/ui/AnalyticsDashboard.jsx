@@ -37,13 +37,11 @@ export default function AnalyticsDashboard({ opportunities, settings, quotaData,
             onClick={() => generateReport(title, contentFn)}
             title={'Generate ' + title + ' Report'}
             style={{
-                background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px',
+                background: '#1c1917', border: 'none', borderRadius: '6px',
                 padding: '0.25rem 0.5rem', cursor: 'pointer', fontSize: '0.7rem',
-                color: '#64748b', fontWeight: '600', fontFamily: 'inherit',
-                display: 'flex', alignItems: 'center', gap: '0.25rem', transition: 'all 0.2s'
+                color: '#f5f1eb', fontWeight: '600', fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', gap: '0.25rem'
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#1e293b'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#64748b'; }}
         >📄 Report</button>
     );
     // Build team and territory lists from user records

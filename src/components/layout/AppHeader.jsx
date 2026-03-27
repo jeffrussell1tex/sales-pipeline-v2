@@ -26,6 +26,7 @@ export default function AppHeader({
         clerkUser, isMobile,
         exportToCSV, exportingCSV,
         setCsvImportType, setShowCsvImportModal,
+        quickLogOpen, setQuickLogOpen,
     } = useApp();
     const isManager = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
@@ -202,6 +203,7 @@ export default function AppHeader({
                                 Logout
                             </button>
                         </div>
+
                         {/* ── Profile Panel ─────────────────────────────────── */}
                         {showProfilePanel && (() => {
                             const DEFAULT_PREFS = {
@@ -276,10 +278,10 @@ export default function AppHeader({
 
                             const panelTabBtn = (tab, label) => (
                                 <button onClick={() => setProfilePanelTab(tab)} style={{
-                                    padding: '0.5rem 1rem', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                                    fontSize: '0.8125rem', fontWeight: '600', borderRadius: '6px',
-                                    background: profilePanelTab === tab ? '#2563eb' : 'transparent',
-                                    color: profilePanelTab === tab ? '#fff' : '#64748b',
+                                    padding: '0.5rem 1rem', border: 'none', borderBottom: profilePanelTab === tab ? '2px solid #1c1917' : '2px solid transparent',
+                                    cursor: 'pointer', fontFamily: 'inherit', background: 'transparent',
+                                    fontSize: '0.8125rem', fontWeight: profilePanelTab === tab ? '700' : '500',
+                                    color: profilePanelTab === tab ? '#1c1917' : '#78716c',
                                     transition: 'all 0.15s',
                                 }}>{label}</button>
                             );
@@ -293,22 +295,22 @@ export default function AppHeader({
                                     right: 0, left: isMobile ? 0 : 'auto',
                                     bottom: isMobile ? 0 : 'auto',
                                     width: isMobile ? '100%' : '420px',
-                                    background: '#fff',
+                                    background: '#faf9f7',
                                     borderRadius: isMobile ? 0 : '12px',
-                                    border: '1px solid #e2e8f0',
+                                    border: '1px solid #e5e2db',
                                     boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
                                     zIndex: 1100,
                                     overflow: 'auto',
                                 }} onClick={e => e.stopPropagation()}>
 
                                     {/* Header */}
-                                    <div style={{ background: '#1a1a2e', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+                                    <div style={{ background: '#1c1917', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
                                         <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: isAdmin ? '#7c3aed' : isManager ? '#059669' : '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.125rem', fontWeight: '700', flexShrink: 0 }}>
                                             {currentUser.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                                         </div>
                                         <div>
                                             <div style={{ color: '#fff', fontWeight: '700', fontSize: '0.9375rem' }}>{currentUser}</div>
-                                            <div style={{ color: '#8b92a9', fontSize: '0.75rem', marginTop: '2px' }}>{clerkUser?.emailAddresses?.[0]?.emailAddress}</div>
+                                            <div style={{ color: '#a8a29e', fontSize: '0.75rem', marginTop: '2px' }}>{clerkUser?.emailAddresses?.[0]?.emailAddress}</div>
                                             <div style={{ marginTop: '4px' }}>
                                                 <span style={{ background: isAdmin ? '#7c3aed' : isManager ? '#059669' : '#2563eb', color: '#fff', fontSize: '0.6rem', fontWeight: '700', padding: '2px 8px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                                     {userRole === 'User' ? 'Sales Rep' : userRole}
@@ -318,18 +320,18 @@ export default function AppHeader({
                                     </div>
 
                                     {/* Tabs */}
-                                    <div style={{ display: 'flex', gap: '0.25rem', padding: '0.75rem 1rem 0', borderBottom: '1px solid #e2e8f0' }}>
+                                    <div style={{ display: 'flex', gap: '0', padding: '0.5rem 1rem 0', borderBottom: '1px solid #e5e2db', background: '#fff' }}>
                                         {panelTabBtn('profile', '👤 Profile')}
                                         {panelTabBtn('notifications', '🔔 Notifications')}
                                         {panelTabBtn('importexport', '⇅ Import / Export')}
                                     </div>
 
-                                    <div style={{ padding: '1.25rem 1.5rem', maxHeight: '560px', overflowY: 'auto' }}>
+                                    <div style={{ padding: '1.25rem 1.5rem', maxHeight: '560px', overflowY: 'auto', background: '#fff' }}>
 
                                         {/* ── Profile Tab ─────────────────────────────── */}
                                         {profilePanelTab === 'profile' && (() => {
-                                            const inputStyle = { width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box' };
-                                            const labelStyle = { fontSize: '0.75rem', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '4px' };
+                                            const inputStyle = { width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box', background: '#f0ece4', color: '#1c1917', outline: 'none' };
+                                            const labelStyle = { fontSize: '0.75rem', fontWeight: '600', color: '#57534e', display: 'block', marginBottom: '4px' };
                                             return (
                                                 <div>
                                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem', marginBottom: '0.875rem' }}>
@@ -339,13 +341,13 @@ export default function AppHeader({
                                                     <div style={{ marginBottom: '0.875rem' }}><label style={labelStyle}>Work Email</label><input style={inputStyle} type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} /></div>
                                                     <div style={{ marginBottom: '0.875rem' }}><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={profileForm.phone} onChange={e => setProfileForm(p => ({ ...p, phone: e.target.value }))} /></div>
                                                     <div style={{ marginBottom: '1.25rem' }}><label style={labelStyle}>Title</label><input style={inputStyle} value={profileForm.title} onChange={e => setProfileForm(p => ({ ...p, title: e.target.value }))} /></div>
-                                                    <div style={{ padding: '0.75rem', background: '#f8fafc', borderRadius: '6px', fontSize: '0.75rem', color: '#64748b', marginBottom: '1rem' }}>
+                                                    <div style={{ padding: '0.75rem', background: '#f0ece4', borderRadius: '8px', fontSize: '0.75rem', color: '#78716c', marginBottom: '1rem', border: '1px solid #e5e2db' }}>
                                                         🔑 Password is managed via Clerk. <a href="https://accounts.clerk.dev" target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Change password →</a>
                                                     </div>
                                                     <button
                                                         onClick={() => saveProfile({ firstName: profileForm.firstName, lastName: profileForm.lastName, email: profileForm.email, phone: profileForm.phone, title: profileForm.title })}
                                                         disabled={profileSaving}
-                                                        style={{ width: '100%', padding: '0.625rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                                        style={{ width: '100%', padding: '0.625rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                                                         {profileSaving ? 'Saving…' : 'Save Profile'}
                                                     </button>
                                                 </div>
@@ -401,7 +403,7 @@ export default function AppHeader({
                                                                     onClick={() => togglePref(alertType, 'enabled', !pref.enabled)}
                                                                     style={{
                                                                         width: '36px', height: '20px', borderRadius: '999px', border: 'none', cursor: 'pointer',
-                                                                        background: pref.enabled ? '#2563eb' : '#d1d5db',
+                                                                        background: pref.enabled ? '#1c1917' : '#d1d5db',
                                                                         position: 'relative', transition: 'background 0.2s', flexShrink: 0,
                                                                     }}
                                                                     title={pref.enabled ? 'Disable' : 'Enable'}
@@ -428,7 +430,7 @@ export default function AppHeader({
                                                 <button
                                                     onClick={() => saveProfile({ notificationPrefs: prefs, digestTime })}
                                                     disabled={profileSaving}
-                                                    style={{ width: '100%', padding: '0.625rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', marginTop: '1rem' }}>
+                                                    style={{ width: '100%', padding: '0.625rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', marginTop: '1rem' }}>
                                                     {profileSaving ? 'Saving…' : 'Save Notification Settings'}
                                                 </button>
                                             </div>
@@ -446,18 +448,14 @@ export default function AppHeader({
                                                         setShowCsvImportModal(true);
                                                         setShowProfilePanel(false);
                                                     }}
-                                                    style={{ padding: '0.35rem 0.875rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', color: '#1e293b', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
-                                                    onMouseEnter={e => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.borderColor = '#2563eb'; e.currentTarget.style.color = '#2563eb'; }}
-                                                    onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#1e293b'; }}
+                                                    style={{ padding: '0.35rem 0.875rem', border: 'none', borderRadius: '6px', background: '#1c1917', color: '#f5f1eb', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
                                                 >📥 Import</button>
                                             );
                                             const exportBtn = (exportKey, filename, headers, rows) => (
                                                 <button
                                                     disabled={exportingCSV === exportKey}
                                                     onClick={() => exportToCSV(filename, headers, rows, exportKey)}
-                                                    style={{ padding: '0.35rem 0.875rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#fff', color: exportingCSV === exportKey ? '#94a3b8' : '#1e293b', fontSize: '0.75rem', fontWeight: '600', cursor: exportingCSV === exportKey ? 'default' : 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
-                                                    onMouseEnter={e => { if (exportingCSV !== exportKey) { e.currentTarget.style.background = '#f0fdf4'; e.currentTarget.style.borderColor = '#059669'; e.currentTarget.style.color = '#059669'; }}}
-                                                    onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = exportingCSV === exportKey ? '#94a3b8' : '#1e293b'; }}
+                                                    style={{ padding: '0.35rem 0.875rem', border: 'none', borderRadius: '6px', background: exportingCSV === exportKey ? '#78716c' : '#1c1917', color: '#f5f1eb', fontSize: '0.75rem', fontWeight: '600', cursor: exportingCSV === exportKey ? 'default' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
                                                 >{exportingCSV === exportKey ? '⏳…' : '📤 Export'}</button>
                                             );
 
@@ -472,7 +470,7 @@ export default function AppHeader({
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
                                                     {/* Accounts */}
-                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e5e2db', borderRadius: '8px', background: '#f0ece4', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                                         {sectionHead('🏢', 'Accounts')}
                                                         {row('accounts', 'accounts',
                                                             `accounts-${new Date().toISOString().slice(0,10)}.csv`,
@@ -482,7 +480,7 @@ export default function AppHeader({
                                                     </div>
 
                                                     {/* Contacts */}
-                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e5e2db', borderRadius: '8px', background: '#f0ece4', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                                         {sectionHead('👤', 'Contacts')}
                                                         {row('contacts', 'contacts',
                                                             `contacts-${new Date().toISOString().slice(0,10)}.csv`,
@@ -492,7 +490,7 @@ export default function AppHeader({
                                                     </div>
 
                                                     {/* Opportunities */}
-                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e5e2db', borderRadius: '8px', background: '#f0ece4', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                                         {sectionHead('💼', 'Opportunities')}
                                                         {row('opportunities', 'opportunities',
                                                             `opportunities-${new Date().toISOString().slice(0,10)}.csv`,
@@ -502,7 +500,7 @@ export default function AppHeader({
                                                     </div>
 
                                                     {/* Tasks */}
-                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fafafa', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                    <div style={{ padding: '0.75rem 1rem', border: '1px solid #e5e2db', borderRadius: '8px', background: '#f0ece4', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                                         {sectionHead('✅', 'Tasks')}
                                                         {row('tasks', 'tasks',
                                                             `tasks-${new Date().toISOString().slice(0,10)}.csv`,
@@ -517,7 +515,7 @@ export default function AppHeader({
                                     </div>
 
                                     {profileSaving && (
-                                        <div style={{ padding: '0.5rem 1.5rem', background: '#f0fdf4', borderTop: '1px solid #bbf7d0', fontSize: '0.75rem', color: '#059669', fontWeight: '600' }}>
+                                        <div style={{ padding: '0.5rem 1.5rem', background: '#f0ece4', borderTop: '1px solid #e5e2db', fontSize: '0.75rem', color: '#57534e', fontWeight: '600' }}>
                                             ✓ Saving preferences…
                                         </div>
                                     )}
@@ -528,8 +526,15 @@ export default function AppHeader({
                         </div>{/* end profile panel relative wrapper */}
                         </div>{/* end ROW A: user pill */}
 
-                        {/* ROW B: org switcher + keyboard + bell — all centered under user pill */}
+                        {/* ROW B: ⚡ log + org switcher + keyboard + bell */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                        <button
+                            onClick={() => setQuickLogOpen(v => !v)}
+                            title="Quick-log an activity"
+                            style={{ height:'32px', padding:'0 0.625rem', borderRadius:'12px', border:'1px solid rgba(255,255,255,0.2)', background: quickLogOpen ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)', color:'#fff', fontSize:'0.6875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem', transition:'all 0.15s', flexShrink:0 }}
+                            onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.25)'}
+                            onMouseLeave={e => e.currentTarget.style.background = quickLogOpen ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)'}
+                        >⚡ Log</button>
                         {userMemberships?.data?.length > 1 && (
                             <OrganizationSwitcher
                                 appearance={{

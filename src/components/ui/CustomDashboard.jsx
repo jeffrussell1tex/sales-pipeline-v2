@@ -396,6 +396,13 @@ export default function CustomDashboard() {
     const [dragOver, setDragOver] = useState(null);
     const saveTimeoutRef = useRef(null);
 
+    // Listen for Customize button click from parent (ReportsTab period bar)
+    useEffect(() => {
+        const handler = () => setShowCustomize(true);
+        document.addEventListener('accelerep:openCustomize', handler);
+        return () => document.removeEventListener('accelerep:openCustomize', handler);
+    }, []);
+
     // Load saved config on mount
     useEffect(() => {
         dbFetch('/.netlify/functions/dashboard-configs')
@@ -475,19 +482,8 @@ export default function CustomDashboard() {
         <>
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-            {/* Toolbar */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                    {visibleWidgets.length} of {widgets.length} widgets visible
-                    {saving && <span style={{ marginLeft: '0.5rem', color: '#2563eb' }}>· Saving…</span>}
-                </div>
-                <button
-                    onClick={() => setShowCustomize(true)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', padding: '0.4rem 0.875rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff', color: '#475569', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}
-                >
-                    ⚙️ Customize
-                </button>
-            </div>
+            {/* Saving indicator — toolbar moved to ReportsTab period bar */}
+            {saving && <div style={{ fontSize: '0.75rem', color: '#2563eb', marginBottom: '0.75rem' }}>· Saving…</div>}
 
             {/* Widget grid */}
             {visibleWidgets.length === 0 ? (

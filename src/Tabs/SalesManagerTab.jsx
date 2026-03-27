@@ -854,7 +854,7 @@ export default function SalesManagerTab() {
                                             const url = URL.createObjectURL(blob);
                                             const a = document.createElement('a');
                                             a.href=url; a.download='commission-preview.csv'; a.click(); URL.revokeObjectURL(url);
-                                        }} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'0.25rem 0.625rem', fontSize:'0.6875rem', fontWeight:'600', color:'#475569', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', transition:'background 0.15s', flexShrink:0 }} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>📤 Export CSV</button>
+                                        }} style={{ background:'#1c1917', border:'none', borderRadius:'6px', padding:'0.25rem 0.625rem', fontSize:'0.6875rem', fontWeight:'600', color:'#f5f1eb', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', flexShrink:0 }}>📤 Export CSV</button>
                                     </div>
                                     <div style={{ padding:'1.25rem 1.5rem' }}>
                                         {(() => {
@@ -1032,7 +1032,7 @@ export default function SalesManagerTab() {
                                         <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'0.125rem' }}>One-time incentive bonuses for specific deals, products, or behaviors</div>
                                     </div>
                                     <button onClick={() => setSettings(prev => ({ ...prev, spiffs: [...(prev.spiffs||[]), { id: 'spiff_'+Date.now(), name: '', amount: '', type: 'flat', condition: '', active: true }] }))}
-                                        style={{ padding:'0.3rem 0.75rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'6px', fontSize:'0.75rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>+ Add SPIFF</button>
+                                        style={{ padding:'0.3rem 0.75rem', background:'#1c1917', color:'#f5f1eb', border:'none', borderRadius:'6px', fontSize:'0.75rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>+ Add SPIFF</button>
                                 </div>
                                 <div style={{ padding:'1.25rem 1.5rem' }}>
                                     {(settings.spiffs||[]).length === 0 ? (

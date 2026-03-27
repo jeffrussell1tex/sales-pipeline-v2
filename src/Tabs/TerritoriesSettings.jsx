@@ -79,7 +79,7 @@ export default function TerritoriesSettings({ onBack, onSave, onCancel }) {
                                     {editingId === t.id ? (
                                         <>
                                             <input style={{ ...inputStyle, flex: 1 }} value={editingName} onChange={e => setEditingName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveEdit(t.id); if (e.key === 'Escape') setEditingId(null); }} autoFocus />
-                                            <button onClick={() => saveEdit(t.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: 'none', background: '#2563eb', color: '#fff', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+                                            <button onClick={() => saveEdit(t.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: 'none', background: '#1c1917', color: '#f5f1eb', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
                                             <button onClick={() => setEditingId(null)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
                                         </>
                                     ) : (
@@ -104,7 +104,7 @@ export default function TerritoriesSettings({ onBack, onSave, onCancel }) {
             </div>
             <div style={{ display:'flex', gap:'0.75rem', padding:'1rem 1.5rem', borderTop:'1px solid #e2e8f0', background:'#f8fafc', marginTop:'1rem' }}>
                 <button onClick={onSave}
-                    style={{ padding:'0.5rem 1.5rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                    style={{ padding:'0.5rem 1.5rem', background:'#1c1917', color:'#f5f1eb', border:'none', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
                     Save changes
                 </button>
                 <button onClick={onCancel}
