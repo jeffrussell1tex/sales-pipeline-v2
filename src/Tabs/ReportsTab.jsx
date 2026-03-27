@@ -615,19 +615,29 @@ ${bodyHtml}
                               </div>
                             </div>
 
-                            {/* Right side: Export PDF */}
-                            <button onClick={()=>{
-                              const lbl={pipeline:'Pipeline',performance:'Performance',revenue:'Revenue',activity:'Activity',leads:'Leads',actions:'Actions'}[reportSubTab]||'Report';
-                              const win=window.open('','_blank','width=900,height=700');
-                              if(!win){alert('Allow popups to export PDF');return;}
-                              const el=document.querySelector('[data-rpt]');
-                              const body=el?el.innerHTML:'<p>Could not capture report.</p>';
-                              const d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
-                              win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Accelerep — '+lbl+'</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#1e293b}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #2563eb;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#94a3b8}button,select{display:none!important}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#f8fafc;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0}td{padding:6px 10px;border-bottom:1px solid #f1f5f9}</style></head><body><div class="hdr"><h1>Accelerep — '+lbl+'</h1><div class="meta">'+d+'</div></div>'+body+'<scr'+'ipt>window.onload=function(){window.print()}<\/script></body></html>');
-                              win.document.close();
-                            }} style={{fontSize:'0.75rem',padding:'0.3rem 0.875rem',border:'1px solid #e2e8f0',borderRadius:'6px',background:'#f8fafc',color:'#475569',cursor:'pointer',fontFamily:'inherit',fontWeight:'600',flexShrink:0}}>
-                              &#128424; Export PDF
-                            </button>
+                            {/* Right side: Customize (custom tab only) + Export PDF */}
+                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexShrink:0 }}>
+                              {reportSubTab === 'custom' && (
+                                <button
+                                  onClick={() => document.dispatchEvent(new CustomEvent('accelerep:openCustomize'))}
+                                  style={{ display:'flex', alignItems:'center', gap:'0.375rem', padding:'0.3rem 0.875rem', border:'1px solid #e2e8f0', borderRadius:'6px', background:'#fff', color:'#475569', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}
+                                >
+                                  ⚙️ Customize
+                                </button>
+                              )}
+                              <button onClick={()=>{
+                                const lbl={pipeline:'Pipeline',performance:'Performance',revenue:'Revenue',activity:'Activity',leads:'Leads',actions:'Actions'}[reportSubTab]||'Report';
+                                const win=window.open('','_blank','width=900,height=700');
+                                if(!win){alert('Allow popups to export PDF');return;}
+                                const el=document.querySelector('[data-rpt]');
+                                const body=el?el.innerHTML:'<p>Could not capture report.</p>';
+                                const d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+                                win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Accelerep — '+lbl+'</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#1e293b}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #2563eb;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#94a3b8}button,select{display:none!important}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#f8fafc;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0}td{padding:6px 10px;border-bottom:1px solid #f1f5f9}</style></head><body><div class="hdr"><h1>Accelerep — '+lbl+'</h1><div class="meta">'+d+'</div></div>'+body+'<scr'+'ipt>window.onload=function(){window.print()}<\/script></body></html>');
+                                win.document.close();
+                              }} style={{fontSize:'0.75rem',padding:'0.3rem 0.875rem',border:'1px solid #e2e8f0',borderRadius:'6px',background:'#f8fafc',color:'#475569',cursor:'pointer',fontFamily:'inherit',fontWeight:'600'}}>
+                                &#128424; Export PDF
+                              </button>
+                            </div>
 
                           </div>
                         </div>

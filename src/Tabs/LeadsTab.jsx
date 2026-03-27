@@ -160,22 +160,37 @@ export default function LeadsTab() {
                 <div>
                     <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
 
-                        {/* TOOLBAR — always visible regardless of view */}
-                        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
-                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', marginRight:'0.25rem' }}>Leads</span>
-                            <div style={{ width:'1px', height:'16px', background:'#e2e8f0' }}></div>
-                            {[
-                                { key:'all', label:'All', count: counts.all },
-                                { key:'hot', label:'🔥 Hot', count: counts.hot },
-                                { key:'New', label:'New', count: counts.New },
-                                { key:'Working', label:'Working', count: counts.Working },
-                                ...(canSeeAll ? [{ key:'unassigned', label:'Unassigned', count: counts.unassigned }] : []),
-                            ].map(f => (
-                                <button key={f.key} onClick={() => setLeadFilter(f.key)} style={{ padding:'0.2rem 0.6rem', borderRadius:'999px', border:'1px solid '+(leadFilter===f.key?'#2563eb':'#e2e8f0'), background:leadFilter===f.key?'#2563eb':'#f8fafc', color:leadFilter===f.key?'#fff':'#64748b', fontSize:'0.6875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
-                                    {f.label} <span style={{ opacity:0.75 }}>{f.count}</span>
-                                </button>
-                            ))}
-                            <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
+                        {/* TOOLBAR — sub-tabs (Sales Manager style) + action buttons */}
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid #e2e8f0', paddingRight:'1rem' }}>
+                            {/* Sub-tabs */}
+                            <div style={{ display:'flex', overflowX:'auto' }}>
+                                {[
+                                    { key:'all',        label:'All',        count: counts.all },
+                                    { key:'hot',        label:'🔥 Hot',     count: counts.hot },
+                                    { key:'New',        label:'New',        count: counts.New },
+                                    { key:'Working',    label:'Working',    count: counts.Working },
+                                    ...(canSeeAll ? [{ key:'unassigned', label:'Unassigned', count: counts.unassigned }] : []),
+                                ].map(f => (
+                                    <button key={f.key} onClick={() => setLeadFilter(f.key)} style={{
+                                        padding: '0.5rem 1.1rem',
+                                        border: 'none',
+                                        borderBottom: leadFilter === f.key ? '2px solid #2563eb' : '2px solid transparent',
+                                        background: 'transparent',
+                                        color: leadFilter === f.key ? '#2563eb' : '#64748b',
+                                        fontWeight: leadFilter === f.key ? '700' : '500',
+                                        fontSize: '0.8125rem',
+                                        cursor: 'pointer',
+                                        fontFamily: 'inherit',
+                                        transition: 'all 0.15s',
+                                        whiteSpace: 'nowrap',
+                                    }}>
+                                        {f.label}
+                                        <span style={{ marginLeft:'0.3rem', fontSize:'0.6875rem', opacity:0.65 }}>{f.count}</span>
+                                    </button>
+                                ))}
+                            </div>
+                            {/* Action buttons */}
+                            <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', flexShrink:0 }}>
                                 {canSeeAll && <button onClick={() => setShowLeadImportModal(true)} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#10b981', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>}
                                 <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
                             </div>
