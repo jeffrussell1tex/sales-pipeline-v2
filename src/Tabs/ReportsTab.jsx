@@ -39,7 +39,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
     const canSeeAll = isAdmin || isManager;
 
     // Local report filter state
-    const [reportSubTab, setReportSubTab] = useState(() => localStorage.getItem('tab:reports:subTab') || 'pipeline');
+    const [reportSubTab, setReportSubTab] = useState('pipeline');
     const [reportTimePeriod, setReportTimePeriod] = useState('all');
     const [reportDateFrom, setReportDateFrom] = useState('');
     const [reportDateTo, setReportDateTo] = useState('');
@@ -273,7 +273,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 const cardStyle = { background: '#fff', borderRadius: '12px', padding: '1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: '1px solid #e2e8f0' };
                 const labelStyle = { fontSize: '0.6875rem', fontWeight: '600', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' };
                 const valueStyle = { fontSize: '1.625rem', fontWeight: '700', color: '#1e293b' };
-                const printBtnStyle = { background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.25rem 0.625rem', fontSize: '0.6875rem', fontWeight: '600', color: '#475569', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', transition: 'background 0.15s', flexShrink: 0 };
+                const printBtnStyle = { background: '#1c1917', border: 'none', borderRadius: '6px', padding: '0.25rem 0.625rem', fontSize: '0.6875rem', fontWeight: '600', color: '#f5f1eb', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 };
 
                 const printSection = (title, bodyHtml) => {
                     const d = new Date();
@@ -525,14 +525,13 @@ ${bodyHtml}
 
                 const ReportBtn = ({ title, contentFn }) => (
                     <button onClick={() => generateReport(title, contentFn)}
-                        style={{ display:'flex', alignItems:'center', gap:'0.3rem', padding:'0.25rem 0.625rem', background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:'6px', cursor:'pointer', fontSize:'0.6875rem', fontWeight:'600', color:'#475569', fontFamily:'inherit', whiteSpace:'nowrap', transition:'background 0.15s', flexShrink:0 }}
-                        onMouseEnter={e => e.currentTarget.style.background='#e2e8f0'}
-                        onMouseLeave={e => e.currentTarget.style.background='#f1f5f9'}>🖨️ Print</button>
+                        style={{ display:'flex', alignItems:'center', gap:'0.3rem', padding:'0.25rem 0.625rem', background:'#1c1917', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'0.6875rem', fontWeight:'600', color:'#f5f1eb', fontFamily:'inherit', whiteSpace:'nowrap', flexShrink:0 }}>🖨️ Print</button>
                 );
 
                 return (
-                    <div className="tab-page">
+                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
+                        {/* ── Row 1: Title — matches Sales Manager tab-page-header style ── */}
                         <div className="tab-page-header">
                             <div className="tab-page-header-bar"></div>
                             <div>
@@ -541,7 +540,7 @@ ${bodyHtml}
                         </div>
 
                         {/* ── Sub-tab nav — Pipeline / Performance / Revenue / etc. ── */}
-                        <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', overflowX:'auto' }}>
+                        <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', overflowX:'auto', marginBottom:'0' }}>
                             {[
                               { key:'pipeline',    label:'Pipeline' },
                               { key:'performance', label:'Performance' },
@@ -551,7 +550,7 @@ ${bodyHtml}
                               { key:'actions',     label:'Actions' },
                               { key:'custom',      label:'Custom' },
                             ].map(({ key, label }) => (
-                              <button key={key} onClick={() => { setReportSubTab(key); localStorage.setItem('tab:reports:subTab', key); }} style={{
+                              <button key={key} onClick={() => setReportSubTab(key)} style={{
                                 padding: '0.5rem 1.25rem',
                                 border: 'none',
                                 borderBottom: reportSubTab === key ? '2px solid #2563eb' : '2px solid transparent',
@@ -568,7 +567,7 @@ ${bodyHtml}
                         </div>
 
                         {/* ── Row 2: Viewing + Period filters (left) + Export PDF (right) ── */}
-                        <div className="table-container">
+                        <div className="table-container" style={{ marginTop: '0.75rem' }}>
                           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.625rem 1.25rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap', gap:'0.5rem' }}>
 
                             {/* Left side: Viewing slice + Period filter */}
@@ -619,7 +618,7 @@ ${bodyHtml}
                               {reportSubTab === 'custom' && (
                                 <button
                                   onClick={() => document.dispatchEvent(new CustomEvent('accelerep:openCustomize'))}
-                                  style={{ display:'flex', alignItems:'center', gap:'0.375rem', padding:'0.3rem 0.875rem', border:'1px solid #e2e8f0', borderRadius:'6px', background:'#fff', color:'#475569', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}
+                                  style={{ display:'flex', alignItems:'center', gap:'0.375rem', padding:'0.3rem 0.875rem', border:'none', borderRadius:'6px', background:'#1c1917', color:'#f5f1eb', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}
                                 >
                                   ⚙️ Customize
                                 </button>
@@ -633,7 +632,7 @@ ${bodyHtml}
                                 const d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
                                 win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Accelerep — '+lbl+'</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#1e293b}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #2563eb;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#94a3b8}button,select{display:none!important}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#f8fafc;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0}td{padding:6px 10px;border-bottom:1px solid #f1f5f9}</style></head><body><div class="hdr"><h1>Accelerep — '+lbl+'</h1><div class="meta">'+d+'</div></div>'+body+'<scr'+'ipt>window.onload=function(){window.print()}<\/script></body></html>');
                                 win.document.close();
-                              }} style={{fontSize:'0.75rem',padding:'0.3rem 0.875rem',border:'1px solid #e2e8f0',borderRadius:'6px',background:'#f8fafc',color:'#475569',cursor:'pointer',fontFamily:'inherit',fontWeight:'600'}}>
+                              }} style={{fontSize:'0.75rem',padding:'0.3rem 0.875rem',border:'none',borderRadius:'6px',background:'#1c1917',color:'#f5f1eb',cursor:'pointer',fontFamily:'inherit',fontWeight:'600'}}>
                                 &#128424; Export PDF
                               </button>
                             </div>
@@ -1132,7 +1131,7 @@ ${bodyHtml}
                                 <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b' }}>📆 Won Revenue by Quarter ({currentYear})</div>
                                 <button onClick={() => { const rows=revenueByQuarter.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'}"><td>${r.q}</td><td style="text-align:right;font-weight:700;">$${r.rev.toLocaleString()}</td></tr>`).join(''); printSection('Won Revenue by Quarter',`<div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
 <table><thead><tr><th>Quarter</th><th style="text-align:right;">Won Revenue</th></tr></thead><tbody>${rows}</tbody></table>
-</div>`); }} style={printBtnStyle} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>🖨️ Print</button>
+</div>`); }} style={printBtnStyle}>🖨️ Print</button>
                               </div>
                               {revenueByQuarter.map(({q,rev})=>(
                                 <div key={q} style={{ marginBottom:'0.625rem' }}>
@@ -1151,7 +1150,7 @@ ${bodyHtml}
                                 <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b' }}>📈 Monthly Won Revenue (Last 6 Mo.)</div>
                                 <button onClick={() => { const rows=monthlyData.map((m,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'}"><td>${m.label}</td><td style="text-align:right;font-weight:700;">$${m.rev.toLocaleString()}</td><td style="text-align:center;">${m.count}</td></tr>`).join(''); printSection('Monthly Won Revenue — Last 6 Months',`<div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
 <table><thead><tr><th>Month</th><th style="text-align:right;">Won Revenue</th><th style="text-align:center;">Deals</th></tr></thead><tbody>${rows}</tbody></table>
-</div>`); }} style={printBtnStyle} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>🖨️ Print</button>
+</div>`); }} style={printBtnStyle}>🖨️ Print</button>
                               </div>
                               <div style={{ display:'flex', alignItems:'flex-end', gap:'0.5rem', height:'120px' }}>
                                 {monthlyData.map((m,i)=>(
@@ -1421,8 +1420,8 @@ ${bodyHtml}
                                       <button key={pill} onClick={()=>setCommissionReportFilter(pill)} style={{ padding:'0.2rem 0.625rem', borderRadius:'999px', border:'none', cursor:'pointer', fontSize:'0.6875rem', fontWeight:'700', fontFamily:'inherit', transition:'all 0.15s', background:(commissionReportFilter||'This Quarter')===pill?'#2563eb':'#e2e8f0', color:(commissionReportFilter||'This Quarter')===pill?'#fff':'#64748b' }}>{pill}</button>
                                     ))}
                                   </div>
-                                  <button onClick={printCommissions} style={printBtnStyle} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>🖨️ Print</button>
-                                  <button onClick={exportCommissionsCSV} style={printBtnStyle} onMouseEnter={e=>e.currentTarget.style.background='#e2e8f0'} onMouseLeave={e=>e.currentTarget.style.background='#f1f5f9'}>📤 Export CSV</button>
+                                  <button onClick={printCommissions} style={printBtnStyle}>🖨️ Print</button>
+                                  <button onClick={exportCommissionsCSV} style={printBtnStyle}>📤 Export CSV</button>
                                 </div>
                               </div>
                               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:'0.75rem', marginBottom:'1rem' }}>

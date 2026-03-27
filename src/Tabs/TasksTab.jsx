@@ -66,7 +66,7 @@ export default function TasksTab() {
     const canEdit = !isReadOnly;
 
     // Local state
-    const [tasksSubView, setTasksSubView] = useState(() => localStorage.getItem('tab:tasks:subView') || 'tasks');
+    const [tasksSubView, setTasksSubView] = useState('tasks');
     const [taskViewMode, setTaskViewMode] = useState('card');
     const [taskStatusFilter, setTaskStatusFilter] = useState([]);
     const [tasksExpandedSections, setTasksExpandedSections] = useState({
@@ -163,13 +163,13 @@ export default function TasksTab() {
                         isAdmin={isAdmin}
                     />
                 {/* ── Sub-tabs (Sales Manager style) ── */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', marginBottom: '0.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0' }}>
                     <div style={{ display: 'flex' }}>
-                        <button onClick={() => { setTasksSubView('tasks'); localStorage.setItem('tab:tasks:subView','tasks'); }}
+                        <button onClick={() => setTasksSubView('tasks')}
                             style={{ padding: '0.5rem 1.25rem', border: 'none', borderBottom: tasksSubView === 'tasks' ? '2px solid #2563eb' : '2px solid transparent', background: 'transparent', color: tasksSubView === 'tasks' ? '#2563eb' : '#64748b', fontWeight: tasksSubView === 'tasks' ? '700' : '500', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>Tasks</button>
-                        <button onClick={() => { setTasksSubView('activities'); localStorage.setItem('tab:tasks:subView','activities'); }}
+                        <button onClick={() => setTasksSubView('activities')}
                             style={{ padding: '0.5rem 1.25rem', border: 'none', borderBottom: tasksSubView === 'activities' ? '2px solid #2563eb' : '2px solid transparent', background: 'transparent', color: tasksSubView === 'activities' ? '#2563eb' : '#64748b', fontWeight: tasksSubView === 'activities' ? '700' : '500', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>Completed</button>
-                        <button onClick={() => { setTasksSubView('feed'); localStorage.setItem('tab:tasks:subView','feed'); const now = new Date().toISOString(); setFeedLastRead(now); try { safeStorage.setItem('feedLastRead', now); } catch(e) {} }}
+                        <button onClick={() => { setTasksSubView('feed'); const now = new Date().toISOString(); setFeedLastRead(now); try { safeStorage.setItem('feedLastRead', now); } catch(e) {} }}
                             style={{ position: 'relative', padding: '0.5rem 1.25rem', border: 'none', borderBottom: tasksSubView === 'feed' ? '2px solid #2563eb' : '2px solid transparent', background: 'transparent', color: tasksSubView === 'feed' ? '#2563eb' : '#64748b', fontWeight: tasksSubView === 'feed' ? '700' : '500', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>Feed</button>
                     </div>
                 </div>
@@ -316,7 +316,7 @@ export default function TasksTab() {
                             {tasksSubView === 'activities' && <button className="btn" onClick={() => handleAddActivity()}>+ Log Activity</button>}
                             {tasksSubView === 'activities' && (
                                 <button className="btn" onClick={fetchLogFromCalEvents} disabled={logFromCalLoading}
-                                    style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}>
+                                    style={{ background: '#1c1917', color: '#f5f1eb', border: 'none' }}>
                                     {logFromCalLoading ? 'Loading…' : '📋 Log from Calendar'}
                                 </button>
                             )}

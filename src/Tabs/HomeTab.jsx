@@ -1429,7 +1429,7 @@ export default function HomeTab() {
                                         <div style={{ textAlign:'center', padding:'1.5rem', color:'#94a3b8', fontSize:'0.8125rem' }}>
                                             <div style={{ fontWeight:'600', color:'#475569', marginBottom:'0.25rem' }}>Connect your Google Calendar</div>
                                             <div style={{ marginBottom:'1rem', fontSize:'0.75rem' }}>See this week's meetings alongside your pipeline</div>
-                                            <button onClick={fetchCalendarEvents} style={{ padding:'0.45rem 1.25rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.8125rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>Connect Google Calendar</button>
+                                            <button onClick={fetchCalendarEvents} style={{ padding:'0.45rem 1.25rem', border:'none', borderRadius:'6px', background:'#1c1917', color:'#f5f1eb', fontSize:'0.8125rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }>Connect Google Calendar</button>
                                         </div>
                                     )}
                                     {!calendarLoading && !calendarError && !calendarConnected && (
@@ -1437,7 +1437,7 @@ export default function HomeTab() {
                                             <div style={{ fontSize:'2rem', marginBottom:'0.5rem' }}>📅</div>
                                             <div style={{ fontWeight:'600', color:'#475569', fontSize:'0.875rem', marginBottom:'0.25rem' }}>See your week at a glance</div>
                                             <div style={{ fontSize:'0.75rem', marginBottom:'1rem' }}>Connect Google Calendar to see meetings alongside your pipeline</div>
-                                            <button onClick={fetchCalendarEvents} style={{ padding:'0.5rem 1.25rem', border:'none', borderRadius:'8px', background:'#2563eb', color:'#fff', fontSize:'0.8125rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>Connect Google Calendar</button>
+                                            <button onClick={fetchCalendarEvents} style={{ padding:'0.5rem 1.25rem', border:'none', borderRadius:'8px', background:'#1c1917', color:'#f5f1eb', fontSize:'0.8125rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }>Connect Google Calendar</button>
                                         </div>
                                     )}
 

@@ -114,7 +114,7 @@ function ByokKeySection({ settings, setSettings }) {
                         disabled={byokSaving || byokKey.trim() === (settings.anthropicApiKey || '')}
                         style={{
                             padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer',
-                            background: byokSaved ? '#10b981' : '#2563eb', color: '#fff',
+                            background: byokSaved ? '#10b981' : '#1c1917', color: '#f5f1eb',
                             fontSize: '0.8125rem', fontWeight: '700', fontFamily: 'inherit',
                             opacity: (byokSaving || byokKey.trim() === (settings.anthropicApiKey || '')) ? 0.5 : 1,
                             minWidth: '64px', transition: 'background 0.2s',
@@ -179,7 +179,7 @@ export default function SettingsTab() {
     if (!isAdmin) return null;
 
     // Local state
-    const [settingsTab, setSettingsTab] = useState(() => localStorage.getItem('tab:settings:subTab') || 'team');
+    const [settingsTab, setSettingsTab] = useState('team');
     const [settingsView, setSettingsView] = useState('default');
     const [savedToast, setSavedToast] = useState(false);
     const [settingsSnapshot, setSettingsSnapshot] = useState(null);
@@ -256,7 +256,7 @@ export default function SettingsTab() {
     const SaveCancelBar = () => (
         <div style={{ display:'flex', gap:'0.75rem', padding:'1rem 1.5rem', borderTop:'1px solid #e2e8f0', background:'#f8fafc', marginTop:'1rem' }}>
             <button onClick={handleSaveView}
-                style={{ padding:'0.5rem 1.5rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                style={{ padding:'0.5rem 1.5rem', background:'#1c1917', color:'#f5f1eb', border:'none', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
                 Save changes
             </button>
             <button onClick={handleCancelView}
@@ -285,7 +285,6 @@ export default function SettingsTab() {
         setSettingsTab(tab);
         setSettingsView('default');
         setSettingsSnapshot(null);
-        localStorage.setItem('tab:settings:subTab', tab);
     };
 
     return (
@@ -1178,7 +1177,7 @@ export default function SettingsTab() {
                                                                     <button onClick={() => setExpandedIndustry(isExpanded ? null : industry.name)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#2563eb', padding: '0', width: '16px', flexShrink: 0 }}>{isExpanded ? '▼' : '▶'}</button>
                                                                     <span style={{ fontWeight: '600', fontSize: '0.875rem', flex: 1 }}>{industry.name}</span>
                                                                     {industry.subs.length > 0 && <span style={{ fontSize: '0.6875rem', color: '#94a3b8', background: '#f1f5f9', padding: '1px 6px', borderRadius: '999px' }}>{industry.subs.length} sub{industry.subs.length > 1 ? 's' : ''}</span>}
-                                                                    <button onClick={() => setExpandedIndustry(isExpanded ? null : industry.name)} style={{ fontSize: '0.6875rem', fontWeight: '600', color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer', fontFamily: 'inherit' }}>+ Sub</button>
+                                                                    <button onClick={() => setExpandedIndustry(isExpanded ? null : industry.name)} style={{ fontSize: '0.6875rem', fontWeight: '600', color: '#f5f1eb', background: '#1c1917', border: 'none', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer', fontFamily: 'inherit' }}>+ Sub</button>
                                                                     <button onClick={() => showConfirm(`Remove "${industry.name}" and all its sub-industries?`, () => { saveIndustries(industries.filter((_, i) => i !== realIdx)); if (expandedIndustry === industry.name) setExpandedIndustry(null); })} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '1rem', padding: '0 0 0 4px', lineHeight: 1 }}>×</button>
                                                                 </div>
                                                                 {isExpanded && (
@@ -1198,7 +1197,7 @@ export default function SettingsTab() {
                                                                             <input type="text" value={newSubIndustryInput} onChange={e => setNewSubIndustryInput(e.target.value)} placeholder={`Add sub-industry under ${industry.name}...`}
                                                                                 style={{ flex: 1, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '5px', padding: '0.375rem 0.625rem', fontSize: '0.8125rem', color: '#1e293b' }}
                                                                                 onKeyPress={e => { if (e.key === 'Enter') { const v = newSubIndustryInput.trim(); if (v && !industry.subs.includes(v)) { saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind)); setNewSubIndustryInput(''); } } }} />
-                                                                            <button onClick={() => { const v = newSubIndustryInput.trim(); if (v && !industry.subs.includes(v)) { saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind)); setNewSubIndustryInput(''); } }} style={{ padding: '0.375rem 0.75rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '5px', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Add</button>
+                                                                            <button onClick={() => { const v = newSubIndustryInput.trim(); if (v && !industry.subs.includes(v)) { saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind)); setNewSubIndustryInput(''); } }} style={{ padding: '0.375rem 0.75rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '5px', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Add</button>
                                                                         </div>
                                                                     </div>
                                                                 )}
@@ -1400,7 +1399,7 @@ export default function SettingsTab() {
                                                         updated[kIdx] = { ...updated[kIdx], tolerances: tols };
                                                         setSettings(prev => ({ ...prev, kpiConfig: updated }));
                                                     }}
-                                                        style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.625rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600', fontFamily: 'inherit' }}
+                                                        style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '4px', padding: '0.25rem 0.625rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600', fontFamily: 'inherit' }}
                                                     >+ Add</button>
                                                 </div>
                                                 {(!kpi.tolerances || kpi.tolerances.length === 0) ? (
@@ -1841,7 +1840,7 @@ export default function SettingsTab() {
                                         }}
                                     />
                                     <button
-                                        className="btn btn-secondary"
+                                        className="btn"
                                         disabled={restoringBackup}
                                         onClick={() => !restoringBackup && document.getElementById('backup-file-input').click()}
                                         style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem', opacity: restoringBackup ? 0.7 : 1 }}

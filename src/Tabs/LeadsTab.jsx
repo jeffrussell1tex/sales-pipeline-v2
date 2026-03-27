@@ -26,8 +26,8 @@ export default function LeadsTab() {
     const reps = (settings.users || []).filter(u => u.role === 'Rep' || u.role === 'User');
     const allReps = (settings.users || []).filter(u => u.name);
 
-    const [leadFilter, setLeadFilter] = React.useState(() => localStorage.getItem('tab:leads:filter') || 'all');
-    const [leadView, setLeadView] = React.useState(() => localStorage.getItem('tab:leads:view') || 'list'); // 'list' | 'kanban' | 'funnel'
+    const [leadFilter, setLeadFilter] = React.useState('all');
+    const [leadView, setLeadView] = React.useState('list'); // 'list' | 'kanban' | 'funnel'
     const [leadFunnelExpanded, setLeadFunnelExpanded] = React.useState(null);
     const [selectedLeads, setSelectedLeads] = React.useState([]);
     const [assignTarget, setAssignTarget] = React.useState('');
@@ -136,7 +136,7 @@ export default function LeadsTab() {
                 </div>
             </div>
             {/* ── Sub-tabs (Sales Manager style) + action buttons ── */}
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid #e2e8f0', marginBottom:'0.25rem' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid #e2e8f0', marginBottom:'0' }}>
                 <div style={{ display:'flex', overflowX:'auto' }}>
                     {[
                         { key:'all',     label:'All',        count: counts.all },
@@ -145,7 +145,7 @@ export default function LeadsTab() {
                         { key:'Working', label:'Working',    count: counts.Working },
                         ...(canSeeAll ? [{ key:'unassigned', label:'Unassigned', count: counts.unassigned }] : []),
                     ].map(f => (
-                        <button key={f.key} onClick={() => { setLeadFilter(f.key); localStorage.setItem('tab:leads:filter', f.key); }} style={{
+                        <button key={f.key} onClick={() => setLeadFilter(f.key)} style={{
                             padding: '0.5rem 1.25rem',
                             border: 'none',
                             borderBottom: leadFilter === f.key ? '2px solid #2563eb' : '2px solid transparent',
@@ -165,8 +165,8 @@ export default function LeadsTab() {
                 </div>
                 {/* Action buttons — right side of sub-tab row */}
                 <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', flexShrink:0, paddingRight:'0.75rem' }}>
-                    {canSeeAll && <button onClick={() => setShowLeadImportModal(true)} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#10b981', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>}
-                    <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
+                    {canSeeAll && <button onClick={() => setShowLeadImportModal(true)} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#1c1917', color:'#f5f1eb', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }>📥 Import</button>}
+                    <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#1c1917', color:'#f5f1eb', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }>+ New Lead</button>
                 </div>
             </div>
 
@@ -200,7 +200,7 @@ export default function LeadsTab() {
                         <div style={{ display:'flex', alignItems:'center', padding:'0.375rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
                             <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
                                 {[{v:'funnel',label:'🔻 Funnel'},{v:'kanban',label:'⬛ Kanban'},{v:'list',label:'☰ List'}].map(({v,label}) => (
-                                    <button key={v} onClick={() => { setLeadView(v); localStorage.setItem('tab:leads:view', v); }}
+                                    <button key={v} onClick={() => setLeadView(v)}
                                         style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
                                             background: leadView===v ? '#fff' : 'transparent',
                                             color: leadView===v ? '#1e293b' : '#64748b',
