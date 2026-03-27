@@ -114,7 +114,7 @@ function ByokKeySection({ settings, setSettings }) {
                         disabled={byokSaving || byokKey.trim() === (settings.anthropicApiKey || '')}
                         style={{
                             padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer',
-                            background: byokSaved ? '#10b981' : '#2563eb', color: '#fff',
+                            background: byokSaved ? '#10b981' : '#1c1917', color: '#f5f1eb',
                             fontSize: '0.8125rem', fontWeight: '700', fontFamily: 'inherit',
                             opacity: (byokSaving || byokKey.trim() === (settings.anthropicApiKey || '')) ? 0.5 : 1,
                             minWidth: '64px', transition: 'background 0.2s',
@@ -255,7 +255,7 @@ export default function SettingsTab() {
     const SaveCancelBar = () => (
         <div style={{ display:'flex', gap:'0.75rem', padding:'1rem 1.5rem', borderTop:'1px solid #e2e8f0', background:'#f8fafc', marginTop:'1rem' }}>
             <button onClick={handleSaveView}
-                style={{ padding:'0.5rem 1.5rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                style={{ padding:'0.5rem 1.5rem', background:'#1c1917', color:'#f5f1eb', border:'none', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
                 Save changes
             </button>
             <button onClick={handleCancelView}
@@ -1155,7 +1155,7 @@ export default function SettingsTab() {
                                                                             <input type="text" value={newSubIndustryInput} onChange={e => setNewSubIndustryInput(e.target.value)} placeholder={`Add sub-industry under ${industry.name}...`}
                                                                                 style={{ flex: 1, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '5px', padding: '0.375rem 0.625rem', fontSize: '0.8125rem', color: '#1e293b' }}
                                                                                 onKeyPress={e => { if (e.key === 'Enter') { const v = newSubIndustryInput.trim(); if (v && !industry.subs.includes(v)) { saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind)); setNewSubIndustryInput(''); } } }} />
-                                                                            <button onClick={() => { const v = newSubIndustryInput.trim(); if (v && !industry.subs.includes(v)) { saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind)); setNewSubIndustryInput(''); } }} style={{ padding: '0.375rem 0.75rem', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '5px', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Add</button>
+                                                                            <button onClick={() => { const v = newSubIndustryInput.trim(); if (v && !industry.subs.includes(v)) { saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind)); setNewSubIndustryInput(''); } }} style={{ padding: '0.375rem 0.75rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '5px', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Add</button>
                                                                         </div>
                                                                     </div>
                                                                 )}
@@ -1357,7 +1357,7 @@ export default function SettingsTab() {
                                                         updated[kIdx] = { ...updated[kIdx], tolerances: tols };
                                                         setSettings(prev => ({ ...prev, kpiConfig: updated }));
                                                     }}
-                                                        style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.25rem 0.625rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600', fontFamily: 'inherit' }}
+                                                        style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '4px', padding: '0.25rem 0.625rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600', fontFamily: 'inherit' }}
                                                     >+ Add</button>
                                                 </div>
                                                 {(!kpi.tolerances || kpi.tolerances.length === 0) ? (
