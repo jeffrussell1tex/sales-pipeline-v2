@@ -535,7 +535,7 @@ export default function AppHeader({
                         <button
                             onClick={() => setQuickLogOpen(v => !v)}
                             title="Quick-log an activity"
-                            style={{ padding:'0.2rem 0.625rem', borderRadius:'12px', border:'1px solid rgba(255,255,255,0.2)', background: quickLogOpen ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)', color:'#fff', fontSize:'0.6875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem', transition:'all 0.15s', flexShrink:0 }}
+                            style={{ height:'32px', padding:'0 0.625rem', borderRadius:'12px', border:'1px solid rgba(255,255,255,0.2)', background: quickLogOpen ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)', color:'#fff', fontSize:'0.6875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem', transition:'all 0.15s', flexShrink:0 }}
                             onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.25)'}
                             onMouseLeave={e => e.currentTarget.style.background = quickLogOpen ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)'}
                         >⚡ Log</button>
