@@ -171,6 +171,13 @@ export default function PipelineTab() {
 
     useEffect(() => { localStorage.setItem('pipelineView', pipelineView); }, [pipelineView]);
 
+    // Listen for ⚡ Score button fired from AppHeader
+    useEffect(() => {
+        const handler = () => handleBulkScore();
+        document.addEventListener('accelerep:bulkScore', handler);
+        return () => document.removeEventListener('accelerep:bulkScore', handler);
+    }, []);
+
     // Bulk AI scoring — scores all active deals sequentially
     const handleBulkScore = async () => {
         if (bulkScoring) return;

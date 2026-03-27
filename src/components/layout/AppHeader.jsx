@@ -202,6 +202,39 @@ export default function AppHeader({
                                 Logout
                             </button>
                         </div>
+
+                        {/* ── ⚡ AI Score button — right of user pill ── */}
+                        {settings?.aiScoringEnabled && (
+                            <button
+                                onClick={() => {
+                                    // Dispatch a custom event that PipelineTab listens for
+                                    document.dispatchEvent(new CustomEvent('accelerep:bulkScore'));
+                                }}
+                                title="AI score all active deals"
+                                style={{
+                                    marginLeft: '0.5rem',
+                                    padding: '0.3rem 0.625rem',
+                                    background: '#c8b99a',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    color: '#1c1917',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '700',
+                                    cursor: 'pointer',
+                                    fontFamily: 'inherit',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem',
+                                    transition: 'background 0.15s',
+                                    flexShrink: 0,
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#b8a88a'}
+                                onMouseLeave={e => e.currentTarget.style.background = '#c8b99a'}
+                            >
+                                ⚡ Score
+                            </button>
+                        )}
+
                         {/* ── Profile Panel ─────────────────────────────────── */}
                         {showProfilePanel && (() => {
                             const DEFAULT_PREFS = {
