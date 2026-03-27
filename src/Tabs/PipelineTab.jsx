@@ -171,6 +171,13 @@ export default function PipelineTab() {
 
     useEffect(() => { localStorage.setItem('pipelineView', pipelineView); }, [pipelineView]);
 
+    // Listen for ⚡ Score button fired from AppHeader
+    useEffect(() => {
+        const handler = () => handleBulkScore();
+        document.addEventListener('accelerep:bulkScore', handler);
+        return () => document.removeEventListener('accelerep:bulkScore', handler);
+    }, []);
+
     // Bulk AI scoring — scores all active deals sequentially
     const handleBulkScore = async () => {
         if (bulkScoring) return;
@@ -270,11 +277,19 @@ export default function PipelineTab() {
                             <h2>Pipeline</h2>
                         </div>
                     </div>
-                    {/* ════ HORIZONTAL SUMMARY PANEL ════ */}
-                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'visible', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+                {/* ── Sub-tabs: Funnel | Kanban | List ── */}
+                <div style={{ display:'flex', alignItems:'center', borderBottom:'1px solid #e2e8f0', marginBottom:'0.25rem' }}>
+                    <button onClick={() => { setPipelineView('funnel'); localStorage.setItem('pipelineView','funnel'); setFunnelExpandedStage(null); }}
+                        style={{ padding:'0.5rem 1.25rem', border:'none', borderBottom: pipelineView==='funnel' ? '2px solid #2563eb' : '2px solid transparent', background:'transparent', color: pipelineView==='funnel' ? '#2563eb' : '#64748b', fontWeight: pipelineView==='funnel' ? '700' : '500', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>Funnel</button>
+                    <button onClick={() => { setPipelineView('kanban'); localStorage.setItem('pipelineView','kanban'); setFunnelExpandedStage(null); }}
+                        style={{ padding:'0.5rem 1.25rem', border:'none', borderBottom: pipelineView==='kanban' ? '2px solid #2563eb' : '2px solid transparent', background:'transparent', color: pipelineView==='kanban' ? '#2563eb' : '#64748b', fontWeight: pipelineView==='kanban' ? '700' : '500', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>Kanban</button>
+                    <button onClick={() => { setPipelineView('table'); localStorage.setItem('pipelineView','table'); setFunnelExpandedStage(null); }}
+                        style={{ padding:'0.5rem 1.25rem', border:'none', borderBottom: pipelineView==='table' ? '2px solid #2563eb' : '2px solid transparent', background:'transparent', color: pipelineView==='table' ? '#2563eb' : '#64748b', fontWeight: pipelineView==='table' ? '700' : '500', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>List</button>
+                </div>
 
-                        {/* ── Panel header: title + all filters ── */}
-                        {(() => {
+                {/* ── Filter toolbar container ── */}
+                <div className="table-container" style={{ marginBottom:'0.75rem' }}>
+                    {(() => {
                             const todayDate = new Date();
                             const currentQ2 = getQuarter(todayDate.toISOString().split('T')[0]);
                             const currentQL2 = getQuarterLabel(currentQ2, todayDate.toISOString().split('T')[0]);
@@ -448,7 +463,10 @@ export default function PipelineTab() {
                                 </div>
                             );
                         })()}
+                </div>{/* end filter toolbar container */}
 
+                    {/* ════ HORIZONTAL SUMMARY PANEL (KPIs only) ════ */}
+                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'visible', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom:'0.75rem' }}>
                         {/* Two-column body: KPIs left | Stage bars right */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1px 1fr' }}>
 
@@ -583,30 +601,23 @@ export default function PipelineTab() {
                     {/* ════ DESKTOP VIEWS: VIEW TOGGLE + FUNNEL / KANBAN / TABLE ════ */}
                     <div className="spt-pipeline-desktop">
 
-                    {/* ════ VIEW TOGGLE ════ */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem 1rem', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                        <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '0.25rem' }}>View:</span>
-                        {[{key:'funnel',label:'🔻 Funnel'},{key:'kanban',label:'🗂 Kanban'},{key:'table',label:'☰ List'}].map(v => (
-                            <button key={v.key} onClick={() => { setPipelineView(v.key); localStorage.setItem('pipelineView', v.key); setFunnelExpandedStage(null); }}
-                                style={{ padding: '0.3rem 0.75rem', border: '1px solid ' + (pipelineView === v.key ? '#2563eb' : '#e2e8f0'), borderRadius: '6px', background: pipelineView === v.key ? '#2563eb' : '#fff', color: pipelineView === v.key ? '#fff' : '#64748b', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
-                                {v.label}
-                            </button>
-                        ))}
+                    {/* AI bulk score button — no longer wrapped in styled bar */}
                     {settings?.aiScoringEnabled && (
-                        <button
-                            onClick={handleBulkScore}
-                            disabled={bulkScoring}
-                            title="Score all active deals with AI"
-                            style={{ padding: '0.3rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: bulkScoring ? '#f1f5f9' : '#fff', color: '#475569', fontSize: '0.75rem', fontWeight: '700', cursor: bulkScoring ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
-                            {bulkScoring ? (
-                                <>
-                                    <span style={{ width: '10px', height: '10px', border: '2px solid #94a3b8', borderTopColor: '#2563eb', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-                                    Scoring {bulkScoreProgress?.done}/{bulkScoreProgress?.total}…
-                                </>
-                            ) : '🤖 Score all deals'}
-                        </button>
+                        <div style={{ padding:'0.375rem 1rem 0' }}>
+                            <button
+                                onClick={handleBulkScore}
+                                disabled={bulkScoring}
+                                title="Score all active deals with AI"
+                                style={{ padding: '0.3rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: bulkScoring ? '#f1f5f9' : '#fff', color: '#475569', fontSize: '0.75rem', fontWeight: '700', cursor: bulkScoring ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
+                                {bulkScoring ? (
+                                    <>
+                                        <span style={{ width: '10px', height: '10px', border: '2px solid #94a3b8', borderTopColor: '#2563eb', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+                                        Scoring {bulkScoreProgress?.done}/{bulkScoreProgress?.total}…
+                                    </>
+                                ) : '🤖 Score all deals'}
+                            </button>
+                        </div>
                     )}
-                    </div>
 
                     {/* ════ FUNNEL VIEW ════ */}
                     {pipelineView === 'funnel' && (

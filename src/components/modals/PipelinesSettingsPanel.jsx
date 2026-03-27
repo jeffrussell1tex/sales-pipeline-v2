@@ -108,7 +108,7 @@ export default function PipelinesSettingsPanel({ settings, setSettings, opportun
                                 <div key={c} onClick={() => setNewPipelineColor(c)} style={{ width: '20px', height: '20px', borderRadius: '50%', background: c, cursor: 'pointer', border: newPipelineColor === c ? '3px solid #1e293b' : '2px solid transparent', transition: 'all 0.15s', boxSizing: 'border-box' }} />
                             ))}
                         </div>
-                        <button onClick={addPipeline} disabled={!newPipelineName.trim()} style={{ padding: '0.625rem 1.25rem', background: newPipelineName.trim() ? '#2563eb' : '#e2e8f0', color: newPipelineName.trim() ? '#fff' : '#94a3b8', border: 'none', borderRadius: '8px', fontFamily: 'inherit', fontSize: '0.8125rem', fontWeight: '700', cursor: newPipelineName.trim() ? 'pointer' : 'not-allowed' }}>
+                        <button onClick={addPipeline} disabled={!newPipelineName.trim()} style={{ padding: '0.625rem 1.25rem', background: newPipelineName.trim() ? '#1c1917' : '#e2e8f0', color: newPipelineName.trim() ? '#f5f1eb' : '#94a3b8', border: 'none', borderRadius: '8px', fontFamily: 'inherit', fontSize: '0.8125rem', fontWeight: '700', cursor: newPipelineName.trim() ? 'pointer' : 'not-allowed' }}>
                             + Add
                         </button>
                     </div>
@@ -120,7 +120,7 @@ export default function PipelinesSettingsPanel({ settings, setSettings, opportun
             </div>
             <div style={{ display:'flex', gap:'0.75rem', padding:'1rem 1.5rem', borderTop:'1px solid #e2e8f0', background:'#f8fafc', marginTop:'1rem' }}>
                 <button onClick={onSave}
-                    style={{ padding:'0.5rem 1.5rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                    style={{ padding:'0.5rem 1.5rem', background:'#1c1917', color:'#f5f1eb', border:'none', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
                     Save changes
                 </button>
                 <button onClick={onCancel}

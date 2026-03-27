@@ -67,7 +67,7 @@ export default function OpportunitiesTab() {
     const handleEdit = (opp) => { setEditingOpp(opp); setShowModal(true); };
 
     // Local state
-    const [oppTabView, setOppTabView] = useState('list');
+    const [oppTabView, setOppTabView] = useState(() => localStorage.getItem('tab:opps:view') || 'list');
     const [oppTabFunnelExpanded, setOppTabFunnelExpanded] = useState(null);
     const [oppQuarterFilter, setOppQuarterFilter] = useState([]);
     const [oppStageFilter, setOppStageFilter] = useState([]);
@@ -203,7 +203,18 @@ export default function OpportunitiesTab() {
                             <h2>Opportunities</h2>
                         </div>
                     </div>
-                    <div className="table-container">
+                {/* ── Sub-tabs: Funnel | Kanban | List ── */}
+                <div style={{ display:'flex', alignItems:'center', borderBottom:'1px solid #e2e8f0', marginBottom:'0.25rem' }}>
+                    <button onClick={() => { setOppTabView('funnel'); localStorage.setItem('tab:opps:view','funnel'); }}
+                        style={{ padding:'0.5rem 1.25rem', border:'none', borderBottom: oppTabView==='funnel' ? '2px solid #2563eb' : '2px solid transparent', background:'transparent', color: oppTabView==='funnel' ? '#2563eb' : '#64748b', fontWeight: oppTabView==='funnel' ? '700' : '500', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>Funnel</button>
+                    <button onClick={() => { setOppTabView('kanban'); localStorage.setItem('tab:opps:view','kanban'); }}
+                        style={{ padding:'0.5rem 1.25rem', border:'none', borderBottom: oppTabView==='kanban' ? '2px solid #2563eb' : '2px solid transparent', background:'transparent', color: oppTabView==='kanban' ? '#2563eb' : '#64748b', fontWeight: oppTabView==='kanban' ? '700' : '500', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>Kanban</button>
+                    <button onClick={() => { setOppTabView('list'); localStorage.setItem('tab:opps:view','list'); }}
+                        style={{ padding:'0.5rem 1.25rem', border:'none', borderBottom: oppTabView==='list' ? '2px solid #2563eb' : '2px solid transparent', background:'transparent', color: oppTabView==='list' ? '#2563eb' : '#64748b', fontWeight: oppTabView==='list' ? '700' : '500', fontSize:'0.875rem', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s', whiteSpace:'nowrap' }}>List</button>
+                </div>
+
+                    {/* ── Toolbar container: filters + new button ── */}
+                    <div className="table-container" style={{ marginBottom:'0.75rem' }}>
                         {/* ── Header: filters left, actions right ── */}
                         <div style={{ display:'flex', alignItems:'center', gap:'0.375rem', padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
                             <div style={{ width:'3px', height:'18px', background:'linear-gradient(to bottom, #2563eb, #7c3aed)', borderRadius:'2px', flexShrink:0, marginRight:'0.25rem' }} />
@@ -344,20 +355,10 @@ export default function OpportunitiesTab() {
                             </div>
                         )}
 
-                            {/* VIEW TOGGLE ROW — flush left below pipeline filters */}
-                            <div style={{ display:'flex', alignItems:'center', padding:'0.375rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
-                                <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
-                                    {[{v:'funnel',label:'🔻 Funnel'},{v:'kanban',label:'⬛ Kanban'},{v:'list',label:'☰ List'}].map(({v,label}) => (
-                                        <button key={v} onClick={() => setOppTabView(v)}
-                                            style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
-                                                background: oppTabView===v ? '#fff' : 'transparent',
-                                                color: oppTabView===v ? '#1e293b' : '#64748b',
-                                                boxShadow: oppTabView===v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                    </div>{/* end toolbar container */}
+
+                    {/* ── Content container ── */}
+                    <div className="table-container" style={{ overflow:'hidden' }}>
                         <div className="table-wrapper">
                             {/* Mobile cards — Opportunities tab */}
                             <div className="opp-mobile-cards" style={{ padding: '0.75rem' }}>

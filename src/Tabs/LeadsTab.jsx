@@ -135,6 +135,41 @@ export default function LeadsTab() {
                     <h2>Leads</h2>
                 </div>
             </div>
+            {/* ── Sub-tabs (Sales Manager style) + action buttons ── */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid #e2e8f0', marginBottom:'0' }}>
+                <div style={{ display:'flex', overflowX:'auto' }}>
+                    {[
+                        { key:'all',     label:'All',        count: counts.all },
+                        { key:'hot',     label:'🔥 Hot',     count: counts.hot },
+                        { key:'New',     label:'New',        count: counts.New },
+                        { key:'Working', label:'Working',    count: counts.Working },
+                        ...(canSeeAll ? [{ key:'unassigned', label:'Unassigned', count: counts.unassigned }] : []),
+                    ].map(f => (
+                        <button key={f.key} onClick={() => setLeadFilter(f.key)} style={{
+                            padding: '0.5rem 1.25rem',
+                            border: 'none',
+                            borderBottom: leadFilter === f.key ? '2px solid #2563eb' : '2px solid transparent',
+                            background: 'transparent',
+                            color: leadFilter === f.key ? '#2563eb' : '#64748b',
+                            fontWeight: leadFilter === f.key ? '700' : '500',
+                            fontSize: '0.875rem',
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                            transition: 'all 0.15s',
+                            whiteSpace: 'nowrap',
+                        }}>
+                            {f.label}
+                            <span style={{ marginLeft:'0.3rem', fontSize:'0.75rem', opacity:0.6 }}>{f.count}</span>
+                        </button>
+                    ))}
+                </div>
+                {/* Action buttons — right side of sub-tab row */}
+                <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', flexShrink:0, paddingRight:'0.75rem' }}>
+                    {canSeeAll && <button onClick={() => setShowLeadImportModal(true)} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#10b981', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>}
+                    <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
+                </div>
+            </div>
+
             <div className="table-container">
             {/* KPI ROW */}
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(3,1fr)' : 'repeat(5,1fr)', gap:'0.75rem', padding:'1rem 1.25rem 0' }}>
@@ -160,26 +195,7 @@ export default function LeadsTab() {
                 <div>
                     <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
 
-                        {/* TOOLBAR — always visible regardless of view */}
-                        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap' }}>
-                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', marginRight:'0.25rem' }}>Leads</span>
-                            <div style={{ width:'1px', height:'16px', background:'#e2e8f0' }}></div>
-                            {[
-                                { key:'all', label:'All', count: counts.all },
-                                { key:'hot', label:'🔥 Hot', count: counts.hot },
-                                { key:'New', label:'New', count: counts.New },
-                                { key:'Working', label:'Working', count: counts.Working },
-                                ...(canSeeAll ? [{ key:'unassigned', label:'Unassigned', count: counts.unassigned }] : []),
-                            ].map(f => (
-                                <button key={f.key} onClick={() => setLeadFilter(f.key)} style={{ padding:'0.2rem 0.6rem', borderRadius:'999px', border:'1px solid '+(leadFilter===f.key?'#2563eb':'#e2e8f0'), background:leadFilter===f.key?'#2563eb':'#f8fafc', color:leadFilter===f.key?'#fff':'#64748b', fontSize:'0.6875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
-                                    {f.label} <span style={{ opacity:0.75 }}>{f.count}</span>
-                                </button>
-                            ))}
-                            <div style={{ marginLeft:'auto', display:'flex', gap:'0.5rem', alignItems:'center' }}>
-                                {canSeeAll && <button onClick={() => setShowLeadImportModal(true)} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#10b981', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>}
-                                <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
-                            </div>
-                        </div>
+
                         {/* VIEW TOGGLE ROW — own row below filter pills, flush left */}
                         <div style={{ display:'flex', alignItems:'center', padding:'0.375rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
                             <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
@@ -420,7 +436,7 @@ export default function LeadsTab() {
                                     });
                                     setLeads(updated);
                                     updated.filter(l => !leads.find(ol => ol.id === l.id && ol.assignedTo === l.assignedTo)).forEach(l => dbFetch('/.netlify/functions/leads', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(l) }).catch(console.error));
-                                }} style={{ flex:1, padding:'0.4rem 0', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>⚡ Auto-assign All</button>
+                                }} style={{ flex:1, padding:'0.4rem 0', border:'none', borderRadius:'6px', background:'#1c1917', color:'#f5f1eb', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>⚡ Auto-assign All</button>
                             </div>
                         </div>
 

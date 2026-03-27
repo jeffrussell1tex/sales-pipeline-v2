@@ -52,39 +52,38 @@ export default function ContactsTab() {
                             
                         </div>
                     </div>
-                <div className="table-container">
-                    <div className="table-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <h2>CONTACTS</h2>
-                        </div>
-                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                            {canEdit && <button className="btn" onClick={handleAddContact}>+ ADD CONTACT</button>}
-                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '600' }}>
-                                    Sort by:
-                                </span>
-                                <select
-                                    value={contactsSortBy}
-                                    onChange={(e) => setContactsSortBy(e.target.value)}
-                                    style={{
-                                        background: '#ffffff',
-                                        border: '1px solid #e2e8f0',
-                                        borderRadius: '6px',
-                                        padding: '0.5rem 0.75rem',
-                                        color: '#1e293b',
-                                        fontSize: '0.875rem',
-                                        fontWeight: '600',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    <option value="lastName">Last Name</option>
-                                    <option value="firstName">First Name</option>
-                                    <option value="company">Company</option>
-                                </select>
-                            </div>
-
-                        </div>
+                {/* ── Sub-tabs (Sales Manager style) + Add Contact ── */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', marginBottom: '0.25rem' }}>
+                    <div style={{ display: 'flex' }}>
+                        {[
+                            { key: 'lastName',  label: 'Last Name' },
+                            { key: 'firstName', label: 'First Name' },
+                            { key: 'company',   label: 'Company' },
+                        ].map(opt => (
+                            <button key={opt.key} onClick={() => setContactsSortBy(opt.key)} style={{
+                                padding: '0.5rem 1.25rem',
+                                border: 'none',
+                                borderBottom: contactsSortBy === opt.key ? '2px solid #2563eb' : '2px solid transparent',
+                                background: 'transparent',
+                                color: contactsSortBy === opt.key ? '#2563eb' : '#64748b',
+                                fontWeight: contactsSortBy === opt.key ? '700' : '500',
+                                fontSize: '0.875rem',
+                                cursor: 'pointer',
+                                fontFamily: 'inherit',
+                                transition: 'all 0.15s',
+                                whiteSpace: 'nowrap',
+                            }}>{opt.label}</button>
+                        ))}
                     </div>
+                    {canEdit && (
+                        <div style={{ paddingRight: '0.75rem', flexShrink: 0 }}>
+                            <button className="btn" onClick={handleAddContact}>+ Add Contact</button>
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Contacts list ── */}
+                <div className="table-container">
                     {/* Bulk action bar */}
                     {selectedContacts.length > 0 && (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.5rem', background: '#eff6ff', borderBottom: '1px solid #bfdbfe' }}>
