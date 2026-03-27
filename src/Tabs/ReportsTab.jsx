@@ -569,7 +569,7 @@ ${bodyHtml}
                         </div>
 
                         {/* ── Row 2: Viewing + Period filters (left) + Export PDF (right) ── */}
-                        <div className="table-container">
+                        <div className="table-container" style={{ marginTop: '0.75rem' }}>
                           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.625rem 1.25rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap', gap:'0.5rem' }}>
 
                             {/* Left side: Viewing slice + Period filter */}
