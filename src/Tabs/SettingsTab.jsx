@@ -178,6 +178,7 @@ export default function SettingsTab() {
     if (!isAdmin) return null;
 
     // Local state
+    const [settingsTab, setSettingsTab] = useState(() => localStorage.getItem('tab:settings:subTab') || 'team');
     const [settingsView, setSettingsView] = useState('menu');
     const [savedToast, setSavedToast] = useState(false);
     const [settingsSnapshot, setSettingsSnapshot] = useState(null);
@@ -196,7 +197,7 @@ export default function SettingsTab() {
 
     // Fetch audit log when view changes to audit-log
     useEffect(() => {
-        if (settingsView !== 'audit-log') return;
+        if (settingsView !== 'audit-log' || settingsTab !== 'security') return;
         setAuditLoading(true);
         dbFetch('/.netlify/functions/audit-log')
             .then(r => r.json())
@@ -264,6 +265,28 @@ export default function SettingsTab() {
         </div>
     );
 
+    // Sub-tab switcher
+    const switchTab = (tab) => {
+        setSettingsTab(tab);
+        setSettingsView('menu');
+        localStorage.setItem('tab:settings:subTab', tab);
+    };
+
+    // Sub-tab style
+    const subTabStyle = (tab) => ({
+        padding: '0.5rem 1.25rem',
+        border: 'none',
+        borderBottom: settingsTab === tab ? '2px solid #2563eb' : '2px solid transparent',
+        background: 'transparent',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        fontSize: '0.875rem',
+        color: settingsTab === tab ? '#2563eb' : '#64748b',
+        fontWeight: settingsTab === tab ? '700' : '500',
+        transition: 'all 0.15s',
+        whiteSpace: 'nowrap',
+    });
+
     return (
 
                 <div className="tab-page">
@@ -271,9 +294,16 @@ export default function SettingsTab() {
                         <div className="tab-page-header-bar"></div>
                         <div>
                             <h2>Settings</h2>
-                            <p>Manage users, configuration, and system preferences</p>
                         </div>
                     </div>
+
+                    {/* ── Sub-tabs ── */}
+                    <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '0.25rem', gap: '0' }}>
+                        <button style={subTabStyle('team')}          onClick={() => switchTab('team')}>Team</button>
+                        <button style={subTabStyle('configuration')} onClick={() => switchTab('configuration')}>Configuration</button>
+                        <button style={subTabStyle('security')}      onClick={() => switchTab('security')}>Security &amp; Data</button>
+                    </div>
+
                 <>
                     {savedToast && (
                         <div style={{ position:'fixed', bottom:'2rem', left:'50%', transform:'translateX(-50%)', background:'#1e293b', color:'#fff', padding:'0.625rem 1.5rem', borderRadius:'8px', fontSize:'0.875rem', fontWeight:'600', zIndex:9999, display:'flex', alignItems:'center', gap:'8px', boxShadow:'0 4px 16px rgba(0,0,0,0.18)' }}>
@@ -288,10 +318,13 @@ export default function SettingsTab() {
                             <div style={{ padding: '1.5rem' }}>
                                 <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', maxWidth: isMobile ? '100%' : '560px' }}>
                                     {[
+                                        ...(settingsTab === 'team' ? [
                                         { group: 'Team' },
                                         { view: 'users',          icon: '👥', title: 'Manage Users',       desc: 'Roles & permissions' },
                                         { view: 'team-builder',   icon: '🏗️', title: 'Team Builder',       desc: 'Teams & managers' },
                                         { view: 'territories',    icon: '📍', title: 'Territories',         desc: 'Sales territory definitions' },
+                                        ] : []),
+                                        ...(settingsTab === 'configuration' ? [
                                         { group: 'Configuration' },
                                         { view: 'vertical-markets', icon: '🏢', title: 'Industries',        desc: 'Primary & sub-industry types' },
                                         { view: 'verticals',      icon: '🏭', title: 'Verticals',           desc: 'Sales vertical assignments' },
@@ -302,12 +335,15 @@ export default function SettingsTab() {
                                         { view: 'logo',           icon: '🖼️', title: 'Company Logo',        desc: 'Upload company logo' },
                                         { view: 'pain-points',    icon: '⚠️', title: 'Pain Points Library', desc: 'Customer pain point templates' },
                                         { view: 'products',       icon: '📦', title: 'Products',             desc: 'Products and services offered' },
+                                        ] : []),
+                                        ...(settingsTab === 'security' ? [
                                         { group: 'Security & Data' },
                                         { view: 'features',       icon: '🧩', title: 'Features',             desc: 'Enable or disable app features' },
                                         { view: 'ai-features',    icon: '🤖', title: 'AI Features',          desc: 'Deal scoring & data privacy controls' },
                                         { view: 'field-visibility', icon: '🔒', title: 'Field Visibility',  desc: 'Role-based field access control' },
                                         { view: 'data-management', icon: '💾', title: 'Data Management',    desc: 'Backup & restore' },
                                         { view: 'audit-log',      icon: '📋', title: 'Audit Log',           desc: 'Change history across all records' },
+                                        ] : []),
                                     ].map((item, idx, arr) => {
                                         if (item.group) return (() => {
                                                 const gc = { 'Team': { bg:'#eff6ff', border:'#bfdbfe', color:'#1d4ed8', dot:'#2563eb' }, 'Configuration': { bg:'#f5f3ff', border:'#ddd6fe', color:'#6d28d9', dot:'#7c3aed' }, 'Security & Data': { bg:'#fff7ed', border:'#fed7aa', color:'#c2410c', dot:'#ea580c' } }[item.group] || { bg:'#f8fafc', border:'#e2e8f0', color:'#64748b', dot:'#94a3b8' };
