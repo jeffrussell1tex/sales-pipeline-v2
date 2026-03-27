@@ -52,39 +52,36 @@ export default function ContactsTab() {
                             
                         </div>
                     </div>
-                <div className="table-container">
-                    <div className="table-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                            <h2>CONTACTS</h2>
-                        </div>
-                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                            {canEdit && <button className="btn" onClick={handleAddContact}>+ ADD CONTACT</button>}
-                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: '600' }}>
-                                    Sort by:
-                                </span>
-                                <select
-                                    value={contactsSortBy}
-                                    onChange={(e) => setContactsSortBy(e.target.value)}
+                {/* ── Toolbar bar — matches Reports period bar style ── */}
+                <div className="table-container" style={{ marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {/* Left: Sort by */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>Sort by:</span>
+                            {['lastName', 'firstName', 'company'].map(opt => (
+                                <button key={opt} onClick={() => setContactsSortBy(opt)}
                                     style={{
-                                        background: '#ffffff',
-                                        border: '1px solid #e2e8f0',
-                                        borderRadius: '6px',
-                                        padding: '0.5rem 0.75rem',
-                                        color: '#1e293b',
-                                        fontSize: '0.875rem',
-                                        fontWeight: '600',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    <option value="lastName">Last Name</option>
-                                    <option value="firstName">First Name</option>
-                                    <option value="company">Company</option>
-                                </select>
-                            </div>
-
+                                        padding: '3px 12px', borderRadius: '999px', border: '1px solid',
+                                        cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.6875rem', fontWeight: '600', transition: 'all 0.15s',
+                                        background: contactsSortBy === opt ? '#1c1917' : '#f8fafc',
+                                        color:      contactsSortBy === opt ? '#f5f1eb' : '#475569',
+                                        borderColor: contactsSortBy === opt ? '#1c1917' : '#e2e8f0',
+                                    }}>
+                                    {opt === 'lastName' ? 'Last Name' : opt === 'firstName' ? 'First Name' : 'Company'}
+                                </button>
+                            ))}
                         </div>
+                        {/* Right: Add Contact */}
+                        {canEdit && (
+                            <button className="btn" onClick={handleAddContact} style={{ flexShrink: 0 }}>
+                                + Add Contact
+                            </button>
+                        )}
                     </div>
+                </div>
+
+                {/* ── Contacts list ── */}
+                <div className="table-container">
                     {/* Bulk action bar */}
                     {selectedContacts.length > 0 && (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.5rem', background: '#eff6ff', borderBottom: '1px solid #bfdbfe' }}>
