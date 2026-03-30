@@ -82,9 +82,10 @@ function StatusBadge({ status }) {
 // ─── Product type badge ───────────────────────────────────────────────────────
 
 const TYPE_COLORS = {
-    recurring: { bg: '#dbeafe', color: '#1e40af', label: 'Recurring' },
+    recurring:  { bg: '#dbeafe', color: '#1e40af', label: 'Recurring' },
     'one-time': { bg: '#fef3c7', color: '#92400e', label: 'One-time' },
-    service:   { bg: '#f3e8ff', color: '#6b21a8', label: 'Service' },
+    one_time:   { bg: '#fef3c7', color: '#92400e', label: 'One-time' },
+    service:    { bg: '#f3e8ff', color: '#6b21a8', label: 'Service' },
 };
 
 function TypeBadge({ type }) {
@@ -184,13 +185,16 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
     }, [catalogGroups, catalogSearch]);
 
     const addProduct = (product) => {
+        // DB uses productType (with value 'one_time') and listPrice
+        const rawType = product.productType || product.type || 'one_time';
+        const normType = rawType === 'one_time' ? 'one-time' : rawType;
         setLineItems(prev => [...prev, {
             _key: Date.now() + Math.random(),
             productId: product.id,
             productName: product.name,
-            productType: product.type,
-            unit: product.unit || (product.type === 'recurring' ? 'month' : 'flat'),
-            listPrice: Number(product.price) || 0,
+            productType: normType,
+            unit: product.unit || (normType === 'recurring' ? 'month' : 'flat'),
+            listPrice: Number(product.listPrice || product.price) || 0,
             quantity: 1,
             discountPct: 0,
         }]);
@@ -354,9 +358,9 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#f5f1eb', lineHeight: 1.3 }}>{prod.name}</div>
                                             <div style={{ fontSize: '0.6875rem', color: '#a8a29e', marginTop: '0.15rem' }}>
-                                                ${Number(prod.price || 0).toLocaleString()} {prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : 'flat'}
+                                                ${Number(prod.listPrice || prod.price || 0).toLocaleString()} {prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : 'flat'}
                                             </div>
-                                            <TypeBadge type={prod.type} />
+                                            <TypeBadge type={prod.productType || prod.type} />
                                         </div>
                                         <button
                                             onClick={() => addProduct(prod)}
@@ -885,23 +889,37 @@ function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings,
 // ─── PRICE BOOK (product management) ─────────────────────────────────────────
 
 function PriceBook({ products, onSave, onDelete }) {
-    const EMPTY = { name: '', category: 'Platform', type: 'recurring', price: '', unit: 'month', description: '', active: true };
+    const EMPTY = { name: '', category: 'Platform', productType: 'recurring', listPrice: '', unit: 'month', description: '', active: true };
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState(EMPTY);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
 
     const openNew = () => { setForm(EMPTY); setEditing('new'); setError(null); };
-    const openEdit = (p) => { setForm({ ...p }); setEditing(p.id); setError(null); };
+    const openEdit = (p) => {
+        setForm({
+            name: p.name || '',
+            category: p.category || 'Platform',
+            productType: p.productType || p.type || 'recurring',
+            listPrice: p.listPrice || p.price || '',
+            unit: p.unit || 'month',
+            description: p.description || '',
+            active: p.active !== false,
+            sku: p.sku || '',
+            minPrice: p.minPrice || '',
+        });
+        setEditing(p.id);
+        setError(null);
+    };
     const cancel = () => { setEditing(null); setError(null); };
 
     const handleSave = async () => {
         if (!form.name.trim()) { setError('Product name is required.'); return; }
-        if (!form.price || isNaN(Number(form.price))) { setError('Valid price is required.'); return; }
+        if (!form.listPrice || isNaN(Number(form.listPrice))) { setError('Valid price is required.'); return; }
         setSaving(true);
         setError(null);
         try {
-            await onSave({ ...form, price: Number(form.price), id: editing === 'new' ? undefined : editing });
+            await onSave({ ...form, listPrice: Number(form.listPrice), id: editing === 'new' ? undefined : editing });
             cancel();
         } catch (err) {
             setError(err.message || 'Failed to save.');
@@ -942,15 +960,15 @@ function PriceBook({ products, onSave, onDelete }) {
                         </div>
                         <div>
                             <label style={lbl}>Type</label>
-                            <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={inp}>
+                            <select value={form.productType} onChange={e => setForm(f => ({ ...f, productType: e.target.value }))} style={inp}>
                                 <option value="recurring">Recurring</option>
-                                <option value="one-time">One-time</option>
+                                <option value="one_time">One-time</option>
                                 <option value="service">Service</option>
                             </select>
                         </div>
                         <div>
                             <label style={lbl}>Price ($)</label>
-                            <input type="number" min="0" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} style={inp} placeholder="0" />
+                            <input type="number" min="0" value={form.listPrice} onChange={e => setForm(f => ({ ...f, listPrice: e.target.value }))} style={inp} placeholder="0" />
                         </div>
                         <div>
                             <label style={lbl}>Unit</label>
