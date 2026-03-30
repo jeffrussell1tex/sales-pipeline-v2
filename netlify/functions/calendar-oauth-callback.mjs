@@ -90,6 +90,10 @@ async function getCalendarEmail(provider, accessToken) {
 }
 
 export const handler = async (event) => {
+    // Log all incoming params for debugging
+    console.log('callback params:', JSON.stringify(event.queryStringParameters));
+    console.log('callback method:', event.httpMethod);
+
     const { code, state, error } = event.queryStringParameters || {};
 
     // Provider denied access
@@ -99,6 +103,7 @@ export const handler = async (event) => {
     }
 
     if (!code || !state) {
+        console.error('Missing code or state. code present:', !!code, 'state present:', !!state);
         return { statusCode: 302, headers: { Location: ERROR_REDIRECT }, body: '' };
     }
 
