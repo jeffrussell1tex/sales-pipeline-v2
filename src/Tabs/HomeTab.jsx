@@ -1101,34 +1101,125 @@ export default function HomeTab() {
                         </div>
                     </div>
 
-                    {/* Today's meetings — always shows when calendar connected */}
-                    {calendarConnected && (
-                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
-                            <div style={{ padding: '0.875rem 1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>Today's meetings</span>
-                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{todayCalEvents.length} event{todayCalEvents.length!==1?'s':''}</span>
-                            </div>
-                            {todayCalEvents.length === 0 ? (
-                                <div style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>No meetings today</div>
-                            ) : (
-                                <div>
-                                    {todayCalEvents.map((ev, idx) => {
-                                        const timeStr = ev.start?.dateTime ? new Date(ev.start.dateTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : 'All day';
-                                        return (
-                                            <div key={ev.id||idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 1rem', borderBottom: idx < todayCalEvents.length-1 ? '1px solid #f8fafc' : 'none' }}>
-                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', width: '56px', flexShrink: 0 }}>{timeStr}</div>
-                                                <div style={{ width: '3px', height: '32px', borderRadius: '2px', background: '#7c3aed', flexShrink: 0 }} />
-                                                <div style={{ flex: 1 }}>
-                                                    <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{ev.summary}</div>
-                                                    {ev.attendeeCount > 0 && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{ev.attendeeCount} attendee{ev.attendeeCount!==1?'s':''}</div>}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                    {/* Calendar — day/week toggle view */}
+                    {calendarConnected && (() => {
+                        // Week view: group all events by date across next 7 days
+                        const weekEvents = calendarEvents
+                            ? [...calendarEvents].sort((a,b) => (a.start?.dateTime||a.start?.date||'').localeCompare(b.start?.dateTime||b.start?.date||''))
+                            : [];
+
+                        // Group by date for week view
+                        const eventsByDay = {};
+                        weekEvents.forEach(ev => {
+                            const d = ev.start?.date || ev.start?.dateTime?.split('T')[0];
+                            if (!d) return;
+                            if (!eventsByDay[d]) eventsByDay[d] = [];
+                            eventsByDay[d].push(ev);
+                        });
+                        const sortedDays = Object.keys(eventsByDay).sort();
+
+                        const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                        const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                        const formatDayLabel = (dateStr) => {
+                            const d = new Date(dateStr + 'T12:00:00');
+                            if (dateStr === todayStr) return 'Today';
+                            const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+                            if (dateStr === tomorrow.toISOString().split('T')[0]) return 'Tomorrow';
+                            return dayNames[d.getDay()] + ' ' + monthNames[d.getMonth()] + ' ' + d.getDate();
+                        };
+
+                        const EventRow = ({ ev, idx, total, accentColor }) => {
+                            const timeStr = ev.start?.dateTime
+                                ? new Date(ev.start.dateTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+                                : 'All day';
+                            return (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 1rem', borderBottom: idx < total-1 ? '1px solid #f8fafc' : 'none' }}>
+                                    <div style={{ fontSize: '0.6875rem', color: '#94a3b8', width: '52px', flexShrink: 0 }}>{timeStr}</div>
+                                    <div style={{ width: '3px', height: '28px', borderRadius: '2px', background: accentColor || '#7c3aed', flexShrink: 0 }} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.summary}</div>
+                                        {ev.attendeeCount > 0 && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{ev.attendeeCount} attendee{ev.attendeeCount!==1?'s':''}</div>}
+                                    </div>
                                 </div>
-                            )}
-                        </div>
-                    )}
+                            );
+                        };
+
+                        const totalCount = calView === 'day' ? todayCalEvents.length : weekEvents.length;
+
+                        return (
+                            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                                {/* Header with toggle */}
+                                <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>
+                                            {calView === 'day' ? "Today's meetings" : "This week"}
+                                        </span>
+                                        <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{totalCount} event{totalCount!==1?'s':''}</span>
+                                    </div>
+                                    {/* Day / Week toggle */}
+                                    <div style={{ display: 'flex', background: '#f0ece4', borderRadius: '6px', padding: '2px', gap: '2px' }}>
+                                        {['day','week'].map(v => (
+                                            <button key={v} onClick={() => setCalView(v)} style={{
+                                                padding: '0.2rem 0.625rem',
+                                                borderRadius: '4px',
+                                                border: 'none',
+                                                background: calView === v ? '#1c1917' : 'transparent',
+                                                color: calView === v ? '#f5f1eb' : '#78716c',
+                                                fontSize: '0.6875rem',
+                                                fontWeight: '600',
+                                                cursor: 'pointer',
+                                                fontFamily: 'inherit',
+                                                textTransform: 'capitalize',
+                                                transition: 'all 0.15s',
+                                            }}>{v}</button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Day view */}
+                                {calView === 'day' && (
+                                    todayCalEvents.length === 0
+                                        ? <div style={{ padding: '1.25rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.8125rem' }}>No meetings today</div>
+                                        : todayCalEvents.map((ev, idx) => (
+                                            <EventRow key={ev.id||idx} ev={ev} idx={idx} total={todayCalEvents.length} accentColor='#7c3aed' />
+                                          ))
+                                )}
+
+                                {/* Week view */}
+                                {calView === 'week' && (
+                                    sortedDays.length === 0
+                                        ? <div style={{ padding: '1.25rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.8125rem' }}>No events this week</div>
+                                        : sortedDays.map((dateStr, di) => (
+                                            <div key={dateStr}>
+                                                {/* Day header */}
+                                                <div style={{
+                                                    padding: '0.375rem 1rem',
+                                                    background: dateStr === todayStr ? '#eff6ff' : '#fafaf9',
+                                                    borderBottom: '1px solid #f1f5f9',
+                                                    borderTop: di > 0 ? '1px solid #f1f5f9' : 'none',
+                                                    fontSize: '0.6875rem',
+                                                    fontWeight: '700',
+                                                    color: dateStr === todayStr ? '#2563eb' : '#94a3b8',
+                                                    textTransform: 'uppercase',
+                                                    letterSpacing: '0.06em',
+                                                }}>
+                                                    {formatDayLabel(dateStr)}
+                                                </div>
+                                                {eventsByDay[dateStr].map((ev, idx) => (
+                                                    <EventRow
+                                                        key={ev.id||idx}
+                                                        ev={ev}
+                                                        idx={idx}
+                                                        total={eventsByDay[dateStr].length}
+                                                        accentColor={dateStr === todayStr ? '#7c3aed' : '#2563eb'}
+                                                    />
+                                                ))}
+                                            </div>
+                                          ))
+                                )}
+                            </div>
+                        );
+                    })()}
 
                     {/* Calendar connect prompt when not connected */}
                     {!calendarConnected && (
