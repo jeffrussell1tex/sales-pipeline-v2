@@ -221,6 +221,11 @@ export default function AppHeader({
                                 closeLapsed:        { enabled: true,  mode: 'instant' },
                                 dealMomentum:       { enabled: true,  mode: 'instant' },
                                 managerAlerts:      { enabled: true,  mode: 'instant' },
+                                // ── Quote alerts ─────────────────────────────────────────
+                                quoteApproved:      { enabled: true,  mode: 'instant' },
+                                quoteRejected:      { enabled: true,  mode: 'instant' },
+                                quotePending:       { enabled: true,  mode: 'instant' },
+                                quoteAccepted:      { enabled: true,  mode: 'instant' },
                             };
                             const ALERT_LABELS = {
                                 stageChanged:       'Deal stage changed',
@@ -237,6 +242,11 @@ export default function AppHeader({
                                 closeLapsed:        'Close date lapsed',
                                 dealMomentum:       'Deal momentum (stage advance)',
                                 managerAlerts:      'Manager escalation alerts',
+                                // ── Quote alerts ─
+                                quoteApproved:      'Quote approved',
+                                quoteRejected:      'Quote rejected',
+                                quotePending:       'Quote submitted for approval',
+                                quoteAccepted:      'Quote accepted by customer',
                             };
                             const prefs = myProfile?.notificationPrefs || DEFAULT_PREFS;
                             const digestTime = myProfile?.digestTime || '08:00';
@@ -379,21 +389,31 @@ export default function AppHeader({
                                                 {Object.entries(ALERT_LABELS).map(([alertType, label]) => {
                                                     // manager-only alerts — hide for reps
                                                     if (alertType === 'managerAlerts' && !isManager && !isAdmin) return null;
+                                                    // quotePending is manager/admin only
+                                                    if (alertType === 'quotePending' && !isManager && !isAdmin) return null;
+                                                    // quoteApproved / quoteRejected only relevant for reps (not managers approving their own)
+                                                    if ((alertType === 'quoteApproved' || alertType === 'quoteRejected') && (isManager || isAdmin)) return null;
                                                     const pref = prefs[alertType] || DEFAULT_PREFS[alertType] || { enabled: true, mode: 'instant' };
                                                     const isDigestOnly = alertType === 'taskDigest' || alertType === 'overdueTaskNudge';
                                                     // Section dividers
                                                     const isPipelineAlert = ['dealSilent','dealStuck','closeLapsed','dealMomentum','managerAlerts'].includes(alertType);
                                                     const isFirstPipeline = alertType === 'dealSilent';
+                                                    const isQuoteAlert = ['quoteApproved','quoteRejected','quotePending','quoteAccepted'].includes(alertType);
+                                                    const isFirstQuote = alertType === 'quoteApproved' || (alertType === 'quotePending' && (isManager || isAdmin));
                                                     return (
                                                         <React.Fragment key={alertType}>
                                                         {isFirstPipeline && (
                                                             <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0', marginBottom: '0.375rem' }}>Pipeline health alerts</div>
+                                                        )}
+                                                        {isFirstQuote && (
+                                                            <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0', marginBottom: '0.375rem' }}>Quote alerts</div>
                                                         )}
                                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0', borderBottom: '1px solid #f1f3f5' }}>
                                                             <div style={{ flex: 1 }}>
                                                                 <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>
                                                                     {label}
                                                                     {alertType === 'managerAlerts' && <span style={{ fontSize: '0.625rem', fontWeight: '700', background: '#ede9fe', color: '#6d28d9', padding: '1px 6px', borderRadius: '999px', marginLeft: '6px' }}>Manager</span>}
+                                                                    {alertType === 'quotePending' && <span style={{ fontSize: '0.625rem', fontWeight: '700', background: '#ede9fe', color: '#6d28d9', padding: '1px 6px', borderRadius: '999px', marginLeft: '6px' }}>Manager</span>}
                                                                 </div>
                                                                 {isDigestOnly && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>Digest only</div>}
                                                             </div>

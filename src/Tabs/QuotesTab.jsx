@@ -270,7 +270,21 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
     };
 
     const handleSubmitApproval = () => handleSaveVersion('Pending Approval');
+    const [pdfBlockMsg, setPdfBlockMsg] = useState(null);
+
     const handleExportPDF = async () => {
+        const status = editingQuote?.status || 'Draft';
+        const approved = status === 'Approved' || status === 'Sent to Customer' || status === 'Accepted';
+        if (!approved) {
+            const msgs = {
+                'Draft': 'This quote is still a draft. Submit it for approval before generating a PDF.',
+                'Pending Approval': 'This quote is pending manager approval. A PDF can only be generated once approved.',
+                'Rejected / Lost': 'This quote was rejected and cannot be exported as a PDF.',
+            };
+            setPdfBlockMsg(msgs[status] || 'This quote must be approved before generating a PDF.');
+            setTimeout(() => setPdfBlockMsg(null), 5000);
+            return;
+        }
         try {
             const opp = linkedOpp;
             const res = await dbFetch('/.netlify/functions/quote-pdf', {
@@ -287,10 +301,9 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
             a.click();
             URL.revokeObjectURL(url);
         } catch {
-            // Fallback: open print dialog on a styled page
             const w = window.open('', '_blank');
             if (!w) return;
-            w.document.write(buildPrintHTML(editingQuote, linkedOpp, lines, subtotal, totalValue, recurringValue, oneTimeValue, dealDiscount));
+            w.document.write(buildPrintHTML(editingQuote, linkedOpp, lines, subtotal, totalValue, recurringValue, oneTimeValue));
             w.document.close();
             setTimeout(() => w.print(), 400);
         }
@@ -388,10 +401,17 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
                         </div>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                        <button onClick={handleExportPDF}
-                            style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>
-                            Export PDF
-                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
+                            <button onClick={handleExportPDF}
+                                style={{ background: (editingQuote?.status === 'Approved' || editingQuote?.status === 'Sent to Customer' || editingQuote?.status === 'Accepted') ? '#1c1917' : '#94a3b8', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                Export PDF
+                            </button>
+                            {pdfBlockMsg && (
+                                <div style={{ fontSize: '0.6875rem', color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.3rem 0.625rem', maxWidth: '260px', textAlign: 'right', lineHeight: 1.4 }}>
+                                    {pdfBlockMsg}
+                                </div>
+                            )}
+                        </div>
                         {userRole === 'Manager' && editingQuote?.status === 'Pending Approval' ? (
                             <button onClick={() => handleSaveVersion('Approved')}
                                 style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -1013,8 +1033,8 @@ function PriceBook({ products, onSave, onDelete }) {
                                 onMouseLeave={e => e.currentTarget.style.background = ''}>
                                 <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', fontWeight: '600', color: prod.active !== false ? '#1c1917' : '#94a3b8' }}>{prod.name}</td>
                                 <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', color: '#64748b' }}>{prod.category || '—'}</td>
-                                <td style={{ padding: '0.625rem 0.75rem' }}><TypeBadge type={prod.type} /></td>
-                                <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>${Number(prod.price || 0).toLocaleString()}</td>
+                                <td style={{ padding: '0.625rem 0.75rem' }}><TypeBadge type={prod.productType || prod.type} /></td>
+                                <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>${Number(prod.listPrice || prod.price || 0).toLocaleString()}</td>
                                 <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.75rem', color: '#64748b' }}>{prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : prod.unit || 'flat'}</td>
                                 <td style={{ padding: '0.625rem 0.75rem' }}>
                                     <span style={{ fontSize: '0.625rem', fontWeight: '700', padding: '0.15rem 0.4rem', borderRadius: '4px', textTransform: 'uppercase',
