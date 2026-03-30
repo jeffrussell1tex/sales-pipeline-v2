@@ -1,7 +1,8 @@
 import { db } from '../../db/index.js';
 import { leads, users } from '../../db/schema.js';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, canSeeAll } from './auth.mjs';
+import { dispatchWebhook } from './webhooks.mjs';
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -47,16 +48,50 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const [inserted] = await db.insert(leads).values({ ...sanitize(data), orgId }).returning();
+
+            // Webhook: lead.created
+            await dispatchWebhook(orgId, 'lead.created', {
+                id:            inserted.id,
+                first_name:    inserted.firstName,
+                last_name:     inserted.lastName,
+                company:       inserted.company,
+                email:         inserted.email,
+                source:        inserted.source,
+                status:        inserted.status,
+                score:         inserted.score,
+                estimated_arr: inserted.estimatedARR ? Number(inserted.estimatedARR) : null,
+                assigned_to:   inserted.assignedTo,
+            });
+
             return { statusCode: 201, headers, body: JSON.stringify({ lead: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+
+            // Fetch existing so we can detect conversion
+            const [existing] = await db.select().from(leads).where(and(eq(leads.id, data.id), eq(leads.orgId, orgId)));
+            const wasConverted = existing?.status === 'Converted';
+
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(leads).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: leads.id, set: { ...updateData, updatedAt: new Date() } })
                 .returning();
+
+            // Webhook: lead.converted — only fires the first time status flips to Converted
+            if (!wasConverted && upserted.status === 'Converted') {
+                await dispatchWebhook(orgId, 'lead.converted', {
+                    id:            upserted.id,
+                    first_name:    upserted.firstName,
+                    last_name:     upserted.lastName,
+                    company:       upserted.company,
+                    email:         upserted.email,
+                    assigned_to:   upserted.assignedTo,
+                    converted_at:  upserted.convertedAt,
+                });
+            }
+
             return { statusCode: 200, headers, body: JSON.stringify({ lead: upserted }) };
         }
         if (event.httpMethod === 'DELETE') {
