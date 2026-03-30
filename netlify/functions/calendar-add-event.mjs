@@ -1,4 +1,4 @@
-// netlify/functions/calendar-add-event.js
+// netlify/functions/calendar-add-event.mjs
 // Creates a calendar event from an Accelerep task.
 //
 // Token resolution: uses the requesting user's personal Google connection from

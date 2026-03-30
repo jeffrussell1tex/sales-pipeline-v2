@@ -1,4 +1,4 @@
-// netlify/functions/calendar-events.js
+// netlify/functions/calendar-events.mjs
 // Fetches Google Calendar (and eventually Outlook/Yahoo) events for the requesting user.
 //
 // Token resolution order:
