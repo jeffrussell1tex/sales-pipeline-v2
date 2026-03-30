@@ -249,9 +249,9 @@ export default function SettingsTab() {
             .finally(() => setAuditLoading(false));
     }, [settingsView]);
 
-    // Load calendar connections when on the calendar sub-tab
+    // Load calendar connections when on a calendar view
     useEffect(() => {
-        if (settingsTab !== 'calendar') return;
+        if (settingsView !== 'my-calendar' && settingsView !== 'company-calendar') return;
         setCalConnectionsLoading(true);
         dbFetch('/.netlify/functions/calendar-connections')
             .then(r => r.json())
@@ -261,7 +261,7 @@ export default function SettingsTab() {
             })
             .catch(err => console.error('Failed to load calendar connections:', err))
             .finally(() => setCalConnectionsLoading(false));
-    }, [settingsTab]);
+    }, [settingsView]);
 
     // Load API keys when api-keys view is active
     useEffect(() => {
@@ -408,11 +408,11 @@ export default function SettingsTab() {
 
                     {/* ── Sub-tabs ── */}
                     <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '0.25rem', gap: '0' }}>
-                        <button style={subTabStyle('team')}          onClick={() => switchTab('team')}>Team</button>
-                        <button style={subTabStyle('configuration')} onClick={() => switchTab('configuration')}>Configuration</button>
-                        <button style={subTabStyle('security')}      onClick={() => switchTab('security')}>Security &amp; Data</button>
                         <button style={subTabStyle('calendar')}      onClick={() => switchTab('calendar')}>Calendar</button>
+                        <button style={subTabStyle('configuration')} onClick={() => switchTab('configuration')}>Configuration</button>
                         <button style={subTabStyle('integrations')}  onClick={() => switchTab('integrations')}>Integrations</button>
+                        <button style={subTabStyle('security')}      onClick={() => switchTab('security')}>Security &amp; Data</button>
+                        <button style={subTabStyle('team')}          onClick={() => switchTab('team')}>Team</button>
                     </div>
 
                 <>
@@ -429,6 +429,11 @@ export default function SettingsTab() {
                             <div style={{ padding: '1.5rem' }}>
                                 <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', maxWidth: isMobile ? '100%' : '560px' }}>
                                     {[
+                                        ...(settingsTab === 'calendar' ? [
+                                        { group: 'Calendar' },
+                                        { view: 'my-calendar',      icon: '📅', title: 'My Calendar',        desc: 'Connect your personal calendar' },
+                                        { view: 'company-calendar', icon: '🗓️', title: 'Company Calendar',   desc: 'Shared org-wide calendar (Admin)' },
+                                        ] : []),
                                         ...(settingsTab === 'team' ? [
                                         { group: 'Team' },
                                         { view: 'users',          icon: '👥', title: 'Manage Users',       desc: 'Roles & permissions' },
@@ -462,7 +467,7 @@ export default function SettingsTab() {
                                         ] : []),
                                     ].map((item, idx, arr) => {
                                         if (item.group) return (() => {
-                                                const gc = { 'Team': { bg:'#eff6ff', border:'#bfdbfe', color:'#1d4ed8', dot:'#2563eb' }, 'Configuration': { bg:'#f5f3ff', border:'#ddd6fe', color:'#6d28d9', dot:'#7c3aed' }, 'Security & Data': { bg:'#fff7ed', border:'#fed7aa', color:'#c2410c', dot:'#ea580c' }, 'Integrations': { bg:'#f0fdf4', border:'#bbf7d0', color:'#15803d', dot:'#16a34a' } }[item.group] || { bg:'#f8fafc', border:'#e2e8f0', color:'#64748b', dot:'#94a3b8' };
+                                                const gc = { 'Calendar': { bg:'#f0fdf4', border:'#bbf7d0', color:'#15803d', dot:'#16a34a' }, 'Team': { bg:'#eff6ff', border:'#bfdbfe', color:'#1d4ed8', dot:'#2563eb' }, 'Configuration': { bg:'#f5f3ff', border:'#ddd6fe', color:'#6d28d9', dot:'#7c3aed' }, 'Security & Data': { bg:'#fff7ed', border:'#fed7aa', color:'#c2410c', dot:'#ea580c' }, 'Integrations': { bg:'#f0fdf4', border:'#bbf7d0', color:'#15803d', dot:'#16a34a' } }[item.group] || { bg:'#f8fafc', border:'#e2e8f0', color:'#64748b', dot:'#94a3b8' };
                                                 return (
                                                     <div key={item.group} style={{ display:'flex', alignItems:'center', gap:'6px', padding: '6px 16px 5px', fontSize: '0.625rem', fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', color: gc.color, background: gc.bg, borderBottom: '0.5px solid ' + gc.border, borderTop: idx > 0 ? '0.5px solid ' + gc.border : 'none' }}>
                                                         <div style={{ width:'6px', height:'6px', borderRadius:'50%', background: gc.dot, flexShrink:0 }} />
@@ -478,7 +483,7 @@ export default function SettingsTab() {
                                                 onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                             >
-                                                <div style={{ width: '24px', height: '24px', borderRadius: '5px', background: ['users','team-builder','territories'].includes(item.view) ? '#dbeafe' : ['vertical-markets','verticals','funnel-stages','pipelines','kpi-settings','fiscal-year','logo','pain-points'].includes(item.view) ? '#ede9fe' : ['api-keys','webhooks'].includes(item.view) ? '#dcfce7' : '#ffedd5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>{item.icon}</div>
+                                                <div style={{ width: '24px', height: '24px', borderRadius: '5px', background: ['users','team-builder','territories'].includes(item.view) ? '#dbeafe' : ['vertical-markets','verticals','funnel-stages','pipelines','kpi-settings','fiscal-year','logo','pain-points'].includes(item.view) ? '#ede9fe' : ['api-keys','webhooks','my-calendar','company-calendar'].includes(item.view) ? '#dcfce7' : '#ffedd5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>{item.icon}</div>
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                     <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{item.title}</div>
                                                     {item.desc && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{item.desc}</div>}
@@ -2053,197 +2058,147 @@ export default function SettingsTab() {
                     )}
 
                     {/* ── Calendar Sub-tab ── */}
-                    {settingsTab === 'calendar' && (() => {
+                    {/* ── My Calendar view ──────────────────────────────────────────────── */}
+                    {settingsView === 'my-calendar' && (() => {
                         const PROVIDERS = [
                             {
-                                id: 'google',
-                                name: 'Google Calendar',
-                                orgName: 'Google Workspace',
-                                desc: 'Connect your Google account',
-                                orgDesc: 'Connect a shared Google calendar',
-                                iconBg: '#fef2f2',
-                                icon: (
-                                    <svg width="20" height="20" viewBox="0 0 48 48">
-                                        <path fill="#4285F4" d="M45.5 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h12.1c-.5 2.7-2.1 4.9-4.4 6.4v5.3h7.1c4.2-3.8 6.7-9.5 6.7-15.4z"/>
-                                        <path fill="#34A853" d="M24 46c6.1 0 11.2-2 14.9-5.5l-7.1-5.3c-2 1.3-4.5 2.1-7.8 2.1-6 0-11.1-4-12.9-9.4H3.7v5.5C7.4 41.5 15.1 46 24 46z"/>
-                                        <path fill="#FBBC05" d="M11.1 27.9c-.5-1.3-.7-2.7-.7-4.1s.3-2.8.7-4.1v-5.5H3.7C2 17.4 1 20.6 1 24s1 6.6 2.7 9.4l7.4-5.5z"/>
-                                        <path fill="#EA4335" d="M24 10.6c3.4 0 6.4 1.2 8.8 3.4l6.6-6.6C35.2 3.8 30 1.9 24 1.9 15.1 1.9 7.4 6.5 3.7 13.4l7.4 5.5C13 13.6 18 10.6 24 10.6z"/>
-                                    </svg>
-                                ),
-                                supportsOrg: true,
+                                id: 'google', name: 'Google Calendar', desc: 'Connect your Google account', iconBg: '#fef2f2',
+                                icon: (<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M45.5 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h12.1c-.5 2.7-2.1 4.9-4.4 6.4v5.3h7.1c4.2-3.8 6.7-9.5 6.7-15.4z"/><path fill="#34A853" d="M24 46c6.1 0 11.2-2 14.9-5.5l-7.1-5.3c-2 1.3-4.5 2.1-7.8 2.1-6 0-11.1-4-12.9-9.4H3.7v5.5C7.4 41.5 15.1 46 24 46z"/><path fill="#FBBC05" d="M11.1 27.9c-.5-1.3-.7-2.7-.7-4.1s.3-2.8.7-4.1v-5.5H3.7C2 17.4 1 20.6 1 24s1 6.6 2.7 9.4l7.4-5.5z"/><path fill="#EA4335" d="M24 10.6c3.4 0 6.4 1.2 8.8 3.4l6.6-6.6C35.2 3.8 30 1.9 24 1.9 15.1 1.9 7.4 6.5 3.7 13.4l7.4 5.5C13 13.6 18 10.6 24 10.6z"/></svg>),
                             },
                             {
-                                id: 'outlook',
-                                name: 'Outlook / Microsoft 365',
-                                orgName: 'Microsoft 365',
-                                desc: 'Connect your work or personal Outlook',
-                                orgDesc: 'Connect a shared Outlook calendar',
-                                iconBg: '#eff6ff',
-                                icon: (
-                                    <svg width="20" height="20" viewBox="0 0 48 48">
-                                        <rect x="2" y="8" width="26" height="32" rx="3" fill="#0078D4"/>
-                                        <rect x="18" y="14" width="28" height="22" rx="3" fill="#50B3FF"/>
-                                        <path fill="#fff" d="M8 18h10v3H8zm0 5h10v3H8zm0 5h7v3H8z"/>
-                                    </svg>
-                                ),
-                                supportsOrg: true,
+                                id: 'outlook', name: 'Outlook / Microsoft 365', desc: 'Connect your work or personal Outlook', iconBg: '#eff6ff',
+                                icon: (<svg width="20" height="20" viewBox="0 0 48 48"><rect x="2" y="8" width="26" height="32" rx="3" fill="#0078D4"/><rect x="18" y="14" width="28" height="22" rx="3" fill="#50B3FF"/><path fill="#fff" d="M8 18h10v3H8zm0 5h10v3H8zm0 5h7v3H8z"/></svg>),
                             },
                             {
-                                id: 'yahoo',
-                                name: 'Yahoo Calendar',
-                                orgName: null,
-                                desc: 'Connect your Yahoo account',
-                                orgDesc: null,
-                                iconBg: '#fdf4ff',
-                                icon: (
-                                    <svg width="20" height="20" viewBox="0 0 48 48">
-                                        <rect width="48" height="48" rx="8" fill="#6001D2"/>
-                                        <text x="24" y="33" fontSize="22" fontWeight="900" fill="#fff" textAnchor="middle" fontFamily="sans-serif">Y!</text>
-                                    </svg>
-                                ),
-                                supportsOrg: false,
+                                id: 'yahoo', name: 'Yahoo Calendar', desc: 'Connect your Yahoo account', iconBg: '#fdf4ff',
+                                icon: (<svg width="20" height="20" viewBox="0 0 48 48"><rect width="48" height="48" rx="8" fill="#6001D2"/><text x="24" y="33" fontSize="22" fontWeight="900" fill="#fff" textAnchor="middle" fontFamily="sans-serif">Y!</text></svg>),
                             },
                             {
-                                id: 'apple',
-                                name: 'Apple Calendar',
-                                orgName: null,
-                                desc: 'iCloud calendar support',
-                                orgDesc: null,
-                                iconBg: '#f8fafc',
-                                comingSoon: true,
-                                icon: (
-                                    <svg width="20" height="20" viewBox="0 0 48 48">
-                                        <path fill="#1c1917" d="M34.5 25.6c0-4.8 3.9-7.1 4.1-7.2-2.2-3.2-5.7-3.7-6.9-3.7-2.9-.3-5.8 1.7-7.2 1.7-1.5 0-3.8-1.7-6.2-1.6-3.2.1-6.1 1.9-7.7 4.7-3.3 5.7-.9 14.2 2.4 18.8 1.6 2.3 3.5 4.8 5.9 4.7 2.4-.1 3.3-1.5 6.2-1.5s3.7 1.5 6.2 1.4c2.6 0 4.2-2.3 5.8-4.6 1.8-2.6 2.5-5.2 2.6-5.3-.1 0-5.2-2-5.2-7.4zM29.8 11.4c1.3-1.6 2.2-3.8 2-6-1.9.1-4.2 1.3-5.6 2.9-1.2 1.4-2.3 3.7-2 5.9 2.1.2 4.3-1.1 5.6-2.8z"/>
-                                    </svg>
-                                ),
-                                supportsOrg: false,
+                                id: 'apple', name: 'Apple Calendar', desc: 'iCloud calendar support', iconBg: '#f8fafc', comingSoon: true,
+                                icon: (<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#1c1917" d="M34.5 25.6c0-4.8 3.9-7.1 4.1-7.2-2.2-3.2-5.7-3.7-6.9-3.7-2.9-.3-5.8 1.7-7.2 1.7-1.5 0-3.8-1.7-6.2-1.6-3.2.1-6.1 1.9-7.7 4.7-3.3 5.7-.9 14.2 2.4 18.8 1.6 2.3 3.5 4.8 5.9 4.7 2.4-.1 3.3-1.5 6.2-1.5s3.7 1.5 6.2 1.4c2.6 0 4.2-2.3 5.8-4.6 1.8-2.6 2.5-5.2 2.6-5.3-.1 0-5.2-2-5.2-7.4zM29.8 11.4c1.3-1.6 2.2-3.8 2-6-1.9.1-4.2 1.3-5.6 2.9-1.2 1.4-2.3 3.7-2 5.9 2.1.2 4.3-1.1 5.6-2.8z"/></svg>),
                             },
                         ];
-
-                        const providerRow = (p, conn, scope) => {
-                            const isDisconnecting = calDisconnecting?.id === conn?.id && calDisconnecting?.scope === scope;
-                            return (
-                                <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #f5f2ee' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', opacity: p.comingSoon ? 0.55 : 1 }}>
-                                        <div style={{ width: 36, height: 36, borderRadius: 8, background: p.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                            {p.icon}
-                                        </div>
-                                        <div>
-                                            <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1c1917' }}>{scope === 'org' ? p.orgName : p.name}</div>
-                                            <div style={{ fontSize: '0.75rem', color: conn ? '#16a34a' : '#78716c', marginTop: 1 }}>
-                                                {conn ? conn.calendarEmail || 'Connected' : (scope === 'org' ? p.orgDesc : p.desc)}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexShrink: 0 }}>
-                                        {p.comingSoon ? (
-                                            <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#a8a29e', background: '#f0ece4', padding: '0.2rem 0.5rem', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Coming soon</span>
-                                        ) : conn ? (
-                                            <>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#16a34a' }} />
-                                                    <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#16a34a' }}>Connected</span>
-                                                </div>
-                                                <button
-                                                    className="btn"
-                                                    onClick={() => handleCalDisconnect(conn.id, scope)}
-                                                    disabled={!!calDisconnecting}
-                                                    style={{ background: '#dc2626', padding: '0.3rem 0.625rem', fontSize: '0.6875rem' }}
-                                                >
-                                                    {isDisconnecting ? '…' : 'Disconnect'}
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <button className="btn" onClick={() => handleCalConnect(p.id, scope)} style={{ fontSize: '0.75rem' }}>
-                                                Connect
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        };
-
                         return (
-                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1.25rem' }}>
-
-                                {/* ── OAuth result banner ── */}
-                                {calConnectResult && (
-                                    <div style={{ gridColumn: '1 / -1', padding: '0.75rem 1.25rem', borderRadius: 10, border: `1px solid ${calConnectResult === 'success' ? '#bbf7d0' : '#fecaca'}`, background: calConnectResult === 'success' ? '#f0fdf4' : '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <span style={{ fontSize: '0.875rem', fontWeight: '600', color: calConnectResult === 'success' ? '#15803d' : '#dc2626' }}>
-                                            {calConnectResult === 'success' ? '✓ Calendar connected successfully.' : '✗ Calendar connection failed. Please try again.'}
-                                        </span>
-                                        <button onClick={() => setCalConnectResult(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem', padding: '0 4px' }}>✕</button>
-                                    </div>
-                                )}
-
-                                {/* ── Left: Personal Calendar ── */}
-                                <div className="table-container">
-                                    <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1ede8', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <div>
-                                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>My Calendar</div>
-                                            <div style={{ fontSize: '0.75rem', color: '#78716c', marginTop: 2 }}>Connect your personal calendar</div>
+                            <div className="table-container">
+                                <div className="table-header">
+                                    <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
+                                    <h2>MY CALENDAR</h2>
+                                </div>
+                                <div style={{ padding: '0.5rem 0' }}>
+                                    {calConnectResult && (
+                                        <div style={{ margin: '0.75rem 1.25rem', padding: '0.75rem 1rem', borderRadius: 8, border: `1px solid ${calConnectResult === 'success' ? '#bbf7d0' : '#fecaca'}`, background: calConnectResult === 'success' ? '#f0fdf4' : '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: calConnectResult === 'success' ? '#15803d' : '#dc2626' }}>
+                                                {calConnectResult === 'success' ? '✓ Calendar connected successfully.' : '✗ Calendar connection failed. Please try again.'}
+                                            </span>
+                                            <button onClick={() => setCalConnectResult(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem' }}>✕</button>
                                         </div>
-                                    </div>
+                                    )}
                                     {calConnectionsLoading ? (
                                         <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>
-                                    ) : (
-                                        PROVIDERS.map(p => {
-                                            const conn = userCalConnections.find(c => c.provider === p.id) || null;
-                                            return providerRow(p, conn, 'user');
-                                        })
-                                    )}
-                                </div>
-
-                                {/* ── Right: Company Calendar (admin only) ── */}
-                                <div>
-                                    <div className="table-container">
-                                        <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1ede8', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <div>
-                                                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Company Calendar</div>
-                                                <div style={{ fontSize: '0.75rem', color: '#78716c', marginTop: 2 }}>Shared org-wide — visible to all users</div>
-                                            </div>
-                                            <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#c8b99a', background: '#1c1917', padding: '0.2rem 0.5rem', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Admin</span>
-                                        </div>
-                                        {calConnectionsLoading ? (
-                                            <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>
-                                        ) : (
-                                            PROVIDERS.filter(p => p.supportsOrg).map(p => {
-                                                const conn = orgCalConnections.find(c => c.provider === p.id) || null;
-                                                return providerRow(p, conn, 'org');
-                                            })
-                                        )}
-                                        <div style={{ margin: '0 1.25rem', padding: '0.75rem 1rem', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, marginBottom: '0.875rem' }}>
-                                            <p style={{ fontSize: '0.75rem', color: '#1d4ed8', lineHeight: 1.5, margin: 0 }}>
-                                                The company calendar is shown to all users. If a user has also connected their personal calendar, both appear together in the calendar view.
-                                            </p>
-                                        </div>
-                                        <div style={{ fontSize: '0.6875rem', color: '#a8a29e', padding: '0 1.25rem 0.875rem' }}>
-                                            Only Admins can connect or disconnect the company calendar.
-                                        </div>
-                                    </div>
-
-                                    {/* Color legend */}
-                                    <div className="table-container" style={{ marginTop: '1.25rem' }}>
-                                        <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1ede8' }}>
-                                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>What users will see</div>
-                                            <div style={{ fontSize: '0.75rem', color: '#78716c', marginTop: 2 }}>Color-coded by source in the calendar view</div>
-                                        </div>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem', padding: '1rem 1.25rem' }}>
-                                            {[
-                                                { label: 'My Google Calendar',  dot: '#2563eb', bg: '#eff6ff', color: '#1d4ed8' },
-                                                { label: 'Company Calendar',     dot: '#16a34a', bg: '#f0fdf4', color: '#15803d' },
-                                                { label: 'My Outlook Calendar', dot: '#7c3aed', bg: '#fdf4ff', color: '#7c3aed' },
-                                                { label: 'My Yahoo Calendar',   dot: '#6001D2', bg: '#faf5ff', color: '#6001D2' },
-                                            ].map(item => (
-                                                <div key={item.label} style={{ background: item.bg, borderRadius: 6, padding: '0.5rem 0.75rem', fontSize: '0.75rem', fontWeight: '600', color: item.color, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: item.dot, flexShrink: 0 }} />
-                                                    {item.label}
+                                    ) : PROVIDERS.map(p => {
+                                        const conn = userCalConnections.find(c => c.provider === p.id) || null;
+                                        const isDisconnecting = calDisconnecting?.id === conn?.id && calDisconnecting?.scope === 'user';
+                                        return (
+                                            <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #f5f2ee' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', opacity: p.comingSoon ? 0.55 : 1 }}>
+                                                    <div style={{ width: 36, height: 36, borderRadius: 8, background: p.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{p.icon}</div>
+                                                    <div>
+                                                        <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1c1917' }}>{p.name}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: conn ? '#16a34a' : '#78716c', marginTop: 1 }}>{conn ? conn.calendarEmail || 'Connected' : p.desc}</div>
+                                                    </div>
                                                 </div>
-                                            ))}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexShrink: 0 }}>
+                                                    {p.comingSoon ? (
+                                                        <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#a8a29e', background: '#f0ece4', padding: '0.2rem 0.5rem', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Coming soon</span>
+                                                    ) : conn ? (
+                                                        <>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                                                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#16a34a' }} />
+                                                                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#16a34a' }}>Connected</span>
+                                                            </div>
+                                                            <button className="btn" onClick={() => handleCalDisconnect(conn.id, 'user')} disabled={!!calDisconnecting} style={{ background: '#dc2626', padding: '0.3rem 0.625rem', fontSize: '0.6875rem' }}>
+                                                                {isDisconnecting ? '…' : 'Disconnect'}
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <button className="btn" onClick={() => handleCalConnect(p.id, 'user')} style={{ fontSize: '0.75rem' }}>Connect</button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* ── Company Calendar view ──────────────────────────────────────────── */}
+                    {settingsView === 'company-calendar' && (() => {
+                        const ORG_PROVIDERS = [
+                            {
+                                id: 'google', name: 'Google Workspace', desc: 'Connect a shared Google calendar', iconBg: '#fef2f2',
+                                icon: (<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M45.5 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h12.1c-.5 2.7-2.1 4.9-4.4 6.4v5.3h7.1c4.2-3.8 6.7-9.5 6.7-15.4z"/><path fill="#34A853" d="M24 46c6.1 0 11.2-2 14.9-5.5l-7.1-5.3c-2 1.3-4.5 2.1-7.8 2.1-6 0-11.1-4-12.9-9.4H3.7v5.5C7.4 41.5 15.1 46 24 46z"/><path fill="#FBBC05" d="M11.1 27.9c-.5-1.3-.7-2.7-.7-4.1s.3-2.8.7-4.1v-5.5H3.7C2 17.4 1 20.6 1 24s1 6.6 2.7 9.4l7.4-5.5z"/><path fill="#EA4335" d="M24 10.6c3.4 0 6.4 1.2 8.8 3.4l6.6-6.6C35.2 3.8 30 1.9 24 1.9 15.1 1.9 7.4 6.5 3.7 13.4l7.4 5.5C13 13.6 18 10.6 24 10.6z"/></svg>),
+                            },
+                            {
+                                id: 'outlook', name: 'Microsoft 365', desc: 'Connect a shared Outlook calendar', iconBg: '#eff6ff',
+                                icon: (<svg width="20" height="20" viewBox="0 0 48 48"><rect x="2" y="8" width="26" height="32" rx="3" fill="#0078D4"/><rect x="18" y="14" width="28" height="22" rx="3" fill="#50B3FF"/><path fill="#fff" d="M8 18h10v3H8zm0 5h10v3H8zm0 5h7v3H8z"/></svg>),
+                            },
+                        ];
+                        return (
+                            <div className="table-container">
+                                <div className="table-header">
+                                    <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
+                                    <h2>COMPANY CALENDAR</h2>
+                                    <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#c8b99a', background: '#1c1917', padding: '0.2rem 0.5rem', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.06em', marginLeft: '0.75rem' }}>Admin</span>
+                                </div>
+                                <div style={{ padding: '0.5rem 0' }}>
+                                    {calConnectResult && (
+                                        <div style={{ margin: '0.75rem 1.25rem', padding: '0.75rem 1rem', borderRadius: 8, border: `1px solid ${calConnectResult === 'success' ? '#bbf7d0' : '#fecaca'}`, background: calConnectResult === 'success' ? '#f0fdf4' : '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: calConnectResult === 'success' ? '#15803d' : '#dc2626' }}>
+                                                {calConnectResult === 'success' ? '✓ Calendar connected successfully.' : '✗ Calendar connection failed. Please try again.'}
+                                            </span>
+                                            <button onClick={() => setCalConnectResult(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem' }}>✕</button>
                                         </div>
-                                        <div style={{ fontSize: '0.6875rem', color: '#a8a29e', padding: '0 1.25rem 0.875rem' }}>
-                                            Events from multiple sources are merged and de-duplicated.
-                                        </div>
+                                    )}
+                                    {calConnectionsLoading ? (
+                                        <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>
+                                    ) : ORG_PROVIDERS.map(p => {
+                                        const conn = orgCalConnections.find(c => c.provider === p.id) || null;
+                                        const isDisconnecting = calDisconnecting?.id === conn?.id && calDisconnecting?.scope === 'org';
+                                        return (
+                                            <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #f5f2ee' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                    <div style={{ width: 36, height: 36, borderRadius: 8, background: p.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{p.icon}</div>
+                                                    <div>
+                                                        <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1c1917' }}>{p.name}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: conn ? '#16a34a' : '#78716c', marginTop: 1 }}>{conn ? conn.calendarEmail || 'Connected' : p.desc}</div>
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexShrink: 0 }}>
+                                                    {conn ? (
+                                                        <>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                                                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#16a34a' }} />
+                                                                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#16a34a' }}>Connected</span>
+                                                            </div>
+                                                            <button className="btn" onClick={() => handleCalDisconnect(conn.id, 'org')} disabled={!!calDisconnecting} style={{ background: '#dc2626', padding: '0.3rem 0.625rem', fontSize: '0.6875rem' }}>
+                                                                {isDisconnecting ? '…' : 'Disconnect'}
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <button className="btn" onClick={() => handleCalConnect(p.id, 'org')} style={{ fontSize: '0.75rem' }}>Connect</button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    <div style={{ margin: '0 1.25rem 1rem', padding: '0.75rem 1rem', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8 }}>
+                                        <p style={{ fontSize: '0.75rem', color: '#1d4ed8', lineHeight: 1.5, margin: 0 }}>
+                                            The company calendar is shown to all users. If a user has also connected their personal calendar, both appear together in the calendar view.
+                                        </p>
+                                    </div>
+                                    <div style={{ fontSize: '0.6875rem', color: '#a8a29e', padding: '0 1.25rem 1rem' }}>
+                                        Only Admins can connect or disconnect the company calendar.
                                     </div>
                                 </div>
                             </div>
