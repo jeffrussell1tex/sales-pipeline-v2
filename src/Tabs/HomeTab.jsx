@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
+import { useAuth } from '@clerk/clerk-react';
 import ViewingBar from '../components/ui/ViewingBar';
 import { dbFetch, waitForToken } from '../utils/storage';
 
@@ -766,6 +767,14 @@ export default function HomeTab() {
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit = !isReadOnly;
 
+    // Clerk auth — needed to pass userId/orgId to the OAuth start redirect
+    const { userId, orgId } = useAuth();
+
+    const connectCalendar = (provider) => {
+        if (!userId || !orgId) return;
+        window.location.href = `/.netlify/functions/calendar-oauth-start?provider=${provider}&scope=user&userId=${userId}&orgId=${orgId}&userRole=${userRole || 'User'}`;
+    };
+
     // Derived KPIs
     const totalARR = visibleOpportunities.reduce((sum, opp) => sum + (parseFloat(opp.arr) || 0), 0);
     const activeOpps = visibleOpportunities.length;
@@ -1130,13 +1139,13 @@ export default function HomeTab() {
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
                                 <button
-                                    onClick={() => { window.location.href = '/.netlify/functions/calendar-oauth-start?provider=google&scope=user'; }}
+                                    onClick={() => connectCalendar('google')}
                                     style={{ padding: '0.45rem 1rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}
                                 >
                                     Connect Google
                                 </button>
                                 <button
-                                    onClick={() => { window.location.href = '/.netlify/functions/calendar-oauth-start?provider=outlook&scope=user'; }}
+                                    onClick={() => connectCalendar('outlook')}
                                     style={{ padding: '0.45rem 1rem', background: '#e8e3da', color: '#78716c', border: '1px solid #ddd8cf', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}
                                 >
                                     Connect Outlook

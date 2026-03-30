@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../AppContext';
+import { useAuth } from '@clerk/clerk-react';
 import { dbFetch } from '../utils/storage';
 import PipelinesSettingsPanel from '../components/modals/PipelinesSettingsPanel';
 import TeamBuilder from './TeamBuilder';
@@ -175,6 +176,10 @@ export default function SettingsTab() {
 
     const isAdmin = userRole === 'Admin';
     const isManager = userRole === 'Manager';
+
+    // Clerk auth — needed to pass userId/orgId to the OAuth start redirect
+    const { userId, orgId } = useAuth();
+
     if (!isAdmin) return null;
 
     // Local state
@@ -273,7 +278,8 @@ export default function SettingsTab() {
 
     // Initiate OAuth connect flow — redirects browser to provider consent screen
     const handleCalConnect = (provider, scope) => {
-        window.location.href = `/.netlify/functions/calendar-oauth-start?provider=${provider}&scope=${scope}`;
+        if (!userId || !orgId) return;
+        window.location.href = `/.netlify/functions/calendar-oauth-start?provider=${provider}&scope=${scope}&userId=${userId}&orgId=${orgId}&userRole=${userRole || 'User'}`;
     };
 
     // UI handlers

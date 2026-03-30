@@ -16,7 +16,6 @@
 // State parameter encodes: { userId, orgId, provider, scope, userRole }
 // encoded as base64 JSON so the callback can restore context after the redirect.
 
-import { verifyAuth } from './auth.mjs';
 
 const APP_URL = process.env.URL || 'https://salespipelinetracker.com';
 const CALLBACK_URL = `${APP_URL}/.netlify/functions/calendar-oauth-callback`;
@@ -56,14 +55,21 @@ export const handler = async (event) => {
         return { statusCode: 405, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Method not allowed' }) };
     }
 
-    // Auth check
-    const auth = await verifyAuth(event);
-    if (auth.error) {
-        return { statusCode: auth.status || 401, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: auth.error }) };
-    }
-    const { userId, orgId, userRole } = auth;
+    // userId, orgId, userRole are passed as query params from the frontend.
+    // The OAuth start endpoint is a browser redirect — no Authorization header is possible.
+    // Security note: scope=org is re-validated in the callback using verifyAuth, so
+    // a spoofed userRole here cannot actually grant org-level access.
+    const {
+        provider,
+        scope,
+        userId,
+        orgId,
+        userRole = 'User',
+    } = event.queryStringParameters || {};
 
-    const { provider, scope } = event.queryStringParameters || {};
+    if (!userId || !orgId) {
+        return { statusCode: 400, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'userId and orgId are required' }) };
+    }
 
     // Validate provider
     if (!provider || !AUTH_URLS[provider]) {
