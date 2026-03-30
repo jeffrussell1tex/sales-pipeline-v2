@@ -1,51 +1,8 @@
 import { db } from '../../db/index.js';
 import { settings } from '../../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
-import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'crypto';
-
-const SETTINGS_ID = 'default';
-
-// ── AES-256-GCM encryption helpers ───────────────────────────────────────────
-// Requires SETTINGS_ENCRYPTION_KEY env var — a 32-byte (64 hex char) secret.
-// Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-// Set in Netlify UI → Site → Environment variables.
-
-function getEncryptionKey() {
-    const raw = process.env.SETTINGS_ENCRYPTION_KEY || '';
-    if (!raw) throw new Error('SETTINGS_ENCRYPTION_KEY is not set');
-    // Accept hex string (64 chars) or raw string — hash to 32 bytes either way
-    return createHash('sha256').update(raw).digest();
-}
-
-function encrypt(plaintext) {
-    if (!plaintext) return null;
-    const key = getEncryptionKey();
-    const iv  = randomBytes(12); // 96-bit IV for GCM
-    const cipher = createCipheriv('aes-256-gcm', key, iv);
-    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-    const tag = cipher.getAuthTag();
-    // Store as iv:tag:ciphertext (all hex) so we can parse it back
-    return iv.toString('hex') + ':' + tag.toString('hex') + ':' + encrypted.toString('hex');
-}
-
-function decrypt(stored) {
-    if (!stored) return null;
-    try {
-        const key = getEncryptionKey();
-        const parts = stored.split(':');
-        if (parts.length !== 3) return null;
-        const iv        = Buffer.from(parts[0], 'hex');
-        const tag       = Buffer.from(parts[1], 'hex');
-        const encrypted = Buffer.from(parts[2], 'hex');
-        const decipher  = createDecipheriv('aes-256-gcm', key, iv);
-        decipher.setAuthTag(tag);
-        return decipher.update(encrypted) + decipher.final('utf8');
-    } catch (err) {
-        console.error('Decryption failed:', err.message);
-        return null;
-    }
-}
+import { encrypt, decrypt } from './crypto.mjs';
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 export const handler = async (event) => {
@@ -107,18 +64,15 @@ export const handler = async (event) => {
             let encryptedApiKey;
             if ('anthropicApiKey' in data) {
                 if (data.anthropicApiKey) {
-                    // New key provided — encrypt it
                     try {
                         encryptedApiKey = encrypt(data.anthropicApiKey);
                     } catch (err) {
                         return { statusCode: 500, headers, body: JSON.stringify({ error: 'Encryption not available: ' + err.message }) };
                     }
                 } else {
-                    // Explicitly cleared (null or empty string)
                     encryptedApiKey = null;
                 }
             } else {
-                // Key not included in payload — preserve whatever is already stored
                 encryptedApiKey = existingExtra.anthropicApiKey || null;
             }
 

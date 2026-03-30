@@ -132,28 +132,22 @@ export const opportunities = pgTable('opportunities', {
 });
 
 // ── TASKS ─────────────────────────────────────────────────────────────────────
-// Follow-up tasks and to-dos
 export const tasks = pgTable('tasks', {
-    id:             text('id').primaryKey(),
-    title:          varchar('title', { length: 500 }),
-    description:    text('description'),
-    type:           varchar('type', { length: 100 }),                // Call, Email, Meeting, etc.
-    dueDate:        varchar('due_date', { length: 20 }),
-    dueTime:        varchar('due_time', { length: 10 }),
-    reminderDate:   varchar('reminder_date', { length: 20 }),
-    reminderTime:   varchar('reminder_time', { length: 10 }),
-    assignedTo:     varchar('assigned_to', { length: 255 }),
-    priority:       varchar('priority', { length: 50 }),             // Low | Medium | High
-    status:         varchar('status', { length: 50 }),               // Open | In Progress | Completed
-    completed:      boolean('completed').notNull().default(false),
-    completedDate:  varchar('completed_date', { length: 20 }),
-    opportunityId:  text('opportunity_id'),
-    contactId:      text('contact_id'),
-    accountId:      text('account_id'),
-    relatedTo:      text('related_to'),
-    createdAt:      timestamp('created_at').notNull().defaultNow(),
-    orgId:          text('org_id').notNull(),
-    updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+    id:            text('id').primaryKey(),
+    type:          varchar('type', { length: 100 }),
+    subject:       varchar('subject', { length: 500 }),
+    dueDate:       varchar('due_date', { length: 20 }),
+    priority:      varchar('priority', { length: 20 }),
+    status:        varchar('status', { length: 50 }).notNull().default('Open'),
+    notes:         text('notes'),
+    assignedTo:    varchar('assigned_to', { length: 255 }),
+    opportunityId: text('opportunity_id'),
+    contactId:     text('contact_id'),
+    accountId:     text('account_id'),
+    author:        varchar('author', { length: 255 }),
+    createdAt:     timestamp('created_at').notNull().defaultNow(),
+    orgId:         text('org_id').notNull(),
+    updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 });
 
 // ── ACTIVITIES ────────────────────────────────────────────────────────────────
@@ -251,6 +245,8 @@ export const recommendationLog = pgTable('recommendation_log', {
     daysToResolve:  integer('days_to_resolve'),
     createdAt:      timestamp('created_at').notNull().defaultNow(),
 });
+
+// ── LEADS ─────────────────────────────────────────────────────────────────────
 // Inbound prospects before they become opportunities
 export const leads = pgTable('leads', {
     id:           text('id').primaryKey(),
@@ -281,4 +277,35 @@ export const dashboardConfigs = pgTable('dashboard_configs', {
     widgets:   jsonb('widgets').notNull().default('[]'), // [{id, position, visible}]
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── USER CALENDAR CONNECTIONS ─────────────────────────────────────────────────
+// One row per user per provider — stores encrypted personal OAuth refresh tokens.
+// provider: 'google' | 'outlook' | 'yahoo'
+// Tokens are encrypted at rest using AES-256-GCM via netlify/functions/crypto.mjs.
+export const userCalendarConnections = pgTable('user_calendar_connections', {
+    id:                    text('id').primaryKey(),           // e.g. "ucal_<timestamp>_<random>"
+    userId:                text('user_id').notNull(),          // Clerk userId
+    orgId:                 text('org_id').notNull(),
+    provider:              varchar('provider', { length: 20 }).notNull(), // google | outlook | yahoo
+    encryptedRefreshToken: text('encrypted_refresh_token').notNull(),    // AES-256-GCM ciphertext
+    calendarEmail:         varchar('calendar_email', { length: 255 }),   // email shown in Settings UI
+    connectedAt:           timestamp('connected_at').notNull().defaultNow(),
+    updatedAt:             timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── ORG CALENDAR CONNECTIONS ──────────────────────────────────────────────────
+// One row per org per provider — stores encrypted shared/org-wide OAuth refresh tokens.
+// Only Admins can connect/disconnect. Visible to all users in that org's calendar view.
+// provider: 'google' | 'outlook'  (Yahoo/Apple org calendars not supported yet)
+export const orgCalendarConnections = pgTable('org_calendar_connections', {
+    id:                    text('id').primaryKey(),           // e.g. "ocal_<timestamp>_<random>"
+    orgId:                 text('org_id').notNull(),
+    provider:              varchar('provider', { length: 20 }).notNull(), // google | outlook
+    encryptedRefreshToken: text('encrypted_refresh_token').notNull(),    // AES-256-GCM ciphertext
+    calendarName:          varchar('calendar_name', { length: 255 }),    // friendly name shown in UI
+    calendarEmail:         varchar('calendar_email', { length: 255 }),   // account email
+    connectedAt:           timestamp('connected_at').notNull().defaultNow(),
+    connectedBy:           varchar('connected_by', { length: 255 }),     // userId of the Admin who connected it
+    updatedAt:             timestamp('updated_at').notNull().defaultNow(),
 });
