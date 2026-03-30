@@ -27,6 +27,7 @@ export default function ViewingAccountPanel({
         viewingContact, setViewingContact,
         viewingAccount, setViewingAccount,
         viewingTask, setViewingTask,
+        setMeetingPrepOpen, setMeetingPrepEvent, setMeetingPrepOppId,
         accShowAllClosed, setAccShowAllClosed,
         accShowAllContacts, setAccShowAllContacts,
     } = useApp();
@@ -109,8 +110,15 @@ const CONTACT_LIMIT = 8;
                           </div>
                       </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                      <button onClick={() => { setActivityInitialContext({ companyName: acc.name }); setEditingActivity(null); setShowActivityModal(true); }} style={{ width:'40px', height:'40px', borderRadius:'50%', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', boxShadow:'0 2px 10px rgba(37,99,235,0.4)', fontSize:'1.1rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }} title="Quick log activity">⚡</button>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
+                      <button onClick={() => { setActivityInitialContext({ companyName: acc.name }); setEditingActivity(null); setShowActivityModal(true); }}
+                          style={{ height:'32px', padding:'0 0.625rem', borderRadius:'12px', border:'1px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.1)', color:'#fff', fontSize:'0.6875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem', transition:'all 0.15s' }}
+                          title="Quick log activity">⚡ Log</button>
+                      {openOpps.length > 0 && (
+                          <button onClick={() => { setMeetingPrepEvent({ summary: acc.name, start: { date: new Date().toISOString().split('T')[0] }, attendeeCount: 0 }); setMeetingPrepOppId(openOpps[0].id); setMeetingPrepOpen(true); }}
+                              style={{ height:'32px', padding:'0 0.625rem', borderRadius:'12px', border:'1px solid rgba(245,241,235,0.25)', background:'rgba(200,185,154,0.15)', color:'#c8b99a', fontSize:'0.6875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem', transition:'all 0.15s' }}
+                              title="Meeting prep">📋 Prep</button>
+                      )}
                       <button className="btn" onClick={() => { setViewingAccount(null); handleEditAccount(acc); }}>Edit Account</button>
                   </div>
               </div>
