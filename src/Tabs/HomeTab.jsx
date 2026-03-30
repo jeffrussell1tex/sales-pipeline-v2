@@ -1103,6 +1103,9 @@ export default function HomeTab() {
 
                     {/* Calendar — day/week toggle view */}
                     {calendarConnected && (() => {
+                        // Define locally to avoid closure issues in minified builds
+                        const _today = new Date();
+                        const _todayStr = _today.toISOString().split('T')[0];
                         // Week view: group all events by date across next 7 days
                         const weekEvents = calendarEvents
                             ? [...calendarEvents].sort((a,b) => (a.start?.dateTime||a.start?.date||'').localeCompare(b.start?.dateTime||b.start?.date||''))
@@ -1122,8 +1125,8 @@ export default function HomeTab() {
                         const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
                         const formatDayLabel = (dateStr) => {
                             const d = new Date(dateStr + 'T12:00:00');
-                            if (dateStr === todayStr) return 'Today';
-                            const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+                            if (dateStr === _todayStr) return 'Today';
+                            const tomorrow = new Date(_today); tomorrow.setDate(_today.getDate() + 1);
                             if (dateStr === tomorrow.toISOString().split('T')[0]) return 'Tomorrow';
                             return dayNames[d.getDay()] + ' ' + monthNames[d.getMonth()] + ' ' + d.getDate();
                         };
@@ -1144,7 +1147,11 @@ export default function HomeTab() {
                             );
                         };
 
-                        const totalCount = calView === 'day' ? todayCalEvents.length : weekEvents.length;
+                        const _todayCalEvents = weekEvents.filter(ev => {
+                            const d = ev.start?.date || ev.start?.dateTime?.split('T')[0];
+                            return d === _todayStr;
+                        }).sort((a,b) => (a.start?.dateTime||'').localeCompare(b.start?.dateTime||''));
+                        const totalCount = calView === 'day' ? _todayCalEvents.length : weekEvents.length;
 
                         return (
                             <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
@@ -1178,10 +1185,10 @@ export default function HomeTab() {
 
                                 {/* Day view */}
                                 {calView === 'day' && (
-                                    todayCalEvents.length === 0
+                                    _todayCalEvents.length === 0
                                         ? <div style={{ padding: '1.25rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.8125rem' }}>No meetings today</div>
-                                        : todayCalEvents.map((ev, idx) => (
-                                            <EventRow key={ev.id||idx} ev={ev} idx={idx} total={todayCalEvents.length} accentColor='#7c3aed' />
+                                        : _todayCalEvents.map((ev, idx) => (
+                                            <EventRow key={ev.id||idx} ev={ev} idx={idx} total={_todayCalEvents.length} accentColor='#7c3aed' />
                                           ))
                                 )}
 
@@ -1194,12 +1201,12 @@ export default function HomeTab() {
                                                 {/* Day header */}
                                                 <div style={{
                                                     padding: '0.375rem 1rem',
-                                                    background: dateStr === todayStr ? '#eff6ff' : '#fafaf9',
+                                                    background: dateStr === _todayStr ? '#eff6ff' : '#fafaf9',
                                                     borderBottom: '1px solid #f1f5f9',
                                                     borderTop: di > 0 ? '1px solid #f1f5f9' : 'none',
                                                     fontSize: '0.6875rem',
                                                     fontWeight: '700',
-                                                    color: dateStr === todayStr ? '#2563eb' : '#94a3b8',
+                                                    color: dateStr === _todayStr ? '#2563eb' : '#94a3b8',
                                                     textTransform: 'uppercase',
                                                     letterSpacing: '0.06em',
                                                 }}>
@@ -1211,7 +1218,7 @@ export default function HomeTab() {
                                                         ev={ev}
                                                         idx={idx}
                                                         total={eventsByDay[dateStr].length}
-                                                        accentColor={dateStr === todayStr ? '#7c3aed' : '#2563eb'}
+                                                        accentColor={dateStr === _todayStr ? '#7c3aed' : '#2563eb'}
                                                     />
                                                 ))}
                                             </div>
