@@ -1128,7 +1128,20 @@ export default function HomeTab() {
                                 <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.875rem', marginBottom: '0.2rem' }}>Connect your Google Calendar</div>
                                 <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>See today's meetings alongside your pipeline</div>
                             </div>
-                            <button onClick={fetchCalendarEvents} style={{ padding: '0.45rem 1rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Connect Google Calendar</button>
+                            <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                                <button
+                                    onClick={() => { window.location.href = '/.netlify/functions/calendar-oauth-start?provider=google&scope=user'; }}
+                                    style={{ padding: '0.45rem 1rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}
+                                >
+                                    Connect Google
+                                </button>
+                                <button
+                                    onClick={() => { window.location.href = '/.netlify/functions/calendar-oauth-start?provider=outlook&scope=user'; }}
+                                    style={{ padding: '0.45rem 1rem', background: '#e8e3da', color: '#78716c', border: '1px solid #ddd8cf', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}
+                                >
+                                    Connect Outlook
+                                </button>
+                            </div>
                         </div>
                     )}
 
