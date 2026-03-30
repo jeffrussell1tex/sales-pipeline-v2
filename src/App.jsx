@@ -452,8 +452,16 @@ dbFetch('/.netlify/functions/users?me=true')
 
     // Auto-fetch calendar events when the home tab is active and calendar is not yet loaded.
     // Uses a ref to ensure we only attempt once per session, not on every tab switch.
+    // Exception: if landing back from OAuth callback (?calconnect=success), always re-fetch
+    // so the user sees their events immediately without a manual page refresh.
     const calendarFetchAttempted = useRef(false);
     useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const fromOAuth = params.get('calconnect') === 'success';
+        if (fromOAuth) {
+            // Reset so we always re-fetch after a successful OAuth connection
+            calendarFetchAttempted.current = false;
+        }
         if (activeTab === 'home' && !calendarFetchAttempted.current && !calendarLoading) {
             calendarFetchAttempted.current = true;
             fetchCalendarEvents();
