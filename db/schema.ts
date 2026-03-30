@@ -1,7 +1,6 @@
 import {
     pgTable, text, integer, boolean, timestamp, jsonb, varchar, decimal
 } from 'drizzle-orm/pg-core';
-
 // ── USERS ─────────────────────────────────────────────────────────────────────
 // Sales reps, managers, admins — one row per user account
 export const users = pgTable('users', {
@@ -18,20 +17,16 @@ export const users = pgTable('users', {
     orgId:         text('org_id').notNull(),
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 });
-
 // ── PIPELINES ─────────────────────────────────────────────────────────────────
-// Named pipelines (e.g. "Enterprise", "SMB")
 export const pipelines = pgTable('pipelines', {
     id:        text('id').primaryKey(),
-    orgId:     text('org_id').notNull(),                             // tenant scope
+    orgId:     text('org_id').notNull(),
     name:      varchar('name', { length: 255 }).notNull(),
     isDefault: boolean('is_default').notNull().default(false),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
-
 // ── ACCOUNTS ──────────────────────────────────────────────────────────────────
-// Customer/prospect companies
 export const accounts = pgTable('accounts', {
     id:                text('id').primaryKey(),
     name:              varchar('name', { length: 255 }).notNull(),
@@ -44,19 +39,17 @@ export const accounts = pgTable('accounts', {
     country:           varchar('country', { length: 100 }),
     website:           varchar('website', { length: 500 }),
     phone:             varchar('phone', { length: 50 }),
-    accountOwner:      varchar('account_owner', { length: 255 }),    // rep name
+    accountOwner:      varchar('account_owner', { length: 255 }),
     assignedRep:       varchar('assigned_rep', { length: 255 }),
     assignedTerritory: varchar('assigned_territory', { length: 255 }),
-    parentAccountId:   text('parent_account_id'),                    // for sub-accounts
-    accountTier:       varchar('account_tier', { length: 20 }).default('account'), // 'account' | 'business_unit' | 'site'
+    parentAccountId:   text('parent_account_id'),
+    accountTier:       varchar('account_tier', { length: 20 }).default('account'),
     notes:             text('notes'),
     createdAt:         timestamp('created_at').notNull().defaultNow(),
     orgId:             text('org_id').notNull(),
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
-
 // ── CONTACTS ──────────────────────────────────────────────────────────────────
-// Individual people at accounts
 export const contacts = pgTable('contacts', {
     id:                text('id').primaryKey(),
     prefix:            varchar('prefix', { length: 20 }),
@@ -66,7 +59,7 @@ export const contacts = pgTable('contacts', {
     suffix:            varchar('suffix', { length: 20 }),
     nickName:          varchar('nick_name', { length: 255 }),
     title:             varchar('title', { length: 255 }),
-    company:           varchar('company', { length: 255 }),          // account name
+    company:           varchar('company', { length: 255 }),
     department:        varchar('department', { length: 255 }),
     workLocation:      varchar('work_location', { length: 255 }),
     email:             varchar('email', { length: 255 }),
@@ -78,7 +71,7 @@ export const contacts = pgTable('contacts', {
     state:             varchar('state', { length: 100 }),
     zip:               varchar('zip', { length: 20 }),
     country:           varchar('country', { length: 100 }),
-    managers:          jsonb('managers').default('[]'),              // array of contact names
+    managers:          jsonb('managers').default('[]'),
     directReports:     jsonb('direct_reports').default('[]'),
     assistantName:     varchar('assistant_name', { length: 255 }),
     homeAddress:       text('home_address'),
@@ -89,14 +82,12 @@ export const contacts = pgTable('contacts', {
     orgId:             text('org_id').notNull(),
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
-
 // ── OPPORTUNITIES ─────────────────────────────────────────────────────────────
-// Sales deals / pipeline opportunities
 export const opportunities = pgTable('opportunities', {
     id:                   text('id').primaryKey(),
     pipelineId:           text('pipeline_id').notNull(),
     opportunityName:      varchar('opportunity_name', { length: 500 }),
-    account:              varchar('account', { length: 255 }),        // account name
+    account:              varchar('account', { length: 255 }),
     site:                 varchar('site', { length: 255 }),
     salesRep:             varchar('sales_rep', { length: 255 }),
     stage:                varchar('stage', { length: 100 }).notNull(),
@@ -107,8 +98,8 @@ export const opportunities = pgTable('opportunities', {
     products:             text('products'),
     unionized:            varchar('unionized', { length: 10 }),
     painPoints:           text('pain_points'),
-    contacts:             text('contacts'),                           // legacy text field
-    contactIds:           jsonb('contact_ids').default('[]'),         // array of contact ids
+    contacts:             text('contacts'),
+    contactIds:           jsonb('contact_ids').default('[]'),
     notes:                text('notes'),
     nextSteps:            text('next_steps'),
     probability:          integer('probability'),
@@ -123,14 +114,13 @@ export const opportunities = pgTable('opportunities', {
     stageChangedDate:     varchar('stage_changed_date', { length: 20 }),
     createdDate:          varchar('created_date', { length: 20 }),
     createdBy:            varchar('created_by', { length: 255 }),
-    stageHistory:         jsonb('stage_history').default('[]'),       // [{stage, date, prevStage, author, timestamp}]
-    comments:             jsonb('comments').default('[]'),            // [{id, text, author, timestamp}]
-    aiScore:              jsonb('ai_score'),                          // {score, verdict, headline, signals, recommendation, scoredAt}
+    stageHistory:         jsonb('stage_history').default('[]'),
+    comments:             jsonb('comments').default('[]'),
+    aiScore:              jsonb('ai_score'),
     createdAt:            timestamp('created_at').notNull().defaultNow(),
     orgId:                text('org_id').notNull(),
     updatedAt:            timestamp('updated_at').notNull().defaultNow(),
 });
-
 // ── TASKS ─────────────────────────────────────────────────────────────────────
 export const tasks = pgTable('tasks', {
     id:            text('id').primaryKey(),
@@ -154,17 +144,15 @@ export const tasks = pgTable('tasks', {
     orgId:         text('org_id').notNull(),
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 });
-
 // ── ACTIVITIES ────────────────────────────────────────────────────────────────
-// Call logs, emails, meetings, notes on opportunities/contacts
 export const activities = pgTable('activities', {
     id:            text('id').primaryKey(),
-    type:          varchar('type', { length: 100 }),                 // Call | Email | Meeting | Note | etc.
+    type:          varchar('type', { length: 100 }),
     date:          varchar('date', { length: 20 }),
     subject:       varchar('subject', { length: 500 }),
     notes:         text('notes'),
     outcome:       varchar('outcome', { length: 255 }),
-    duration:      integer('duration'),                              // minutes
+    duration:      integer('duration'),
     opportunityId: text('opportunity_id'),
     contactId:     text('contact_id'),
     accountId:     text('account_id'),
@@ -173,30 +161,28 @@ export const activities = pgTable('activities', {
     orgId:         text('org_id').notNull(),
     updatedAt:     timestamp('updated_at').notNull().defaultNow(),
 });
-
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
-// Company-wide app configuration (one row per tenant)
 export const settings = pgTable('settings', {
     id:              text('id').primaryKey().default('default'),
     companyName:     varchar('company_name', { length: 255 }),
-    companyLogo:     text('company_logo'),                           // base64 or URL
-    fiscalYearStart: varchar('fiscal_year_start', { length: 10 }),  // e.g. "2025-01-01"
-    stages:          jsonb('stages').default('[]'),                  // array of stage names
+    companyLogo:     text('company_logo'),
+    fiscalYearStart: varchar('fiscal_year_start', { length: 10 }),
+    stages:          jsonb('stages').default('[]'),
     taskTypes:       jsonb('task_types').default('[]'),
     painPoints:      jsonb('pain_points').default('[]'),
     verticalMarkets: jsonb('vertical_markets').default('[]'),
-    fieldVisibility: jsonb('field_visibility').default('{}'),        // role-based field access
-    extra:           jsonb('extra').default('{}'),                   // overflow blob: quotaData, pipelines, teams, territories, verticals, commissionPlan, kpiConfig, logoUrl
+    fieldVisibility: jsonb('field_visibility').default('{}'),
+    extra:           jsonb('extra').default('{}'),
     orgId:           text('org_id').notNull(),
     updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+    // ── NEW: added for Quotes feature ────────────────────────────────────────
+    quotesEnabled:   boolean('quotes_enabled').default(false),
 });
-
 // ── AUDIT LOG ─────────────────────────────────────────────────────────────────
-// Record of all create/update/delete actions
 export const auditLog = pgTable('audit_log', {
     id:         text('id').primaryKey(),
-    action:     varchar('action', { length: 50 }).notNull(),         // create | update | delete
-    entityType: varchar('entity_type', { length: 100 }).notNull(),   // opportunity | contact | account | task
+    action:     varchar('action', { length: 50 }).notNull(),
+    entityType: varchar('entity_type', { length: 100 }).notNull(),
     entityId:   text('entity_id').notNull(),
     entityName: text('entity_name'),
     detail:     text('detail'),
@@ -205,23 +191,21 @@ export const auditLog = pgTable('audit_log', {
     orgId:      text('org_id').notNull(),
     timestamp:  timestamp('timestamp').notNull().defaultNow(),
 });
-
 // ── SPIFF CLAIMS ──────────────────────────────────────────────────────────────
-// Rep-submitted SPIFF bonus claims, pending manager approval
 export const spiffClaims = pgTable('spiff_claims', {
-    id:              text('id').primaryKey(),                         // e.g. "claim_<timestamp>"
+    id:              text('id').primaryKey(),
     orgId:           text('org_id').notNull(),
-    spiffId:         text('spiff_id').notNull(),                     // references settings.spiffs[].id
+    spiffId:         text('spiff_id').notNull(),
     spiffName:       varchar('spiff_name', { length: 500 }),
     opportunityId:   text('opportunity_id'),
     opportunityName: varchar('opportunity_name', { length: 500 }),
     account:         varchar('account', { length: 255 }),
     repName:         varchar('rep_name', { length: 255 }).notNull(),
-    amount:          decimal('amount', { precision: 12, scale: 2 }),  // flat $ amount (0 for multiplier type)
-    multiplier:      decimal('multiplier', { precision: 6, scale: 3 }), // e.g. 1.5 for 1.5× multiplier
-    spiffType:       varchar('spiff_type', { length: 50 }),           // flat | pct | multiplier
+    amount:          decimal('amount', { precision: 12, scale: 2 }),
+    multiplier:      decimal('multiplier', { precision: 6, scale: 3 }),
+    spiffType:       varchar('spiff_type', { length: 50 }),
     dealArr:         decimal('deal_arr', { precision: 12, scale: 2 }),
-    status:          varchar('status', { length: 50 }).notNull().default('pending'), // pending | approved | rejected | paid
+    status:          varchar('status', { length: 50 }).notNull().default('pending'),
     note:            text('note'),
     claimedAt:       timestamp('claimed_at').notNull().defaultNow(),
     approvedAt:      timestamp('approved_at'),
@@ -230,29 +214,24 @@ export const spiffClaims = pgTable('spiff_claims', {
     createdAt:       timestamp('created_at').notNull().defaultNow(),
     updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 });
-
 // ── RECOMMENDATION LOG ────────────────────────────────────────────────────────
-// Tracks when reps act on (or dismiss) recommended actions, and whether
-// the underlying signal was resolved afterward.
 export const recommendationLog = pgTable('recommendation_log', {
-    id:             text('id').primaryKey(),                          // e.g. "rec_<timestamp>"
+    id:             text('id').primaryKey(),
     orgId:          text('org_id').notNull(),
     repName:        varchar('rep_name', { length: 255 }).notNull(),
-    actionType:     varchar('action_type', { length: 100 }).notNull(), // stale | stuck | lapsed | coverage | velocity | task
-    opportunityId:  text('opportunity_id'),                           // null for task-only actions
+    actionType:     varchar('action_type', { length: 100 }).notNull(),
+    opportunityId:  text('opportunity_id'),
     dealName:       varchar('deal_name', { length: 500 }),
     arrAtRisk:      decimal('arr_at_risk', { precision: 12, scale: 2 }),
     stage:          varchar('stage', { length: 100 }),
-    signal:         text('signal'),                                   // human-readable reason that triggered it
+    signal:         text('signal'),
     dismissedAt:    timestamp('dismissed_at').notNull().defaultNow(),
-    outcome:        varchar('outcome', { length: 50 }).notNull().default('pending'), // pending | resolved | ignored
+    outcome:        varchar('outcome', { length: 50 }).notNull().default('pending'),
     resolvedAt:     timestamp('resolved_at'),
     daysToResolve:  integer('days_to_resolve'),
     createdAt:      timestamp('created_at').notNull().defaultNow(),
 });
-
 // ── LEADS ─────────────────────────────────────────────────────────────────────
-// Inbound prospects before they become opportunities
 export const leads = pgTable('leads', {
     id:           text('id').primaryKey(),
     firstName:    varchar('first_name', { length: 255 }),
@@ -261,95 +240,130 @@ export const leads = pgTable('leads', {
     title:        varchar('title', { length: 255 }),
     email:        varchar('email', { length: 255 }),
     phone:        varchar('phone', { length: 50 }),
-    source:       varchar('source', { length: 100 }),           // Web Form | LinkedIn | Trade Show | etc.
-    status:       varchar('status', { length: 50 }).notNull().default('New'),  // New | Contacted | Qualified | Working | Converted | Dead
-    score:        integer('score').default(50),                 // 0–100
+    source:       varchar('source', { length: 100 }),
+    status:       varchar('status', { length: 50 }).notNull().default('New'),
+    score:        integer('score').default(50),
     estimatedARR: decimal('estimated_arr', { precision: 12, scale: 2 }),
-    assignedTo:   varchar('assigned_to', { length: 255 }),      // rep name
+    assignedTo:   varchar('assigned_to', { length: 255 }),
     notes:        text('notes'),
     convertedAt:  varchar('converted_at', { length: 30 }),
     createdAt:    timestamp('created_at').notNull().defaultNow(),
     orgId:        text('org_id').notNull(),
     updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 });
-
 // ── DASHBOARD CONFIGS ─────────────────────────────────────────────────────────
-// Per-user custom dashboard widget configuration
 export const dashboardConfigs = pgTable('dashboard_configs', {
-    id:        text('id').primaryKey(),           // e.g. "dash_<userId>_<orgId>"
+    id:        text('id').primaryKey(),
     userId:    text('user_id').notNull(),
     orgId:     text('org_id').notNull(),
-    widgets:   jsonb('widgets').notNull().default('[]'), // [{id, position, visible}]
+    widgets:   jsonb('widgets').notNull().default('[]'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
-
 // ── USER CALENDAR CONNECTIONS ─────────────────────────────────────────────────
-// One row per user per provider — stores encrypted personal OAuth refresh tokens.
-// provider: 'google' | 'outlook' | 'yahoo'
-// Tokens are encrypted at rest using AES-256-GCM via netlify/functions/crypto.mjs.
 export const userCalendarConnections = pgTable('user_calendar_connections', {
-    id:                    text('id').primaryKey(),           // e.g. "ucal_<timestamp>_<random>"
-    userId:                text('user_id').notNull(),          // Clerk userId
+    id:                    text('id').primaryKey(),
+    userId:                text('user_id').notNull(),
     orgId:                 text('org_id').notNull(),
-    provider:              varchar('provider', { length: 20 }).notNull(), // google | outlook | yahoo
-    encryptedRefreshToken: text('encrypted_refresh_token').notNull(),    // AES-256-GCM ciphertext
-    calendarEmail:         varchar('calendar_email', { length: 255 }),   // email shown in Settings UI
+    provider:              varchar('provider', { length: 20 }).notNull(),
+    encryptedRefreshToken: text('encrypted_refresh_token').notNull(),
+    calendarEmail:         varchar('calendar_email', { length: 255 }),
     connectedAt:           timestamp('connected_at').notNull().defaultNow(),
     updatedAt:             timestamp('updated_at').notNull().defaultNow(),
 });
-
 // ── ORG CALENDAR CONNECTIONS ──────────────────────────────────────────────────
-// One row per org per provider — stores encrypted shared/org-wide OAuth refresh tokens.
-// Only Admins can connect/disconnect. Visible to all users in that org's calendar view.
-// provider: 'google' | 'outlook'  (Yahoo/Apple org calendars not supported yet)
 export const orgCalendarConnections = pgTable('org_calendar_connections', {
-    id:                    text('id').primaryKey(),           // e.g. "ocal_<timestamp>_<random>"
+    id:                    text('id').primaryKey(),
     orgId:                 text('org_id').notNull(),
-    provider:              varchar('provider', { length: 20 }).notNull(), // google | outlook
-    encryptedRefreshToken: text('encrypted_refresh_token').notNull(),    // AES-256-GCM ciphertext
-    calendarName:          varchar('calendar_name', { length: 255 }),    // friendly name shown in UI
-    calendarEmail:         varchar('calendar_email', { length: 255 }),   // account email
+    provider:              varchar('provider', { length: 20 }).notNull(),
+    encryptedRefreshToken: text('encrypted_refresh_token').notNull(),
+    calendarName:          varchar('calendar_name', { length: 255 }),
+    calendarEmail:         varchar('calendar_email', { length: 255 }),
     connectedAt:           timestamp('connected_at').notNull().defaultNow(),
-    connectedBy:           varchar('connected_by', { length: 255 }),     // userId of the Admin who connected it
+    connectedBy:           varchar('connected_by', { length: 255 }),
     updatedAt:             timestamp('updated_at').notNull().defaultNow(),
 });
-
 // ── API KEYS ──────────────────────────────────────────────────────────────────
-// Public REST API keys — one per named integration, scoped to org.
-// The actual key value is never stored — only its SHA-256 hash.
-// On generation, the plaintext key is returned once and never again.
-// key format: "spt_live_<32 random bytes hex>"
 export const apiKeys = pgTable('api_keys', {
-    id:          text('id').primaryKey(),                          // e.g. "apikey_<timestamp>_<random>"
+    id:          text('id').primaryKey(),
     orgId:       text('org_id').notNull(),
-    name:        varchar('name', { length: 255 }).notNull(),       // human label, e.g. "Tableau Integration"
-    keyHash:     text('key_hash').notNull(),                       // SHA-256 of the plaintext key
-    keyPrefix:   varchar('key_prefix', { length: 20 }).notNull(), // first 12 chars for display, e.g. "spt_live_a1b2"
-    scopes:      jsonb('scopes').notNull().default('["read"]'),    // ["read"] — write scope reserved for future
-    lastUsedAt:  timestamp('last_used_at'),                        // updated on each successful API call
-    createdBy:   varchar('created_by', { length: 255 }),           // Clerk userId of the admin who created it
+    name:        varchar('name', { length: 255 }).notNull(),
+    keyHash:     text('key_hash').notNull(),
+    keyPrefix:   varchar('key_prefix', { length: 20 }).notNull(),
+    scopes:      jsonb('scopes').notNull().default('["read"]'),
+    lastUsedAt:  timestamp('last_used_at'),
+    createdBy:   varchar('created_by', { length: 255 }),
     createdAt:   timestamp('created_at').notNull().defaultNow(),
-    revokedAt:   timestamp('revoked_at'),                          // null = active; set to revoke
+    revokedAt:   timestamp('revoked_at'),
+    updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+// ── WEBHOOK SUBSCRIPTIONS ─────────────────────────────────────────────────────
+export const webhookSubscriptions = pgTable('webhook_subscriptions', {
+    id:          text('id').primaryKey(),
+    orgId:       text('org_id').notNull(),
+    name:        varchar('name', { length: 255 }).notNull(),
+    targetUrl:   text('target_url').notNull(),
+    eventTypes:  jsonb('event_types').notNull().default('[]'),
+    secret:      text('secret').notNull(),
+    active:      boolean('active').notNull().default(true),
+    createdBy:   varchar('created_by', { length: 255 }),
+    lastFiredAt: timestamp('last_fired_at'),
+    lastStatus:  integer('last_status'),
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
     updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
 
-// ── WEBHOOK SUBSCRIPTIONS ─────────────────────────────────────────────────────
-// Customers subscribe to CRM events and receive POST requests to their endpoint.
-// The secret is used to sign payloads (HMAC-SHA256) so the receiver can verify authenticity.
-// Supported events: opportunity.created | opportunity.stage_changed | opportunity.won |
-//   opportunity.lost | task.overdue | lead.created | lead.converted | spiff.claimed
-export const webhookSubscriptions = pgTable('webhook_subscriptions', {
-    id:          text('id').primaryKey(),                          // e.g. "wh_<timestamp>_<random>"
-    orgId:       text('org_id').notNull(),
-    name:        varchar('name', { length: 255 }).notNull(),       // human label, e.g. "HubSpot Sync"
-    targetUrl:   text('target_url').notNull(),                     // HTTPS endpoint to POST to
-    eventTypes:  jsonb('event_types').notNull().default('[]'),     // array of subscribed event strings
-    secret:      text('secret').notNull(),                         // random secret for HMAC signing — stored plaintext (receiver needs it)
-    active:      boolean('active').notNull().default(true),
-    createdBy:   varchar('created_by', { length: 255 }),           // Clerk userId
-    lastFiredAt: timestamp('last_fired_at'),                       // updated on each dispatch attempt
-    lastStatus:  integer('last_status'),                           // HTTP status from last delivery attempt
-    createdAt:   timestamp('created_at').notNull().defaultNow(),
-    updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+// ── PRODUCTS (PRICE BOOK) ─────────────────────────────────────────────────────
+// NEW — added for Quotes feature
+// productType: 'recurring' | 'one_time' | 'service'
+// unit: 'month' | 'year' | 'user' | 'flat' | 'hour' | 'day'
+export const products = pgTable('products', {
+    id:           text('id').primaryKey(),
+    orgId:        text('org_id').notNull(),
+    name:         varchar('name', { length: 255 }).notNull(),
+    sku:          varchar('sku', { length: 100 }),
+    description:  text('description'),
+    productType:  varchar('product_type', { length: 20 }).notNull().default('one_time'),
+    listPrice:    decimal('list_price', { precision: 12, scale: 2 }).notNull(),
+    minPrice:     decimal('min_price', { precision: 12, scale: 2 }),
+    unit:         varchar('unit', { length: 50 }).default('flat'),
+    category:     varchar('category', { length: 255 }),
+    active:       boolean('active').notNull().default(true),
+    sortOrder:    integer('sort_order').default(0),
+    createdBy:    varchar('created_by', { length: 255 }),
+    createdAt:    timestamp('created_at').notNull().defaultNow(),
+    updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── QUOTES ────────────────────────────────────────────────────────────────────
+// NEW — added for Quotes feature
+// status: 'Draft' | 'Pending Approval' | 'Approved' | 'Sent' | 'Accepted' | 'Declined' | 'Expired'
+// When Accepted, totalValue is synced to opportunity.arr automatically.
+export const quotes = pgTable('quotes', {
+    id:              text('id').primaryKey(),
+    orgId:           text('org_id').notNull(),
+    opportunityId:   text('opportunity_id').notNull(),
+    quoteNumber:     varchar('quote_number', { length: 50 }).notNull(),
+    version:         integer('version').notNull().default(1),
+    name:            varchar('name', { length: 500 }),
+    status:          varchar('status', { length: 50 }).notNull().default('Draft'),
+    validUntil:      varchar('valid_until', { length: 20 }),
+    paymentTerms:    varchar('payment_terms', { length: 100 }),
+    billingContact:  varchar('billing_contact', { length: 255 }),
+    lineItems:       jsonb('line_items').notNull().default('[]'),
+    subtotal:        decimal('subtotal', { precision: 12, scale: 2 }),
+    dealDiscount:    decimal('deal_discount', { precision: 5, scale: 2 }).default('0'),
+    totalValue:      decimal('total_value', { precision: 12, scale: 2 }),
+    recurringValue:  decimal('recurring_value', { precision: 12, scale: 2 }),
+    oneTimeValue:    decimal('one_time_value', { precision: 12, scale: 2 }),
+    notes:           text('notes'),
+    approvalNote:    text('approval_note'),
+    approvedBy:      varchar('approved_by', { length: 255 }),
+    approvedAt:      timestamp('approved_at'),
+    sentAt:          timestamp('sent_at'),
+    acceptedAt:      timestamp('accepted_at'),
+    syncedToOpp:     boolean('synced_to_opp').default(false),
+    createdBy:       varchar('created_by', { length: 255 }),
+    createdAt:       timestamp('created_at').notNull().defaultNow(),
+    updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 });

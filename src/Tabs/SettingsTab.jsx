@@ -451,6 +451,7 @@ export default function SettingsTab() {
                                         { view: 'logo',           icon: '🖼️', title: 'Company Logo',        desc: 'Upload company logo' },
                                         { view: 'pain-points',    icon: '⚠️', title: 'Pain Points Library', desc: 'Customer pain point templates' },
                                         { view: 'products',       icon: '📦', title: 'Products',             desc: 'Products and services offered' },
+                                        { view: 'price-book',     icon: '💲', title: 'Price Book',           desc: 'Manage the product catalog for quoting' },
                                         ] : []),
                                         ...(settingsTab === 'security' ? [
                                         { group: 'Security & Data' },
@@ -563,11 +564,207 @@ export default function SettingsTab() {
 </div>
                     )}
 
+
+                    {settingsView === 'price-book' && (() => {
+                        const { products, handleSaveProduct, handleDeleteProduct, productModalSaving } = useApp();
+                        const [pbTab, setPbTab] = React.useState(() => localStorage.getItem('tab:settings:priceBookTab') || 'products');
+                        const [showProductForm, setShowProductForm] = React.useState(false);
+                        const [editingProduct, setEditingProduct] = React.useState(null);
+                        const [productForm, setProductForm] = React.useState({ name: '', sku: '', description: '', productType: 'one_time', listPrice: '', minPrice: '', unit: 'flat', category: '', active: true });
+                        const [productSaveError, setProductSaveError] = React.useState(null);
+                        const [pbSearch, setPbSearch] = React.useState('');
+                        const [pbTypeFilter, setPbTypeFilter] = React.useState('all');
+
+                        const pbInputStyle = { width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' };
+                        const pbLabelStyle = { display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' };
+
+                        const openNewProduct = () => {
+                            setEditingProduct(null);
+                            setProductForm({ name: '', sku: '', description: '', productType: 'one_time', listPrice: '', minPrice: '', unit: 'flat', category: '', active: true });
+                            setProductSaveError(null);
+                            setShowProductForm(true);
+                        };
+                        const openEditProduct = (p) => {
+                            setEditingProduct(p);
+                            setProductForm({ name: p.name || '', sku: p.sku || '', description: p.description || '', productType: p.productType || 'one_time', listPrice: p.listPrice || '', minPrice: p.minPrice || '', unit: p.unit || 'flat', category: p.category || '', active: p.active !== false });
+                            setProductSaveError(null);
+                            setShowProductForm(true);
+                        };
+                        const saveProduct = async () => {
+                            setProductSaveError(null);
+                            if (!productForm.name.trim()) { setProductSaveError('Product name is required.'); return; }
+                            if (!productForm.listPrice || isNaN(Number(productForm.listPrice))) { setProductSaveError('A valid list price is required.'); return; }
+                            const result = await handleSaveProduct(productForm, editingProduct);
+                            if (result) { setShowProductForm(false); setEditingProduct(null); }
+                            else setProductSaveError('Failed to save product. Please try again.');
+                        };
+
+                        const typeLabel = { recurring: 'Recurring', one_time: 'One-time', service: 'Service' };
+                        const typeBadge = { recurring: { bg: '#e0e7ff', color: '#3730a3' }, one_time: { bg: '#dcfce7', color: '#166534' }, service: { bg: '#fef3c7', color: '#92400e' } };
+                        const unitOptions = ['flat', 'month', 'year', 'user', 'hour', 'day'];
+
+                        const filtered = (products || []).filter(p => {
+                            if (pbTypeFilter !== 'all' && p.productType !== pbTypeFilter) return false;
+                            if (pbSearch && !p.name.toLowerCase().includes(pbSearch.toLowerCase()) && !(p.sku || '').toLowerCase().includes(pbSearch.toLowerCase()) && !(p.category || '').toLowerCase().includes(pbSearch.toLowerCase())) return false;
+                            return true;
+                        });
+
+                        const categories = [...new Set((products || []).map(p => p.category).filter(Boolean))].sort();
+
+                        return (
+                            <div className="table-container">
+                                <div className="table-header">
+                                    <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
+                                    <h2>PRICE BOOK</h2>
+                                </div>
+
+                                {/* Product form modal */}
+                                {showProductForm && (
+                                    <>
+                                        <div onClick={() => setShowProductForm(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000 }} />
+                                        <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: '#fff', border: '1px solid #e5e2db', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.15)', zIndex: 1001, width: '100%', maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto' }}>
+                                            <div style={{ background: '#1c1917', color: '#f5f1eb', padding: '1rem 1.5rem', borderRadius: '12px 12px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <span style={{ fontWeight: '600', fontSize: '0.9375rem' }}>{editingProduct ? 'Edit Product' : 'New Product'}</span>
+                                                <button onClick={() => setShowProductForm(false)} style={{ background: 'none', border: 'none', color: '#a8a29e', fontSize: '1.25rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                                            </div>
+                                            <div style={{ padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                                {productSaveError && <div style={{ background: '#fee2e2', border: '1px solid #fecaca', borderRadius: '8px', padding: '0.625rem 0.875rem', fontSize: '0.8125rem', color: '#dc2626' }}>{productSaveError}</div>}
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                                    <div style={{ gridColumn: '1/-1' }}>
+                                                        <label style={pbLabelStyle}>Product Name *</label>
+                                                        <input style={pbInputStyle} value={productForm.name} onChange={e => setProductForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Platform — Enterprise" />
+                                                    </div>
+                                                    <div>
+                                                        <label style={pbLabelStyle}>SKU</label>
+                                                        <input style={pbInputStyle} value={productForm.sku} onChange={e => setProductForm(p => ({ ...p, sku: e.target.value }))} placeholder="e.g. PLT-ENT-001" />
+                                                    </div>
+                                                    <div>
+                                                        <label style={pbLabelStyle}>Category</label>
+                                                        <input style={pbInputStyle} value={productForm.category} onChange={e => setProductForm(p => ({ ...p, category: e.target.value }))} placeholder="e.g. Platform, Services" list="cat-datalist" />
+                                                        <datalist id="cat-datalist">{categories.map(c => <option key={c} value={c} />)}</datalist>
+                                                    </div>
+                                                    <div>
+                                                        <label style={pbLabelStyle}>Type *</label>
+                                                        <select style={pbInputStyle} value={productForm.productType} onChange={e => setProductForm(p => ({ ...p, productType: e.target.value }))}>
+                                                            <option value="recurring">Recurring</option>
+                                                            <option value="one_time">One-time</option>
+                                                            <option value="service">Service</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label style={pbLabelStyle}>Unit</label>
+                                                        <select style={pbInputStyle} value={productForm.unit} onChange={e => setProductForm(p => ({ ...p, unit: e.target.value }))}>
+                                                            {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label style={pbLabelStyle}>List Price *</label>
+                                                        <input style={pbInputStyle} type="number" min="0" step="0.01" value={productForm.listPrice} onChange={e => setProductForm(p => ({ ...p, listPrice: e.target.value }))} placeholder="0.00" />
+                                                    </div>
+                                                    <div>
+                                                        <label style={pbLabelStyle}>Min Price (floor)</label>
+                                                        <input style={pbInputStyle} type="number" min="0" step="0.01" value={productForm.minPrice} onChange={e => setProductForm(p => ({ ...p, minPrice: e.target.value }))} placeholder="0.00" />
+                                                    </div>
+                                                    <div style={{ gridColumn: '1/-1' }}>
+                                                        <label style={pbLabelStyle}>Description</label>
+                                                        <textarea style={{ ...pbInputStyle, minHeight: '72px', resize: 'vertical' }} value={productForm.description} onChange={e => setProductForm(p => ({ ...p, description: e.target.value }))} placeholder="Optional product description shown on quotes" />
+                                                    </div>
+                                                    <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                        <button
+                                                            onClick={() => setProductForm(p => ({ ...p, active: !p.active }))}
+                                                            style={{ width: '40px', height: '22px', borderRadius: '999px', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', background: productForm.active ? '#2563eb' : '#e2e8f0', border: 'none', padding: 0, flexShrink: 0 }}>
+                                                            <div style={{ position: 'absolute', width: '16px', height: '16px', background: '#fff', borderRadius: '50%', top: '3px', transition: 'left 0.2s', left: productForm.active ? '21px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                                                        </button>
+                                                        <span style={{ fontSize: '0.8125rem', color: '#57534e', fontWeight: '500' }}>Active — visible in quote builder catalog</span>
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid #f0ece4', paddingTop: '1rem' }}>
+                                                    <button className="btn btn-secondary" onClick={() => setShowProductForm(false)}>Cancel</button>
+                                                    <button className="btn" onClick={saveProduct} disabled={productModalSaving}>{productModalSaving ? 'Saving…' : editingProduct ? 'Save Changes' : 'Add Product'}</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* Toolbar */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1.25rem', borderBottom: '1px solid #f0ece4', flexWrap: 'wrap' }}>
+                                    <input
+                                        value={pbSearch} onChange={e => setPbSearch(e.target.value)}
+                                        placeholder="Search products…"
+                                        style={{ background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.375rem 0.75rem', fontSize: '0.8125rem', fontFamily: 'inherit', color: '#1c1917', width: '200px', outline: 'none' }}
+                                    />
+                                    {['all', 'recurring', 'one_time', 'service'].map(t => (
+                                        <button key={t} onClick={() => setPbTypeFilter(t)}
+                                            style={{ padding: '0.3rem 0.75rem', borderRadius: '8px', border: '1px solid', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit', background: pbTypeFilter === t ? '#1c1917' : '#e8e3da', color: pbTypeFilter === t ? '#f5f1eb' : '#78716c', borderColor: pbTypeFilter === t ? '#1c1917' : '#ddd8cf', transition: 'all 0.15s' }}>
+                                            {t === 'all' ? 'All' : t === 'one_time' ? 'One-time' : t === 'recurring' ? 'Recurring' : 'Services'}
+                                        </button>
+                                    ))}
+                                    <button className="btn" style={{ marginLeft: 'auto' }} onClick={openNewProduct}>+ Add Product</button>
+                                </div>
+
+                                {/* Products table */}
+                                {filtered.length === 0 ? (
+                                    <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>
+                                        {(products || []).length === 0 ? 'No products yet. Add your first product to start building quotes.' : 'No products match your search.'}
+                                    </div>
+                                ) : (
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                                        <thead>
+                                            <tr>
+                                                {['Product', 'SKU', 'Category', 'Type', 'List Price', 'Min Price', 'Unit', 'Status', ''].map(h => (
+                                                    <th key={h} style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', padding: '0.625rem 1rem', textAlign: 'left', borderBottom: '1px solid #f0ece4', whiteSpace: 'nowrap' }}>{h}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filtered.map(p => (
+                                                <tr key={p.id} style={{ borderBottom: '1px solid #f8f7f5' }} onMouseEnter={e => e.currentTarget.style.background = '#fafaf9'} onMouseLeave={e => e.currentTarget.style.background = ''}>
+                                                    <td style={{ padding: '0.75rem 1rem' }}>
+                                                        <div style={{ fontWeight: '600', color: '#1c1917' }}>{p.name}</div>
+                                                        {p.description && <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>{p.description.slice(0, 60)}{p.description.length > 60 ? '…' : ''}</div>}
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem 1rem', color: '#94a3b8', fontFamily: 'monospace', fontSize: '0.75rem' }}>{p.sku || '—'}</td>
+                                                    <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{p.category || '—'}</td>
+                                                    <td style={{ padding: '0.75rem 1rem' }}>
+                                                        <span style={{ padding: '2px 8px', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700', background: (typeBadge[p.productType] || typeBadge.one_time).bg, color: (typeBadge[p.productType] || typeBadge.one_time).color }}>
+                                                            {typeLabel[p.productType] || p.productType}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem 1rem', fontWeight: '600', color: '#1c1917' }}>${Number(p.listPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                                    <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{p.minPrice ? '$' + Number(p.minPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
+                                                    <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{p.unit || 'flat'}</td>
+                                                    <td style={{ padding: '0.75rem 1rem' }}>
+                                                        <span style={{ fontSize: '0.75rem', fontWeight: '600', color: p.active !== false ? '#16a34a' : '#94a3b8' }}>{p.active !== false ? '● Active' : '○ Inactive'}</span>
+                                                    </td>
+                                                    <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
+                                                        <button className="btn btn-secondary" style={{ marginRight: '0.5rem', padding: '0.25rem 0.625rem', fontSize: '0.75rem' }} onClick={() => openEditProduct(p)}>Edit</button>
+                                                        <button onClick={() => handleDeleteProduct(p.id, showConfirm)} style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: '0.8125rem', cursor: 'pointer', fontWeight: '600', fontFamily: 'inherit' }}>Deactivate</button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+
+                                <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid #f0ece4', background: '#fafaf9', display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.75rem', color: '#94a3b8' }}>
+                                    <span>{(products || []).filter(p => p.active !== false).length} active product{(products || []).filter(p => p.active !== false).length !== 1 ? 's' : ''}</span>
+                                    <span>·</span>
+                                    <span>{(products || []).filter(p => p.productType === 'recurring').length} recurring</span>
+                                    <span>·</span>
+                                    <span>{(products || []).filter(p => p.productType === 'one_time').length} one-time</span>
+                                    <span>·</span>
+                                    <span>{(products || []).filter(p => p.productType === 'service').length} services</span>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
                     {settingsView === 'field-visibility' && (() => {
                         const roles = ['Admin', 'Manager', 'User', 'ReadOnly'];
                         const roleLabels = { Admin: 'Admin', Manager: 'Manager', User: 'Sales Rep', ReadOnly: 'Read-Only' };
                         const fields = [
-                            { key: 'arr',           label: 'ARR ($)',              desc: 'Revenue amount on the deal' },
+                            { key: 'arr',           label: 'Revenue ($)',          desc: 'Revenue amount on the deal' },
                             { key: 'implCost',      label: 'Implementation Cost',  desc: 'Implementation / services cost' },
                             { key: 'probability',   label: 'Probability %',        desc: 'Close probability (stage default or rep override)' },
                             { key: 'weightedValue', label: 'Weighted Value',        desc: 'Calculated weighted pipeline value' },
@@ -1403,7 +1600,7 @@ export default function SettingsTab() {
                                     <div style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '1rem' }}>Controls what the sparklines on KPI cards visualize.</div>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                                         {[
-                                            { value: 'stage-distribution', label: 'Stage Distribution', desc: 'ARR/count across funnel stages' },
+                                            { value: 'stage-distribution', label: 'Stage Distribution', desc: 'Revenue/count across funnel stages' },
                                             { value: 'month-over-month', label: 'Month over Month', desc: 'Last 6 months of close dates' },
                                             { value: 'quarter-over-quarter', label: 'Quarter over Quarter', desc: 'Last 4 quarters' },
                                             { value: 'year-to-date', label: 'Year to Date', desc: 'Monthly buckets since Jan 1' },
@@ -1586,6 +1783,23 @@ export default function SettingsTab() {
                                         </span>
                                     </div>
                                 </div>
+                                {/* Quotes toggle */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', marginBottom: '0.75rem' }}>
+                                    <div>
+                                        <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1e293b', marginBottom: '0.25rem' }}>Quotes</div>
+                                        <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>Enable the Quotes tab — price book, CPQ-style quote builder, versioning, approvals, and revenue sync to opportunities.</div>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1.5rem', flexShrink: 0 }}>
+                                        <button
+                                            onClick={() => setSettings(prev => ({ ...prev, quotesEnabled: !(prev.quotesEnabled === true) }))}
+                                            style={{ width: '44px', height: '24px', borderRadius: '999px', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', background: settings.quotesEnabled === true ? '#2563eb' : '#e2e8f0', border: 'none', padding: 0, flexShrink: 0 }}>
+                                            <div style={{ position: 'absolute', width: '18px', height: '18px', background: '#fff', borderRadius: '50%', top: '3px', transition: 'left 0.2s', left: settings.quotesEnabled === true ? '23px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                                        </button>
+                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: settings.quotesEnabled === true ? '#2563eb' : '#94a3b8', minWidth: '28px' }}>
+                                            {settings.quotesEnabled === true ? 'On' : 'Off'}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
                             <SaveCancelBar />
                         </div>
@@ -1605,7 +1819,7 @@ export default function SettingsTab() {
                                     <div>
                                         <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#c2410c', marginBottom: '4px' }}>Data privacy notice</div>
                                         <div style={{ fontSize: '0.75rem', color: '#92400e', lineHeight: 1.6 }}>
-                                            When AI deal scoring is enabled, deal data (account name, stage, ARR, activity summaries, and contact names) is sent to Anthropic's API to generate scores. No data is stored by Anthropic beyond the request. Disable this feature if your organization has data residency or confidentiality requirements that prevent sending deal data to third-party AI services.
+                                            When AI deal scoring is enabled, deal data (account name, stage, Revenue, activity summaries, and contact names) is sent to Anthropic's API to generate scores. No data is stored by Anthropic beyond the request. Disable this feature if your organization has data residency or confidentiality requirements that prevent sending deal data to third-party AI services.
                                         </div>
                                     </div>
                                 </div>
@@ -1653,7 +1867,7 @@ export default function SettingsTab() {
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                                             {[
                                                 ['Deal name & account', true],
-                                                ['Stage & ARR', true],
+                                                ['Stage & Revenue', true],
                                                 ['Activity summaries', true],
                                                 ['Contact names', true],
                                                 ['Notes (first 200 chars)', true],

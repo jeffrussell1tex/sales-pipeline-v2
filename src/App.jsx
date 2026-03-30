@@ -48,6 +48,8 @@ import { useModalState } from './hooks/useModalState';
 import { useUIState } from './hooks/useUIState';
 import { useCalendarState } from './hooks/useCalendarState';
 import { useUserHandlers } from './hooks/useUserHandlers';
+import { useQuotes } from './hooks/useQuotes';
+import QuotesTab from './Tabs/QuotesTab';
 import ErrorBoundary from './components/ErrorBoundary';
 
 
@@ -300,6 +302,10 @@ function App() {
         loadTasks(setDbOffline);
         loadActivities(setDbOffline);
 
+        // Load quotes and products if quotes feature is enabled
+        loadQuotes(setDbOffline);
+        loadProducts();
+
 dbFetch('/.netlify/functions/leads')
     .then(checkOk).then(r => r.json())
     .then(data => setLeads(data.leads || []))
@@ -549,9 +555,9 @@ dbFetch('/.netlify/functions/users?me=true')
         return !opp || isRepVisible(opp.salesRep);
     });
 
-    const totalARR = visibleOpportunities.reduce((sum, opp) => sum + (parseFloat(opp.arr) || 0), 0);
+    const totalRevenue = visibleOpportunities.reduce((sum, opp) => sum + (parseFloat(opp.arr) || 0), 0);
     const activeOpps = visibleOpportunities.length;
-    const avgARR = activeOpps > 0 ? totalARR / activeOpps : 0;
+    const avgRevenue = activeOpps > 0 ? totalRevenue / activeOpps : 0;
     
     // Calculate forecasted revenue by quarter
     const getQuarter = (dateString) => {
@@ -635,6 +641,19 @@ dbFetch('/.netlify/functions/users?me=true')
         userModalSaving, setUserModalSaving,
         handleAddUser, handleEditUser, handleDeleteUser, handleSaveUser,
     } = useUserHandlers({ setSettings, showConfirm: (...a) => _showConfirmRef.current?.(...a), showModal, setLastCreatedRepName, editingUser, setEditingUser, setShowUserModal });
+
+    const {
+        quotes, setQuotes,
+        products, setProducts,
+        loadQuotes, loadProducts,
+        quoteModalError, setQuoteModalError,
+        quoteModalSaving, setQuoteModalSaving,
+        handleSaveQuote, handleDeleteQuote,
+        productModalError, setProductModalError,
+        productModalSaving, setProductModalSaving,
+        handleSaveProduct, handleDeleteProduct,
+        getQuotesForOpp, getNextQuoteNumber,
+    } = useQuotes();
 
     // handleUpdateFiscalYearStart managed by useSettings hook
 
@@ -1147,6 +1166,13 @@ dbFetch('/.netlify/functions/users?me=true')
         }
     }, [settings.leadsEnabled]);
 
+    // Redirect away from quotes tab if quotes is disabled
+    useEffect(() => {
+        if (settings.quotesEnabled === false && activeTab === 'quotes') {
+            setActiveTab('home');
+        }
+    }, [settings.quotesEnabled]);
+
     if (!clerkLoaded || !orgLoaded) {
         return (
             <div className="login-page">
@@ -1205,6 +1231,10 @@ dbFetch('/.netlify/functions/users?me=true')
         tasks, setTasks,
         activities, setActivities,
         leads, setLeads,
+        quotes, setQuotes,
+        products, setProducts,
+        totalRevenue,
+        avgRevenue,
         // Auth
         currentUser,
         userRole,
@@ -1286,6 +1316,15 @@ dbFetch('/.netlify/functions/users?me=true')
         allRepNames,
         allTeamNames,
         allTerritoryNames,
+        // Quotes & Price Book
+        loadQuotes, loadProducts,
+        handleSaveQuote, handleDeleteQuote,
+        handleSaveProduct, handleDeleteProduct,
+        quoteModalError, setQuoteModalError,
+        quoteModalSaving,
+        productModalError, setProductModalError,
+        productModalSaving,
+        getQuotesForOpp, getNextQuoteNumber,
         // SPIFF
         spiffClaims, setSpiffClaims,
         // Derived/filtered lists
@@ -1462,6 +1501,13 @@ dbFetch('/.netlify/functions/users?me=true')
                 >
                     LEADS
                 </button>
+                <button
+                    className={`nav-tab ${activeTab === 'quotes' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('quotes')}
+                    style={{ display: settings.quotesEnabled === false ? 'none' : '' }}
+                >
+                    QUOTES
+                </button>
                 <button 
                     className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
                     onClick={() => setActiveTab('reports')}
@@ -1530,6 +1576,12 @@ dbFetch('/.netlify/functions/users?me=true')
             {activeTab === 'leads' && settings.leadsEnabled !== false && (
                 <ErrorBoundary tabName="Leads">
                     <LeadsTab />
+                </ErrorBoundary>
+            )}
+
+            {activeTab === 'quotes' && settings.quotesEnabled !== false && (
+                <ErrorBoundary tabName="Quotes">
+                    <QuotesTab />
                 </ErrorBoundary>
             )}
 
@@ -1632,7 +1684,7 @@ dbFetch('/.netlify/functions/users?me=true')
                                         <div style={{ background: '#fff', border: '1px solid #ddd8cf', borderRadius: '10px', padding: '0.75rem 1rem' }}>
                                             <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1c1917', marginBottom: '0.25rem' }}>{matchedOpp.opportunityName || matchedOpp.account}</div>
                                             <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>{matchedOpp.account} · {matchedOpp.stage}</div>
-                                            <div style={{ fontWeight: '700', fontSize: '0.875rem', color: '#2563eb', marginTop: '0.25rem' }}>${(matchedOpp.arr || 0).toLocaleString()} ARR</div>
+                                            <div style={{ fontWeight: '700', fontSize: '0.875rem', color: '#2563eb', marginTop: '0.25rem' }}>${(matchedOpp.arr || 0).toLocaleString()} Revenue</div>
                                         </div>
                                     </div>
                                 ) : (
