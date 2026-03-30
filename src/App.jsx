@@ -450,10 +450,19 @@ dbFetch('/.netlify/functions/users?me=true')
 
 
 
-    // Auto-fetch calendar events when the home tab is active and calendar is not yet loaded.
-    // This removes the need for the user to manually click "Connect Google Calendar" every session.
+    // On mount: if landing back from OAuth callback, reset so events load when user goes to Home.
+    const calendarFetchAttempted = useRef(false);
     useEffect(() => {
-        if (activeTab === 'home' && !calendarConnected && !calendarLoading && !calendarError) {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('calconnect') === 'success') {
+            calendarFetchAttempted.current = false;
+        }
+    }, []);
+
+    // Auto-fetch calendar events when the home tab is active — once per session.
+    useEffect(() => {
+        if (activeTab === 'home' && !calendarFetchAttempted.current && !calendarLoading) {
+            calendarFetchAttempted.current = true;
             fetchCalendarEvents();
         }
     }, [activeTab]);
@@ -820,16 +829,22 @@ dbFetch('/.netlify/functions/users?me=true')
         setCalendarLoading(true);
         setCalendarError(null);
         try {
+            await waitForToken();
             const now = new Date();
             const weekStart = new Date(now);
             weekStart.setHours(0, 0, 0, 0);
             const weekEnd = new Date(weekStart);
             weekEnd.setDate(weekStart.getDate() + 7);
-            const res = await fetch('/.netlify/functions/calendar-events?timeMin=' + weekStart.toISOString() + '&timeMax=' + weekEnd.toISOString());
+            const res = await dbFetch('/.netlify/functions/calendar-events?timeMin=' + weekStart.toISOString() + '&timeMax=' + weekEnd.toISOString());
             if (!res.ok) throw new Error('Failed to load calendar');
             const data = await res.json();
-            setCalendarEvents(data.events || []);
-            setCalendarConnected(true);
+            if (data.connected === false) {
+                setCalendarConnected(false);
+                setCalendarEvents([]);
+            } else {
+                setCalendarEvents(data.events || []);
+                setCalendarConnected(true);
+            }
         } catch (err) {
             setCalendarError(err.message);
             setCalendarConnected(false);
@@ -843,7 +858,7 @@ dbFetch('/.netlify/functions/users?me=true')
         setLogFromCalLoading(true);
         setLogFromCalError(null);
         try {
-            const res = await fetch('/.netlify/functions/calendar-events?timeMin=' + logFromCalDateFrom + 'T00:00:00Z&timeMax=' + logFromCalDateTo + 'T23:59:59Z');
+            const res = await dbFetch('/.netlify/functions/calendar-events?timeMin=' + logFromCalDateFrom + 'T00:00:00Z&timeMax=' + logFromCalDateTo + 'T23:59:59Z');
             if (!res.ok) throw new Error('Failed to load calendar events');
             const data = await res.json();
             setLogFromCalEvents(data.events || []);

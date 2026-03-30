@@ -112,11 +112,11 @@ const CONTACT_LIMIT = 8;
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
                       <button onClick={() => { setActivityInitialContext({ companyName: acc.name }); setEditingActivity(null); setShowActivityModal(true); }}
-                          style={{ height:'32px', padding:'0 0.625rem', borderRadius:'12px', border:'1px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.1)', color:'#fff', fontSize:'0.6875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem', transition:'all 0.15s' }}
+                          style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'none', background:'#1c1917', color:'#f5f1eb', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
                           title="Quick log activity">⚡ Log</button>
                       {openOpps.length > 0 && (
                           <button onClick={() => { setMeetingPrepEvent({ summary: acc.name, start: { date: new Date().toISOString().split('T')[0] }, attendeeCount: 0 }); setMeetingPrepOppId(openOpps[0].id); setMeetingPrepOpen(true); }}
-                              style={{ height:'32px', padding:'0 0.625rem', borderRadius:'12px', border:'1px solid rgba(245,241,235,0.25)', background:'rgba(200,185,154,0.15)', color:'#c8b99a', fontSize:'0.6875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem', transition:'all 0.15s' }}
+                              style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'1px solid #ddd8cf', background:'#f0ece4', color:'#1c1917', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
                               title="Meeting prep">📋 Prep</button>
                       )}
                       <button className="btn" onClick={() => { setViewingAccount(null); handleEditAccount(acc); }}>Edit Account</button>
