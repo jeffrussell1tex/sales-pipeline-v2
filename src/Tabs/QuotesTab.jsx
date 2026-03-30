@@ -131,7 +131,7 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
     const [oppId, setOppId] = useState(editingQuote?.opportunityId || '');
     const [validUntil, setValidUntil] = useState(editingQuote?.validUntil || '');
     const [paymentTerms, setPaymentTerms] = useState(editingQuote?.paymentTerms || 'Net 30 · Annual');
-    const [dealDiscount, setDealDiscount] = useState(String(editingQuote?.dealDiscount || '0'));
+    // dealDiscount removed — avg line discount is now read-only computed from line items
     const [lineItems, setLineItems] = useState(editingQuote?.lineItems || []);
     const [notes, setNotes] = useState(editingQuote?.notes || '');
     const [saving, setSaving] = useState(false);
@@ -148,15 +148,15 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
             setOppId(editingQuote.opportunityId || '');
             setValidUntil(editingQuote.validUntil || '');
             setPaymentTerms(editingQuote.paymentTerms || 'Net 30 · Annual');
-            setDealDiscount(String(editingQuote.dealDiscount || '0'));
+            // dealDiscount no longer in state
             setLineItems(editingQuote.lineItems || []);
             setNotes(editingQuote.notes || '');
         }
     }, [editingQuote?.id]);
 
     const { lines, subtotal, totalValue, recurringValue, oneTimeValue, avgDisc } = useMemo(
-        () => calcLineTotals(lineItems, dealDiscount),
-        [lineItems, dealDiscount]
+        () => calcLineTotals(lineItems, 0),
+        [lineItems]
     );
 
     const needsApproval = avgDisc >= DISCOUNT_APPROVAL_THRESHOLD;
@@ -225,14 +225,14 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
                 opportunityId: oppId,
                 validUntil,
                 paymentTerms,
-                dealDiscount: parseFloat(dealDiscount) || 0,
+                dealDiscount: 0,
                 lineItems,
                 notes,
                 status,
                 createdBy: editingQuote?.createdBy || currentUser,
             };
             await onSave(payload);
-            if (statusOverride) onClose();
+            onClose();
         } catch (err) {
             setError(err.message || 'Failed to save.');
         } finally {
@@ -254,7 +254,7 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
                 opportunityId: editingQuote.opportunityId,
                 validUntil: editingQuote.validUntil,
                 paymentTerms: editingQuote.paymentTerms,
-                dealDiscount: editingQuote.dealDiscount,
+                dealDiscount: 0,
                 lineItems: [...(editingQuote.lineItems || [])],
                 notes: editingQuote.notes,
                 status: 'Draft',
@@ -392,7 +392,7 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
                             style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>
                             Export PDF
                         </button>
-                        {(userRole === 'Admin' || userRole === 'Manager' || needsApproval) && editingQuote?.status === 'Pending Approval' && (userRole === 'Admin' || userRole === 'Manager') ? (
+                        {userRole === 'Manager' && editingQuote?.status === 'Pending Approval' ? (
                             <button onClick={() => handleSaveVersion('Approved')}
                                 style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>
                                 ✓ Approve
@@ -543,10 +543,8 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
                                 <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1c1917' }}>{fmtFull(subtotal)}</span>
                             </div>
                             <div style={{ padding: '0.5rem 1rem', borderBottom: '1px solid #f0ece4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                                <span style={{ fontSize: '0.8125rem', color: '#64748b', flexShrink: 0 }}>Deal Discount %</span>
-                                <input type="number" min="0" max="100" value={dealDiscount}
-                                    onChange={e => setDealDiscount(e.target.value)}
-                                    style={{ ...inp, width: '80px', textAlign: 'right', padding: '0.25rem 0.4rem' }} />
+                                <span style={{ fontSize: '0.8125rem', color: '#64748b', flexShrink: 0 }}>Avg Line Discount</span>
+                                <span style={{ fontSize: '0.875rem', fontWeight: '700', color: avgDisc >= DISCOUNT_APPROVAL_THRESHOLD ? '#dc2626' : '#1c1917' }}>{pct(avgDisc)}</span>
                             </div>
                             <div style={{ padding: '0.75rem 1rem', background: '#f8f7f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>Total</span>
@@ -693,7 +691,7 @@ function buildPrintHTML(quote, opp, lines, subtotal, totalValue, recurringValue,
         '<table><thead><tr><th>Product</th><th>Type</th><th style="text-align:right">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Disc%</th><th style="text-align:right">Total</th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table>' +
         '<table class="totals"><tr><td>Subtotal</td><td>$' + Math.round(subtotal || 0).toLocaleString() + '</td></tr>' +
-        (Number(dealDiscount) > 0 ? '<tr><td>Deal Discount (' + dealDiscount + '%)</td><td>−$' + Math.round((subtotal || 0) * Number(dealDiscount) / 100).toLocaleString() + '</td></tr>' : '') +
+        '' +
         '<tr><td class="big">Total</td><td class="big">$' + Math.round(totalValue || 0).toLocaleString() + '</td></tr></table>' +
         '</body></html>';
 }
@@ -1079,7 +1077,7 @@ function ApprovalsView({ quotes, opportunities, currentUser, userRole, onApprove
                         {pending.map(q => {
                             const opp = (opportunities || []).find(o => o.id === q.opportunityId);
                             const { totalValue, avgDisc } = calcLineTotals(q.lineItems || [], q.dealDiscount || 0);
-                            const canAct = isAdmin || isManager;
+                            const canAct = isManager;
                             return (
                                 <div key={q.id} style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f0ece4', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                     <div style={{ flex: 1, minWidth: 0 }}>

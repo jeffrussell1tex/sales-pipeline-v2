@@ -134,7 +134,7 @@ const ctOpps = activeDeals; // alias for Prep button — active deals linked to 
                   ) : (
                       <div>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px 120px 110px 100px', padding: '0.5rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #f1f3f5', fontSize: '0.6875rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                              <span>Opportunity</span><span>Stage</span><span style={{ textAlign: 'right' }}>ARR</span><span style={{ textAlign: 'center' }}>Close Date</span><span style={{ textAlign: 'center' }}>Health</span>
+                              <span>Opportunity</span><span>Stage</span><span style={{ textAlign: 'right' }}>Revenue</span><span style={{ textAlign: 'center' }}>Close Date</span><span style={{ textAlign: 'center' }}>Health</span>
                           </div>
                           {activeDeals.sort((a, b) => new Date(a.forecastedCloseDate || '9999') - new Date(b.forecastedCloseDate || '9999')).slice(0, contactShowAllDeals ? activeDeals.length : DEAL_LIMIT).map((opp, idx) => {
                               const sc = getStageColor(opp.stage);

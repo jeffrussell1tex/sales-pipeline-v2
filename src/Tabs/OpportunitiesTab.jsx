@@ -431,7 +431,7 @@ export default function OpportunitiesTab() {
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='account') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('account'); setOppSortDir('asc'); } }}>Account {oppSortField==='account' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         <th>Opportunity</th>
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='stage') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('stage'); setOppSortDir('asc'); } }}>Stage {oppSortField==='stage' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        {canViewField('arr') && <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='arr') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('arr'); setOppSortDir('desc'); } }}>ARR {oppSortField==='arr' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>}
+                                        {canViewField('arr') && <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='arr') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('arr'); setOppSortDir('desc'); } }}>Revenue {oppSortField==='arr' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>}
                                         <th style={{ cursor:'pointer', userSelect:'none' }} onClick={() => { if (oppSortField==='closeDate') setOppSortDir(d => d==='asc'?'desc':'asc'); else { setOppSortField('closeDate'); setOppSortDir('asc'); } }}>Close Date {oppSortField==='closeDate' ? (oppSortDir==='asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         <th style={{ width:'130px' }}>Actions</th>
                                     </tr>
@@ -549,13 +549,13 @@ export default function OpportunitiesTab() {
                                                                 headers: { 'Content-Type': 'application/json' },
                                                                 body: JSON.stringify(updatedOpp)
                                                             }).catch(err => console.error('Failed to save ARR change:', err));
-                                                            addAudit('update','opportunity',opp.id,opp.opportunityName||opp.account||opp.id,`ARR: ${opp.arr} → ${val}`);
+                                                            addAudit('update','opportunity',opp.id,opp.opportunityName||opp.account||opp.id,`Revenue: ${opp.arr} → ${val}`);
                                                             setInlineEdit(null);
                                                         }}
                                                         onKeyDown={e => { if (e.key==='Enter') e.target.blur(); if (e.key==='Escape') setInlineEdit(null); }}
                                                         style={{ width:'80px', fontSize:'0.75rem', border:'1.5px solid #2563eb', borderRadius:'4px', padding:'0.1rem 0.25rem', textAlign:'right', outline:'none' }} />
                                                 ) : (
-                                                    <span title="Click to edit ARR" onClick={() => setInlineEdit({ oppId: opp.id, field:'arr', value: opp.arr||0 })}
+                                                    <span title="Click to edit Revenue" onClick={() => setInlineEdit({ oppId: opp.id, field:'arr', value: opp.arr||0 })}
                                                         style={{ cursor:'pointer' }} onMouseEnter={e => e.currentTarget.style.textDecoration='underline'} onMouseLeave={e => e.currentTarget.style.textDecoration='none'}>
                                                         ${(parseFloat(opp.arr)||0).toLocaleString()}
                                                     </span>
@@ -684,7 +684,7 @@ export default function OpportunitiesTab() {
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                             {[
                                                 { label: 'Stage', value: <span style={{ background: getStageColor(opp.stage).text + '22', color: getStageColor(opp.stage).text, padding: '0.35rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600' }}>{opp.stage}</span> },
-                                                canViewField('arr') && { label: 'ARR', value: '$' + (opp.arr || 0).toLocaleString() },
+                                                canViewField('arr') && { label: 'Revenue', value: '$' + (opp.arr || 0).toLocaleString() },
                                                 canViewField('implCost') && opp.implementationCost > 0 && { label: 'Impl. Cost', value: '$' + (opp.implementationCost || 0).toLocaleString() },
                                                 canViewField('probability') && { label: 'Probability', value: <span style={{ fontWeight: '600', color: isOverridden ? '#f59e0b' : '#475569' }}>{effectiveProb !== null ? effectiveProb + '%' : '—'}{isOverridden ? ' ✎' : ''}</span> },
                                                 canViewField('weightedValue') && { label: 'Weighted Value', value: '$' + weighted.toLocaleString() },
@@ -886,7 +886,7 @@ export default function OpportunitiesTab() {
                                         <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem' }}>
                                             {[
                                                 { label:'Stage', value:<span style={{ background:getStageColor(opp.stage).text+'22', color:getStageColor(opp.stage).text, padding:'0.15rem 0.5rem', borderRadius:'999px', fontSize:'0.75rem', fontWeight:'600' }}>{opp.stage}</span> },
-                                                canViewField('arr') && { label:'ARR', value:'$'+(opp.arr||0).toLocaleString() },
+                                                canViewField('arr') && { label:'Revenue', value:'$'+(opp.arr||0).toLocaleString() },
                                                 canViewField('probability') && { label:'Probability', value:<span style={{ fontWeight:'600', color:isOverridden?'#f59e0b':'#475569' }}>{effectiveProb !== null ? effectiveProb+'%' : '—'}{isOverridden?' ✎':''}</span> },
                                                 canViewField('weightedValue') && { label:'Weighted', value:'$'+weighted.toLocaleString() },
                                                 { label:'Sales Rep', value:opp.salesRep||'—' },
