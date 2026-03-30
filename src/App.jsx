@@ -822,6 +822,7 @@ dbFetch('/.netlify/functions/users?me=true')
         setCalendarLoading(true);
         setCalendarError(null);
         try {
+            await waitForToken();
             const now = new Date();
             const weekStart = new Date(now);
             weekStart.setHours(0, 0, 0, 0);
