@@ -314,3 +314,42 @@ export const orgCalendarConnections = pgTable('org_calendar_connections', {
     connectedBy:           varchar('connected_by', { length: 255 }),     // userId of the Admin who connected it
     updatedAt:             timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ── API KEYS ──────────────────────────────────────────────────────────────────
+// Public REST API keys — one per named integration, scoped to org.
+// The actual key value is never stored — only its SHA-256 hash.
+// On generation, the plaintext key is returned once and never again.
+// key format: "spt_live_<32 random bytes hex>"
+export const apiKeys = pgTable('api_keys', {
+    id:          text('id').primaryKey(),                          // e.g. "apikey_<timestamp>_<random>"
+    orgId:       text('org_id').notNull(),
+    name:        varchar('name', { length: 255 }).notNull(),       // human label, e.g. "Tableau Integration"
+    keyHash:     text('key_hash').notNull(),                       // SHA-256 of the plaintext key
+    keyPrefix:   varchar('key_prefix', { length: 20 }).notNull(), // first 12 chars for display, e.g. "spt_live_a1b2"
+    scopes:      jsonb('scopes').notNull().default('["read"]'),    // ["read"] — write scope reserved for future
+    lastUsedAt:  timestamp('last_used_at'),                        // updated on each successful API call
+    createdBy:   varchar('created_by', { length: 255 }),           // Clerk userId of the admin who created it
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
+    revokedAt:   timestamp('revoked_at'),                          // null = active; set to revoke
+    updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── WEBHOOK SUBSCRIPTIONS ─────────────────────────────────────────────────────
+// Customers subscribe to CRM events and receive POST requests to their endpoint.
+// The secret is used to sign payloads (HMAC-SHA256) so the receiver can verify authenticity.
+// Supported events: opportunity.created | opportunity.stage_changed | opportunity.won |
+//   opportunity.lost | task.overdue | lead.created | lead.converted | spiff.claimed
+export const webhookSubscriptions = pgTable('webhook_subscriptions', {
+    id:          text('id').primaryKey(),                          // e.g. "wh_<timestamp>_<random>"
+    orgId:       text('org_id').notNull(),
+    name:        varchar('name', { length: 255 }).notNull(),       // human label, e.g. "HubSpot Sync"
+    targetUrl:   text('target_url').notNull(),                     // HTTPS endpoint to POST to
+    eventTypes:  jsonb('event_types').notNull().default('[]'),     // array of subscribed event strings
+    secret:      text('secret').notNull(),                         // random secret for HMAC signing — stored plaintext (receiver needs it)
+    active:      boolean('active').notNull().default(true),
+    createdBy:   varchar('created_by', { length: 255 }),           // Clerk userId
+    lastFiredAt: timestamp('last_fired_at'),                       // updated on each dispatch attempt
+    lastStatus:  integer('last_status'),                           // HTTP status from last delivery attempt
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
+    updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});

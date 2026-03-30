@@ -207,6 +207,26 @@ export default function SettingsTab() {
     const [calDisconnecting, setCalDisconnecting] = useState(null); // { id, scope }
     const [calConnectResult, setCalConnectResult] = useState(null); // 'success' | 'error' | null
 
+    // API Keys state
+    const [apiKeysList, setApiKeysList] = useState([]);
+    const [apiKeysLoading, setApiKeysLoading] = useState(false);
+    const [apiKeyNewName, setApiKeyNewName] = useState('');
+    const [apiKeyGenerating, setApiKeyGenerating] = useState(false);
+    const [apiKeyRevealed, setApiKeyRevealed] = useState(null); // { id, key } — shown once after generation
+    const [apiKeyError, setApiKeyError] = useState(null);
+    const [apiKeyRevoking, setApiKeyRevoking] = useState(null); // id being revoked
+
+    // Webhooks state
+    const [webhooksList, setWebhooksList] = useState([]);
+    const [webhooksLoading, setWebhooksLoading] = useState(false);
+    const [webhookForm, setWebhookForm] = useState({ name: '', targetUrl: '', eventTypes: [] });
+    const [webhookSaving, setWebhookSaving] = useState(false);
+    const [webhookError, setWebhookError] = useState(null);
+    const [webhookRevealed, setWebhookRevealed] = useState(null); // { id, secret } — shown once after creation
+    const [webhookDeleting, setWebhookDeleting] = useState(null); // id being deleted
+    const [webhookToggling, setWebhookToggling] = useState(null); // id being toggled
+    const [showWebhookForm, setShowWebhookForm] = useState(false);
+
     // Fetch audit log when view changes to audit-log
     useEffect(() => {
         if (settingsView !== 'audit-log' || settingsTab !== 'security') return;
@@ -242,6 +262,30 @@ export default function SettingsTab() {
             .catch(err => console.error('Failed to load calendar connections:', err))
             .finally(() => setCalConnectionsLoading(false));
     }, [settingsTab]);
+
+    // Load API keys when api-keys view is active
+    useEffect(() => {
+        if (settingsView !== 'api-keys') return;
+        setApiKeysLoading(true);
+        setApiKeyError(null);
+        dbFetch('/.netlify/functions/api-keys')
+            .then(r => r.json())
+            .then(data => setApiKeysList(data.keys || []))
+            .catch(() => setApiKeyError('Failed to load API keys.'))
+            .finally(() => setApiKeysLoading(false));
+    }, [settingsView]);
+
+    // Load webhooks when webhooks view is active
+    useEffect(() => {
+        if (settingsView !== 'webhooks') return;
+        setWebhooksLoading(true);
+        setWebhookError(null);
+        dbFetch('/.netlify/functions/webhooks')
+            .then(r => r.json())
+            .then(data => setWebhooksList(data.webhooks || []))
+            .catch(() => setWebhookError('Failed to load webhooks.'))
+            .finally(() => setWebhooksLoading(false));
+    }, [settingsView]);
 
     // Detect OAuth callback result from URL params on mount
     useEffect(() => {
@@ -368,6 +412,7 @@ export default function SettingsTab() {
                         <button style={subTabStyle('configuration')} onClick={() => switchTab('configuration')}>Configuration</button>
                         <button style={subTabStyle('security')}      onClick={() => switchTab('security')}>Security &amp; Data</button>
                         <button style={subTabStyle('calendar')}      onClick={() => switchTab('calendar')}>Calendar</button>
+                        <button style={subTabStyle('integrations')}  onClick={() => switchTab('integrations')}>Integrations</button>
                     </div>
 
                 <>
@@ -410,9 +455,14 @@ export default function SettingsTab() {
                                         { view: 'data-management', icon: '💾', title: 'Data Management',    desc: 'Backup & restore' },
                                         { view: 'audit-log',      icon: '📋', title: 'Audit Log',           desc: 'Change history across all records' },
                                         ] : []),
+                                        ...(settingsTab === 'integrations' ? [
+                                        { group: 'Integrations' },
+                                        { view: 'api-keys',       icon: '🔑', title: 'API Keys',             desc: 'Generate & manage REST API credentials' },
+                                        { view: 'webhooks',       icon: '🔗', title: 'Webhooks',             desc: 'Subscribe to CRM events & push to endpoints' },
+                                        ] : []),
                                     ].map((item, idx, arr) => {
                                         if (item.group) return (() => {
-                                                const gc = { 'Team': { bg:'#eff6ff', border:'#bfdbfe', color:'#1d4ed8', dot:'#2563eb' }, 'Configuration': { bg:'#f5f3ff', border:'#ddd6fe', color:'#6d28d9', dot:'#7c3aed' }, 'Security & Data': { bg:'#fff7ed', border:'#fed7aa', color:'#c2410c', dot:'#ea580c' } }[item.group] || { bg:'#f8fafc', border:'#e2e8f0', color:'#64748b', dot:'#94a3b8' };
+                                                const gc = { 'Team': { bg:'#eff6ff', border:'#bfdbfe', color:'#1d4ed8', dot:'#2563eb' }, 'Configuration': { bg:'#f5f3ff', border:'#ddd6fe', color:'#6d28d9', dot:'#7c3aed' }, 'Security & Data': { bg:'#fff7ed', border:'#fed7aa', color:'#c2410c', dot:'#ea580c' }, 'Integrations': { bg:'#f0fdf4', border:'#bbf7d0', color:'#15803d', dot:'#16a34a' } }[item.group] || { bg:'#f8fafc', border:'#e2e8f0', color:'#64748b', dot:'#94a3b8' };
                                                 return (
                                                     <div key={item.group} style={{ display:'flex', alignItems:'center', gap:'6px', padding: '6px 16px 5px', fontSize: '0.625rem', fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', color: gc.color, background: gc.bg, borderBottom: '0.5px solid ' + gc.border, borderTop: idx > 0 ? '0.5px solid ' + gc.border : 'none' }}>
                                                         <div style={{ width:'6px', height:'6px', borderRadius:'50%', background: gc.dot, flexShrink:0 }} />
@@ -428,7 +478,7 @@ export default function SettingsTab() {
                                                 onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                             >
-                                                <div style={{ width: '24px', height: '24px', borderRadius: '5px', background: ['users','team-builder','territories'].includes(item.view) ? '#dbeafe' : ['vertical-markets','verticals','funnel-stages','pipelines','kpi-settings','fiscal-year','logo','pain-points'].includes(item.view) ? '#ede9fe' : '#ffedd5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>{item.icon}</div>
+                                                <div style={{ width: '24px', height: '24px', borderRadius: '5px', background: ['users','team-builder','territories'].includes(item.view) ? '#dbeafe' : ['vertical-markets','verticals','funnel-stages','pipelines','kpi-settings','fiscal-year','logo','pain-points'].includes(item.view) ? '#ede9fe' : ['api-keys','webhooks'].includes(item.view) ? '#dcfce7' : '#ffedd5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>{item.icon}</div>
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                     <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{item.title}</div>
                                                     {item.desc && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{item.desc}</div>}
@@ -2195,6 +2245,478 @@ export default function SettingsTab() {
                                             Events from multiple sources are merged and de-duplicated.
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* ── API Keys view ─────────────────────────────────────────────────── */}
+                    {settingsView === 'api-keys' && (() => {
+                        const handleGenerateKey = async () => {
+                            if (!apiKeyNewName.trim()) return;
+                            setApiKeyGenerating(true);
+                            setApiKeyError(null);
+                            setApiKeyRevealed(null);
+                            try {
+                                const res = await dbFetch('/.netlify/functions/api-keys', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ name: apiKeyNewName.trim() }),
+                                });
+                                const data = await res.json();
+                                if (!res.ok) { setApiKeyError(data.error || 'Failed to generate key.'); return; }
+                                setApiKeysList(prev => [data.key, ...prev]);
+                                setApiKeyRevealed({ id: data.key.id, key: data.plaintextKey });
+                                setApiKeyNewName('');
+                            } catch { setApiKeyError('Network error. Please try again.'); }
+                            finally { setApiKeyGenerating(false); }
+                        };
+
+                        const handleRevokeKey = async (id) => {
+                            setApiKeyRevoking(id);
+                            try {
+                                const res = await dbFetch(`/.netlify/functions/api-keys?id=${id}`, { method: 'DELETE' });
+                                if (!res.ok) { const d = await res.json(); setApiKeyError(d.error || 'Failed to revoke key.'); return; }
+                                setApiKeysList(prev => prev.map(k => k.id === id ? { ...k, revokedAt: new Date().toISOString() } : k));
+                                if (apiKeyRevealed?.id === id) setApiKeyRevealed(null);
+                            } catch { setApiKeyError('Network error. Please try again.'); }
+                            finally { setApiKeyRevoking(null); }
+                        };
+
+                        const activeKeys  = apiKeysList.filter(k => !k.revokedAt);
+                        const revokedKeys = apiKeysList.filter(k => k.revokedAt);
+
+                        return (
+                            <div className="table-container">
+                                <div className="table-header">
+                                    <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
+                                    <h2>API KEYS</h2>
+                                </div>
+                                <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+                                    {/* Info banner */}
+                                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '1rem 1.25rem' }}>
+                                        <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#1d4ed8', marginBottom: '4px' }}>REST API Access</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#1d4ed8', lineHeight: 1.6 }}>
+                                            Use API keys to authenticate requests to the Accelerep public REST API. Keys are read-only and scoped to your organisation.
+                                            Base URL: <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: '4px', fontFamily: 'monospace' }}>/.netlify/functions/public-api?resource=opportunities</code>
+                                        </div>
+                                    </div>
+
+                                    {/* Generate new key */}
+                                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                                        <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9' }}>
+                                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Generate New Key</div>
+                                        </div>
+                                        <div style={{ padding: '1rem 1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                                            <div style={{ flex: 1, minWidth: '200px' }}>
+                                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' }}>Key Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={apiKeyNewName}
+                                                    onChange={e => setApiKeyNewName(e.target.value)}
+                                                    onKeyDown={e => e.key === 'Enter' && handleGenerateKey()}
+                                                    placeholder="e.g. Tableau Integration"
+                                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' }}
+                                                />
+                                            </div>
+                                            <button
+                                                className="btn"
+                                                onClick={handleGenerateKey}
+                                                disabled={apiKeyGenerating || !apiKeyNewName.trim()}
+                                                style={{ opacity: (!apiKeyNewName.trim() || apiKeyGenerating) ? 0.5 : 1 }}
+                                            >
+                                                {apiKeyGenerating ? 'Generating…' : '+ Generate Key'}
+                                            </button>
+                                        </div>
+                                        {apiKeyError && (
+                                            <div style={{ margin: '0 1.25rem 1rem', padding: '0.5rem 0.75rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '0.75rem', color: '#dc2626' }}>{apiKeyError}</div>
+                                        )}
+                                    </div>
+
+                                    {/* Revealed key — shown once */}
+                                    {apiKeyRevealed && (
+                                        <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '10px', padding: '1rem 1.25rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#15803d' }}>✓ Key generated — copy it now</div>
+                                                <button onClick={() => setApiKeyRevealed(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem', padding: '0 4px' }}>✕</button>
+                                            </div>
+                                            <div style={{ fontSize: '0.7rem', color: '#15803d', marginBottom: '10px' }}>
+                                                This key will not be shown again. Store it securely.
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                <code style={{ flex: 1, padding: '0.5rem 0.75rem', background: '#fff', border: '1px solid #86efac', borderRadius: '6px', fontSize: '0.75rem', fontFamily: 'monospace', wordBreak: 'break-all', color: '#1c1917' }}>
+                                                    {apiKeyRevealed.key}
+                                                </code>
+                                                <button
+                                                    className="btn"
+                                                    onClick={() => navigator.clipboard.writeText(apiKeyRevealed.key)}
+                                                    style={{ whiteSpace: 'nowrap', fontSize: '0.75rem' }}
+                                                >
+                                                    Copy
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Active keys list */}
+                                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                                        <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Active Keys</div>
+                                            <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#64748b' }}>{activeKeys.length} key{activeKeys.length !== 1 ? 's' : ''}</span>
+                                        </div>
+                                        {apiKeysLoading ? (
+                                            <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>
+                                        ) : activeKeys.length === 0 ? (
+                                            <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>No active API keys. Generate one above.</div>
+                                        ) : activeKeys.map((k, idx) => (
+                                            <div key={k.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.875rem 1.25rem', borderBottom: idx < activeKeys.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{k.name}</div>
+                                                    <div style={{ display: 'flex', gap: '1rem', marginTop: '3px', flexWrap: 'wrap' }}>
+                                                        <code style={{ fontSize: '0.6875rem', color: '#64748b', fontFamily: 'monospace' }}>{k.keyPrefix}••••••••</code>
+                                                        <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>
+                                                            Created {new Date(k.createdAt).toLocaleDateString()}
+                                                        </span>
+                                                        {k.lastUsedAt && (
+                                                            <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>
+                                                                Last used {new Date(k.lastUsedAt).toLocaleDateString()}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                                                    <span style={{ fontSize: '0.625rem', fontWeight: '700', background: '#d1fae5', color: '#065f46', padding: '2px 8px', borderRadius: '999px', textTransform: 'uppercase' }}>read</span>
+                                                    <button
+                                                        onClick={() => handleRevokeKey(k.id)}
+                                                        disabled={apiKeyRevoking === k.id}
+                                                        style={{ padding: '0.3rem 0.75rem', borderRadius: '6px', border: '1px solid #fecaca', background: 'transparent', color: '#dc2626', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', opacity: apiKeyRevoking === k.id ? 0.5 : 1 }}
+                                                    >
+                                                        {apiKeyRevoking === k.id ? '…' : 'Revoke'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Revoked keys — collapsed summary */}
+                                    {revokedKeys.length > 0 && (
+                                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                                            <div style={{ padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Revoked Keys</div>
+                                                <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{revokedKeys.length} revoked</span>
+                                            </div>
+                                            {revokedKeys.map((k, idx) => (
+                                                <div key={k.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.625rem 1.25rem', borderTop: '1px solid #f1f5f9', opacity: 0.5 }}>
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#94a3b8', textDecoration: 'line-through' }}>{k.name}</div>
+                                                        <code style={{ fontSize: '0.6875rem', color: '#94a3b8', fontFamily: 'monospace' }}>{k.keyPrefix}••••••••</code>
+                                                    </div>
+                                                    <span style={{ fontSize: '0.625rem', fontWeight: '700', background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: '999px', textTransform: 'uppercase', flexShrink: 0 }}>revoked</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* API reference quick-start */}
+                                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                                        <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9' }}>
+                                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Quick Reference</div>
+                                        </div>
+                                        <div style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                            {[
+                                                { label: 'Opportunities', path: 'opportunities' },
+                                                { label: 'Accounts',      path: 'accounts' },
+                                                { label: 'Contacts',      path: 'contacts' },
+                                                { label: 'Activities',    path: 'activities' },
+                                                { label: 'Leads',         path: 'leads' },
+                                                { label: 'Tasks',         path: 'tasks' },
+                                            ].map(ep => (
+                                                <div key={ep.path} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                                    <span style={{ fontSize: '0.6875rem', fontWeight: '700', background: '#dbeafe', color: '#1d4ed8', padding: '2px 8px', borderRadius: '4px', fontFamily: 'monospace', flexShrink: 0 }}>GET</span>
+                                                    <code style={{ fontSize: '0.7rem', color: '#475569', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                                                        /.netlify/functions/public-api?resource={ep.path}&page=1&limit=50
+                                                    </code>
+                                                </div>
+                                            ))}
+                                            <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '8px', fontSize: '0.7rem', color: '#64748b', fontFamily: 'monospace', lineHeight: 1.7 }}>
+                                                <div style={{ color: '#94a3b8', marginBottom: '4px' }}># Example cURL</div>
+                                                <div>{'curl -H "Authorization: Bearer spt_live_<your-key>" \\'}</div>
+                                                <div>{'  "https://your-site.netlify.app/.netlify/functions/public-api?resource=opportunities"'}</div>
+                                            </div>
+                                            <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                                                Rate limit: 300 requests / 15 min per key. Responses include <code style={{ fontFamily: 'monospace' }}>X-RateLimit-Remaining</code> header.
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* ── Webhooks view ──────────────────────────────────────────────────── */}
+                    {settingsView === 'webhooks' && (() => {
+                        const SUPPORTED_EVENTS = [
+                            { value: 'opportunity.created',      label: 'Opportunity Created' },
+                            { value: 'opportunity.stage_changed',label: 'Opportunity Stage Changed' },
+                            { value: 'opportunity.won',          label: 'Opportunity Won' },
+                            { value: 'opportunity.lost',         label: 'Opportunity Lost' },
+                            { value: 'lead.created',             label: 'Lead Created' },
+                            { value: 'lead.converted',           label: 'Lead Converted' },
+                            { value: 'task.overdue',             label: 'Task Overdue' },
+                            { value: 'task.completed',           label: 'Task Completed' },
+                            { value: 'spiff.claimed',            label: 'SPIFF Claimed' },
+                        ];
+
+                        const toggleEvent = (val) => {
+                            setWebhookForm(prev => ({
+                                ...prev,
+                                eventTypes: prev.eventTypes.includes(val)
+                                    ? prev.eventTypes.filter(e => e !== val)
+                                    : [...prev.eventTypes, val],
+                            }));
+                        };
+
+                        const handleCreateWebhook = async () => {
+                            if (!webhookForm.name.trim() || !webhookForm.targetUrl.trim() || webhookForm.eventTypes.length === 0) {
+                                setWebhookError('Name, target URL, and at least one event are required.');
+                                return;
+                            }
+                            if (!webhookForm.targetUrl.startsWith('https://')) {
+                                setWebhookError('Target URL must use HTTPS.');
+                                return;
+                            }
+                            setWebhookSaving(true);
+                            setWebhookError(null);
+                            setWebhookRevealed(null);
+                            try {
+                                const res = await dbFetch('/.netlify/functions/webhooks', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(webhookForm),
+                                });
+                                const data = await res.json();
+                                if (!res.ok) { setWebhookError(data.error || 'Failed to create webhook.'); return; }
+                                setWebhooksList(prev => [data.webhook, ...prev]);
+                                setWebhookRevealed({ id: data.webhook.id, secret: data.secret });
+                                setWebhookForm({ name: '', targetUrl: '', eventTypes: [] });
+                                setShowWebhookForm(false);
+                            } catch { setWebhookError('Network error. Please try again.'); }
+                            finally { setWebhookSaving(false); }
+                        };
+
+                        const handleToggleWebhook = async (wh) => {
+                            setWebhookToggling(wh.id);
+                            try {
+                                const res = await dbFetch('/.netlify/functions/webhooks', {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ id: wh.id, active: !wh.active }),
+                                });
+                                if (!res.ok) return;
+                                setWebhooksList(prev => prev.map(w => w.id === wh.id ? { ...w, active: !w.active } : w));
+                            } catch { /* silent */ }
+                            finally { setWebhookToggling(null); }
+                        };
+
+                        const handleDeleteWebhook = async (id) => {
+                            setWebhookDeleting(id);
+                            try {
+                                const res = await dbFetch(`/.netlify/functions/webhooks?id=${id}`, { method: 'DELETE' });
+                                if (!res.ok) return;
+                                setWebhooksList(prev => prev.filter(w => w.id !== id));
+                                if (webhookRevealed?.id === id) setWebhookRevealed(null);
+                            } catch { /* silent */ }
+                            finally { setWebhookDeleting(null); }
+                        };
+
+                        return (
+                            <div className="table-container">
+                                <div className="table-header">
+                                    <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
+                                    <h2>WEBHOOKS</h2>
+                                    <button className="btn" onClick={() => { setShowWebhookForm(v => !v); setWebhookError(null); }} style={{ marginLeft: 'auto' }}>
+                                        {showWebhookForm ? 'Cancel' : '+ New Webhook'}
+                                    </button>
+                                </div>
+                                <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+                                    {/* Info banner */}
+                                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '1rem 1.25rem' }}>
+                                        <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#1d4ed8', marginBottom: '4px' }}>Event-Driven Webhooks</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#1d4ed8', lineHeight: 1.6 }}>
+                                            Subscribe to CRM events and receive real-time HTTP POST payloads to your endpoint. Each payload is signed with HMAC-SHA256 using your webhook secret so your receiver can verify authenticity.
+                                        </div>
+                                    </div>
+
+                                    {/* New webhook form */}
+                                    {showWebhookForm && (
+                                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                                            <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9' }}>
+                                                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>New Webhook Subscription</div>
+                                            </div>
+                                            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
+                                                    <div>
+                                                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' }}>Name</label>
+                                                        <input
+                                                            type="text"
+                                                            value={webhookForm.name}
+                                                            onChange={e => setWebhookForm(prev => ({ ...prev, name: e.target.value }))}
+                                                            placeholder="e.g. HubSpot Sync"
+                                                            style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' }}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' }}>Target URL (HTTPS)</label>
+                                                        <input
+                                                            type="url"
+                                                            value={webhookForm.targetUrl}
+                                                            onChange={e => setWebhookForm(prev => ({ ...prev, targetUrl: e.target.value }))}
+                                                            placeholder="https://your-server.com/webhook"
+                                                            style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.5rem' }}>Events to Subscribe</label>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '0.5rem' }}>
+                                                        {SUPPORTED_EVENTS.map(ev => {
+                                                            const checked = webhookForm.eventTypes.includes(ev.value);
+                                                            return (
+                                                                <label key={ev.value} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 0.75rem', border: `1px solid ${checked ? '#93c5fd' : '#e5e2db'}`, borderRadius: '8px', background: checked ? '#eff6ff' : '#f0ece4', cursor: 'pointer', fontSize: '0.75rem', fontWeight: checked ? '600' : '400', color: checked ? '#1d4ed8' : '#44403c', transition: 'all 0.1s' }}>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={checked}
+                                                                        onChange={() => toggleEvent(ev.value)}
+                                                                        style={{ accentColor: '#2563eb', width: '14px', height: '14px', flexShrink: 0 }}
+                                                                    />
+                                                                    {ev.label}
+                                                                </label>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                                {webhookError && (
+                                                    <div style={{ padding: '0.5rem 0.75rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '0.75rem', color: '#dc2626' }}>{webhookError}</div>
+                                                )}
+                                                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                                    <button className="btn" onClick={handleCreateWebhook} disabled={webhookSaving} style={{ opacity: webhookSaving ? 0.5 : 1 }}>
+                                                        {webhookSaving ? 'Creating…' : 'Create Webhook'}
+                                                    </button>
+                                                    <button className="btn btn-secondary" onClick={() => { setShowWebhookForm(false); setWebhookError(null); setWebhookForm({ name: '', targetUrl: '', eventTypes: [] }); }}>
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Revealed secret — shown once */}
+                                    {webhookRevealed && (
+                                        <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '10px', padding: '1rem 1.25rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#15803d' }}>✓ Webhook created — copy your signing secret</div>
+                                                <button onClick={() => setWebhookRevealed(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem', padding: '0 4px' }}>✕</button>
+                                            </div>
+                                            <div style={{ fontSize: '0.7rem', color: '#15803d', marginBottom: '10px' }}>
+                                                This secret will not be shown again. Use it to verify the <code style={{ fontFamily: 'monospace' }}>X-SPT-Signature</code> header on incoming payloads.
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                <code style={{ flex: 1, padding: '0.5rem 0.75rem', background: '#fff', border: '1px solid #86efac', borderRadius: '6px', fontSize: '0.75rem', fontFamily: 'monospace', wordBreak: 'break-all', color: '#1c1917' }}>
+                                                    {webhookRevealed.secret}
+                                                </code>
+                                                <button className="btn" onClick={() => navigator.clipboard.writeText(webhookRevealed.secret)} style={{ whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                                                    Copy
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Webhooks list */}
+                                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                                        <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Subscriptions</div>
+                                            <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#64748b' }}>{webhooksList.length} webhook{webhooksList.length !== 1 ? 's' : ''}</span>
+                                        </div>
+                                        {webhooksLoading ? (
+                                            <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>
+                                        ) : webhooksList.length === 0 ? (
+                                            <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>No webhooks yet. Click "+ New Webhook" to get started.</div>
+                                        ) : webhooksList.map((wh, idx) => (
+                                            <div key={wh.id} style={{ padding: '1rem 1.25rem', borderBottom: idx < webhooksList.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{wh.name}</div>
+                                                            <span style={{ fontSize: '0.625rem', fontWeight: '700', padding: '2px 8px', borderRadius: '999px', textTransform: 'uppercase', background: wh.active ? '#d1fae5' : '#f1f5f9', color: wh.active ? '#065f46' : '#94a3b8' }}>
+                                                                {wh.active ? 'active' : 'paused'}
+                                                            </span>
+                                                            {wh.lastStatus && (
+                                                                <span style={{ fontSize: '0.625rem', fontWeight: '700', padding: '2px 8px', borderRadius: '999px', background: wh.lastStatus >= 200 && wh.lastStatus < 300 ? '#d1fae5' : '#fee2e2', color: wh.lastStatus >= 200 && wh.lastStatus < 300 ? '#065f46' : '#991b1b' }}>
+                                                                    {wh.lastStatus}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div style={{ fontSize: '0.6875rem', color: '#64748b', fontFamily: 'monospace', marginBottom: '6px', wordBreak: 'break-all' }}>{wh.targetUrl}</div>
+                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                                            {(wh.eventTypes || []).map(ev => (
+                                                                <span key={ev} style={{ fontSize: '0.5625rem', fontWeight: '700', background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                                                    {ev}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                        {wh.lastFiredAt && (
+                                                            <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '4px' }}>
+                                                                Last fired {new Date(wh.lastFiredAt).toLocaleString()}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end', flexShrink: 0 }}>
+                                                        <button
+                                                            onClick={() => handleToggleWebhook(wh)}
+                                                            disabled={webhookToggling === wh.id}
+                                                            style={{ padding: '0.3rem 0.75rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: 'transparent', color: '#64748b', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', opacity: webhookToggling === wh.id ? 0.5 : 1 }}
+                                                        >
+                                                            {webhookToggling === wh.id ? '…' : wh.active ? 'Pause' : 'Resume'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteWebhook(wh.id)}
+                                                            disabled={webhookDeleting === wh.id}
+                                                            style={{ padding: '0.3rem 0.75rem', borderRadius: '6px', border: '1px solid #fecaca', background: 'transparent', color: '#dc2626', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', opacity: webhookDeleting === wh.id ? 0.5 : 1 }}
+                                                        >
+                                                            {webhookDeleting === wh.id ? '…' : 'Delete'}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Signature verification guide */}
+                                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                                        <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9' }}>
+                                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Verifying Payloads</div>
+                                        </div>
+                                        <div style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: 1.6 }}>
+                                                Every webhook request includes an <code style={{ fontFamily: 'monospace', background: '#f1f5f9', padding: '1px 5px', borderRadius: '3px' }}>X-SPT-Signature</code> header.
+                                                Verify it with HMAC-SHA256 using your webhook secret.
+                                            </div>
+                                            <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '0.875rem 1rem', fontSize: '0.7rem', fontFamily: 'monospace', color: '#475569', lineHeight: 1.8 }}>
+                                                <div style={{ color: '#94a3b8' }}># Node.js verification example</div>
+                                                <div>{'const crypto = require("crypto");'}</div>
+                                                <div>{'const sig = req.headers["x-spt-signature"];'}</div>
+                                                <div>{'const expected = "sha256=" + crypto'}</div>
+                                                <div>{'  .createHmac("sha256", YOUR_SECRET)'}</div>
+                                                <div>{'  .update(JSON.stringify(req.body))'}</div>
+                                                <div>{'  .digest("hex");'}</div>
+                                                <div>{'if (sig !== expected) return res.status(401).send("Invalid signature");'}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                 </div>
                             </div>
                         );
