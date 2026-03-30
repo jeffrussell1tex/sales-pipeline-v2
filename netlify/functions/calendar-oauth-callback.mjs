@@ -14,10 +14,13 @@
 //   Outlook: MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET
 //   Yahoo:   YAHOO_CLIENT_ID, YAHOO_CLIENT_SECRET
 
-import { db } from '../../db/index.js';
-import { userCalendarConnections, orgCalendarConnections } from '../../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { neon } from '@netlify/neon';
 import { encrypt } from './crypto.mjs';
+
+// Use raw SQL to avoid Drizzle ORM cold-start issues in redirect callbacks
+function getDb() {
+    return neon(process.env.NETLIFY_DATABASE_URL || process.env.DATABASE_URL);
+}
 
 const APP_URL = process.env.URL || 'https://salespipelinetracker.com';
 const CALLBACK_URL = `${APP_URL}/.netlify/functions/calendar-oauth-callback`;
@@ -136,71 +139,63 @@ export const handler = async (event) => {
 
         const now = new Date();
 
+        const sql = getDb();
+
         if (scope === 'user') {
-            // Upsert — if the user has already connected this provider, replace the token
-            const existing = await db
-                .select({ id: userCalendarConnections.id })
-                .from(userCalendarConnections)
-                .where(
-                    and(
-                        eq(userCalendarConnections.userId, userId),
-                        eq(userCalendarConnections.orgId, orgId),
-                        eq(userCalendarConnections.provider, provider)
-                    )
-                );
+            // Upsert using raw SQL — check if connection already exists then insert or update
+            const existing = await sql`
+                SELECT id FROM user_calendar_connections
+                WHERE user_id = ${userId} AND org_id = ${orgId} AND provider = ${provider}
+                LIMIT 1
+            `;
 
             if (existing.length > 0) {
-                await db
-                    .update(userCalendarConnections)
-                    .set({ encryptedRefreshToken, calendarEmail, updatedAt: now })
-                    .where(eq(userCalendarConnections.id, existing[0].id));
+                await sql`
+                    UPDATE user_calendar_connections
+                    SET encrypted_refresh_token = ${encryptedRefreshToken},
+                        calendar_email = ${calendarEmail},
+                        updated_at = ${now}
+                    WHERE id = ${existing[0].id}
+                `;
             } else {
                 const newId = 'ucal_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                await db.insert(userCalendarConnections).values({
-                    id: newId,
-                    userId,
-                    orgId,
-                    provider,
-                    encryptedRefreshToken,
-                    calendarEmail,
-                    connectedAt: now,
-                    updatedAt:   now,
-                });
+                await sql`
+                    INSERT INTO user_calendar_connections
+                        (id, user_id, org_id, provider, encrypted_refresh_token, calendar_email, connected_at, updated_at)
+                    VALUES
+                        (${newId}, ${userId}, ${orgId}, ${provider}, ${encryptedRefreshToken}, ${calendarEmail}, ${now}, ${now})
+                `;
             }
         } else {
             // Org connection — upsert per provider per org
-            const existing = await db
-                .select({ id: orgCalendarConnections.id })
-                .from(orgCalendarConnections)
-                .where(
-                    and(
-                        eq(orgCalendarConnections.orgId, orgId),
-                        eq(orgCalendarConnections.provider, provider)
-                    )
-                );
+            const existing = await sql`
+                SELECT id FROM org_calendar_connections
+                WHERE org_id = ${orgId} AND provider = ${provider}
+                LIMIT 1
+            `;
 
             const calendarName = provider === 'google'  ? 'Google Workspace Calendar'
                                : provider === 'outlook' ? 'Microsoft 365 Calendar'
                                : 'Company Calendar';
 
             if (existing.length > 0) {
-                await db
-                    .update(orgCalendarConnections)
-                    .set({ encryptedRefreshToken, calendarEmail, calendarName, connectedBy: userId, updatedAt: now })
-                    .where(eq(orgCalendarConnections.id, existing[0].id));
+                await sql`
+                    UPDATE org_calendar_connections
+                    SET encrypted_refresh_token = ${encryptedRefreshToken},
+                        calendar_email = ${calendarEmail},
+                        calendar_name = ${calendarName},
+                        connected_by = ${userId},
+                        updated_at = ${now}
+                    WHERE id = ${existing[0].id}
+                `;
             } else {
                 const newId = 'ocal_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                await db.insert(orgCalendarConnections).values({
-                    id: newId,
-                    orgId,
-                    provider,
-                    encryptedRefreshToken,
-                    calendarName,
-                    calendarEmail,
-                    connectedBy: userId,
-                    connectedAt: now,
-                    updatedAt:   now,
-                });
+                await sql`
+                    INSERT INTO org_calendar_connections
+                        (id, org_id, provider, encrypted_refresh_token, calendar_name, calendar_email, connected_by, connected_at, updated_at)
+                    VALUES
+                        (${newId}, ${orgId}, ${provider}, ${encryptedRefreshToken}, ${calendarName}, ${calendarEmail}, ${userId}, ${now}, ${now})
+                `;
             }
         }
 
