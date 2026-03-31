@@ -10,33 +10,42 @@ import VerticalsSettings from './VerticalsSettings';
 // ── Price Book Panel ──────────────────────────────────────────────────────────
 // Extracted as a proper component to comply with React rules of hooks
 function PriceBookPanel({ goBackToMenu, showConfirm }) {
-    const { products, handleSaveProduct, handleDeleteProduct, productModalSaving } = useApp();
+    const { products, handleSaveProduct, handleDeleteProduct, productModalSaving, settings } = useApp();
     const [showProductForm, setShowProductForm] = React.useState(false);
     const [editingProduct, setEditingProduct] = React.useState(null);
-    const [productForm, setProductForm] = React.useState({ name: '', sku: '', description: '', productType: 'one_time', listPrice: '', minPrice: '', unit: 'flat', category: '', active: true });
+    const [productForm, setProductForm] = React.useState({ name: '', sku: '', description: '', productType: 'one_time', listPrice: '', minPrice: '', unit: 'flat', category: '', active: true, customPrice: false });
     const [productSaveError, setProductSaveError] = React.useState(null);
     const [pbSearch, setPbSearch] = React.useState('');
     const [pbTypeFilter, setPbTypeFilter] = React.useState('all');
+
+    // Read options from settings (admin-configurable) with safe fallbacks
+    const pbCfg = settings?.priceBookConfig || {};
+    const unitOptions     = (pbCfg.units      || ['flat', 'month', 'year', 'user', 'hour', 'day']);
+    const typeOptions     = (pbCfg.types      || ['recurring', 'one_time', 'service']);
+    const categoryOptions = [...new Set([
+        ...(pbCfg.categories || ['Platform', 'Add-ons', 'Services', 'Hardware']),
+        ...(products || []).map(p => p.category).filter(Boolean),
+    ])].sort();
 
     const pbInputStyle = { width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' };
     const pbLabelStyle = { display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' };
 
     const openNewProduct = () => {
         setEditingProduct(null);
-        setProductForm({ name: '', sku: '', description: '', productType: 'one_time', listPrice: '', minPrice: '', unit: 'flat', category: '', active: true });
+        setProductForm({ name: '', sku: '', description: '', productType: 'one_time', listPrice: '', minPrice: '', unit: 'flat', category: '', active: true, customPrice: false });
         setProductSaveError(null);
         setShowProductForm(true);
     };
     const openEditProduct = (p) => {
         setEditingProduct(p);
-        setProductForm({ name: p.name || '', sku: p.sku || '', description: p.description || '', productType: p.productType || 'one_time', listPrice: p.listPrice || '', minPrice: p.minPrice || '', unit: p.unit || 'flat', category: p.category || '', active: p.active !== false });
+        setProductForm({ name: p.name || '', sku: p.sku || '', description: p.description || '', productType: p.productType || 'one_time', listPrice: p.listPrice || '', minPrice: p.minPrice || '', unit: p.unit || 'flat', category: p.category || '', active: p.active !== false, customPrice: p.customPrice === true });
         setProductSaveError(null);
         setShowProductForm(true);
     };
     const saveProduct = async () => {
         setProductSaveError(null);
         if (!productForm.name.trim()) { setProductSaveError('Product name is required.'); return; }
-        if (!productForm.listPrice || isNaN(Number(productForm.listPrice))) { setProductSaveError('A valid list price is required.'); return; }
+        if (!productForm.customPrice && (!productForm.listPrice || isNaN(Number(productForm.listPrice)))) { setProductSaveError('A valid list price is required (or enable Custom Price).'); return; }
         const result = await handleSaveProduct(productForm, editingProduct);
         if (result) { setShowProductForm(false); setEditingProduct(null); }
         else setProductSaveError('Failed to save product. Please try again.');
@@ -44,15 +53,12 @@ function PriceBookPanel({ goBackToMenu, showConfirm }) {
 
     const typeLabel = { recurring: 'Recurring', one_time: 'One-time', service: 'Service' };
     const typeBadge = { recurring: { bg: '#e0e7ff', color: '#3730a3' }, one_time: { bg: '#dcfce7', color: '#166534' }, service: { bg: '#fef3c7', color: '#92400e' } };
-    const unitOptions = ['flat', 'month', 'year', 'user', 'hour', 'day'];
 
-    const filtered = (products || []).filter(p => {
+    const filtered = [...(products || [])].filter(p => {
         if (pbTypeFilter !== 'all' && p.productType !== pbTypeFilter) return false;
         if (pbSearch && !p.name.toLowerCase().includes(pbSearch.toLowerCase()) && !(p.sku || '').toLowerCase().includes(pbSearch.toLowerCase()) && !(p.category || '').toLowerCase().includes(pbSearch.toLowerCase())) return false;
         return true;
-    });
-
-    const categories = [...new Set((products || []).map(p => p.category).filter(Boolean))].sort();
+    }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
     return (
         <div className="table-container">
@@ -83,15 +89,17 @@ function PriceBookPanel({ goBackToMenu, showConfirm }) {
                                 </div>
                                 <div>
                                     <label style={pbLabelStyle}>Category</label>
-                                    <input style={pbInputStyle} value={productForm.category} onChange={e => setProductForm(p => ({ ...p, category: e.target.value }))} placeholder="e.g. Platform, Services" list="cat-datalist" />
-                                    <datalist id="cat-datalist">{categories.map(c => <option key={c} value={c} />)}</datalist>
+                                    <select style={pbInputStyle} value={productForm.category} onChange={e => setProductForm(p => ({ ...p, category: e.target.value }))}>
+                                        <option value="">— Select —</option>
+                                        {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
                                 </div>
                                 <div>
                                     <label style={pbLabelStyle}>Type *</label>
                                     <select style={pbInputStyle} value={productForm.productType} onChange={e => setProductForm(p => ({ ...p, productType: e.target.value }))}>
-                                        <option value="recurring">Recurring</option>
-                                        <option value="one_time">One-time</option>
-                                        <option value="service">Service</option>
+                                        {typeOptions.map(t => (
+                                            <option key={t} value={t}>{typeLabel[t] || t}</option>
+                                        ))}
                                     </select>
                                 </div>
                                 <div>
@@ -102,11 +110,17 @@ function PriceBookPanel({ goBackToMenu, showConfirm }) {
                                 </div>
                                 <div>
                                     <label style={pbLabelStyle}>List Price *</label>
-                                    <input style={pbInputStyle} type="number" min="0" step="0.01" value={productForm.listPrice} onChange={e => setProductForm(p => ({ ...p, listPrice: e.target.value }))} placeholder="0.00" />
+                                    {productForm.customPrice ? (
+                                        <div style={{ ...pbInputStyle, color: '#94a3b8', fontStyle: 'italic', display: 'flex', alignItems: 'center' }}>
+                                            Rep enters price on quote
+                                        </div>
+                                    ) : (
+                                        <input style={pbInputStyle} type="number" min="0" step="0.01" value={productForm.listPrice} onChange={e => setProductForm(p => ({ ...p, listPrice: e.target.value }))} placeholder="0.00" />
+                                    )}
                                 </div>
                                 <div>
                                     <label style={pbLabelStyle}>Min Price (floor)</label>
-                                    <input style={pbInputStyle} type="number" min="0" step="0.01" value={productForm.minPrice} onChange={e => setProductForm(p => ({ ...p, minPrice: e.target.value }))} placeholder="0.00" />
+                                    <input style={pbInputStyle} type="number" min="0" step="0.01" value={productForm.minPrice} onChange={e => setProductForm(p => ({ ...p, minPrice: e.target.value }))} placeholder="0.00" disabled={productForm.customPrice} style={{ ...pbInputStyle, opacity: productForm.customPrice ? 0.5 : 1 }} />
                                 </div>
                                 <div style={{ gridColumn: '1/-1' }}>
                                     <label style={pbLabelStyle}>Description</label>
@@ -119,6 +133,17 @@ function PriceBookPanel({ goBackToMenu, showConfirm }) {
                                         <div style={{ position: 'absolute', width: '16px', height: '16px', background: '#fff', borderRadius: '50%', top: '3px', transition: 'left 0.2s', left: productForm.active ? '21px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
                                     </button>
                                     <span style={{ fontSize: '0.8125rem', color: '#57534e', fontWeight: '500' }}>Active — visible in quote builder catalog</span>
+                                </div>
+                                <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'flex-start', gap: '0.75rem', background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.75rem 1rem' }}>
+                                    <button
+                                        onClick={() => setProductForm(p => ({ ...p, customPrice: !p.customPrice, listPrice: !p.customPrice ? '' : p.listPrice }))}
+                                        style={{ width: '40px', height: '22px', borderRadius: '999px', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', background: productForm.customPrice ? '#2563eb' : '#e2e8f0', border: 'none', padding: 0, flexShrink: 0, marginTop: '1px' }}>
+                                        <div style={{ position: 'absolute', width: '16px', height: '16px', background: '#fff', borderRadius: '50%', top: '3px', transition: 'left 0.2s', left: productForm.customPrice ? '21px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                                    </button>
+                                    <div>
+                                        <div style={{ fontSize: '0.8125rem', color: '#1c1917', fontWeight: '600' }}>Custom Price (Variable)</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#78716c', marginTop: '2px' }}>When enabled, sales reps enter the price directly on the quote. Ideal for services that vary by project.</div>
+                                    </div>
                                 </div>
                             </div>
                             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid #f0ece4', paddingTop: '1rem' }}>
@@ -164,7 +189,10 @@ function PriceBookPanel({ goBackToMenu, showConfirm }) {
                         {filtered.map(p => (
                             <tr key={p.id} style={{ borderBottom: '1px solid #f8f7f5' }} onMouseEnter={e => e.currentTarget.style.background = '#fafaf9'} onMouseLeave={e => e.currentTarget.style.background = ''}>
                                 <td style={{ padding: '0.75rem 1rem' }}>
-                                    <div style={{ fontWeight: '600', color: '#1c1917' }}>{p.name}</div>
+                                    <div style={{ fontWeight: '600', color: '#1c1917', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                                        {p.name}
+                                        {p.customPrice && <span style={{ fontSize: '0.5625rem', fontWeight: '700', background: '#f3e8ff', color: '#6b21a8', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Custom</span>}
+                                    </div>
                                     {p.description && <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>{p.description.slice(0, 60)}{p.description.length > 60 ? '…' : ''}</div>}
                                 </td>
                                 <td style={{ padding: '0.75rem 1rem', color: '#94a3b8', fontFamily: 'monospace', fontSize: '0.75rem' }}>{p.sku || '—'}</td>
@@ -174,8 +202,10 @@ function PriceBookPanel({ goBackToMenu, showConfirm }) {
                                         {typeLabel[p.productType] || p.productType}
                                     </span>
                                 </td>
-                                <td style={{ padding: '0.75rem 1rem', fontWeight: '600', color: '#1c1917' }}>${Number(p.listPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{p.minPrice ? '$' + Number(p.minPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
+                                <td style={{ padding: '0.75rem 1rem', fontWeight: '600', color: p.customPrice ? '#7c3aed' : '#1c1917', fontStyle: p.customPrice ? 'italic' : 'normal' }}>
+                                    {p.customPrice ? 'Rep enters price' : '$' + Number(p.listPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                                <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{p.minPrice && !p.customPrice ? '$' + Number(p.minPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
                                 <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{p.unit || 'flat'}</td>
                                 <td style={{ padding: '0.75rem 1rem' }}>
                                     <span style={{ fontSize: '0.75rem', fontWeight: '600', color: p.active !== false ? '#16a34a' : '#94a3b8' }}>{p.active !== false ? '● Active' : '○ Inactive'}</span>
@@ -198,6 +228,125 @@ function PriceBookPanel({ goBackToMenu, showConfirm }) {
                 <span>{(products || []).filter(p => p.productType === 'one_time').length} one-time</span>
                 <span>·</span>
                 <span>{(products || []).filter(p => p.productType === 'service').length} services</span>
+            </div>
+        </div>
+    );
+}
+
+// ── Price Book Config Panel ────────────────────────────────────────────────────
+// Admin-only: manage units, types, and categories for the price book
+function PriceBookConfigPanel({ settings, setSettings, goBackToMenu }) {
+    const pbCfg = settings.priceBookConfig || { units: ['flat', 'month', 'year', 'user', 'hour', 'day'], types: ['recurring', 'one_time', 'service'], categories: ['Platform', 'Add-ons', 'Services', 'Hardware'] };
+
+    const [newUnit,     setNewUnit]     = React.useState('');
+    const [newType,     setNewType]     = React.useState('');
+    const [newCategory, setNewCategory] = React.useState('');
+    const [saved, setSaved] = React.useState(false);
+
+    const update = (key, list) => {
+        setSettings(prev => ({
+            ...prev,
+            priceBookConfig: { ...pbCfg, [key]: list },
+        }));
+    };
+
+    const addItem = (key, value, setter) => {
+        const v = value.trim();
+        if (!v) return;
+        const current = pbCfg[key] || [];
+        if (current.map(x => x.toLowerCase()).includes(v.toLowerCase())) return;
+        update(key, [...current, v]);
+        setter('');
+    };
+
+    const removeItem = (key, idx) => {
+        const current = pbCfg[key] || [];
+        update(key, current.filter((_, i) => i !== idx));
+    };
+
+    const pbInputStyle = {
+        flex: 1, padding: '0.45rem 0.75rem', border: '1px solid #e5e2db',
+        borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit',
+        background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box',
+    };
+
+    const SectionCard = ({ title, description, items, itemKey, value, setValue, labelMap }) => (
+        <div style={{ background: '#fff', border: '1px solid #ddd8cf', borderRadius: '12px', overflow: 'hidden', marginBottom: '1rem' }}>
+            <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f0ece4', background: '#fafaf9' }}>
+                <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>{title}</div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>{description}</div>
+            </div>
+            <div style={{ padding: '1rem 1.25rem' }}>
+                {/* Add new */}
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.875rem' }}>
+                    <input
+                        value={value}
+                        onChange={e => setValue(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') addItem(itemKey, value, setValue); }}
+                        placeholder={`Add new ${title.toLowerCase()} option…`}
+                        style={pbInputStyle}
+                    />
+                    <button onClick={() => addItem(itemKey, value, setValue)}
+                        style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.45rem 1rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                        + Add
+                    </button>
+                </div>
+                {/* List */}
+                {(pbCfg[itemKey] || []).length === 0 ? (
+                    <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic', padding: '0.5rem 0' }}>No options yet.</div>
+                ) : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {(pbCfg[itemKey] || []).map((item, idx) => (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.3rem 0.625rem', fontSize: '0.8125rem', color: '#1c1917' }}>
+                                <span>{labelMap ? (labelMap[item] || item) : item}</span>
+                                <button onClick={() => removeItem(itemKey, idx)}
+                                    style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.875rem', lineHeight: 1, padding: '0 0.125rem', fontFamily: 'inherit' }}>×</button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="table-container">
+            <div className="table-header">
+                <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
+                <h2>PRICE BOOK CONFIG</h2>
+            </div>
+            <div style={{ padding: '1.25rem 1.5rem' }}>
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8125rem', color: '#1e40af' }}>
+                    ℹ️ These options populate the dropdowns when admins add or edit products in the Price Book. Changes are saved automatically.
+                </div>
+
+                <SectionCard
+                    title="Units"
+                    description="Billing unit options shown on each product (e.g. /month, /year, flat fee)."
+                    items={pbCfg.units}
+                    itemKey="units"
+                    value={newUnit}
+                    setValue={setNewUnit}
+                />
+
+                <SectionCard
+                    title="Types"
+                    description="Product type classifications. Controls how the quote builder calculates ARR vs one-time value."
+                    items={pbCfg.types}
+                    itemKey="types"
+                    value={newType}
+                    setValue={setNewType}
+                    labelMap={{ recurring: 'Recurring', one_time: 'One-time', service: 'Service' }}
+                />
+
+                <SectionCard
+                    title="Categories"
+                    description="Product categories used to group items in the quote builder catalog panel."
+                    items={pbCfg.categories}
+                    itemKey="categories"
+                    value={newCategory}
+                    setValue={setNewCategory}
+                />
             </div>
         </div>
     );
@@ -648,6 +797,7 @@ export default function SettingsTab() {
                                         { view: 'pain-points',    icon: '⚠️', title: 'Pain Points Library', desc: 'Customer pain point templates' },
                                         { view: 'products',       icon: '📦', title: 'Products',             desc: 'Products and services offered' },
                                         { view: 'price-book',     icon: '💲', title: 'Price Book',           desc: 'Manage the product catalog for quoting' },
+                                        { view: 'price-book-config', icon: '⚙️', title: 'Price Book Config',  desc: 'Manage units, types & categories for quoting' },
                                         ] : []),
                                         ...(settingsTab === 'security' ? [
                                         { group: 'Security & Data' },
@@ -680,7 +830,7 @@ export default function SettingsTab() {
                                                 onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
                                                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                                             >
-                                                <div style={{ width: '24px', height: '24px', borderRadius: '5px', background: ['users','team-builder','territories'].includes(item.view) ? '#dbeafe' : ['vertical-markets','verticals','funnel-stages','pipelines','kpi-settings','fiscal-year','logo','pain-points'].includes(item.view) ? '#ede9fe' : ['api-keys','webhooks','my-calendar','company-calendar'].includes(item.view) ? '#dcfce7' : '#ffedd5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>{item.icon}</div>
+                                                <div style={{ width: '24px', height: '24px', borderRadius: '5px', background: ['users','team-builder','territories'].includes(item.view) ? '#dbeafe' : ['vertical-markets','verticals','funnel-stages','pipelines','kpi-settings','fiscal-year','logo','pain-points','price-book','price-book-config'].includes(item.view) ? '#ede9fe' : ['api-keys','webhooks','my-calendar','company-calendar'].includes(item.view) ? '#dcfce7' : '#ffedd5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>{item.icon}</div>
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                     <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{item.title}</div>
                                                     {item.desc && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{item.desc}</div>}
@@ -762,6 +912,8 @@ export default function SettingsTab() {
 
 
                     {settingsView === 'price-book' && <PriceBookPanel goBackToMenu={goBackToMenu} showConfirm={showConfirm} />}
+
+                    {settingsView === 'price-book-config' && <PriceBookConfigPanel settings={settings} setSettings={setSettings} goBackToMenu={goBackToMenu} />}
 
                     {settingsView === 'field-visibility' && (() => {
                         const roles = ['Admin', 'Manager', 'User', 'ReadOnly'];

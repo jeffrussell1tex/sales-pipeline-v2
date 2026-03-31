@@ -60,6 +60,11 @@ const DEFAULT_SETTINGS = {
     ],
     aiScoringEnabled: false,
     leadsEnabled: true,
+    priceBookConfig: {
+        units:      ['flat', 'month', 'year', 'user', 'hour', 'day'],
+        types:      ['recurring', 'one_time', 'service'],
+        categories: ['Platform', 'Add-ons', 'Services', 'Hardware'],
+    },
 };
 
 export function useSettings() {
