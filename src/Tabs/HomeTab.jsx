@@ -222,7 +222,7 @@ function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUs
                 <select value={sortBy} onChange={e => setSortBy(e.target.value)}
                     style={{ fontSize:'0.75rem', padding:'0.3rem 1.5rem 0.3rem 0.625rem', border:'0.5px solid #e2e8f0', borderRadius:'6px', background:'#f8fafc', color:'#475569', cursor:'pointer', fontFamily:'inherit', appearance:'none', backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")", backgroundRepeat:'no-repeat', backgroundPosition:'right 6px center' }}>
                     <option value="health">Sort: Health score</option>
-                    <option value="arr">Sort: Pipeline ARR</option>
+                    <option value="arr">Sort: Pipeline Revenue</option>
                     <option value="quota">Sort: Quota attainment</option>
                 </select>
             </div>
@@ -251,7 +251,7 @@ function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUs
                                         </div>
                                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                                             {[
-                                                { val: fmtArr(rs.pipelineArr), lbl: 'Pipeline ARR', danger: rs.pipelineArr === 0 },
+                                                { val: fmtArr(rs.pipelineArr), lbl: 'Pipeline Rev.', danger: rs.pipelineArr === 0 },
                                                 { val: rs.dealCount, lbl: 'Active deals', danger: rs.dealCount === 0 },
                                                 { val: rs.daysSinceAct !== null ? rs.daysSinceAct+'d' : '—', lbl: 'Last activity', danger: rs.daysSinceAct === null || rs.daysSinceAct >= 14, warn: rs.daysSinceAct !== null && rs.daysSinceAct >= 7 && rs.daysSinceAct < 14 },
                                                 { val: rs.overdueCount, lbl: 'Overdue tasks', danger: rs.overdueCount >= 3, warn: rs.overdueCount >= 1 && rs.overdueCount < 3 },
@@ -995,7 +995,7 @@ export default function HomeTab() {
                     {/* KPI strip */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: '0.75rem' }}>
                         {[
-                            { label: 'Pipeline ARR', value: fmtArr(myPipelineARR), sub: myActiveOpps.length+' active deals', accent: '#2563eb' },
+                            { label: 'Pipeline Rev.', value: fmtArr(myPipelineARR), sub: myActiveOpps.length+' active deals', accent: '#2563eb' },
                             { label: 'Closed won', value: fmtArr(myClosedWonARR), sub: 'this period', accent: '#10b981' },
                             { label: 'Open tasks', value: String(openTasks.length), sub: overdueTasks.length > 0 ? overdueTasks.length+' overdue' : 'all on track', subColor: overdueTasks.length > 0 ? '#ef4444' : '#10b981', accent: overdueTasks.length > 0 ? '#ef4444' : '#f59e0b' },
                             { label: nextQuarter ? nextQuarter[0]+' forecast' : 'Next qtr forecast', value: fmtArr(fv), sub: 'forecasted close', accent: '#7c3aed' },
