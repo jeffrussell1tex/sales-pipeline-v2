@@ -15,7 +15,6 @@ import ReportsTab from './Tabs/ReportsTab';
 import ContactsTab from './Tabs/ContactsTab';
 import LeadsTab from './Tabs/LeadsTab';
 import AccountsTab from './Tabs/AccountsTab';
-import OpportunitiesTab from './Tabs/OpportunitiesTab';
 import PipelineTab from './Tabs/PipelineTab';
 import TasksTab from './Tabs/TasksTab';
 import HomeTab from './Tabs/HomeTab';
@@ -397,7 +396,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 case '2':
                     e.preventDefault(); setActiveTab('pipeline'); break;
                 case '3':
-                    e.preventDefault(); setActiveTab('opportunities'); break;
+                    e.preventDefault(); setActiveTab('pipeline'); break;
                 case '4':
                     e.preventDefault(); setActiveTab('tasks'); break;
                 case '5':
@@ -1174,6 +1173,13 @@ dbFetch('/.netlify/functions/users?me=true')
         }
     }, [settings.quotesEnabled]);
 
+    // Redirect any user who had 'opportunities' stored in localStorage to 'pipeline'
+    useEffect(() => {
+        if (activeTab === 'opportunities') {
+            setActiveTab('pipeline');
+        }
+    }, []);
+
     // Deep link: navigate to Quotes tab pre-filtered to a specific opportunity
     // (state lives in useQuotes, exposed via AppContext)
 
@@ -1460,12 +1466,6 @@ dbFetch('/.netlify/functions/users?me=true')
                     PIPELINE
                 </button>
                 <button 
-                    className={`nav-tab ${activeTab === 'opportunities' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('opportunities')}
-                >
-                    OPPORTUNITIES
-                </button>
-                <button 
                     className={`nav-tab ${activeTab === 'tasks' ? 'active' : ''}`}
                     onClick={() => setActiveTab('tasks')}
                     style={{ position: 'relative' }}
@@ -1551,12 +1551,6 @@ dbFetch('/.netlify/functions/users?me=true')
             {activeTab === 'pipeline' && (
                 <ErrorBoundary tabName="Pipeline">
                     <PipelineTab />
-                </ErrorBoundary>
-            )}
-
-            {activeTab === 'opportunities' && (
-                <ErrorBoundary tabName="Opportunities">
-                    <OpportunitiesTab />
                 </ErrorBoundary>
             )}
 
