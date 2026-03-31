@@ -282,32 +282,42 @@ function PbSectionCard({ title, description, itemKey, pbCfg, value, setValue, on
     );
 }
 
-function PriceBookConfigPanel({ settings, setSettings, goBackToMenu }) {
-    const pbCfg = settings.priceBookConfig || { units: ['flat', 'month', 'year', 'user', 'hour', 'day'], types: ['recurring', 'one_time', 'service'], categories: ['Platform', 'Add-ons', 'Services', 'Hardware'] };
+const DEFAULT_PB_CFG = {
+    units:      ['flat', 'month', 'year', 'user', 'hour', 'day'],
+    types:      ['recurring', 'one_time', 'service'],
+    categories: ['Platform', 'Add-ons', 'Services', 'Hardware'],
+};
 
+function PriceBookConfigPanel({ settings, setSettings, goBackToMenu }) {
     const [newUnit,     setNewUnit]     = React.useState('');
     const [newType,     setNewType]     = React.useState('');
     const [newCategory, setNewCategory] = React.useState('');
 
-    const update = (key, list) => {
-        setSettings(prev => ({
-            ...prev,
-            priceBookConfig: { ...(prev.priceBookConfig || pbCfg), [key]: list },
-        }));
-    };
+    // Always read pbCfg from live settings prop — never from a stale closure.
+    const pbCfg = settings.priceBookConfig || DEFAULT_PB_CFG;
 
     const addItem = (key, value, setter) => {
         const v = value.trim();
         if (!v) return;
-        const current = (settings.priceBookConfig || pbCfg)[key] || [];
+        // Read current list from latest settings prop, not a captured snapshot.
+        const current = (settings.priceBookConfig || DEFAULT_PB_CFG)[key] || [];
         if (current.map(x => x.toLowerCase()).includes(v.toLowerCase())) return;
-        update(key, [...current, v]);
+        const updated = [...current, v];
+        // Update via functional form so we always spread the freshest prev state.
+        setSettings(prev => ({
+            ...prev,
+            priceBookConfig: { ...(prev.priceBookConfig || DEFAULT_PB_CFG), [key]: updated },
+        }));
         setter('');
     };
 
     const removeItem = (key, idx) => {
-        const current = (settings.priceBookConfig || pbCfg)[key] || [];
-        update(key, current.filter((_, i) => i !== idx));
+        const current = (settings.priceBookConfig || DEFAULT_PB_CFG)[key] || [];
+        const updated = current.filter((_, i) => i !== idx);
+        setSettings(prev => ({
+            ...prev,
+            priceBookConfig: { ...(prev.priceBookConfig || DEFAULT_PB_CFG), [key]: updated },
+        }));
     };
 
     return (
@@ -325,7 +335,7 @@ function PriceBookConfigPanel({ settings, setSettings, goBackToMenu }) {
                     title="Units"
                     description="Billing unit options shown on each product (e.g. /month, /year, flat fee)."
                     itemKey="units"
-                    pbCfg={settings.priceBookConfig || pbCfg}
+                    pbCfg={pbCfg}
                     value={newUnit}
                     setValue={setNewUnit}
                     onAdd={addItem}
@@ -336,7 +346,7 @@ function PriceBookConfigPanel({ settings, setSettings, goBackToMenu }) {
                     title="Types"
                     description="Product type classifications. Controls how the quote builder calculates ARR vs one-time value."
                     itemKey="types"
-                    pbCfg={settings.priceBookConfig || pbCfg}
+                    pbCfg={pbCfg}
                     value={newType}
                     setValue={setNewType}
                     onAdd={addItem}
@@ -348,7 +358,7 @@ function PriceBookConfigPanel({ settings, setSettings, goBackToMenu }) {
                     title="Categories"
                     description="Product categories used to group items in the quote builder catalog panel."
                     itemKey="categories"
-                    pbCfg={settings.priceBookConfig || pbCfg}
+                    pbCfg={pbCfg}
                     value={newCategory}
                     setValue={setNewCategory}
                     onAdd={addItem}
