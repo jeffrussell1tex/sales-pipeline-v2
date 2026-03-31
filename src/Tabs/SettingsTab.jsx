@@ -1927,7 +1927,14 @@ export default function SettingsTab() {
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1.5rem', flexShrink: 0 }}>
                                         <button
-                                            onClick={() => setSettings(prev => ({ ...prev, leadsEnabled: !(prev.leadsEnabled !== false) }))}
+                                            onClick={() => {
+                                                const next = !(settings.leadsEnabled !== false);
+                                                setSettings(prev => ({ ...prev, leadsEnabled: next }));
+                                                dbFetch('/.netlify/functions/settings', {
+                                                    method: 'PUT',
+                                                    body: JSON.stringify({ leadsEnabled: next }),
+                                                }).catch(err => console.error('Failed to save leadsEnabled:', err));
+                                            }}
                                             style={{ width: '44px', height: '24px', borderRadius: '999px', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', background: settings.leadsEnabled !== false ? '#2563eb' : '#e2e8f0', border: 'none', padding: 0, flexShrink: 0 }}>
                                             <div style={{ position: 'absolute', width: '18px', height: '18px', background: '#fff', borderRadius: '50%', top: '3px', transition: 'left 0.2s', left: settings.leadsEnabled !== false ? '23px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
                                         </button>
@@ -1944,7 +1951,14 @@ export default function SettingsTab() {
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1.5rem', flexShrink: 0 }}>
                                         <button
-                                            onClick={() => setSettings(prev => ({ ...prev, quotesEnabled: !(prev.quotesEnabled === true) }))}
+                                            onClick={() => {
+                                                const next = !(settings.quotesEnabled === true);
+                                                setSettings(prev => ({ ...prev, quotesEnabled: next }));
+                                                dbFetch('/.netlify/functions/settings', {
+                                                    method: 'PUT',
+                                                    body: JSON.stringify({ quotesEnabled: next }),
+                                                }).catch(err => console.error('Failed to save quotesEnabled:', err));
+                                            }}
                                             style={{ width: '44px', height: '24px', borderRadius: '999px', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', background: settings.quotesEnabled === true ? '#2563eb' : '#e2e8f0', border: 'none', padding: 0, flexShrink: 0 }}>
                                             <div style={{ position: 'absolute', width: '18px', height: '18px', background: '#fff', borderRadius: '50%', top: '3px', transition: 'left 0.2s', left: settings.quotesEnabled === true ? '23px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
                                         </button>

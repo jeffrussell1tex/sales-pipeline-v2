@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../AppContext';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function AccountModal({ account, isSubAccount, parentTier, settings: settingsProp, onClose, onSave, onAddRep, existingAccounts, errorMessage, onDismissError, saving }) {
     const { settings: contextSettings } = useApp();
@@ -49,6 +50,7 @@ export default function AccountModal({ account, isSubAccount, parentTier, settin
     });
     const [showParentSuggestions, setShowParentSuggestions] = useState(false);
     const [duplicateWarning, setDuplicateWarning] = useState(null);
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
 
     const allRepNames = [...new Set([
         ...(settings?.users || []).filter(u => u.name).map(u => u.name)
@@ -136,8 +138,8 @@ export default function AccountModal({ account, isSubAccount, parentTier, settin
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div className="modal-overlay">
-            <div className="modal" onClick={e => e.stopPropagation()}>
-                <h2>{account ? `Edit ${tierLabel}` : `New ${tierLabel}`}</h2>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle }}>
+                <h2 {...dragHandleProps}>{account ? `Edit ${tierLabel}` : `New ${tierLabel}`}</h2>
                 <form onSubmit={handleSubmit}>
                     <div className="form-grid">
                         <div className="form-group full">

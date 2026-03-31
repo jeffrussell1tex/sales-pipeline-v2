@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function ContactModal({ contact, contacts, accounts, settings, onClose, onSave, onSaveNewContact, onAddAccount, errorMessage, onDismissError, saving }) {
     const [formData, setFormData] = useState(contact || {
@@ -61,6 +62,7 @@ export default function ContactModal({ contact, contacts, accounts, settings, on
     };
 
     const [duplicateContactWarning, setDuplicateContactWarning] = useState(null);
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -187,8 +189,8 @@ export default function ContactModal({ contact, contacts, accounts, settings, on
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       <div className="modal-overlay" onClick={e => e.stopPropagation()}>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '650px' }}>
-                <h2>{contact ? 'Edit Contact' : 'New Contact'}</h2>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, maxWidth: '650px' }}>
+                <h2 {...dragHandleProps}>{contact ? 'Edit Contact' : 'New Contact'}</h2>
 
                 <div style={{ display: 'flex', background: '#f1f3f5', borderRadius: '6px', padding: '3px', marginBottom: '1.25rem' }}>
                     <button type="button" onClick={() => setActiveContactTab('primary')} style={tabBtnStyle(activeContactTab === 'primary')}>Primary Info</button>

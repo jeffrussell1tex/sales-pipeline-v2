@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function ActivityModal({ activity, opportunities, contacts, accounts, onClose, onSave, initialContext, onSaveNewContact, onSaveNewAccount, onAddContact, onAddAccount, onAddOpportunity, errorMessage, onDismissError, saving }) {
     const [formData, setFormData] = useState(activity || {
@@ -12,6 +13,7 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
     });
 
     const [nestedModal, setNestedModal] = useState(null);
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
 
     const [opportunitySearch, setOpportunitySearch] = useState(
         activity ? (opportunities || []).find(o => o.id === activity.opportunityId)?.opportunityName || '' : (initialContext?.opportunityName || '')
@@ -71,8 +73,8 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div className="modal-overlay">
-            <div className="modal" onClick={e => e.stopPropagation()}>
-                <h2>{activity ? 'Edit Activity' : 'Log Activity'}</h2>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle }}>
+                <h2 {...dragHandleProps}>{activity ? 'Edit Activity' : 'Log Activity'}</h2>
                 <form onSubmit={handleSubmit}>
                     <div className="form-grid">
                         <div className="form-group">

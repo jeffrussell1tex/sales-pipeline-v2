@@ -396,15 +396,15 @@ dbFetch('/.netlify/functions/users?me=true')
                 case '2':
                     e.preventDefault(); setActiveTab('pipeline'); break;
                 case '3':
-                    e.preventDefault(); setActiveTab('pipeline'); break;
-                case '4':
                     e.preventDefault(); setActiveTab('tasks'); break;
-                case '5':
+                case '4':
                     e.preventDefault(); setActiveTab('accounts'); break;
-                case '6':
+                case '5':
                     e.preventDefault(); setActiveTab('contacts'); break;
-                case '7':
+                case '6':
                     e.preventDefault(); setActiveTab('leads'); break;
+                case '7':
+                    e.preventDefault(); setActiveTab('quotes'); break;
                 case '8':
                     e.preventDefault(); setActiveTab('reports'); break;
                 case 'o': case 'O':

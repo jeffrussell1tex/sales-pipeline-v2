@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import TimePicker from '../ui/TimePicker';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function TaskModal({ task, taskTypes, opportunities, accounts, contacts, settings, onClose, onSave, onAddTaskType, onSaveNewContact, onSaveNewAccount, onAddOpportunity, onAddContact, onAddAccount, errorMessage, onDismissError, saving }) {
     const [formData, setFormData] = useState(task ? { ...task, status: task.status || (task.completed ? 'Completed' : 'Open'), assignedTo: task.assignedTo || '', priority: task.priority || 'Medium', addToCalendar: false } : {
@@ -39,6 +40,7 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
     const [accountSearch, setAccountSearch] = useState('');
     const [showAccountSuggestions, setShowAccountSuggestions] = useState(false);
     const [nestedModal, setNestedModal] = useState(null);
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
 
     const handleChange = (field, value) => {
         setFormData({ ...formData, [field]: value });
@@ -83,8 +85,8 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div className="modal-overlay" onClick={e => e.stopPropagation()}>
-            <div className="modal" onClick={e => e.stopPropagation()}>
-                <h2>{task ? 'Edit Task' : 'New Task'}</h2>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle }}>
+                <h2 {...dragHandleProps}>{task ? 'Edit Task' : 'New Task'}</h2>
                 <form onSubmit={handleSubmit}>
                     <div className="form-grid">
                         <div className="form-group">
