@@ -653,6 +653,7 @@ dbFetch('/.netlify/functions/users?me=true')
         productModalSaving, setProductModalSaving,
         handleSaveProduct, handleDeleteProduct,
         getQuotesForOpp, getNextQuoteNumber,
+        quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     } = useQuotes();
 
     // handleUpdateFiscalYearStart managed by useSettings hook
@@ -1173,6 +1174,9 @@ dbFetch('/.netlify/functions/users?me=true')
         }
     }, [settings.quotesEnabled]);
 
+    // Deep link: navigate to Quotes tab pre-filtered to a specific opportunity
+    // (state lives in useQuotes, exposed via AppContext)
+
     if (!clerkLoaded || !orgLoaded) {
         return (
             <div className="login-page">
@@ -1325,6 +1329,7 @@ dbFetch('/.netlify/functions/users?me=true')
         productModalError, setProductModalError,
         productModalSaving,
         getQuotesForOpp, getNextQuoteNumber,
+        quotesDeepLinkOppId, setQuotesDeepLinkOppId,
         // SPIFF
         spiffClaims, setSpiffClaims,
         // Derived/filtered lists

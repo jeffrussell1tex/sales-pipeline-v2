@@ -845,7 +845,6 @@ export default function SettingsTab() {
                                         { view: 'fiscal-year',    icon: '📅', title: 'Fiscal Year',         desc: 'Quarter & fiscal year start' },
                                         { view: 'logo',           icon: '🖼️', title: 'Company Logo',        desc: 'Upload company logo' },
                                         { view: 'pain-points',    icon: '⚠️', title: 'Pain Points Library', desc: 'Customer pain point templates' },
-                                        { view: 'products',       icon: '📦', title: 'Products',             desc: 'Products and services offered' },
                                         { view: 'price-book',     icon: '💲', title: 'Price Book',           desc: 'Manage the product catalog for quoting' },
                                         { view: 'price-book-config', icon: '⚙️', title: 'Price Book Config',  desc: 'Manage units, types & categories for quoting' },
                                         ] : []),
@@ -892,72 +891,6 @@ export default function SettingsTab() {
                                 </div>
                             </div>
                         </div>
-                    )}
-
-
-                    {settingsView === 'products' && (
-                        <div className="table-container">
-                            <div className="table-header">
-                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
-                                <h2>PRODUCTS</h2>
-                            </div>
-                            <div style={{ padding: '1.5rem' }}>
-                                <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1.5rem', lineHeight: '1.6' }}>
-                                    Define your product and service catalog. These products will appear as selectable options when creating or editing opportunities.
-                                </p>
-                                <div style={{ marginBottom: '2rem' }}>
-                                    <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>Add New Product</h3>
-                                    <div style={{ display: 'flex', gap: '0.5rem', maxWidth: isMobile ? '100%' : '500px' }}>
-                                        <input
-                                            type="text"
-                                            value={newProductInput}
-                                            onChange={e => setNewProductInput(e.target.value)}
-                                            placeholder="Enter product name..."
-                                            style={{ flex: 1, background: '#f8f9fa', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.625rem 0.75rem', color: '#1e293b', fontSize: '0.875rem' }}
-                                            onKeyPress={e => {
-                                                if (e.key === 'Enter') {
-                                                    const value = newProductInput.trim();
-                                                    if (value && !(settings.products || []).includes(value)) {
-                                                        setSettings(prev => ({ ...prev, products: [...(prev.products || []), value] }));
-                                                        setNewProductInput('');
-                                                    }
-                                                }
-                                            }}
-                                        />
-                                        <button className="btn" onClick={() => {
-                                            const value = newProductInput.trim();
-                                            if (value && !(settings.products || []).includes(value)) {
-                                                setSettings(prev => ({ ...prev, products: [...(prev.products || []), value] }));
-                                                setNewProductInput('');
-                                            }
-                                        }}>+ ADD</button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>
-                                        Products ({(settings.products || []).length})
-                                    </h3>
-                                    {(settings.products || []).length === 0 ? (
-                                        <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b', background: '#f1f3f5', borderRadius: '8px' }}>
-                                            No products yet. Add your first product above.
-                                        </div>
-                                    ) : (
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-                                            {(settings.products || []).map((product, idx) => (
-                                                <span key={idx} style={{ background: '#ffffff', padding: '0.75rem 1rem', borderRadius: '6px', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.75rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                                                    <span style={{ fontSize: '1rem' }}>📦</span>
-                                                    <span style={{ fontWeight: '500', color: '#1e293b' }}>{product}</span>
-                                                    <button onClick={() => setSettings(prev => ({ ...prev, products: (prev.products || []).filter((_, i) => i !== idx) }))}
-                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '1rem', padding: 0, lineHeight: 1 }}>×</button>
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        
-                            <SaveCancelBar />
-</div>
                     )}
 
 

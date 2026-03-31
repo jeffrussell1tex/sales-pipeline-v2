@@ -26,6 +26,9 @@ export function useQuotes() {
     const [productModalError, setProductModalError] = useState(null);
     const [productModalSaving, setProductModalSaving] = useState(false);
 
+    // ── Deep link: navigate from opp modal → Quotes tab pre-filtered ─────────
+    const [quotesDeepLinkOppId, setQuotesDeepLinkOppId] = useState(null);
+
     // ── Loaders ───────────────────────────────────────────────────────────────
     const loadQuotes = useCallback(async (setDbOffline) => {
         try {
@@ -210,5 +213,7 @@ export function useQuotes() {
         // Helpers
         getQuotesForOpp,
         getNextQuoteNumber,
+        // Deep link
+        quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     };
 }

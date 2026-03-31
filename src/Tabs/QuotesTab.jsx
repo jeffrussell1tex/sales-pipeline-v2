@@ -736,7 +736,7 @@ function buildPrintHTML(quote, opp, lines, subtotal, totalValue, recurringValue,
 
 // ─── ALL QUOTES LIST ──────────────────────────────────────────────────────────
 
-function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings, onEdit, onDelete, onNewQuote, loadQuotes, showConfirm }) {
+function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings, onEdit, onDelete, onNewQuote, loadQuotes, showConfirm, deepLinkOppId, onClearDeepLink }) {
     const managedReps = new Set((settings?.users || [])
         .filter(u => u.managedBy === currentUser || u.manager === currentUser)
         .map(u => u.name));
@@ -744,10 +744,18 @@ function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings,
     const [filterRep, setFilterRep] = useState('');
     const [filterPeriod, setFilterPeriod] = useState('all');
     const [filterStatus, setFilterStatus] = useState('');
+    const [filterOpp, setFilterOpp] = useState('');
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
     const [sortField, setSortField] = useState('createdAt');
     const [sortDir, setSortDir] = useState('desc');
+
+    // Consume deep link — pre-filter to a specific opportunity
+    useEffect(() => {
+        if (deepLinkOppId) {
+            setFilterOpp(deepLinkOppId);
+        }
+    }, [deepLinkOppId]);
 
     const isAdmin = userRole === 'Admin';
     const isManager = userRole === 'Manager';
@@ -790,6 +798,7 @@ function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings,
             const opp = (opportunities || []).find(o => o.id === q.opportunityId);
             return opp?.salesRep === filterRep || q.createdBy === filterRep;
         });
+        if (filterOpp) out = out.filter(q => q.opportunityId === filterOpp);
         if (filterStatus) out = out.filter(q => q.status === filterStatus);
         out = [...out].sort((a, b) => {
             let av = a[sortField] || '', bv = b[sortField] || '';
@@ -804,7 +813,12 @@ function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings,
             seen.add(q.quoteNumber);
             return true;
         });
-    }, [periodFiltered, filterRep, filterStatus, sortField, sortDir, opportunities]);
+    }, [periodFiltered, filterRep, filterStatus, filterOpp, sortField, sortDir, opportunities]);
+
+    // Opp name for banner display
+    const deepLinkOpp = deepLinkOppId
+        ? (opportunities || []).find(o => o.id === deepLinkOppId)
+        : null;
 
     const th = (label, field) => (
         <th onClick={() => { setSortField(field); setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }}
@@ -1126,65 +1140,13 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
     );
 }
 
-// ─── QUOTE NOTICE MODAL ───────────────────────────────────────────────────────
-function QuoteNoticeModal({ notice, onClose }) {
-    if (!notice) return null;
-    const isSuccess = notice.type === 'success';
-    return (
-        <div style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 9999, padding: '1rem',
-        }} onClick={onClose}>
-            <div style={{
-                background: '#fff', borderRadius: '16px', padding: '2rem 2rem 1.5rem',
-                maxWidth: '420px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
-                border: `1.5px solid ${isSuccess ? '#bbf7d0' : '#fecaca'}`,
-                textAlign: 'center',
-            }} onClick={e => e.stopPropagation()}>
-                <div style={{
-                    width: '52px', height: '52px', borderRadius: '50%', margin: '0 auto 1rem',
-                    background: isSuccess ? '#f0fdf4' : '#fef2f2',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '1.5rem', color: isSuccess ? '#16a34a' : '#dc2626',
-                }}>
-                    {isSuccess ? '✓' : '⚠'}
-                </div>
-                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#1c1917', marginBottom: '0.5rem' }}>
-                    {notice.title}
-                </div>
-                <div style={{ fontSize: '0.875rem', color: '#64748b', lineHeight: 1.6, marginBottom: '1.5rem' }}>
-                    {notice.message}
-                </div>
-                <button onClick={onClose} style={{
-                    background: isSuccess ? '#16a34a' : '#1c1917',
-                    color: '#fff', border: 'none', borderRadius: '8px',
-                    padding: '0.55rem 2rem', fontSize: '0.875rem', fontWeight: '600',
-                    cursor: 'pointer', fontFamily: 'inherit',
-                }}>
-                    {isSuccess ? 'Great, thanks!' : 'Got it'}
-                </button>
-            </div>
-        </div>
-    );
-}
-
 // ─── APPROVALS SUB-TAB ────────────────────────────────────────────────────────
 
-function ApprovalsView({ quotes, opportunities, currentUser, userRole, settings, onApprove, onReject, onEdit }) {
+function ApprovalsView({ quotes, opportunities, currentUser, userRole, onApprove, onReject, onEdit }) {
     const isManager = userRole === 'Manager';
     const isAdmin = userRole === 'Admin';
 
     const pending = useMemo(() => (quotes || []).filter(q => q.status === 'Pending Approval'), [quotes]);
-
-    const [notice, setNotice] = useState(null);
-
-    // Look up who a rep reports to for "awaiting approval from" display
-    const getManagerName = (repName) => {
-        if (!repName || !settings?.users) return null;
-        const rep = settings.users.find(u => u.name === repName);
-        return rep?.managedBy || rep?.manager || null;
-    };
 
     const handleSendToCustomer = async (quote) => {
         try {
@@ -1193,23 +1155,14 @@ function ApprovalsView({ quotes, opportunities, currentUser, userRole, settings,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ quoteId: quote.id }),
             });
-            setNotice({
-                type: 'success',
-                title: 'Quote Sent',
-                message: `The quote has been sent to the customer successfully.`,
-            });
+            alert('Quote sent to customer successfully.');
         } catch {
-            setNotice({
-                type: 'error',
-                title: 'Send Failed',
-                message: 'The quote could not be sent. Please check your connection and try again.',
-            });
+            alert('Failed to send email. Please try again.');
         }
     };
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <QuoteNoticeModal notice={notice} onClose={() => setNotice(null)} />
             <div className="table-container">
                 <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f0ece4', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>
@@ -1224,7 +1177,6 @@ function ApprovalsView({ quotes, opportunities, currentUser, userRole, settings,
                             const opp = (opportunities || []).find(o => o.id === q.opportunityId);
                             const { totalValue, avgDisc } = calcLineTotals(q.lineItems || [], q.dealDiscount || 0);
                             const canAct = isManager;
-                            const managerName = getManagerName(q.createdBy);
                             return (
                                 <div key={q.id} style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f0ece4', display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1232,13 +1184,6 @@ function ApprovalsView({ quotes, opportunities, currentUser, userRole, settings,
                                         <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
                                             {opp ? (opp.opportunityName || opp.account) : '—'} · Rep: {q.createdBy || '—'} · Avg Discount: {pct(avgDisc)}
                                         </div>
-                                        {managerName && (
-                                            <div style={{ fontSize: '0.6875rem', color: '#d97706', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                                <span style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '0.1rem 0.4rem', fontWeight: '600' }}>
-                                                    ⏳ Awaiting approval from {managerName}
-                                                </span>
-                                            </div>
-                                        )}
                                     </div>
                                     <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1c1917', flexShrink: 0 }}>{fmtFull(totalValue)}</div>
                                     <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
@@ -1249,6 +1194,7 @@ function ApprovalsView({ quotes, opportunities, currentUser, userRole, settings,
                                                 <button onClick={() => onReject(q)} style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>✕ Reject</button>
                                             </>
                                         )}
+                                        <button onClick={() => handleSendToCustomer(q)} style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>📧 Send</button>
                                     </div>
                                 </div>
                             );
@@ -1294,13 +1240,25 @@ export default function QuotesTab() {
         quotes, setQuotes, products, opportunities, settings, currentUser, userRole,
         handleSaveQuote, handleDeleteQuote, handleSaveProduct, handleDeleteProduct,
         loadQuotes, getNextQuoteNumber, showConfirm,
+        quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     } = useApp();
 
     const [subTab, setSubTab] = useState(() => localStorage.getItem('tab:quotes:subTab') || 'builder');
     const [builderMode, setBuilderMode] = useState(false); // true = showing builder canvas
     const [editingQuote, setEditingQuote] = useState(null);
+    // Deep link: opp ID passed from OpportunityModal → pre-filter All Quotes
+    const [deepLinkOppId, setDeepLinkOppId] = useState(null);
 
     const setTab = (t) => { setSubTab(t); localStorage.setItem('tab:quotes:subTab', t); };
+
+    // Consume deep link from context on mount
+    useEffect(() => {
+        if (quotesDeepLinkOppId) {
+            setDeepLinkOppId(quotesDeepLinkOppId);
+            setQuotesDeepLinkOppId(null); // consume it
+            setTab('all');
+        }
+    }, [quotesDeepLinkOppId]);
 
     const openBuilder = (quote = null) => {
         setEditingQuote(quote);
@@ -1435,6 +1393,8 @@ export default function QuotesTab() {
                     onNewQuote={() => openBuilder(null)}
                     loadQuotes={loadQuotes}
                     showConfirm={showConfirm}
+                    deepLinkOppId={deepLinkOppId}
+                    onClearDeepLink={() => setDeepLinkOppId(null)}
                 />
             )}
 
@@ -1455,7 +1415,6 @@ export default function QuotesTab() {
                     opportunities={opportunities}
                     currentUser={currentUser}
                     userRole={userRole}
-                    settings={settings}
                     onApprove={handleApprove}
                     onReject={handleReject}
                     onEdit={(q) => openBuilder(q)}
