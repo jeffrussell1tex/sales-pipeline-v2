@@ -235,63 +235,35 @@ function PriceBookPanel({ goBackToMenu, showConfirm }) {
 
 // ── Price Book Config Panel ────────────────────────────────────────────────────
 // Admin-only: manage units, types, and categories for the price book
-function PriceBookConfigPanel({ settings, setSettings, goBackToMenu }) {
-    const pbCfg = settings.priceBookConfig || { units: ['flat', 'month', 'year', 'user', 'hour', 'day'], types: ['recurring', 'one_time', 'service'], categories: ['Platform', 'Add-ons', 'Services', 'Hardware'] };
+// Hoisted outside PriceBookConfigPanel so React never remounts it on re-render,
+// which would kill input focus on every keystroke.
+const pbInputStyle = {
+    flex: 1, padding: '0.45rem 0.75rem', border: '1px solid #e5e2db',
+    borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit',
+    background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box',
+};
 
-    const [newUnit,     setNewUnit]     = React.useState('');
-    const [newType,     setNewType]     = React.useState('');
-    const [newCategory, setNewCategory] = React.useState('');
-    const [saved, setSaved] = React.useState(false);
-
-    const update = (key, list) => {
-        setSettings(prev => ({
-            ...prev,
-            priceBookConfig: { ...pbCfg, [key]: list },
-        }));
-    };
-
-    const addItem = (key, value, setter) => {
-        const v = value.trim();
-        if (!v) return;
-        const current = pbCfg[key] || [];
-        if (current.map(x => x.toLowerCase()).includes(v.toLowerCase())) return;
-        update(key, [...current, v]);
-        setter('');
-    };
-
-    const removeItem = (key, idx) => {
-        const current = pbCfg[key] || [];
-        update(key, current.filter((_, i) => i !== idx));
-    };
-
-    const pbInputStyle = {
-        flex: 1, padding: '0.45rem 0.75rem', border: '1px solid #e5e2db',
-        borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit',
-        background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box',
-    };
-
-    const SectionCard = ({ title, description, items, itemKey, value, setValue, labelMap }) => (
+function PbSectionCard({ title, description, itemKey, pbCfg, value, setValue, onAdd, onRemove, labelMap }) {
+    return (
         <div style={{ background: '#fff', border: '1px solid #ddd8cf', borderRadius: '12px', overflow: 'hidden', marginBottom: '1rem' }}>
             <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f0ece4', background: '#fafaf9' }}>
                 <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>{title}</div>
                 <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>{description}</div>
             </div>
             <div style={{ padding: '1rem 1.25rem' }}>
-                {/* Add new */}
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.875rem' }}>
                     <input
                         value={value}
                         onChange={e => setValue(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') addItem(itemKey, value, setValue); }}
+                        onKeyDown={e => { if (e.key === 'Enter') onAdd(itemKey, value, setValue); }}
                         placeholder={`Add new ${title.toLowerCase()} option…`}
                         style={pbInputStyle}
                     />
-                    <button onClick={() => addItem(itemKey, value, setValue)}
+                    <button onClick={() => onAdd(itemKey, value, setValue)}
                         style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.45rem 1rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                         + Add
                     </button>
                 </div>
-                {/* List */}
                 {(pbCfg[itemKey] || []).length === 0 ? (
                     <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic', padding: '0.5rem 0' }}>No options yet.</div>
                 ) : (
@@ -299,7 +271,7 @@ function PriceBookConfigPanel({ settings, setSettings, goBackToMenu }) {
                         {(pbCfg[itemKey] || []).map((item, idx) => (
                             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.3rem 0.625rem', fontSize: '0.8125rem', color: '#1c1917' }}>
                                 <span>{labelMap ? (labelMap[item] || item) : item}</span>
-                                <button onClick={() => removeItem(itemKey, idx)}
+                                <button onClick={() => onRemove(itemKey, idx)}
                                     style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.875rem', lineHeight: 1, padding: '0 0.125rem', fontFamily: 'inherit' }}>×</button>
                             </div>
                         ))}
@@ -308,6 +280,35 @@ function PriceBookConfigPanel({ settings, setSettings, goBackToMenu }) {
             </div>
         </div>
     );
+}
+
+function PriceBookConfigPanel({ settings, setSettings, goBackToMenu }) {
+    const pbCfg = settings.priceBookConfig || { units: ['flat', 'month', 'year', 'user', 'hour', 'day'], types: ['recurring', 'one_time', 'service'], categories: ['Platform', 'Add-ons', 'Services', 'Hardware'] };
+
+    const [newUnit,     setNewUnit]     = React.useState('');
+    const [newType,     setNewType]     = React.useState('');
+    const [newCategory, setNewCategory] = React.useState('');
+
+    const update = (key, list) => {
+        setSettings(prev => ({
+            ...prev,
+            priceBookConfig: { ...(prev.priceBookConfig || pbCfg), [key]: list },
+        }));
+    };
+
+    const addItem = (key, value, setter) => {
+        const v = value.trim();
+        if (!v) return;
+        const current = (settings.priceBookConfig || pbCfg)[key] || [];
+        if (current.map(x => x.toLowerCase()).includes(v.toLowerCase())) return;
+        update(key, [...current, v]);
+        setter('');
+    };
+
+    const removeItem = (key, idx) => {
+        const current = (settings.priceBookConfig || pbCfg)[key] || [];
+        update(key, current.filter((_, i) => i !== idx));
+    };
 
     return (
         <div className="table-container">
@@ -320,32 +321,38 @@ function PriceBookConfigPanel({ settings, setSettings, goBackToMenu }) {
                     ℹ️ These options populate the dropdowns when admins add or edit products in the Price Book. Changes are saved automatically.
                 </div>
 
-                <SectionCard
+                <PbSectionCard
                     title="Units"
                     description="Billing unit options shown on each product (e.g. /month, /year, flat fee)."
-                    items={pbCfg.units}
                     itemKey="units"
+                    pbCfg={settings.priceBookConfig || pbCfg}
                     value={newUnit}
                     setValue={setNewUnit}
+                    onAdd={addItem}
+                    onRemove={removeItem}
                 />
 
-                <SectionCard
+                <PbSectionCard
                     title="Types"
                     description="Product type classifications. Controls how the quote builder calculates ARR vs one-time value."
-                    items={pbCfg.types}
                     itemKey="types"
+                    pbCfg={settings.priceBookConfig || pbCfg}
                     value={newType}
                     setValue={setNewType}
+                    onAdd={addItem}
+                    onRemove={removeItem}
                     labelMap={{ recurring: 'Recurring', one_time: 'One-time', service: 'Service' }}
                 />
 
-                <SectionCard
+                <PbSectionCard
                     title="Categories"
                     description="Product categories used to group items in the quote builder catalog panel."
-                    items={pbCfg.categories}
                     itemKey="categories"
+                    pbCfg={settings.priceBookConfig || pbCfg}
                     value={newCategory}
                     setValue={setNewCategory}
+                    onAdd={addItem}
+                    onRemove={removeItem}
                 />
             </div>
         </div>
