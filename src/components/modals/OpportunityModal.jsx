@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { stages } from '../../utils/constants';
 import { dbFetch } from '../../utils/storage';
+import { useApp } from '../../AppContext';
 
 // ─────────────────────────────────────────────────────────────
 //  Deal History Tab
@@ -699,6 +700,104 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
     );
 }
 
+
+// ─── OppQuotesPanel ──────────────────────────────────────────────────────────
+// Shown inside the Opportunity modal's Quotes tab.
+// Displays existing quotes for this opp + a "Build Quote" button that deep-links
+// into the Quotes tab with this opportunity pre-selected.
+
+function OppQuotesPanel({ opportunity, contacts, onClose }) {
+    const { quotes, opportunities, setActiveTab, setQuotesDeepLinkOppId } = useApp();
+
+    const oppQuotes = React.useMemo(() =>
+        (quotes || [])
+            .filter(q => q.opportunityId === opportunity?.id)
+            .sort((a, b) => (b.version || 1) - (a.version || 1)),
+        [quotes, opportunity?.id]
+    );
+
+    const fmtCurrency = (v) => v == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
+
+    const statusColors = {
+        'Draft':            { bg: '#f1f5f9', color: '#64748b' },
+        'Pending Approval': { bg: '#fef3c7', color: '#d97706' },
+        'Approved':         { bg: '#dcfce7', color: '#16a34a' },
+        'Sent to Customer': { bg: '#dbeafe', color: '#2563eb' },
+        'Accepted':         { bg: '#d1fae5', color: '#059669' },
+        'Rejected / Lost':  { bg: '#fee2e2', color: '#dc2626' },
+    };
+
+    const handleNavigate = () => {
+        if (setQuotesDeepLinkOppId) setQuotesDeepLinkOppId(opportunity?.id);
+        if (setActiveTab) setActiveTab('quotes');
+        if (onClose) onClose();
+    };
+
+    // Pre-fill context for the primary contact on this opp
+    const primaryContact = React.useMemo(() => {
+        const contactNames = (opportunity?.contacts || '').split(', ').filter(Boolean);
+        if (!contactNames.length) return null;
+        const firstName = contactNames[0].split(' (')[0];
+        return (contacts || []).find(c => `${c.firstName} ${c.lastName}` === firstName) || null;
+    }, [opportunity, contacts]);
+
+    return (
+        <div style={{ padding: '0.5rem 0' }}>
+            {/* Opp / account / contact summary strip */}
+            <div style={{ background: '#f8f6f3', border: '1px solid #e8e3da', borderRadius: '10px', padding: '0.875rem 1.125rem', marginBottom: '1.25rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                <div>
+                    <div style={{ fontSize: '0.6875rem', fontWeight: '600', color: '#a8a29e', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>Opportunity</div>
+                    <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>{opportunity?.opportunityName || opportunity?.account || '—'}</div>
+                </div>
+                <div>
+                    <div style={{ fontSize: '0.6875rem', fontWeight: '600', color: '#a8a29e', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>Account</div>
+                    <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#44403c' }}>{opportunity?.account || '—'}</div>
+                </div>
+                {primaryContact && (
+                    <div>
+                        <div style={{ fontSize: '0.6875rem', fontWeight: '600', color: '#a8a29e', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>Primary Contact</div>
+                        <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#44403c' }}>{primaryContact.firstName} {primaryContact.lastName}{primaryContact.title ? ` · ${primaryContact.title}` : ''}</div>
+                    </div>
+                )}
+                <div>
+                    <div style={{ fontSize: '0.6875rem', fontWeight: '600', color: '#a8a29e', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>Est. ARR</div>
+                    <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>{fmtCurrency(opportunity?.arr)}</div>
+                </div>
+            </div>
+
+            {/* Quote list */}
+            {oppQuotes.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: '#94a3b8', fontSize: '0.875rem' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📋</div>
+                    <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: '#64748b' }}>No quotes yet</div>
+                    <div>Click below to open the Quote Builder for this opportunity.</div>
+                </div>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                    {oppQuotes.map(q => {
+                        const sc = statusColors[q.status] || { bg: '#f1f5f9', color: '#64748b' };
+                        return (
+                            <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', background: '#fff', border: '1px solid #e8e3da', borderRadius: '8px' }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1c1917' }}>{q.name || q.quoteNumber} <span style={{ fontWeight: '400', color: '#94a3b8' }}>v{q.version || 1}</span></div>
+                                    {q.updatedAt && <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '1px' }}>Updated {new Date(q.updatedAt).toLocaleDateString()}</div>}
+                                </div>
+                                <span style={{ background: sc.bg, color: sc.color, fontSize: '0.6875rem', fontWeight: '700', padding: '0.2rem 0.6rem', borderRadius: '999px', whiteSpace: 'nowrap' }}>{q.status}</span>
+                                <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1c1917', flexShrink: 0 }}>{fmtCurrency(q.total ?? q.subtotal)}</div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* Navigate button */}
+            <button onClick={handleNavigate} style={{ width: '100%', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '10px', padding: '0.75rem', fontSize: '0.9375rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                📋 {oppQuotes.length === 0 ? 'Build First Quote' : 'Open in Quote Builder'} →
+            </button>
+        </div>
+    );
+}
+
 export default function OpportunityModal({ opportunity, accounts, contacts, settings, pipelines, activePipelineId, currentUser, activities, onSaveActivity, onDeleteActivity, onSaveComment, onEditComment, onDeleteComment, onClose, onSave, onAddAccount, onSaveNewContact, onSaveNewAccount, onAddContact, lastCreatedAccountName, onAddRep, lastCreatedRepName, errorMessage, onDismissError, saving }) {
     const stages = (settings.funnelStages && settings.funnelStages.length > 0)
         ? settings.funnelStages.filter(s => s.name.trim()).map(s => s.name)
@@ -1068,6 +1167,7 @@ if (formData.account && formData.account.trim()) {
                             { id: 'history', label: `History${oppActivities.length > 0 ? ` (${oppActivities.length})` : ''}` },
                             { id: 'contacts', label: `Contacts${Object.keys((() => { const ce = {}; oppActivities.forEach(a => { if (a.contactName) ce[a.contactName] = true; }); (opportunity.contacts||'').split(', ').filter(Boolean).forEach(n => { ce[n.split(' (')[0]] = true; }); return ce; })()).length > 0 ? ` (${Object.keys((() => { const ce = {}; oppActivities.forEach(a => { if (a.contactName) ce[a.contactName] = true; }); (opportunity.contacts||'').split(', ').filter(Boolean).forEach(n => { ce[n.split(' (')[0]] = true; }); return ce; })()).length})` : ''}` },
                             ...(settings?.aiScoringEnabled ? [{ id: 'ai-score', label: '🤖 AI Score' }] : []),
+                            { id: 'quotes', label: '📋 Quotes' },
                         ].map(tab => (
                             <button
                                 key={tab.id}
@@ -1122,6 +1222,14 @@ if (formData.account && formData.account.trim()) {
                 )}
 
                 {/* ══ AI SCORE TAB ══ */}
+                {opportunity && modalTab === 'quotes' && (
+                    <OppQuotesPanel
+                        opportunity={opportunity}
+                        contacts={contacts}
+                        onClose={onClose}
+                    />
+                )}
+
                 {opportunity && modalTab === 'ai-score' && (
                     <AiScoreTab
                         opportunity={opportunity}

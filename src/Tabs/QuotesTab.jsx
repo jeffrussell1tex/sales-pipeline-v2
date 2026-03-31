@@ -115,7 +115,7 @@ const DISCOUNT_APPROVAL_THRESHOLD = 15; // percent
 
 // ─── QUOTE BUILDER ────────────────────────────────────────────────────────────
 
-function QuoteBuilder({ quote, onSave, onClose, opportunities, products, settings, currentUser, userRole, quotes, getNextQuoteNumber }) {
+function QuoteBuilder({ quote, onSave, onClose, opportunities, products, settings, currentUser, userRole, quotes, getNextQuoteNumber, defaultOppId }) {
     const isNew = !quote;
     const versions = useMemo(() =>
         isNew ? [] : (quotes || []).filter(q => q.quoteNumber === quote?.quoteNumber).sort((a, b) => a.version - b.version),
@@ -128,7 +128,7 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
 
     // Form state
     const [name, setName] = useState(editingQuote?.name || '');
-    const [oppId, setOppId] = useState(editingQuote?.opportunityId || '');
+    const [oppId, setOppId] = useState(editingQuote?.opportunityId || defaultOppId || '');
     const [validUntil, setValidUntil] = useState(editingQuote?.validUntil || '');
     const [paymentTerms, setPaymentTerms] = useState(editingQuote?.paymentTerms || 'Net 30 · Annual');
     // dealDiscount removed — avg line discount is now read-only computed from line items
@@ -162,15 +162,20 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
     const needsApproval = avgDisc >= DISCOUNT_APPROVAL_THRESHOLD;
     const linkedOpp = (opportunities || []).find(o => o.id === oppId);
 
-    // Group products for catalog
+    // Group products for catalog — categories and products within each are alpha-sorted
     const catalogGroups = useMemo(() => {
         const groups = {};
-        (products || []).filter(p => p.active !== false).forEach(p => {
-            const cat = p.category || 'Other';
-            if (!groups[cat]) groups[cat] = [];
-            groups[cat].push(p);
-        });
-        return groups;
+        [...(products || [])].filter(p => p.active !== false)
+            .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+            .forEach(p => {
+                const cat = p.category || 'Other';
+                if (!groups[cat]) groups[cat] = [];
+                groups[cat].push(p);
+            });
+        // Return with sorted category keys
+        return Object.fromEntries(
+            Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))
+        );
     }, [products]);
 
     const filteredGroups = useMemo(() => {
@@ -185,18 +190,19 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
     }, [catalogGroups, catalogSearch]);
 
     const addProduct = (product) => {
-        // DB uses productType (with value 'one_time') and listPrice
         const rawType = product.productType || product.type || 'one_time';
         const normType = rawType === 'one_time' ? 'one-time' : rawType;
+        const isCustomPrice = product.customPrice === true;
         setLineItems(prev => [...prev, {
             _key: Date.now() + Math.random(),
             productId: product.id,
             productName: product.name,
             productType: normType,
             unit: product.unit || (normType === 'recurring' ? 'month' : 'flat'),
-            listPrice: Number(product.listPrice || product.price) || 0,
+            listPrice: isCustomPrice ? '' : (Number(product.listPrice || product.price) || 0),
             quantity: 1,
             discountPct: 0,
+            customPrice: isCustomPrice,
         }]);
     };
 
@@ -369,9 +375,12 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
                                 >
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#f5f1eb', lineHeight: 1.3 }}>{prod.name}</div>
+                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#f5f1eb', lineHeight: 1.3, display: 'flex', alignItems: 'center', gap: '0.375rem', flexWrap: 'wrap' }}>
+                                                {prod.name}
+                                                {prod.customPrice && <span style={{ fontSize: '0.5rem', fontWeight: '700', background: 'rgba(167,139,250,0.25)', color: '#c4b5fd', padding: '1px 4px', borderRadius: '3px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Custom</span>}
+                                            </div>
                                             <div style={{ fontSize: '0.6875rem', color: '#a8a29e', marginTop: '0.15rem' }}>
-                                                ${Number(prod.listPrice || prod.price || 0).toLocaleString()} {prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : 'flat'}
+                                                {prod.customPrice ? 'Price set on quote' : '$' + Number(prod.listPrice || prod.price || 0).toLocaleString() + ' ' + (prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : 'flat')}
                                             </div>
                                             <TypeBadge type={prod.productType || prod.type} />
                                         </div>
@@ -513,9 +522,13 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
                                 {lines.map((item, idx) => (
                                     <tr key={item._key || idx} style={{ borderBottom: '1px solid #f0ece4' }}>
                                         <td style={{ padding: '0.5rem 0.75rem', minWidth: '160px' }}>
-                                            <div style={{ fontWeight: '600', fontSize: '0.8125rem', color: '#1c1917' }}>{item.productName}</div>
+                                            <div style={{ fontWeight: '600', fontSize: '0.8125rem', color: '#1c1917', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                                                {item.productName}
+                                                {item.customPrice && <span style={{ fontSize: '0.5rem', fontWeight: '700', background: '#f3e8ff', color: '#7c3aed', padding: '1px 4px', borderRadius: '3px', textTransform: 'uppercase' }}>Custom</span>}
+                                            </div>
                                             {item.productType === 'recurring' && <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>/mo × 12 months</div>}
                                             {item.productType === 'service' && <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>flat fee</div>}
+                                            {item.customPrice && <div style={{ fontSize: '0.6875rem', color: '#7c3aed', fontWeight: '600' }}>Enter project price →</div>}
                                         </td>
                                         <td style={{ padding: '0.5rem 0.75rem' }}><TypeBadge type={item.productType} /></td>
                                         <td style={{ padding: '0.5rem 0.5rem', textAlign: 'right' }}>
@@ -526,15 +539,20 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
                                         <td style={{ padding: '0.5rem 0.5rem', textAlign: 'right' }}>
                                             <input type="number" min="0" value={item.listPrice}
                                                 onChange={e => updateLine(idx, 'listPrice', Number(e.target.value))}
-                                                style={{ ...inp, width: '90px', textAlign: 'right', padding: '0.3rem 0.4rem' }} />
+                                                style={{ ...inp, width: '90px', textAlign: 'right', padding: '0.3rem 0.4rem',
+                                                    borderColor: item.customPrice ? '#7c3aed' : '#e5e2db',
+                                                    boxShadow: item.customPrice ? '0 0 0 2px rgba(124,58,237,0.12)' : 'none',
+                                                }}
+                                                placeholder={item.customPrice ? 'Enter $' : '0'}
+                                            />
                                         </td>
                                         <td style={{ padding: '0.5rem 0.5rem', textAlign: 'right' }}>
                                             <input type="number" min="0" max="100" value={item.discountPct}
                                                 onChange={e => updateLine(idx, 'discountPct', Number(e.target.value))}
                                                 style={{ ...inp, width: '60px', textAlign: 'right', padding: '0.3rem 0.4rem', borderColor: Number(item.discountPct) >= DISCOUNT_APPROVAL_THRESHOLD ? '#d97706' : '#e5e2db' }} />
                                         </td>
-                                        <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: '700', fontSize: '0.875rem', color: '#1c1917', whiteSpace: 'nowrap' }}>
-                                            {fmtFull(item.lineTotal)}
+                                        <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: '700', fontSize: '0.875rem', color: item.customPrice && !item.listPrice ? '#94a3b8' : '#1c1917', whiteSpace: 'nowrap' }}>
+                                            {item.customPrice && !item.listPrice ? '—' : fmtFull(item.lineTotal)}
                                         </td>
                                         <td style={{ padding: '0.5rem 0.5rem', textAlign: 'right' }}>
                                             <button onClick={() => removeLine(idx)}
@@ -546,7 +564,7 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
                                     <tr>
                                         <td colSpan={7}>
                                             <div style={{ padding: '2rem', textAlign: 'center', color: dragOver ? '#2563eb' : '#94a3b8', fontSize: '0.8125rem', fontStyle: 'italic', borderRadius: '8px', border: dragOver ? '2px dashed #2563eb' : '2px dashed transparent', transition: 'all 0.15s', margin: '0.5rem' }}>
-                                                ← Click + Add from catalog to add products, or drag here
+                                                ← Click + Add from the product catalog, or drag a product here
                                             </div>
                                         </td>
                                     </tr>
@@ -718,7 +736,7 @@ function buildPrintHTML(quote, opp, lines, subtotal, totalValue, recurringValue,
 
 // ─── ALL QUOTES LIST ──────────────────────────────────────────────────────────
 
-function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings, onEdit, onDelete, onNewQuote, loadQuotes }) {
+function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings, onEdit, onDelete, onNewQuote, loadQuotes, showConfirm, deepLinkOppId, onClearDeepLink }) {
     const managedReps = new Set((settings?.users || [])
         .filter(u => u.managedBy === currentUser || u.manager === currentUser)
         .map(u => u.name));
@@ -726,10 +744,18 @@ function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings,
     const [filterRep, setFilterRep] = useState('');
     const [filterPeriod, setFilterPeriod] = useState('all');
     const [filterStatus, setFilterStatus] = useState('');
+    const [filterOpp, setFilterOpp] = useState('');
     const [customFrom, setCustomFrom] = useState('');
     const [customTo, setCustomTo] = useState('');
     const [sortField, setSortField] = useState('createdAt');
     const [sortDir, setSortDir] = useState('desc');
+
+    // Consume deep link — pre-filter to a specific opportunity
+    useEffect(() => {
+        if (deepLinkOppId) {
+            setFilterOpp(deepLinkOppId);
+        }
+    }, [deepLinkOppId]);
 
     const isAdmin = userRole === 'Admin';
     const isManager = userRole === 'Manager';
@@ -772,6 +798,7 @@ function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings,
             const opp = (opportunities || []).find(o => o.id === q.opportunityId);
             return opp?.salesRep === filterRep || q.createdBy === filterRep;
         });
+        if (filterOpp) out = out.filter(q => q.opportunityId === filterOpp);
         if (filterStatus) out = out.filter(q => q.status === filterStatus);
         out = [...out].sort((a, b) => {
             let av = a[sortField] || '', bv = b[sortField] || '';
@@ -786,7 +813,12 @@ function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings,
             seen.add(q.quoteNumber);
             return true;
         });
-    }, [periodFiltered, filterRep, filterStatus, sortField, sortDir, opportunities]);
+    }, [periodFiltered, filterRep, filterStatus, filterOpp, sortField, sortDir, opportunities]);
+
+    // Opp name for banner display
+    const deepLinkOpp = deepLinkOppId
+        ? (opportunities || []).find(o => o.id === deepLinkOppId)
+        : null;
 
     const th = (label, field) => (
         <th onClick={() => { setSortField(field); setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }}
@@ -886,7 +918,7 @@ function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings,
                                         </div>
                                     </td>
                                     <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                                        <button onClick={e => { e.stopPropagation(); if (window.confirm('Delete this quote?')) onDelete(q.id); }}
+                                        <button onClick={e => { e.stopPropagation(); showConfirm ? showConfirm('Delete this quote?', () => onDelete(q.id), true) : (window.confirm('Delete this quote?') && onDelete(q.id)); }}
                                             style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'inherit' }}>Delete</button>
                                     </td>
                                 </tr>
@@ -906,9 +938,22 @@ function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings,
 
 // ─── PRICE BOOK (product management) ─────────────────────────────────────────
 
-function PriceBook({ products, onSave, onDelete }) {
-    const EMPTY = { name: '', category: 'Platform', productType: 'recurring', listPrice: '', unit: 'month', description: '', active: true };
-    const [editing, setEditing] = useState(null);
+function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm }) {
+    const isAdmin = userRole === 'Admin';
+
+    // Settings-driven options with safe fallbacks
+    const pbCfg        = settings?.priceBookConfig || {};
+    const unitOptions  = pbCfg.units      || ['flat', 'month', 'year', 'user', 'hour', 'day'];
+    const typeOptions  = pbCfg.types      || ['recurring', 'one_time', 'service'];
+    const catOptions   = [...new Set([
+        ...(pbCfg.categories || ['Platform', 'Add-ons', 'Services', 'Hardware']),
+        ...(products || []).map(p => p.category).filter(Boolean),
+    ])].sort();
+
+    const TYPE_LABEL   = { recurring: 'Recurring', one_time: 'One-time', service: 'Service' };
+
+    const EMPTY = { name: '', category: '', productType: typeOptions[0] || 'recurring', listPrice: '', unit: unitOptions[0] || 'flat', description: '', active: true, customPrice: false };
+    const [editing, setEditing] = useState(null); // product id or 'new'
     const [form, setForm] = useState(EMPTY);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
@@ -917,14 +962,13 @@ function PriceBook({ products, onSave, onDelete }) {
     const openEdit = (p) => {
         setForm({
             name: p.name || '',
-            category: p.category || 'Platform',
-            productType: p.productType || p.type || 'recurring',
+            category: p.category || '',
+            productType: p.productType || p.type || typeOptions[0] || 'recurring',
             listPrice: p.listPrice || p.price || '',
-            unit: p.unit || 'month',
+            unit: p.unit || unitOptions[0] || 'flat',
             description: p.description || '',
             active: p.active !== false,
-            sku: p.sku || '',
-            minPrice: p.minPrice || '',
+            customPrice: p.customPrice === true,
         });
         setEditing(p.id);
         setError(null);
@@ -933,11 +977,16 @@ function PriceBook({ products, onSave, onDelete }) {
 
     const handleSave = async () => {
         if (!form.name.trim()) { setError('Product name is required.'); return; }
-        if (!form.listPrice || isNaN(Number(form.listPrice))) { setError('Valid price is required.'); return; }
+        if (!form.customPrice && (form.listPrice === '' || isNaN(Number(form.listPrice)))) { setError('A valid list price is required (or enable Custom Price).'); return; }
         setSaving(true);
         setError(null);
         try {
-            await onSave({ ...form, listPrice: Number(form.listPrice), id: editing === 'new' ? undefined : editing });
+            const payload = {
+                ...form,
+                listPrice: form.customPrice ? 0 : Number(form.listPrice),
+                id: editing === 'new' ? undefined : editing,
+            };
+            await onSave(payload);
             cancel();
         } catch (err) {
             setError(err.message || 'Failed to save.');
@@ -946,23 +995,34 @@ function PriceBook({ products, onSave, onDelete }) {
         }
     };
 
-    const categories = [...new Set((products || []).map(p => p.category).filter(Boolean)), 'Platform', 'Add-ons', 'Services', 'Hardware'].filter((v, i, a) => a.indexOf(v) === i);
+    const handleDelete = (prodId) => {
+        if (showConfirm) {
+            showConfirm('Deactivate this product? It will no longer appear in the catalog for new quotes.', () => onDelete(prodId), true);
+        } else {
+            onDelete(prodId);
+        }
+    };
+
+    // Always alpha-sorted
+    const sortedProducts = [...(products || [])].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {/* Toolbar */}
             <div className="table-container" style={{ marginBottom: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', padding: '0.625rem 1.25rem' }}>
-                    <span style={{ fontSize: '0.8125rem', color: '#64748b' }}>{(products || []).length} product{(products || []).length !== 1 ? 's' : ''} in Price Book</span>
-                    <button onClick={openNew}
-                        style={{ marginLeft: 'auto', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>
-                        + Add Product
-                    </button>
+                    <span style={{ fontSize: '0.8125rem', color: '#64748b' }}>{sortedProducts.length} product{sortedProducts.length !== 1 ? 's' : ''} in Price Book</span>
+                    {isAdmin && (
+                        <button onClick={openNew}
+                            style={{ marginLeft: 'auto', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            + Add Product
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Edit form */}
-            {editing && (
+            {/* Edit / New form — Admin only */}
+            {isAdmin && editing && (
                 <div className="table-container" style={{ padding: '1.25rem' }}>
                     <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1c1917', marginBottom: '1rem' }}>{editing === 'new' ? 'New Product' : 'Edit Product'}</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
@@ -973,34 +1033,44 @@ function PriceBook({ products, onSave, onDelete }) {
                         <div>
                             <label style={lbl}>Category</label>
                             <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={inp}>
-                                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                <option value="">— Select —</option>
+                                {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                         </div>
                         <div>
                             <label style={lbl}>Type</label>
                             <select value={form.productType} onChange={e => setForm(f => ({ ...f, productType: e.target.value }))} style={inp}>
-                                <option value="recurring">Recurring</option>
-                                <option value="one_time">One-time</option>
-                                <option value="service">Service</option>
+                                {typeOptions.map(t => <option key={t} value={t}>{TYPE_LABEL[t] || t}</option>)}
                             </select>
                         </div>
                         <div>
                             <label style={lbl}>Price ($)</label>
-                            <input type="number" min="0" value={form.listPrice} onChange={e => setForm(f => ({ ...f, listPrice: e.target.value }))} style={inp} placeholder="0" />
+                            {form.customPrice ? (
+                                <div style={{ ...inp, color: '#94a3b8', fontStyle: 'italic', display: 'flex', alignItems: 'center', fontSize: '0.75rem' }}>Rep enters on quote</div>
+                            ) : (
+                                <input type="number" min="0" value={form.listPrice} onChange={e => setForm(f => ({ ...f, listPrice: e.target.value }))} style={inp} placeholder="0" />
+                            )}
                         </div>
                         <div>
                             <label style={lbl}>Unit</label>
                             <select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} style={inp}>
-                                <option value="month">/month</option>
-                                <option value="year">/year</option>
-                                <option value="flat">flat fee</option>
-                                <option value="unit">per unit</option>
+                                {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
                             </select>
                         </div>
                     </div>
                     <div style={{ marginBottom: '0.75rem' }}>
                         <label style={lbl}>Description (optional)</label>
                         <input value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={inp} placeholder="Brief description shown in quotes" />
+                    </div>
+                    {/* Custom Price toggle */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
+                        <input type="checkbox" id="pb-custom-price" checked={!!form.customPrice}
+                            onChange={e => setForm(f => ({ ...f, customPrice: e.target.checked, listPrice: e.target.checked ? '' : f.listPrice }))}
+                            style={{ marginTop: '2px', cursor: 'pointer' }} />
+                        <label htmlFor="pb-custom-price" style={{ cursor: 'pointer' }}>
+                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1c1917' }}>Custom / Variable Price</div>
+                            <div style={{ fontSize: '0.75rem', color: '#78716c', marginTop: '2px' }}>When enabled, reps enter the price directly on the quote. Ideal for services that vary by project.</div>
+                        </label>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
                         <input type="checkbox" id="prod-active" checked={form.active !== false} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} />
@@ -1021,20 +1091,27 @@ function PriceBook({ products, onSave, onDelete }) {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                         <tr style={{ background: '#f8f7f5' }}>
-                            {['Name', 'Category', 'Type', 'Price', 'Unit', 'Status', ''].map((h, i) => (
+                            {['Name', 'Category', 'Type', 'Price', 'Unit', 'Status', ...(isAdmin ? [''] : [])].map((h, i) => (
                                 <th key={i} style={{ padding: '0.5rem 0.75rem', fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left', borderBottom: '1px solid #e8e3da' }}>{h}</th>
                             ))}
                         </tr>
                     </thead>
                     <tbody>
-                        {(products || []).map(prod => (
+                        {sortedProducts.map(prod => (
                             <tr key={prod.id} style={{ borderBottom: '1px solid #f0ece4' }}
                                 onMouseEnter={e => e.currentTarget.style.background = '#faf9f7'}
                                 onMouseLeave={e => e.currentTarget.style.background = ''}>
-                                <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', fontWeight: '600', color: prod.active !== false ? '#1c1917' : '#94a3b8' }}>{prod.name}</td>
+                                <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', fontWeight: '600', color: prod.active !== false ? '#1c1917' : '#94a3b8' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                                        {prod.name}
+                                        {prod.customPrice && <span style={{ fontSize: '0.5625rem', fontWeight: '700', background: '#f3e8ff', color: '#6b21a8', padding: '1px 5px', borderRadius: '4px', textTransform: 'uppercase' }}>Custom</span>}
+                                    </div>
+                                </td>
                                 <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', color: '#64748b' }}>{prod.category || '—'}</td>
                                 <td style={{ padding: '0.625rem 0.75rem' }}><TypeBadge type={prod.productType || prod.type} /></td>
-                                <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>${Number(prod.listPrice || prod.price || 0).toLocaleString()}</td>
+                                <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.875rem', fontWeight: '700', color: prod.customPrice ? '#7c3aed' : '#1c1917', fontStyle: prod.customPrice ? 'italic' : 'normal' }}>
+                                    {prod.customPrice ? 'Variable' : '$' + Number(prod.listPrice || prod.price || 0).toLocaleString()}
+                                </td>
                                 <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.75rem', color: '#64748b' }}>{prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : prod.unit || 'flat'}</td>
                                 <td style={{ padding: '0.625rem 0.75rem' }}>
                                     <span style={{ fontSize: '0.625rem', fontWeight: '700', padding: '0.15rem 0.4rem', borderRadius: '4px', textTransform: 'uppercase',
@@ -1043,15 +1120,17 @@ function PriceBook({ products, onSave, onDelete }) {
                                         {prod.active !== false ? 'Active' : 'Inactive'}
                                     </span>
                                 </td>
-                                <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                                    <button onClick={() => openEdit(prod)} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'inherit', marginRight: '0.75rem' }}>Edit</button>
-                                    <button onClick={() => { if (window.confirm('Delete this product?')) onDelete(prod.id); }} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'inherit' }}>Delete</button>
-                                </td>
+                                {isAdmin && (
+                                    <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
+                                        <button onClick={() => openEdit(prod)} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'inherit', marginRight: '0.75rem' }}>Edit</button>
+                                        <button onClick={() => handleDelete(prod.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'inherit' }}>Delete</button>
+                                    </td>
+                                )}
                             </tr>
                         ))}
-                        {(products || []).length === 0 && (
-                            <tr><td colSpan={7} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem', fontStyle: 'italic' }}>
-                                No products yet. Click "+ Add Product" to build your Price Book.
+                        {sortedProducts.length === 0 && (
+                            <tr><td colSpan={isAdmin ? 7 : 6} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem', fontStyle: 'italic' }}>
+                                No products yet. {isAdmin ? 'Click "+ Add Product" to build your Price Book.' : 'Contact your admin to add products.'}
                             </td></tr>
                         )}
                     </tbody>
@@ -1160,14 +1239,26 @@ export default function QuotesTab() {
     const {
         quotes, setQuotes, products, opportunities, settings, currentUser, userRole,
         handleSaveQuote, handleDeleteQuote, handleSaveProduct, handleDeleteProduct,
-        loadQuotes, getNextQuoteNumber,
+        loadQuotes, getNextQuoteNumber, showConfirm,
+        quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     } = useApp();
 
     const [subTab, setSubTab] = useState(() => localStorage.getItem('tab:quotes:subTab') || 'builder');
     const [builderMode, setBuilderMode] = useState(false); // true = showing builder canvas
     const [editingQuote, setEditingQuote] = useState(null);
+    // Deep link: opp ID passed from OpportunityModal → pre-filter All Quotes
+    const [deepLinkOppId, setDeepLinkOppId] = useState(null);
 
     const setTab = (t) => { setSubTab(t); localStorage.setItem('tab:quotes:subTab', t); };
+
+    // Consume deep link from context on mount
+    useEffect(() => {
+        if (quotesDeepLinkOppId) {
+            setDeepLinkOppId(quotesDeepLinkOppId);
+            setQuotesDeepLinkOppId(null); // consume it
+            setTab('all');
+        }
+    }, [quotesDeepLinkOppId]);
 
     const openBuilder = (quote = null) => {
         setEditingQuote(quote);
@@ -1239,6 +1330,7 @@ export default function QuotesTab() {
                         userRole={userRole}
                         quotes={quotes}
                         getNextQuoteNumber={getNextQuoteNumber}
+                        defaultOppId={editingQuote ? undefined : deepLinkOppId}
                     />
                 </div>
             </div>
@@ -1301,14 +1393,20 @@ export default function QuotesTab() {
                     onDelete={handleDeleteQuote}
                     onNewQuote={() => openBuilder(null)}
                     loadQuotes={loadQuotes}
+                    showConfirm={showConfirm}
+                    deepLinkOppId={deepLinkOppId}
+                    onClearDeepLink={() => setDeepLinkOppId(null)}
                 />
             )}
 
             {subTab === 'pricebook' && (
                 <PriceBook
                     products={products}
+                    settings={settings}
+                    userRole={userRole}
                     onSave={handleSaveProductLocal}
                     onDelete={handleDeleteProductLocal}
+                    showConfirm={showConfirm}
                 />
             )}
 
