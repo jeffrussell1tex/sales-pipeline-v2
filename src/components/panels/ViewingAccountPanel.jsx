@@ -27,6 +27,7 @@ export default function ViewingAccountPanel({
         viewingContact, setViewingContact,
         viewingAccount, setViewingAccount,
         viewingTask, setViewingTask,
+        setMeetingPrepOpen, setMeetingPrepEvent, setMeetingPrepOppId,
         accShowAllClosed, setAccShowAllClosed,
         accShowAllContacts, setAccShowAllContacts,
     } = useApp();
@@ -109,8 +110,15 @@ const CONTACT_LIMIT = 8;
                           </div>
                       </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                      <button onClick={() => { setActivityInitialContext({ companyName: acc.name }); setEditingActivity(null); setShowActivityModal(true); }} style={{ width:'40px', height:'40px', borderRadius:'50%', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', boxShadow:'0 2px 10px rgba(37,99,235,0.4)', fontSize:'1.1rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }} title="Quick log activity">⚡</button>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
+                      <button onClick={() => { setActivityInitialContext({ companyName: acc.name }); setEditingActivity(null); setShowActivityModal(true); }}
+                          style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'none', background:'#1c1917', color:'#f5f1eb', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
+                          title="Quick log activity">⚡ Log</button>
+                      {openOpps.length > 0 && (
+                          <button onClick={() => { setMeetingPrepEvent({ summary: acc.name, start: { date: new Date().toISOString().split('T')[0] }, attendeeCount: 0 }); setMeetingPrepOppId(openOpps[0].id); setMeetingPrepOpen(true); }}
+                              style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'1px solid #ddd8cf', background:'#f0ece4', color:'#1c1917', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
+                              title="Meeting prep">📋 Prep</button>
+                      )}
                       <button className="btn" onClick={() => { setViewingAccount(null); handleEditAccount(acc); }}>Edit Account</button>
                   </div>
               </div>
@@ -214,7 +222,7 @@ const CONTACT_LIMIT = 8;
                   ) : (
                       <div>
                           <div style={{ display: 'grid', gridTemplateColumns: hasSubs ? '1fr 130px 140px 110px 90px' : '1fr 140px 120px 110px 100px', padding: '0.5rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #f1f3f5', fontSize: '0.6875rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                              <span>Opportunity</span>{hasSubs && <span>Account</span>}<span>Stage</span><span style={{ textAlign: 'right' }}>ARR</span><span style={{ textAlign: 'center' }}>Close Date</span>
+                              <span>Opportunity</span>{hasSubs && <span>Account</span>}<span>Stage</span><span style={{ textAlign: 'right' }}>Revenue</span><span style={{ textAlign: 'center' }}>Close Date</span>
                           </div>
                           {[...allOpenOpps].sort((a, b) => new Date(a.forecastedCloseDate || '9999') - new Date(b.forecastedCloseDate || '9999')).map((opp, idx) => {
                               const sc = getStageColor(opp.stage);

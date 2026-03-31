@@ -38,6 +38,22 @@ export function useCalendarState() {
     const [meetingPrepOpen, setMeetingPrepOpen] = useState(false);
     const [meetingPrepOppId, setMeetingPrepOppId] = useState(null);
 
+    // ── Calendar connections (loaded from /calendar-connections on mount) ──────
+    // userConnections: array of { id, provider, calendarEmail, connectedAt }
+    // orgConnections:  array of { id, provider, calendarName, calendarEmail, connectedAt }
+    const [userCalConnections, setUserCalConnections] = useState([]);
+    const [orgCalConnections, setOrgCalConnections] = useState([]);
+    const [calConnectionsLoading, setCalConnectionsLoading] = useState(false);
+    const [calConnectionsError, setCalConnectionsError] = useState(null);
+
+    // Tracks which provider + scope is currently being disconnected (for spinner state)
+    // e.g. { id: 'ucal_123', scope: 'user' } or null
+    const [calDisconnecting, setCalDisconnecting] = useState(null);
+
+    // Set when the app lands back from the OAuth callback redirect
+    // (?calconnect=success|error) — used to show a toast/banner in the Calendar tab
+    const [calConnectResult, setCalConnectResult] = useState(null); // 'success' | 'error' | null
+
     return {
         calendarEvents, setCalendarEvents,
         calendarLoading, setCalendarLoading,
@@ -64,5 +80,12 @@ export function useCalendarState() {
         meetingPrepEvent, setMeetingPrepEvent,
         meetingPrepOpen, setMeetingPrepOpen,
         meetingPrepOppId, setMeetingPrepOppId,
+        // Connections
+        userCalConnections, setUserCalConnections,
+        orgCalConnections, setOrgCalConnections,
+        calConnectionsLoading, setCalConnectionsLoading,
+        calConnectionsError, setCalConnectionsError,
+        calDisconnecting, setCalDisconnecting,
+        calConnectResult, setCalConnectResult,
     };
 }

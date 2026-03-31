@@ -69,3 +69,45 @@ export const productOptions = [
     'AutoCall, Timesheets',
     'Shiftboard, AutoCall, Timesheets'
 ];
+
+// ── Quotes & Price Book ───────────────────────────────────────────────────────
+
+export const QUOTE_STATUSES = [
+    'Draft',
+    'Pending Approval',
+    'Approved',
+    'Sent',
+    'Accepted',
+    'Declined',
+    'Expired',
+];
+
+export const PRODUCT_TYPES = [
+    { value: 'recurring', label: 'Recurring' },
+    { value: 'one_time',  label: 'One-time' },
+    { value: 'service',   label: 'Service' },
+];
+
+export const PRODUCT_UNITS = [
+    { value: 'flat',  label: 'Flat fee' },
+    { value: 'month', label: 'Per month' },
+    { value: 'year',  label: 'Per year' },
+    { value: 'user',  label: 'Per user' },
+    { value: 'hour',  label: 'Per hour' },
+    { value: 'day',   label: 'Per day' },
+];
+
+export const PAYMENT_TERMS = [
+    'Due on Receipt',
+    'Net 15',
+    'Net 30',
+    'Net 45',
+    'Net 60',
+    'Annual Upfront',
+    'Monthly',
+];
+
+// ── Field label renames (ARR → Revenue) ───────────────────────────────────────
+// The DB column stays `arr` for backward compatibility.
+// Use this label everywhere in the UI.
+export const REVENUE_LABEL = 'Revenue';

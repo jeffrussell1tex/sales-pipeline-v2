@@ -22,6 +22,7 @@ export default function ViewingContactPanel({
         viewingContact, setViewingContact,
         viewingAccount, setViewingAccount,
         viewingTask, setViewingTask,
+        setMeetingPrepOpen, setMeetingPrepEvent, setMeetingPrepOppId,
         contactShowAllDeals, setContactShowAllDeals,
     } = useApp();
 
@@ -52,6 +53,7 @@ const activeDeals = involvedOpps.filter(o => o.stage !== 'Closed Won' && o.stage
 const closedDeals = involvedOpps.filter(o => o.stage === 'Closed Won' || o.stage === 'Closed Lost');
 const relatedAccount = ct.company ? accounts.find(a => a.name.toLowerCase() === ct.company.toLowerCase()) : null;
 const DEAL_LIMIT = 5;
+const ctOpps = activeDeals; // alias for Prep button — active deals linked to this contact
 
 
     return (
@@ -87,8 +89,15 @@ const DEAL_LIMIT = 5;
                           </div>
                       </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                      <button onClick={() => { setActivityInitialContext({ companyName: ct.company || '', contactName: ctFullName }); setEditingActivity(null); setShowActivityModal(true); }} style={{ width:'40px', height:'40px', borderRadius:'50%', background:'linear-gradient(135deg,#2563eb,#7c3aed)', color:'#fff', border:'none', boxShadow:'0 2px 10px rgba(37,99,235,0.4)', fontSize:'1.1rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }} title="Quick log activity">⚡</button>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
+                      <button onClick={() => { setActivityInitialContext({ companyName: ct.company || '', contactName: ctFullName }); setEditingActivity(null); setShowActivityModal(true); }}
+                          style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'none', background:'#1c1917', color:'#f5f1eb', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
+                          title="Quick log activity">⚡ Log</button>
+                      {ctOpps.length > 0 && (
+                          <button onClick={() => { setMeetingPrepEvent({ summary: ctFullName, start: { date: new Date().toISOString().split('T')[0] }, attendeeCount: 0 }); setMeetingPrepOppId(ctOpps[0].id); setMeetingPrepOpen(true); }}
+                              style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'1px solid #ddd8cf', background:'#f0ece4', color:'#1c1917', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
+                              title="Meeting prep">📋 Prep</button>
+                      )}
                       <button className="btn" onClick={() => { setViewingContact(null); handleEditContact(ct); }}>Edit Contact</button>
                   </div>
               </div>
@@ -125,7 +134,7 @@ const DEAL_LIMIT = 5;
                   ) : (
                       <div>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px 120px 110px 100px', padding: '0.5rem 1.5rem', background: '#f8fafc', borderBottom: '1px solid #f1f3f5', fontSize: '0.6875rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                              <span>Opportunity</span><span>Stage</span><span style={{ textAlign: 'right' }}>ARR</span><span style={{ textAlign: 'center' }}>Close Date</span><span style={{ textAlign: 'center' }}>Health</span>
+                              <span>Opportunity</span><span>Stage</span><span style={{ textAlign: 'right' }}>Revenue</span><span style={{ textAlign: 'center' }}>Close Date</span><span style={{ textAlign: 'center' }}>Health</span>
                           </div>
                           {activeDeals.sort((a, b) => new Date(a.forecastedCloseDate || '9999') - new Date(b.forecastedCloseDate || '9999')).slice(0, contactShowAllDeals ? activeDeals.length : DEAL_LIMIT).map((opp, idx) => {
                               const sc = getStageColor(opp.stage);

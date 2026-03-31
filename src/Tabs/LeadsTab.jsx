@@ -165,8 +165,8 @@ export default function LeadsTab() {
                 </div>
                 {/* Action buttons — right side of sub-tab row */}
                 <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', flexShrink:0, paddingRight:'0.75rem' }}>
-                    {canSeeAll && <button onClick={() => setShowLeadImportModal(true)} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#10b981', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>}
-                    <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#2563eb', color:'#fff', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
+                    {canSeeAll && <button onClick={() => setShowLeadImportModal(true)} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#1c1917', color:'#f5f1eb', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>📥 Import</button>}
+                    <button onClick={() => setNewLead({})} style={{ padding:'0.3rem 0.75rem', border:'none', borderRadius:'6px', background:'#1c1917', color:'#f5f1eb', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>+ New Lead</button>
                 </div>
             </div>
 
@@ -235,7 +235,7 @@ export default function LeadsTab() {
                                     <thead>
                                         <tr style={{ background:'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
                                             {canSeeAll && <th style={{ padding:'0.5rem 0.75rem', textAlign:'left', fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', width:'32px' }}><input type="checkbox" onChange={e => setSelectedLeads(e.target.checked ? filtered.map(l => l.id) : [])} checked={selectedLeads.length === filtered.length && filtered.length > 0} /></th>}
-                                            {['Score','Name / Company','Source','Status', ...(canSeeAll?['Assigned To']:[]),'Est. ARR','Actions'].map(h => (
+                                            {['Score','Name / Company','Source','Status', ...(canSeeAll?['Assigned To']:[]),'Est. Revenue','Actions'].map(h => (
                                                 <th key={h} style={{ padding:'0.5rem 0.75rem', textAlign:'left', fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em' }}>{h}</th>
                                             ))}
                                         </tr>

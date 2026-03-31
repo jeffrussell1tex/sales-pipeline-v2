@@ -3,6 +3,7 @@ import { opportunities, users } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, canSeeAll, isManager } from './auth.mjs';
 import { sendEmail, emailTemplates } from './send-email.mjs';
+import { dispatchWebhook } from './webhooks.mjs';
 
 // ── Email helpers ─────────────────────────────────────────────────────────────
 
@@ -176,6 +177,18 @@ export const handler = async (event) => {
                 });
             }
 
+            // Webhook: opportunity.created
+            await dispatchWebhook(orgId, 'opportunity.created', {
+                id:               inserted.id,
+                opportunity_name: inserted.opportunityName,
+                account:          inserted.account,
+                sales_rep:        inserted.salesRep,
+                stage:            inserted.stage,
+                arr:              inserted.arr ? Number(inserted.arr) : null,
+                pipeline_id:      inserted.pipelineId,
+                created_date:     inserted.createdDate,
+            });
+
             return { statusCode: 201, headers, body: JSON.stringify({ opportunity: inserted }) };
         }
 
@@ -261,6 +274,26 @@ export const handler = async (event) => {
                     updatedBy:     userId,
                     opportunityId: upserted.id,
                 });
+            }
+
+            // Webhooks: fire based on what changed
+            const webhookBase = {
+                id:               upserted.id,
+                opportunity_name: upserted.opportunityName,
+                account:          upserted.account,
+                sales_rep:        upserted.salesRep,
+                stage:            upserted.stage,
+                arr:              upserted.arr ? Number(upserted.arr) : null,
+                pipeline_id:      upserted.pipelineId,
+            };
+            if (stageChanged) {
+                if (upserted.stage === 'Closed Won') {
+                    await dispatchWebhook(orgId, 'opportunity.won', { ...webhookBase, won_date: upserted.wonDate });
+                } else if (upserted.stage === 'Closed Lost') {
+                    await dispatchWebhook(orgId, 'opportunity.lost', { ...webhookBase, lost_reason: upserted.lostReason, lost_date: upserted.lostDate });
+                } else {
+                    await dispatchWebhook(orgId, 'opportunity.stage_changed', { ...webhookBase, from_stage: previousStage, to_stage: upserted.stage });
+                }
             }
 
             return { statusCode: 200, headers, body: JSON.stringify({ opportunity: upserted }) };

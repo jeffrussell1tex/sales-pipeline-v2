@@ -193,7 +193,7 @@ function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUs
                     <div style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.08em' }}>Team pipeline health</div>
                     <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'2px' }}>
                         {selectedTeam === 'all' ? 'All teams · ' : `${selectedTeam} · `}
-                        Sorted by {sortBy === 'health' ? 'health score · worst first' : sortBy === 'arr' ? 'pipeline ARR · highest first' : 'quota attainment · highest first'}
+                        Sorted by {sortBy === 'health' ? 'health score · worst first' : sortBy === 'arr' ? 'pipeline revenue · highest first' : 'quota attainment · highest first'}
                     </div>
                 </div>
                 <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
@@ -207,7 +207,7 @@ function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUs
                     <select value={sortBy} onChange={e => setSortBy(e.target.value)}
                         style={{ fontSize:'0.75rem', padding:'0.3rem 1.5rem 0.3rem 0.625rem', border:'0.5px solid #e2e8f0', borderRadius:'6px', background:'#f8fafc', color:'#475569', cursor:'pointer', fontFamily:'inherit', appearance:'none', backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")", backgroundRepeat:'no-repeat', backgroundPosition:'right 6px center' }}>
                         <option value="health">Sort: Health score</option>
-                        <option value="arr">Sort: Pipeline ARR</option>
+                        <option value="arr">Sort: Pipeline Revenue</option>
                         <option value="quota">Sort: Quota attainment</option>
                     </select>
                 </div>
@@ -244,7 +244,7 @@ function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUs
                                         {/* Stats 2-col grid */}
                                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                                             {[
-                                                { val: fmtArr(rs.pipelineArr), lbl: 'Pipeline ARR', danger: rs.pipelineArr === 0 },
+                                                { val: fmtArr(rs.pipelineArr), lbl: 'Pipeline Revenue', danger: rs.pipelineArr === 0 },
                                                 { val: rs.dealCount, lbl: 'Active deals', danger: rs.dealCount === 0 },
                                                 { val: rs.daysSinceAct !== null ? rs.daysSinceAct+'d' : '—', lbl: 'Last activity', danger: rs.daysSinceAct === null || rs.daysSinceAct >= 14, warn: rs.daysSinceAct >= 7 && rs.daysSinceAct < 14 },
                                                 { val: rs.overdueCount, lbl: 'Overdue tasks', danger: rs.overdueCount >= 3, warn: rs.overdueCount >= 1 && rs.overdueCount < 3 },

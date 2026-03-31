@@ -48,6 +48,8 @@ import { useModalState } from './hooks/useModalState';
 import { useUIState } from './hooks/useUIState';
 import { useCalendarState } from './hooks/useCalendarState';
 import { useUserHandlers } from './hooks/useUserHandlers';
+import { useQuotes } from './hooks/useQuotes';
+import QuotesTab from './Tabs/QuotesTab';
 import ErrorBoundary from './components/ErrorBoundary';
 
 
@@ -300,6 +302,10 @@ function App() {
         loadTasks(setDbOffline);
         loadActivities(setDbOffline);
 
+        // Load quotes and products if quotes feature is enabled
+        loadQuotes(setDbOffline);
+        loadProducts();
+
 dbFetch('/.netlify/functions/leads')
     .then(checkOk).then(r => r.json())
     .then(data => setLeads(data.leads || []))
@@ -450,10 +456,19 @@ dbFetch('/.netlify/functions/users?me=true')
 
 
 
-    // Auto-fetch calendar events when the home tab is active and calendar is not yet loaded.
-    // This removes the need for the user to manually click "Connect Google Calendar" every session.
+    // On mount: if landing back from OAuth callback, reset so events load when user goes to Home.
+    const calendarFetchAttempted = useRef(false);
     useEffect(() => {
-        if (activeTab === 'home' && !calendarConnected && !calendarLoading && !calendarError) {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('calconnect') === 'success') {
+            calendarFetchAttempted.current = false;
+        }
+    }, []);
+
+    // Auto-fetch calendar events when the home tab is active — once per session.
+    useEffect(() => {
+        if (activeTab === 'home' && !calendarFetchAttempted.current && !calendarLoading) {
+            calendarFetchAttempted.current = true;
             fetchCalendarEvents();
         }
     }, [activeTab]);
@@ -540,9 +555,9 @@ dbFetch('/.netlify/functions/users?me=true')
         return !opp || isRepVisible(opp.salesRep);
     });
 
-    const totalARR = visibleOpportunities.reduce((sum, opp) => sum + (parseFloat(opp.arr) || 0), 0);
+    const totalRevenue = visibleOpportunities.reduce((sum, opp) => sum + (parseFloat(opp.arr) || 0), 0);
     const activeOpps = visibleOpportunities.length;
-    const avgARR = activeOpps > 0 ? totalARR / activeOpps : 0;
+    const avgRevenue = activeOpps > 0 ? totalRevenue / activeOpps : 0;
     
     // Calculate forecasted revenue by quarter
     const getQuarter = (dateString) => {
@@ -626,6 +641,19 @@ dbFetch('/.netlify/functions/users?me=true')
         userModalSaving, setUserModalSaving,
         handleAddUser, handleEditUser, handleDeleteUser, handleSaveUser,
     } = useUserHandlers({ setSettings, showConfirm: (...a) => _showConfirmRef.current?.(...a), showModal, setLastCreatedRepName, editingUser, setEditingUser, setShowUserModal });
+
+    const {
+        quotes, setQuotes,
+        products, setProducts,
+        loadQuotes, loadProducts,
+        quoteModalError, setQuoteModalError,
+        quoteModalSaving, setQuoteModalSaving,
+        handleSaveQuote, handleDeleteQuote,
+        productModalError, setProductModalError,
+        productModalSaving, setProductModalSaving,
+        handleSaveProduct, handleDeleteProduct,
+        getQuotesForOpp, getNextQuoteNumber,
+    } = useQuotes();
 
     // handleUpdateFiscalYearStart managed by useSettings hook
 
@@ -820,16 +848,22 @@ dbFetch('/.netlify/functions/users?me=true')
         setCalendarLoading(true);
         setCalendarError(null);
         try {
+            await waitForToken();
             const now = new Date();
             const weekStart = new Date(now);
             weekStart.setHours(0, 0, 0, 0);
             const weekEnd = new Date(weekStart);
             weekEnd.setDate(weekStart.getDate() + 7);
-            const res = await fetch('/.netlify/functions/calendar-events?timeMin=' + weekStart.toISOString() + '&timeMax=' + weekEnd.toISOString());
+            const res = await dbFetch('/.netlify/functions/calendar-events?timeMin=' + weekStart.toISOString() + '&timeMax=' + weekEnd.toISOString());
             if (!res.ok) throw new Error('Failed to load calendar');
             const data = await res.json();
-            setCalendarEvents(data.events || []);
-            setCalendarConnected(true);
+            if (data.connected === false) {
+                setCalendarConnected(false);
+                setCalendarEvents([]);
+            } else {
+                setCalendarEvents(data.events || []);
+                setCalendarConnected(true);
+            }
         } catch (err) {
             setCalendarError(err.message);
             setCalendarConnected(false);
@@ -843,7 +877,7 @@ dbFetch('/.netlify/functions/users?me=true')
         setLogFromCalLoading(true);
         setLogFromCalError(null);
         try {
-            const res = await fetch('/.netlify/functions/calendar-events?timeMin=' + logFromCalDateFrom + 'T00:00:00Z&timeMax=' + logFromCalDateTo + 'T23:59:59Z');
+            const res = await dbFetch('/.netlify/functions/calendar-events?timeMin=' + logFromCalDateFrom + 'T00:00:00Z&timeMax=' + logFromCalDateTo + 'T23:59:59Z');
             if (!res.ok) throw new Error('Failed to load calendar events');
             const data = await res.json();
             setLogFromCalEvents(data.events || []);
@@ -1132,6 +1166,13 @@ dbFetch('/.netlify/functions/users?me=true')
         }
     }, [settings.leadsEnabled]);
 
+    // Redirect away from quotes tab if quotes is disabled
+    useEffect(() => {
+        if (settings.quotesEnabled === false && activeTab === 'quotes') {
+            setActiveTab('home');
+        }
+    }, [settings.quotesEnabled]);
+
     if (!clerkLoaded || !orgLoaded) {
         return (
             <div className="login-page">
@@ -1190,6 +1231,10 @@ dbFetch('/.netlify/functions/users?me=true')
         tasks, setTasks,
         activities, setActivities,
         leads, setLeads,
+        quotes, setQuotes,
+        products, setProducts,
+        totalRevenue,
+        avgRevenue,
         // Auth
         currentUser,
         userRole,
@@ -1271,6 +1316,15 @@ dbFetch('/.netlify/functions/users?me=true')
         allRepNames,
         allTeamNames,
         allTerritoryNames,
+        // Quotes & Price Book
+        loadQuotes, loadProducts,
+        handleSaveQuote, handleDeleteQuote,
+        handleSaveProduct, handleDeleteProduct,
+        quoteModalError, setQuoteModalError,
+        quoteModalSaving,
+        productModalError, setProductModalError,
+        productModalSaving,
+        getQuotesForOpp, getNextQuoteNumber,
         // SPIFF
         spiffClaims, setSpiffClaims,
         // Derived/filtered lists
@@ -1447,6 +1501,13 @@ dbFetch('/.netlify/functions/users?me=true')
                 >
                     LEADS
                 </button>
+                <button
+                    className={`nav-tab ${activeTab === 'quotes' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('quotes')}
+                    style={{ display: settings.quotesEnabled === false ? 'none' : '' }}
+                >
+                    QUOTES
+                </button>
                 <button 
                     className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
                     onClick={() => setActiveTab('reports')}
@@ -1515,6 +1576,12 @@ dbFetch('/.netlify/functions/users?me=true')
             {activeTab === 'leads' && settings.leadsEnabled !== false && (
                 <ErrorBoundary tabName="Leads">
                     <LeadsTab />
+                </ErrorBoundary>
+            )}
+
+            {activeTab === 'quotes' && settings.quotesEnabled !== false && (
+                <ErrorBoundary tabName="Quotes">
+                    <QuotesTab />
                 </ErrorBoundary>
             )}
 
@@ -1593,28 +1660,31 @@ dbFetch('/.netlify/functions/users?me=true')
                         <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '420px', background: '#fff', zIndex: 9001, boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
 
                             {/* Header */}
-                            <div style={{ background: 'linear-gradient(135deg, #1e40af, #2563eb)', padding: '1.25rem 1.5rem', color: '#fff', flexShrink: 0 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                    <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#93c5fd', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.375rem' }}>Meeting Prep</div>
+                            <div style={{ background: '#1c1917', padding: '1.25rem 1.5rem', color: '#f5f1eb', flexShrink: 0 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <div style={{ width: '3px', height: '16px', background: '#c8b99a', borderRadius: '2px' }} />
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#c8b99a', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Meeting Prep</div>
+                                    </div>
                                     <button onClick={() => setMeetingPrepOpen(false)}
-                                        style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>✕</button>
+                                        style={{ background: 'rgba(245,241,235,0.1)', border: '1px solid rgba(245,241,235,0.15)', color: '#f5f1eb', borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontFamily: 'inherit' }}>✕</button>
                                 </div>
-                                <div style={{ fontWeight: '800', fontSize: '1rem', lineHeight: 1.3, marginBottom: '0.375rem' }}>{evTitle}</div>
-                                <div style={{ fontSize: '0.8125rem', color: '#bfdbfe' }}>
+                                <div style={{ fontWeight: '700', fontSize: '1rem', lineHeight: 1.3, marginBottom: '0.375rem', color: '#f5f1eb' }}>{evTitle}</div>
+                                <div style={{ fontSize: '0.8125rem', color: '#a8a29e' }}>
                                     {evDate} · {evTime}{evEnd ? ' – ' + evEnd : ''}{ev.attendeeCount > 0 ? ` · ${ev.attendeeCount} attendees` : ''}
                                 </div>
                             </div>
 
-                            <div style={{ flex: 1, padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto' }}>
+                            <div style={{ flex: 1, padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', overflowY: 'auto', background: '#f0ece4' }}>
 
                                 {/* Opportunity match */}
                                 {matchedOpp ? (
                                     <div>
-                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Linked Opportunity</div>
-                                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem 1rem' }}>
-                                            <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1e293b', marginBottom: '0.25rem' }}>{matchedOpp.opportunityName || matchedOpp.account}</div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Linked Opportunity</div>
+                                        <div style={{ background: '#fff', border: '1px solid #ddd8cf', borderRadius: '10px', padding: '0.75rem 1rem' }}>
+                                            <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1c1917', marginBottom: '0.25rem' }}>{matchedOpp.opportunityName || matchedOpp.account}</div>
                                             <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>{matchedOpp.account} · {matchedOpp.stage}</div>
-                                            <div style={{ fontWeight: '700', fontSize: '0.875rem', color: '#2563eb', marginTop: '0.25rem' }}>${(matchedOpp.arr || 0).toLocaleString()} ARR</div>
+                                            <div style={{ fontWeight: '700', fontSize: '0.875rem', color: '#2563eb', marginTop: '0.25rem' }}>${(matchedOpp.arr || 0).toLocaleString()} Revenue</div>
                                         </div>
                                     </div>
                                 ) : (
@@ -1626,7 +1696,7 @@ dbFetch('/.netlify/functions/users?me=true')
                                 {/* Deal Health */}
                                 {health && (
                                     <div>
-                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Deal Health</div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Deal Health</div>
                                         <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem 1rem' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
                                                 <span style={{ fontWeight: '800', fontSize: '1.5rem', color: healthColor }}>{health.score}</span>
@@ -1645,7 +1715,7 @@ dbFetch('/.netlify/functions/users?me=true')
                                 {/* Account details */}
                                 {matchedAccount && (
                                     <div>
-                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Account</div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Account</div>
                                         <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem 1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                                             {[
                                                 ['Industry', matchedAccount.industry],
@@ -1665,7 +1735,7 @@ dbFetch('/.netlify/functions/users?me=true')
                                 {/* Contacts */}
                                 {matchedOpp && (
                                     <div>
-                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Contacts</div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Contacts</div>
                                         {matchedContacts.length === 0 ? (
                                             <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic' }}>No contacts found for this account</div>
                                         ) : (
@@ -1690,7 +1760,7 @@ dbFetch('/.netlify/functions/users?me=true')
                                 {/* Recent Activities */}
                                 {matchedOpp && (
                                     <div>
-                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Recent Activities</div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Recent Activities</div>
                                         {recentActivities.length === 0 ? (
                                             <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic' }}>No activities logged yet</div>
                                         ) : (
@@ -1712,7 +1782,7 @@ dbFetch('/.netlify/functions/users?me=true')
                                 {/* Open Tasks */}
                                 {matchedOpp && (
                                     <div>
-                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Open Tasks</div>
+                                        <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Open Tasks</div>
                                         {openTasks.length === 0 ? (
                                             <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic' }}>No open tasks</div>
                                         ) : (
@@ -1734,13 +1804,13 @@ dbFetch('/.netlify/functions/users?me=true')
                             </div>
 
                             {/* Footer actions */}
-                            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #ddd8cf', display: 'flex', gap: '0.5rem', flexShrink: 0, background: '#fff' }}>
                                 <button onClick={() => { setMeetingPrepOpen(false); handleAddActivity(matchedOpp?.id || null); }}
-                                    style={{ flex: 1, padding: '0.5rem', border: 'none', borderRadius: '8px', background: '#2563eb', color: '#fff', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                    style={{ flex: 1, padding: '0.5rem', border: 'none', borderRadius: '8px', background: '#1c1917', color: '#f5f1eb', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     + Log Activity
                                 </button>
                                 <button onClick={() => { setMeetingPrepOpen(false); setEditingTask({ opportunityId: matchedOpp?.id || '', relatedTo: matchedOpp?.id || '' }); setShowTaskModal(true); }}
-                                    style={{ flex: 1, padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#f8fafc', color: '#475569', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                    style={{ flex: 1, padding: '0.5rem', border: '1px solid #ddd8cf', borderRadius: '8px', background: '#e8e3da', color: '#78716c', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
                                     + Add Task
                                 </button>
                             </div>

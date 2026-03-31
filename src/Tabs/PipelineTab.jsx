@@ -473,9 +473,9 @@ export default function PipelineTab() {
                             {/* LEFT: 2×2 KPI tile grid */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem', padding: '0.875rem 1rem' }}>
                                 {[
-                                    { label: 'Total Pipeline ARR', value: '$' + (pipelineTotalARR >= 1000000 ? (pipelineTotalARR/1000000).toFixed(1)+'M' : pipelineTotalARR >= 1000 ? Math.round(pipelineTotalARR/1000)+'K' : pipelineTotalARR.toLocaleString()), kpiId: 'totalPipelineARR', rawVal: pipelineTotalARR, accent: '#2563eb' },
+                                    { label: 'Total Pipeline Revenue', value: '$' + (pipelineTotalARR >= 1000000 ? (pipelineTotalARR/1000000).toFixed(1)+'M' : pipelineTotalARR >= 1000 ? Math.round(pipelineTotalARR/1000)+'K' : pipelineTotalARR.toLocaleString()), kpiId: 'totalPipelineRevenue', rawVal: pipelineTotalARR, accent: '#2563eb' },
                                     { label: 'Active Opportunities', value: String(pipelineActiveOpps), kpiId: 'activeOpps', rawVal: pipelineActiveOpps, accent: '#10b981' },
-                                    { label: 'Avg ARR', value: '$' + (pipelineAvgARR >= 1000000 ? (pipelineAvgARR/1000000).toFixed(1)+'M' : Math.round(pipelineAvgARR/1000)+'K'), kpiId: 'avgARR', rawVal: pipelineAvgARR, accent: '#f59e0b' },
+                                    { label: 'Avg Deal Value', value: '$' + (pipelineAvgARR >= 1000000 ? (pipelineAvgARR/1000000).toFixed(1)+'M' : Math.round(pipelineAvgARR/1000)+'K'), kpiId: 'avgDealValue', rawVal: pipelineAvgARR, accent: '#f59e0b' },
                                     { label: (pipelineNextQtr ? pipelineNextQtr[0] : 'Next Qtr') + ' Forecast', value: '$' + ((pipelineNextQtr?pipelineNextQtr[1]:0) >= 1000000 ? ((pipelineNextQtr?pipelineNextQtr[1]:0)/1000000).toFixed(1)+'M' : Math.round((pipelineNextQtr?pipelineNextQtr[1]:0)/1000)+'K'), kpiId: 'nextQForecast', rawVal: pipelineNextQtr ? pipelineNextQtr[1] : 0, accent: '#7c3aed' },
                                 ].map(({ label, value, kpiId, rawVal, accent }) => {
                                     const kc = getKpiColor(kpiId, rawVal);
@@ -492,7 +492,7 @@ export default function PipelineTab() {
                                                 const tMode = settings.kpiTrendMode || 'stage-distribution';
                                                 const _n = new Date();
                                                 let bkts = [];
-                                                const oppVal = o => kpiId === 'totalPipelineARR' || kpiId === 'avgARR' ? (parseFloat(o.arr)||0) : 1;
+                                                const oppVal = o => kpiId === 'totalPipelineRevenue' || kpiId === 'avgDealValue' ? (parseFloat(o.arr)||0) : 1;
                                                 if (tMode === 'stage-distribution') { const sl = (settings.funnelStages||[]).map(s=>s.name); bkts = sl.map(s => pipelineFilteredOpps.filter(o=>o.stage===s).reduce((a,o)=>a+oppVal(o),0)); }
                                                 else if (tMode === 'month-over-month') { for(let i=5;i>=0;i--){const d=new Date(_n.getFullYear(),_n.getMonth()-i,1),nx=new Date(_n.getFullYear(),_n.getMonth()-i+1,1); bkts.push(pipelineFilteredOpps.filter(o=>{const c=o.forecastedCloseDate?new Date(o.forecastedCloseDate + 'T12:00:00'):null;return c&&c>=d&&c<nx;}).reduce((a,o)=>a+oppVal(o),0));} }
                                                 else if (tMode === 'quarter-over-quarter') { for(let i=3;i>=0;i--){const qm=_n.getMonth()-(i*3),fy=_n.getFullYear()+Math.floor(qm/12),fm=((qm%12)+12)%12;const s=new Date(fy,fm,1),e=new Date(fy,fm+3,1); bkts.push(pipelineFilteredOpps.filter(o=>{const c=o.forecastedCloseDate?new Date(o.forecastedCloseDate + 'T12:00:00'):null;return c&&c>=s&&c<e;}).reduce((a,o)=>a+oppVal(o),0));} }
@@ -716,7 +716,7 @@ export default function PipelineTab() {
                                     <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem' }}>
                                         {[
                                             { label:'Stage', value: <span style={{ background:getStageColor(opp.stage).text+'22', color:getStageColor(opp.stage).text, padding:'0.15rem 0.5rem', borderRadius:'999px', fontSize:'0.75rem', fontWeight:'600' }}>{opp.stage}</span> },
-                                            canViewField('arr') && { label:'ARR', value:'$'+(opp.arr||0).toLocaleString() },
+                                            canViewField('arr') && { label:'Revenue', value:'$'+(opp.arr||0).toLocaleString() },
                                             canViewField('probability') && { label:'Probability', value:<span style={{ fontWeight:'600', color:isOverridden?'#f59e0b':'#475569' }}>{effectiveProb !== null ? effectiveProb+'%' : '—'}{isOverridden?' ✎':''}</span> },
                                             canViewField('weightedValue') && { label:'Weighted', value:'$'+weighted.toLocaleString() },
                                             { label:'Sales Rep', value:opp.salesRep||'—' },
@@ -942,7 +942,7 @@ export default function PipelineTab() {
                                         <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'account') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('account'); setPipelineSortDir('asc'); } }}>Account {pipelineSortField === 'account' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         <th>Opportunity</th>
                                         <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'stage') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('stage'); setPipelineSortDir('asc'); } }}>Stage {pipelineSortField === 'stage' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        {canViewField('arr') && <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'arr') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('arr'); setPipelineSortDir('desc'); } }}>ARR {pipelineSortField === 'arr' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>}
+                                        {canViewField('arr') && <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'arr') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('arr'); setPipelineSortDir('desc'); } }}>Revenue {pipelineSortField === 'arr' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>}
                                         <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'closeDate') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('closeDate'); setPipelineSortDir('asc'); } }}>Close Date {pipelineSortField === 'closeDate' ? (pipelineSortDir === 'asc' ? <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▲</span> : <span style={{color:'#2563eb',fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
                                         <th style={{ width: '130px' }}>Actions</th>
                                     </tr>
@@ -1232,7 +1232,7 @@ export default function PipelineTab() {
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                             {[
                                                 { label: 'Stage', value: <span style={{ background: getStageColor(opp.stage).text + '22', color: getStageColor(opp.stage).text, padding: '0.35rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600' }}>{opp.stage}</span> },
-                                                canViewField('arr') && { label: 'ARR', value: '$' + (opp.arr || 0).toLocaleString() },
+                                                canViewField('arr') && { label: 'Revenue', value: '$' + (opp.arr || 0).toLocaleString() },
                                                 canViewField('implCost') && opp.implementationCost > 0 && { label: 'Impl. Cost', value: '$' + (opp.implementationCost || 0).toLocaleString() },
                                                 canViewField('probability') && { label: 'Probability', value: <span style={{ fontWeight: '600', color: isOverridden ? '#f59e0b' : '#475569' }}>{effectiveProb !== null ? effectiveProb + '%' : '—'}{isOverridden ? ' ✎' : ''}</span> },
                                                 canViewField('weightedValue') && { label: 'Weighted Value', value: '$' + weighted.toLocaleString() },

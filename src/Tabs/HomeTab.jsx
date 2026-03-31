@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
+import { useAuth } from '@clerk/clerk-react';
 import ViewingBar from '../components/ui/ViewingBar';
 import { dbFetch, waitForToken } from '../utils/storage';
 
@@ -221,7 +222,7 @@ function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUs
                 <select value={sortBy} onChange={e => setSortBy(e.target.value)}
                     style={{ fontSize:'0.75rem', padding:'0.3rem 1.5rem 0.3rem 0.625rem', border:'0.5px solid #e2e8f0', borderRadius:'6px', background:'#f8fafc', color:'#475569', cursor:'pointer', fontFamily:'inherit', appearance:'none', backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")", backgroundRepeat:'no-repeat', backgroundPosition:'right 6px center' }}>
                     <option value="health">Sort: Health score</option>
-                    <option value="arr">Sort: Pipeline ARR</option>
+                    <option value="arr">Sort: Pipeline Revenue</option>
                     <option value="quota">Sort: Quota attainment</option>
                 </select>
             </div>
@@ -250,7 +251,7 @@ function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUs
                                         </div>
                                         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
                                             {[
-                                                { val: fmtArr(rs.pipelineArr), lbl: 'Pipeline ARR', danger: rs.pipelineArr === 0 },
+                                                { val: fmtArr(rs.pipelineArr), lbl: 'Pipeline Rev.', danger: rs.pipelineArr === 0 },
                                                 { val: rs.dealCount, lbl: 'Active deals', danger: rs.dealCount === 0 },
                                                 { val: rs.daysSinceAct !== null ? rs.daysSinceAct+'d' : '—', lbl: 'Last activity', danger: rs.daysSinceAct === null || rs.daysSinceAct >= 14, warn: rs.daysSinceAct !== null && rs.daysSinceAct >= 7 && rs.daysSinceAct < 14 },
                                                 { val: rs.overdueCount, lbl: 'Overdue tasks', danger: rs.overdueCount >= 3, warn: rs.overdueCount >= 1 && rs.overdueCount < 3 },
@@ -766,6 +767,14 @@ export default function HomeTab() {
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit = !isReadOnly;
 
+    // Clerk auth — needed to pass userId/orgId to the OAuth start redirect
+    const { userId, orgId } = useAuth();
+
+    const connectCalendar = (provider) => {
+        if (!userId || !orgId) return;
+        window.location.href = `/.netlify/functions/calendar-oauth-start?provider=${provider}&scope=user&userId=${userId}&orgId=${orgId}&userRole=${userRole || 'User'}`;
+    };
+
     // Derived KPIs
     const totalARR = visibleOpportunities.reduce((sum, opp) => sum + (parseFloat(opp.arr) || 0), 0);
     const activeOpps = visibleOpportunities.length;
@@ -986,7 +995,7 @@ export default function HomeTab() {
                     {/* KPI strip */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: '0.75rem' }}>
                         {[
-                            { label: 'Pipeline ARR', value: fmtArr(myPipelineARR), sub: myActiveOpps.length+' active deals', accent: '#2563eb' },
+                            { label: 'Pipeline Rev.', value: fmtArr(myPipelineARR), sub: myActiveOpps.length+' active deals', accent: '#2563eb' },
                             { label: 'Closed won', value: fmtArr(myClosedWonARR), sub: 'this period', accent: '#10b981' },
                             { label: 'Open tasks', value: String(openTasks.length), sub: overdueTasks.length > 0 ? overdueTasks.length+' overdue' : 'all on track', subColor: overdueTasks.length > 0 ? '#ef4444' : '#10b981', accent: overdueTasks.length > 0 ? '#ef4444' : '#f59e0b' },
                             { label: nextQuarter ? nextQuarter[0]+' forecast' : 'Next qtr forecast', value: fmtArr(fv), sub: 'forecasted close', accent: '#7c3aed' },
@@ -1092,34 +1101,132 @@ export default function HomeTab() {
                         </div>
                     </div>
 
-                    {/* Today's meetings — always shows when calendar connected */}
-                    {calendarConnected && (
-                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
-                            <div style={{ padding: '0.875rem 1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>Today's meetings</span>
-                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{todayCalEvents.length} event{todayCalEvents.length!==1?'s':''}</span>
-                            </div>
-                            {todayCalEvents.length === 0 ? (
-                                <div style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>No meetings today</div>
-                            ) : (
-                                <div>
-                                    {todayCalEvents.map((ev, idx) => {
-                                        const timeStr = ev.start?.dateTime ? new Date(ev.start.dateTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : 'All day';
-                                        return (
-                                            <div key={ev.id||idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 1rem', borderBottom: idx < todayCalEvents.length-1 ? '1px solid #f8fafc' : 'none' }}>
-                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', width: '56px', flexShrink: 0 }}>{timeStr}</div>
-                                                <div style={{ width: '3px', height: '32px', borderRadius: '2px', background: '#7c3aed', flexShrink: 0 }} />
-                                                <div style={{ flex: 1 }}>
-                                                    <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{ev.summary}</div>
-                                                    {ev.attendeeCount > 0 && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{ev.attendeeCount} attendee{ev.attendeeCount!==1?'s':''}</div>}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                    {/* Calendar — day/week toggle view */}
+                    {calendarConnected && (() => {
+                        // Define locally to avoid closure issues in minified builds
+                        const _today = new Date();
+                        const _todayStr = _today.toISOString().split('T')[0];
+                        // Week view: group all events by date across next 7 days
+                        const weekEvents = calendarEvents
+                            ? [...calendarEvents].sort((a,b) => (a.start?.dateTime||a.start?.date||'').localeCompare(b.start?.dateTime||b.start?.date||''))
+                            : [];
+
+                        // Group by date for week view
+                        const eventsByDay = {};
+                        weekEvents.forEach(ev => {
+                            const d = ev.start?.date || ev.start?.dateTime?.split('T')[0];
+                            if (!d) return;
+                            if (!eventsByDay[d]) eventsByDay[d] = [];
+                            eventsByDay[d].push(ev);
+                        });
+                        const sortedDays = Object.keys(eventsByDay).sort();
+
+                        const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                        const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                        const formatDayLabel = (dateStr) => {
+                            const d = new Date(dateStr + 'T12:00:00');
+                            if (dateStr === _todayStr) return 'Today';
+                            const tomorrow = new Date(_today); tomorrow.setDate(_today.getDate() + 1);
+                            if (dateStr === tomorrow.toISOString().split('T')[0]) return 'Tomorrow';
+                            return dayNames[d.getDay()] + ' ' + monthNames[d.getMonth()] + ' ' + d.getDate();
+                        };
+
+                        const EventRow = ({ ev, idx, total, accentColor }) => {
+                            const timeStr = ev.start?.dateTime
+                                ? new Date(ev.start.dateTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+                                : 'All day';
+                            return (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 1rem', borderBottom: idx < total-1 ? '1px solid #f8fafc' : 'none' }}>
+                                    <div style={{ fontSize: '0.6875rem', color: '#94a3b8', width: '52px', flexShrink: 0 }}>{timeStr}</div>
+                                    <div style={{ width: '3px', height: '28px', borderRadius: '2px', background: accentColor || '#7c3aed', flexShrink: 0 }} />
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.summary}</div>
+                                        {ev.attendeeCount > 0 && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{ev.attendeeCount} attendee{ev.attendeeCount!==1?'s':''}</div>}
+                                    </div>
                                 </div>
-                            )}
-                        </div>
-                    )}
+                            );
+                        };
+
+                        const _todayCalEvents = weekEvents.filter(ev => {
+                            const d = ev.start?.date || ev.start?.dateTime?.split('T')[0];
+                            return d === _todayStr;
+                        }).sort((a,b) => (a.start?.dateTime||'').localeCompare(b.start?.dateTime||''));
+                        const totalCount = calView === 'day' ? _todayCalEvents.length : weekEvents.length;
+
+                        return (
+                            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                                {/* Header with toggle */}
+                                <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <span style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1e293b' }}>
+                                            {calView === 'day' ? "Today's meetings" : "This week"}
+                                        </span>
+                                        <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{totalCount} event{totalCount!==1?'s':''}</span>
+                                    </div>
+                                    {/* Day / Week toggle */}
+                                    <div style={{ display: 'flex', background: '#f0ece4', borderRadius: '6px', padding: '2px', gap: '2px' }}>
+                                        {['day','week'].map(v => (
+                                            <button key={v} onClick={() => setCalView(v)} style={{
+                                                padding: '0.2rem 0.625rem',
+                                                borderRadius: '4px',
+                                                border: 'none',
+                                                background: calView === v ? '#1c1917' : 'transparent',
+                                                color: calView === v ? '#f5f1eb' : '#78716c',
+                                                fontSize: '0.6875rem',
+                                                fontWeight: '600',
+                                                cursor: 'pointer',
+                                                fontFamily: 'inherit',
+                                                textTransform: 'capitalize',
+                                                transition: 'all 0.15s',
+                                            }}>{v}</button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Day view */}
+                                {calView === 'day' && (
+                                    _todayCalEvents.length === 0
+                                        ? <div style={{ padding: '1.25rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.8125rem' }}>No meetings today</div>
+                                        : _todayCalEvents.map((ev, idx) => (
+                                            <EventRow key={ev.id||idx} ev={ev} idx={idx} total={_todayCalEvents.length} accentColor='#7c3aed' />
+                                          ))
+                                )}
+
+                                {/* Week view */}
+                                {calView === 'week' && (
+                                    sortedDays.length === 0
+                                        ? <div style={{ padding: '1.25rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.8125rem' }}>No events this week</div>
+                                        : sortedDays.map((dateStr, di) => (
+                                            <div key={dateStr}>
+                                                {/* Day header */}
+                                                <div style={{
+                                                    padding: '0.375rem 1rem',
+                                                    background: dateStr === _todayStr ? '#eff6ff' : '#fafaf9',
+                                                    borderBottom: '1px solid #f1f5f9',
+                                                    borderTop: di > 0 ? '1px solid #f1f5f9' : 'none',
+                                                    fontSize: '0.6875rem',
+                                                    fontWeight: '700',
+                                                    color: dateStr === _todayStr ? '#2563eb' : '#94a3b8',
+                                                    textTransform: 'uppercase',
+                                                    letterSpacing: '0.06em',
+                                                }}>
+                                                    {formatDayLabel(dateStr)}
+                                                </div>
+                                                {eventsByDay[dateStr].map((ev, idx) => (
+                                                    <EventRow
+                                                        key={ev.id||idx}
+                                                        ev={ev}
+                                                        idx={idx}
+                                                        total={eventsByDay[dateStr].length}
+                                                        accentColor={dateStr === _todayStr ? '#7c3aed' : '#2563eb'}
+                                                    />
+                                                ))}
+                                            </div>
+                                          ))
+                                )}
+                            </div>
+                        );
+                    })()}
 
                     {/* Calendar connect prompt when not connected */}
                     {!calendarConnected && (
@@ -1128,7 +1235,20 @@ export default function HomeTab() {
                                 <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.875rem', marginBottom: '0.2rem' }}>Connect your Google Calendar</div>
                                 <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>See today's meetings alongside your pipeline</div>
                             </div>
-                            <button onClick={fetchCalendarEvents} style={{ padding: '0.45rem 1rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>Connect Google Calendar</button>
+                            <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                                <button
+                                    onClick={() => connectCalendar('google')}
+                                    style={{ padding: '0.45rem 1rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}
+                                >
+                                    Connect Google
+                                </button>
+                                <button
+                                    onClick={() => connectCalendar('outlook')}
+                                    style={{ padding: '0.45rem 1rem', background: '#e8e3da', color: '#78716c', border: '1px solid #ddd8cf', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}
+                                >
+                                    Connect Outlook
+                                </button>
+                            </div>
                         </div>
                     )}
 

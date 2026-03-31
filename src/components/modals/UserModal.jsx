@@ -100,31 +100,19 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                         <div className="form-group"><label>Work Phone</label><input type="tel" value={formData.phone || ''} onChange={e => handleChange('phone', e.target.value)} /></div>
                         <div className="form-group"><label>Mobile</label><input type="tel" value={formData.mobile || ''} onChange={e => handleChange('mobile', e.target.value)} /></div>
                         <div className="form-group"><label>Territory</label>
-                            <select value={formData.territory || ''} onChange={e => handleChange('territory', e.target.value)}>
-                                <option value="">— unassigned —</option>
-                                {(settings?.territories || []).map(t => {
-                                    const name = typeof t === 'string' ? t : t.name;
-                                    return <option key={name} value={name}>{name}</option>;
-                                })}
-                            </select>
+                            <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#f8fafc', fontSize: '0.875rem', color: formData.territory ? '#1e293b' : '#94a3b8', minHeight: '36px', display: 'flex', alignItems: 'center' }}>
+                                {formData.territory ? `📍 ${formData.territory}` : 'Assigned via Team Builder'}
+                            </div>
                         </div>
                         <div className="form-group"><label>Team</label>
-                            <select value={formData.team || ''} onChange={e => handleChange('team', e.target.value)}>
-                                <option value="">— unassigned —</option>
-                                {(settings?.teams || []).map(t => {
-                                    const name = typeof t === 'string' ? t : t.name;
-                                    return <option key={name} value={name}>{name}</option>;
-                                })}
-                            </select>
+                            <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#f8fafc', fontSize: '0.875rem', color: formData.team ? '#1e293b' : '#94a3b8', minHeight: '36px', display: 'flex', alignItems: 'center' }}>
+                                {formData.team ? `👥 ${formData.team}` : 'Assigned via Team Builder'}
+                            </div>
                         </div>
                         <div className="form-group"><label>Vertical</label>
-                            <select value={formData.vertical || ''} onChange={e => handleChange('vertical', e.target.value)}>
-                                <option value="">— unassigned —</option>
-                                {(settings?.verticals || []).map(v => {
-                                    const name = typeof v === 'string' ? v : v.name;
-                                    return <option key={name} value={name}>{name}</option>;
-                                })}
-                            </select>
+                            <div style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#f8fafc', fontSize: '0.875rem', color: formData.vertical ? '#1e293b' : '#94a3b8', minHeight: '36px', display: 'flex', alignItems: 'center' }}>
+                                {formData.vertical ? `🏭 ${formData.vertical}` : 'Assigned via Team Builder'}
+                            </div>
                         </div>
                     </div>
                     )}

@@ -2,6 +2,7 @@ import { db } from '../../db/index.js';
 import { tasks } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { dispatchWebhook } from './webhooks.mjs';
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -44,11 +45,29 @@ export const handler = async (event) => {
         if (event.httpMethod === 'PUT') {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
+
+            // Fetch existing so we can detect completion
+            const [existing] = await db.select().from(tasks).where(and(eq(tasks.id, data.id), eq(tasks.orgId, orgId)));
+            const wasCompleted = existing?.completed === true;
+
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(tasks).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: tasks.id, set: { ...updateData, updatedAt: new Date() } })
                 .returning();
+
+            // Webhook: task.completed — only fires the first time completed flips to true
+            if (!wasCompleted && upserted.completed) {
+                await dispatchWebhook(orgId, 'task.completed', {
+                    id:             upserted.id,
+                    title:          upserted.title,
+                    type:           upserted.type,
+                    assigned_to:    upserted.assignedTo,
+                    opportunity_id: upserted.opportunityId,
+                    completed_date: upserted.completedDate,
+                });
+            }
+
             return { statusCode: 200, headers, body: JSON.stringify({ task: upserted }) };
         }
         if (event.httpMethod === 'DELETE') {
