@@ -88,26 +88,53 @@ export const handler = async (event) => {
     });
 
     // ── GET ?me=true — any authenticated user can fetch their own record ──────
-    // Looks up by DB id (= Clerk userId) first, falls back to name match.
-    // Returns null user (not 404) when no row exists yet — frontend handles gracefully.
+    // Lookup order:
+    //   1. Direct id match (id col = real Clerk userId)
+    //   2. Email match (covers invite flow where DB row has pending_ id)
+    //   3. Display name match (legacy fallback for manually created rows)
+    // When a match is found via email or name and the id differs (pending_ row),
+    // the row's id is updated to the real Clerk userId so future lookups are direct.
     if (event.httpMethod === 'GET' && event.queryStringParameters?.me === 'true') {
         try {
-            // Try direct id lookup first (id col = Clerk userId when row was created via ?me=true PUT)
+            // 1. Direct id lookup
             let [row] = await db.select().from(users).where(eq(users.id, userId));
 
-            // Fallback: match by display name (rows created by admin before self-registration)
             if (!row) {
                 const { createClerkClient } = await import('@clerk/backend');
                 const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
                 const clerkUser = await clerk.users.getUser(userId);
-                const displayName = ((clerkUser.firstName || '') + ' ' + (clerkUser.lastName || '')).trim()
-                    || clerkUser.emailAddresses?.[0]?.emailAddress || '';
-                if (displayName) {
-                    [row] = await db.select().from(users).where(eq(users.name, displayName));
+                const clerkEmail = clerkUser.emailAddresses?.[0]?.emailAddress?.toLowerCase() || '';
+                const displayName = ((clerkUser.firstName || '') + ' ' + (clerkUser.lastName || '')).trim();
+
+                // 2. Email match — catches invited users whose DB row has a pending_ id
+                if (clerkEmail) {
+                    [row] = await db.select().from(users).where(
+                        and(eq(users.email, clerkEmail), eq(users.orgId, orgId))
+                    );
+                }
+
+                // 3. Display name fallback
+                if (!row && displayName) {
+                    [row] = await db.select().from(users).where(
+                        and(eq(users.name, displayName), eq(users.orgId, orgId))
+                    );
+                }
+
+                // If we found a row via email/name but id doesn't match (pending_ or old placeholder),
+                // update the id to the real Clerk userId so future lookups hit path 1.
+                if (row && row.id !== userId) {
+                    try {
+                        await db.update(users)
+                            .set({ id: userId, updatedAt: new Date() })
+                            .where(eq(users.id, row.id));
+                        row = { ...row, id: userId };
+                        console.log(`users.mjs: reconciled row → ${userId} for ${clerkEmail}`);
+                    } catch (reconcileErr) {
+                        console.warn('users.mjs: reconcile update failed:', reconcileErr.message);
+                    }
                 }
             }
 
-            // Return null user instead of 404 — not having a row yet is normal for new installs
             return { statusCode: 200, headers, body: JSON.stringify({ user: row ? flatten(row) : null }) };
         } catch (err) {
             console.error('Users /me GET error:', err.message);

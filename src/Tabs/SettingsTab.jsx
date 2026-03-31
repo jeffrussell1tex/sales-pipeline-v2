@@ -691,6 +691,39 @@ export default function SettingsTab() {
     // UI handlers
     const handleAddUser = () => { setEditingUser(null); setShowUserModal(true); };
     const handleEditUser = (user) => { setEditingUser(user); setShowUserModal(true); };
+
+    // ── Invite user state ──────────────────────────────────────────────────────
+    const [showInviteModal, setShowInviteModal] = React.useState(false);
+    const [inviteForm, setInviteForm] = React.useState({ name: '', email: '', role: 'User', team: '', territory: '' });
+    const [inviteSending, setInviteSending] = React.useState(false);
+    const [inviteResult, setInviteResult] = React.useState(null); // { type: 'success'|'error', message }
+
+    const handleSendInvite = async () => {
+        if (!inviteForm.name.trim() || !inviteForm.email.trim()) {
+            setInviteResult({ type: 'error', message: 'Name and email are required.' });
+            return;
+        }
+        setInviteSending(true);
+        setInviteResult(null);
+        try {
+            const res = await dbFetch('/.netlify/functions/invite-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(inviteForm),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setInviteResult({ type: 'error', message: data.error || 'Failed to send invitation.' });
+            } else {
+                setInviteResult({ type: 'success', message: data.message });
+                setInviteForm({ name: '', email: '', role: 'User', team: '', territory: '' });
+            }
+        } catch {
+            setInviteResult({ type: 'error', message: 'Network error — please try again.' });
+        } finally {
+            setInviteSending(false);
+        }
+    };
     const handleDeleteUser = (userId) => {
         showConfirm('Are you sure you want to delete this user?', async () => {
             await dbFetch('/.netlify/functions/users?id=' + userId, { method: 'DELETE' }).catch(console.error);
@@ -1339,7 +1372,10 @@ export default function SettingsTab() {
                                     ← Back
                                 </button>
                                 <h2>MANAGE USERS</h2>
-                                <button className="btn" onClick={handleAddUser}>+ ADD USER</button>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button className="btn btn-secondary" onClick={() => { setInviteResult(null); setShowInviteModal(true); }}>📧 Invite User</button>
+                                    <button className="btn" onClick={handleAddUser}>+ ADD USER</button>
+                                </div>
                             </div>
                             <div style={{ padding: '1.5rem' }}>
                                 {(settings.users || []).length === 0 ? (
@@ -1369,6 +1405,11 @@ export default function SettingsTab() {
                                                         gap: '0.5rem'
                                                     }}>
                                                         {user.name}
+                                                        {(user.id || '').startsWith('pending_') && (
+                                                            <span style={{ fontSize: '0.625rem', fontWeight: '700', padding: '0.125rem 0.5rem', borderRadius: '10px', background: '#fef9c3', color: '#854d0e', border: '1px solid #fde047', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                                                                Pending
+                                                            </span>
+                                                        )}
                                                         <span style={{
                                                             fontSize: '0.6875rem',
                                                             fontWeight: '600',
@@ -1417,6 +1458,13 @@ export default function SettingsTab() {
                                                     )}
                                                 </div>
                                                 <div className="action-buttons">
+                                                    {userRole === 'Admin' && user.email && (
+                                                        <button className="action-btn" onClick={() => {
+                                                            setInviteForm({ name: user.name, email: user.email, role: user.userType || user.role || 'User', team: user.team || '', territory: user.territory || '' });
+                                                            setInviteResult(null);
+                                                            setShowInviteModal(true);
+                                                        }}>📧 Invite</button>
+                                                    )}
                                                     <button className="action-btn" onClick={() => handleEditUser(user)}>Edit</button>
                                                     <button className="action-btn delete" onClick={() => handleDeleteUser(user.id)}>Delete</button>
                                                 </div>
@@ -3063,6 +3111,62 @@ export default function SettingsTab() {
                         );
                     })()}
 
+                
+            {/* ── Invite User Modal ──────────────────────────────────────────── */}
+            {showInviteModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}
+                    onClick={() => setShowInviteModal(false)}>
+                    <div style={{ background: '#fff', borderRadius: '16px', padding: '2rem', maxWidth: '460px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}
+                        onClick={e => e.stopPropagation()}>
+                        <div style={{ fontSize: '1.125rem', fontWeight: '700', color: '#1c1917', marginBottom: '0.25rem' }}>📧 Invite User</div>
+                        <div style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '1.5rem' }}>Send a Clerk invitation email. The user will land with the correct role on first login.</div>
+
+                        {inviteResult && (
+                            <div style={{ background: inviteResult.type === 'success' ? '#f0fdf4' : '#fef2f2', border: `1px solid ${inviteResult.type === 'success' ? '#bbf7d0' : '#fecaca'}`, borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.8125rem', color: inviteResult.type === 'success' ? '#15803d' : '#dc2626' }}>
+                                {inviteResult.message}
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', color: '#1c1917', marginBottom: '0.375rem' }}>Full Name *</label>
+                                <input value={inviteForm.name} onChange={e => setInviteForm(p => ({ ...p, name: e.target.value }))}
+                                    placeholder="Karen Russell"
+                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', boxSizing: 'border-box' }} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', color: '#1c1917', marginBottom: '0.375rem' }}>Email Address *</label>
+                                <input value={inviteForm.email} onChange={e => setInviteForm(p => ({ ...p, email: e.target.value }))}
+                                    placeholder="karen@company.com" type="email"
+                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', boxSizing: 'border-box' }} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', color: '#1c1917', marginBottom: '0.375rem' }}>Role *</label>
+                                <select value={inviteForm.role} onChange={e => setInviteForm(p => ({ ...p, role: e.target.value }))}
+                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', boxSizing: 'border-box' }}>
+                                    <option value="User">Sales Rep</option>
+                                    <option value="Manager">Manager</option>
+                                    <option value="Admin">Admin</option>
+                                    <option value="ReadOnly">Read-Only</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+                            <button onClick={() => setShowInviteModal(false)}
+                                style={{ background: '#f0ece4', color: '#78716c', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.5rem 1.25rem', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                {inviteResult?.type === 'success' ? 'Close' : 'Cancel'}
+                            </button>
+                            {inviteResult?.type !== 'success' && (
+                                <button onClick={handleSendInvite} disabled={inviteSending}
+                                    style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.5rem 1.5rem', fontSize: '0.875rem', fontWeight: '600', cursor: inviteSending ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: inviteSending ? 0.6 : 1 }}>
+                                    {inviteSending ? 'Sending…' : '📧 Send Invitation'}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
                 </>
                 </div>
             
