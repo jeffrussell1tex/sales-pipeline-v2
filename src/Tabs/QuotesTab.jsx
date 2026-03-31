@@ -115,7 +115,7 @@ const DISCOUNT_APPROVAL_THRESHOLD = 15; // percent
 
 // ─── QUOTE BUILDER ────────────────────────────────────────────────────────────
 
-function QuoteBuilder({ quote, onSave, onClose, opportunities, products, settings, currentUser, userRole, quotes, getNextQuoteNumber }) {
+function QuoteBuilder({ quote, onSave, onClose, opportunities, products, settings, currentUser, userRole, quotes, getNextQuoteNumber, defaultOppId }) {
     const isNew = !quote;
     const versions = useMemo(() =>
         isNew ? [] : (quotes || []).filter(q => q.quoteNumber === quote?.quoteNumber).sort((a, b) => a.version - b.version),
@@ -128,7 +128,7 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
 
     // Form state
     const [name, setName] = useState(editingQuote?.name || '');
-    const [oppId, setOppId] = useState(editingQuote?.opportunityId || '');
+    const [oppId, setOppId] = useState(editingQuote?.opportunityId || defaultOppId || '');
     const [validUntil, setValidUntil] = useState(editingQuote?.validUntil || '');
     const [paymentTerms, setPaymentTerms] = useState(editingQuote?.paymentTerms || 'Net 30 · Annual');
     // dealDiscount removed — avg line discount is now read-only computed from line items
@@ -1330,6 +1330,7 @@ export default function QuotesTab() {
                         userRole={userRole}
                         quotes={quotes}
                         getNextQuoteNumber={getNextQuoteNumber}
+                        defaultOppId={editingQuote ? undefined : deepLinkOppId}
                     />
                 </div>
             </div>
