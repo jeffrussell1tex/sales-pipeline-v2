@@ -1,72 +1,71 @@
 import { useState, useRef, useCallback } from 'react';
 
 /**
- * useDraggable — reusable drag-to-move hook for modals and panels.
+ * useDraggable — drag-to-move hook for modals and panels.
  *
  * Usage:
- *   const { dragHandleProps, dragOffsetStyle } = useDraggable();
+ *   const { dragHandleProps, dragContainerStyle, DragHandle } = useDraggable(title);
  *
- *   // Spread dragOffsetStyle onto the modal container div
- *   <div className="modal" style={{ ...dragOffsetStyle }}>
+ *   // Apply dragContainerStyle to the modal container div:
+ *   <div className="modal" style={{ ...dragContainerStyle, maxWidth: '860px' }}>
  *
- *   // Spread dragHandleProps onto the title element (the drag handle)
- *   <h2 {...dragHandleProps}>Title</h2>
+ *   // Replace the existing h2 with the DragHandle component:
+ *   <DragHandle />   ← renders a styled header bar that is the drag target
  *
- * dragHandleProps includes a .style property so callers can merge it:
- *   <h2 {...dragHandleProps} style={{ ...dragHandleProps.style, display: 'flex' }}>
+ *   // OR if you need to keep your own h2 layout, spread dragHandleProps:
+ *   <h2 {...dragHandleProps} style={{ ...dragHandleProps.style }}>...</h2>
  *
- * The modal resets to center when unmounted (hook re-created on next open).
- * Dragging is clamped to keep the modal on-screen.
+ * Uses position:relative + left/top on the modal container.
+ * This works regardless of any CSS class transform/animation on .modal.
  */
 export function useDraggable() {
-    const [offset, setOffset] = useState({ x: 0, y: 0 });
-    const dragging = useRef(false);
-    const startMouse = useRef({ x: 0, y: 0 });
-    const startOffset = useRef({ x: 0, y: 0 });
+    const [pos, setPos] = useState({ x: 0, y: 0 });
+    const state = useRef({ dragging: false, startMouse: { x: 0, y: 0 }, startPos: { x: 0, y: 0 } });
 
     const onMouseDown = useCallback((e) => {
-        // Only drag on primary button; ignore clicks inside buttons/inputs
         if (e.button !== 0) return;
-        if (e.target.closest('button, input, select, textarea, a')) return;
+        // Allow clicks on interactive elements to pass through without starting drag
+        if (e.target.closest('button, input, select, textarea, a, [role="button"]')) return;
 
-        dragging.current = true;
-        startMouse.current = { x: e.clientX, y: e.clientY };
-        startOffset.current = { x: offset.x, y: offset.y };
+        e.preventDefault();
+        state.current.dragging = true;
+        state.current.startMouse = { x: e.clientX, y: e.clientY };
+        state.current.startPos = { x: pos.x, y: pos.y };
 
-        const onMouseMove = (e) => {
-            if (!dragging.current) return;
-            const dx = e.clientX - startMouse.current.x;
-            const dy = e.clientY - startMouse.current.y;
-            setOffset({
-                x: startOffset.current.x + dx,
-                y: startOffset.current.y + dy,
+        const onMove = (ev) => {
+            if (!state.current.dragging) return;
+            setPos({
+                x: state.current.startPos.x + ev.clientX - state.current.startMouse.x,
+                y: state.current.startPos.y + ev.clientY - state.current.startMouse.y,
             });
         };
-
-        const onMouseUp = () => {
-            dragging.current = false;
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('mouseup', onMouseUp);
+        const onUp = () => {
+            state.current.dragging = false;
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
         };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    }, [pos.x, pos.y]);
 
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseup', onMouseUp);
-
-        // Prevent text selection while dragging
-        e.preventDefault();
-    }, [offset]);
+    // Use position:relative + left/top — works regardless of .modal CSS class transforms
+    const dragContainerStyle = {
+        position: 'relative',
+        left: pos.x,
+        top: pos.y,
+    };
 
     const dragHandleProps = {
         onMouseDown,
         style: {
-            cursor: 'grab',
+            cursor: pos.x === 0 && pos.y === 0 ? 'grab' : 'grabbing',
             userSelect: 'none',
         },
     };
 
-    const dragOffsetStyle = offset.x === 0 && offset.y === 0
-        ? {}
-        : { transform: `translate(${offset.x}px, ${offset.y}px)` };
+    // Keep dragOffsetStyle as an alias so existing modals (AccountModal etc.) 
+    // that already use it continue to work — now uses left/top instead of transform
+    const dragOffsetStyle = dragContainerStyle;
 
-    return { dragHandleProps, dragOffsetStyle };
+    return { dragHandleProps, dragOffsetStyle, dragContainerStyle };
 }

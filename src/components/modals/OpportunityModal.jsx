@@ -1151,15 +1151,22 @@ if (formData.account && formData.account.trim()) {
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div className="modal-overlay">
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, maxWidth: '860px' }}>
-                <h2 {...dragHandleProps} style={{ ...dragHandleProps.style, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <span>{opportunity ? 'Edit Opportunity' : 'New Opportunity'}</span>
-                    {opportunity && (
-                        <span style={{ fontSize: '0.6875rem', fontWeight: '600', color: '#94a3b8', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.2rem 0.625rem', fontFamily: 'monospace', letterSpacing: '0.03em' }}>
-                            ID: {opportunity.id}
-                        </span>
-                    )}
-                </h2>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, maxWidth: '860px', padding: 0, overflow: 'hidden' }}>
+                {/* ── Drag handle header bar ── */}
+                <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: '#1c1917', padding: '0.875rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px 12px 0 0', minHeight: '52px' }}>
+                    <h2 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: '700', color: '#f5f1eb', cursor: 'inherit', userSelect: 'none' }}>
+                        {opportunity ? 'Edit Opportunity' : 'New Opportunity'}
+                    </h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        {opportunity && (
+                            <span style={{ fontSize: '0.6875rem', fontWeight: '600', color: 'rgba(245,241,235,0.5)', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', padding: '0.2rem 0.625rem', fontFamily: 'monospace', letterSpacing: '0.03em' }}>
+                                ID: {opportunity.id}
+                            </span>
+                        )}
+                        <span style={{ fontSize: '0.6875rem', color: 'rgba(245,241,235,0.35)', fontWeight: '500', letterSpacing: '0.03em' }}>⠿ drag</span>
+                    </div>
+                </div>
+                <div style={{ padding: '1.5rem' }}>
 
                 {/* ── Tab bar (only for existing opportunities) ── */}
                 {opportunity && (
@@ -2123,6 +2130,7 @@ if (formData.account && formData.account.trim()) {
                     </div>
                 </form>
                 </div>{/* end details tab */}
+                </div>{/* end padding wrapper */}
             </div>
 
             {nestedModal && nestedModal.type === 'contact' && (

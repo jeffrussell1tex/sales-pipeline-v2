@@ -85,8 +85,15 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div className="modal-overlay" onClick={e => e.stopPropagation()}>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle }}>
-                <h2 {...dragHandleProps}>{task ? 'Edit Task' : 'New Task'}</h2>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, padding: 0, overflow: 'hidden' }}>
+                {/* ── Drag handle header bar ── */}
+                <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: '#1c1917', padding: '0.875rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px 12px 0 0', minHeight: '52px' }}>
+                    <h2 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: '700', color: '#f5f1eb', cursor: 'inherit', userSelect: 'none' }}>
+                        {task ? 'Edit Task' : 'New Task'}
+                    </h2>
+                    <span style={{ fontSize: '0.6875rem', color: 'rgba(245,241,235,0.35)', fontWeight: '500', letterSpacing: '0.03em' }}>⠿ drag</span>
+                </div>
+                <div style={{ padding: '1.5rem' }}>
                 <form onSubmit={handleSubmit}>
                     <div className="form-grid">
                         <div className="form-group">
@@ -400,6 +407,7 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                         </button>
                     </div>
                 </form>
+                </div>{/* end padding wrapper */}
             </div>
             {nestedModal && nestedModal.type === 'contact' && (
                 <div className="modal-overlay" style={{ zIndex: 2000 }} onClick={() => setNestedModal(null)}>
