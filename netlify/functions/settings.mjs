@@ -47,6 +47,8 @@ export const handler = async (event) => {
                 commissionPlan:   row.extra?.commissionPlan  || null,
                 aiScoringEnabled: row.extra?.aiScoringEnabled ?? false,
                 leadsEnabled:     row.extra?.leadsEnabled     ?? true,
+                customerTypes:    row.extra?.customerTypes    || [],
+                companyProfile:   row.extra?.companyProfile   || null,
                 // BYOK: send back the plaintext key so the UI can display it,
                 // but NEVER log or expose it in error responses
                 anthropicApiKey:  decryptedKey || null,
@@ -93,6 +95,8 @@ export const handler = async (event) => {
                 products:         'products'         in data ? (data.products         || [])   : existingExtra.products         || [],
                 aiScoringEnabled: 'aiScoringEnabled' in data ? !!data.aiScoringEnabled : existingExtra.aiScoringEnabled ?? false,
                 leadsEnabled:     'leadsEnabled'     in data ? !!data.leadsEnabled     : existingExtra.leadsEnabled     ?? true,
+                customerTypes:    'customerTypes'    in data ? (data.customerTypes    || [])   : existingExtra.customerTypes    || [],
+                companyProfile:   'companyProfile'   in data ? (data.companyProfile   || null) : existingExtra.companyProfile   || null,
                 // Store encrypted ciphertext — never the plaintext key
                 anthropicApiKey:  encryptedApiKey,
             };

@@ -38,6 +38,7 @@ export const handler = async (event) => {
         notes:             d.notes             || null,
         assignedRep:       d.assignedRep       || null,
         assignedTerritory: d.assignedTerritory || null,
+        doNotContact:      d.doNotContact === true ? true : false,
     });
 
     try {

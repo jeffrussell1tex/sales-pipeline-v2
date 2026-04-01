@@ -60,6 +60,8 @@ const DEFAULT_SETTINGS = {
     ],
     aiScoringEnabled: false,
     leadsEnabled: true,
+    customerTypes: [],
+    companyProfile: { address: '', phone: '', notes: '' },
     priceBookConfig: {
         units:      ['flat', 'month', 'year', 'user', 'hour', 'day'],
         types:      ['recurring', 'one_time', 'service'],

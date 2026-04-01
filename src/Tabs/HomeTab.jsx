@@ -880,6 +880,10 @@ export default function HomeTab() {
     const myPipelineARR = myActiveOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
     const myClosedWonARR = myOpps.filter(o => o.stage === 'Closed Won').reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
 
+    // Derive current user's annual quota for KPI threshold evaluation
+    const myUserObj = (settings?.users || []).find(u => u.name === currentUser);
+    const myAnnualQuota = myUserObj?.annualQuota || 0;
+
     // Today's calendar events
     const todayCalEvents = calendarConnected && calendarEvents
         ? calendarEvents.filter(ev => {
@@ -994,12 +998,18 @@ export default function HomeTab() {
 
                     {/* KPI strip */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: '0.75rem' }}>
-                        {[
-                            { label: 'Pipeline Rev.', value: fmtArr(myPipelineARR), sub: myActiveOpps.length+' active deals', accent: '#2563eb' },
-                            { label: 'Closed won', value: fmtArr(myClosedWonARR), sub: 'this period', accent: '#10b981' },
-                            { label: 'Open tasks', value: String(openTasks.length), sub: overdueTasks.length > 0 ? overdueTasks.length+' overdue' : 'all on track', subColor: overdueTasks.length > 0 ? '#ef4444' : '#10b981', accent: overdueTasks.length > 0 ? '#ef4444' : '#f59e0b' },
-                            { label: nextQuarter ? nextQuarter[0]+' forecast' : 'Next qtr forecast', value: fmtArr(fv), sub: 'forecasted close', accent: '#7c3aed' },
-                        ].map(kpi => (
+                        {(() => {
+                            // Evaluate tolerance colours for quota-relative KPIs
+                            const pipelineKpi  = getKpiColor('totalPipelineARR', myPipelineARR, myAnnualQuota);
+                            const forecastKpi  = getKpiColor('nextQForecast',    fv,            myAnnualQuota);
+                            const quotaKpi     = getKpiColor('quota',            myClosedWonARR, myAnnualQuota);
+                            return [
+                                { label: 'Pipeline Rev.',  value: fmtArr(myPipelineARR), sub: myActiveOpps.length+' active deals', accent: pipelineKpi.toleranceColor || '#2563eb' },
+                                { label: 'Closed won',     value: fmtArr(myClosedWonARR), sub: 'this period', accent: quotaKpi.toleranceColor || '#10b981' },
+                                { label: 'Open tasks',     value: String(openTasks.length), sub: overdueTasks.length > 0 ? overdueTasks.length+' overdue' : 'all on track', subColor: overdueTasks.length > 0 ? '#ef4444' : '#10b981', accent: overdueTasks.length > 0 ? '#ef4444' : '#f59e0b' },
+                                { label: nextQuarter ? nextQuarter[0]+' forecast' : 'Next qtr forecast', value: fmtArr(fv), sub: 'forecasted close', accent: forecastKpi.toleranceColor || '#7c3aed' },
+                            ];
+                        })().map(kpi => (
                             <div key={kpi.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderLeft: '3px solid '+kpi.accent, borderRadius: '10px', padding: '0.875rem 1rem' }}>
                                 <div style={{ fontSize: '0.6rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.3rem' }}>{kpi.label}</div>
                                 <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.02em', lineHeight: 1 }}>{kpi.value}</div>

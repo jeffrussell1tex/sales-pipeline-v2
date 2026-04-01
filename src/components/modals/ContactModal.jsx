@@ -8,7 +8,7 @@ export default function ContactModal({ contact, contacts, accounts, settings, on
         email: '', personalEmail: '', phone: '', mobile: '',
         address: '', city: '', state: '', zip: '', country: '',
         managers: [], directReports: [], assistantName: '',
-        homeAddress: '', notes: ''
+        homeAddress: '', notes: '', doNotContact: false
     });
 
     const [activeContactTab, setActiveContactTab] = useState('primary');
@@ -270,6 +270,29 @@ export default function ContactModal({ contact, contacts, accounts, settings, on
                                     )}
                                 </div>
                             )}
+                        </div>
+
+                        {/* ── Do Not Contact flag ── */}
+                        <div className="form-group full">
+                            <label>Do Not Contact</label>
+                            <div
+                                onClick={() => setFormData(prev => ({ ...prev, doNotContact: !prev.doNotContact }))}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', userSelect: 'none', padding: '0.625rem 0.875rem', borderRadius: '8px', border: formData.doNotContact ? '1px solid #fca5a5' : '1px solid #e5e2db', background: formData.doNotContact ? '#fef2f2' : '#f0ece4', transition: 'all 0.15s' }}
+                            >
+                                <div style={{ width: '36px', height: '20px', borderRadius: '999px', background: formData.doNotContact ? '#dc2626' : '#d6d3ce', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                                    <div style={{ position: 'absolute', width: '14px', height: '14px', background: '#fff', borderRadius: '50%', top: '3px', left: formData.doNotContact ? '19px' : '3px', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.875rem', fontWeight: '600', color: formData.doNotContact ? '#dc2626' : '#57534e' }}>
+                                        {formData.doNotContact ? '🚫 Do Not Contact — flagged' : 'Not flagged'}
+                                    </div>
+                                    {formData.doNotContact && (
+                                        <div style={{ fontSize: '0.75rem', color: '#b91c1c', marginTop: '0.125rem' }}>
+                                            Emails blocked · Activity warnings active
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </div>
                     )}

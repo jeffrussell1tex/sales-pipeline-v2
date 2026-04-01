@@ -28,6 +28,8 @@ export const handler = async (event) => {
         parentAccountId:   d.parentAccountId   || d.parentId || null,
         accountTier:       d.accountTier       || (d.parentAccountId ? 'business_unit' : 'account'),
         notes:             d.notes             || null,
+        doNotContact:      d.doNotContact      === true ? true : false,
+        customerTypes:     Array.isArray(d.customerTypes) ? d.customerTypes : [],
     });
 
     try {

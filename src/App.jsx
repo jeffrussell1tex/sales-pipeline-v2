@@ -603,8 +603,9 @@ dbFetch('/.netlify/functions/users?me=true')
 
 
 
-    // KPI color helper - returns CSS class and tolerance color based on value
-    const getKpiColor = (kpiId, value) => {
+    // KPI color helper - returns CSS class and tolerance color based on value.
+    // For quota-relative KPIs, pass annualQuota so percent thresholds resolve correctly.
+    const getKpiColor = (kpiId, value, annualQuota = 0) => {
         const kpiDefs = settings.kpiConfig || [];
         const kpi = kpiDefs.find(k => k.id === kpiId);
         if (!kpi) return { className: 'primary', toleranceColor: null };
@@ -612,7 +613,11 @@ dbFetch('/.netlify/functions/users?me=true')
         if (kpi.tolerances && kpi.tolerances.length > 0) {
             const sorted = [...kpi.tolerances].sort((a, b) => b.min - a.min);
             for (const t of sorted) {
-                if (value >= t.min) return { className, toleranceColor: t.color, toleranceLabel: t.label };
+                // When thresholdType is percent_of_quota, t.min is a % (e.g. 150 = 150% of quota)
+                const effectiveMin = kpi.thresholdType === 'percent_of_quota'
+                    ? (annualQuota * (t.min / 100))
+                    : t.min;
+                if (value >= effectiveMin) return { className, toleranceColor: t.color, toleranceLabel: t.label };
             }
             return { className, toleranceColor: sorted[sorted.length - 1].color };
         }
