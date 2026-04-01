@@ -80,6 +80,7 @@ export const contacts = pgTable('contacts', {
     notes:             text('notes'),
     assignedRep:       varchar('assigned_rep', { length: 255 }),
     assignedTerritory: varchar('assigned_territory', { length: 255 }),
+    doNotContact:      boolean('do_not_contact').default(false),
     createdAt:         timestamp('created_at').notNull().defaultNow(),
     orgId:             text('org_id').notNull(),
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),
