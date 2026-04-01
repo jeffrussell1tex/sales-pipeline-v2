@@ -308,8 +308,9 @@ export default function PipelineTab() {
                                 { key: 'Q4', label: 'Q4', match: (opp) => opp.closeQuarter && opp.closeQuarter.includes('Q4') },
                             ];
                             window.__pipelineFilterOptions = timeFilterOpts;
+                            const excludedRoles = new Set(['Admin', 'Manager']);
                             const allReps2 = canSeeAll ? [...new Set([
-                                ...(settings.users||[]).filter(u => u.name).map(u => u.name),
+                                ...(settings.users||[]).filter(u => u.name && !excludedRoles.has(u.userType)).map(u => u.name),
                                 ...visibleOpportunities.filter(o => o.salesRep).map(o => o.salesRep)
                             ])].sort() : [];
                             const allTeams2 = canSeeAll ? [...new Set((settings.users||[]).filter(u => u.team).map(u => u.team))].sort() : [];
