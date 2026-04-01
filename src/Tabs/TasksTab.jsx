@@ -155,7 +155,7 @@ export default function TasksTab() {
                     </div>
                     <ViewingBar
                         allPipelines={allPipelines} activePipeline={activePipeline} setActivePipelineId={setActivePipelineId}
-                        canSeeAll={canSeeAll} allRepNames={(settings?.users||[]).filter(u=>u.userType==='Sales Rep').map(u=>u.name).filter(Boolean).sort()} allTeamNames={allTeamNames} allTerritoryNames={allTerritoryNames}
+                        canSeeAll={canSeeAll} allRepNames={[...new Set([...(settings?.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>u.name)])].sort()} allTeamNames={allTeamNames} allTerritoryNames={allTerritoryNames}
                         viewingRep={viewingRep} setViewingRep={setViewingRep}
                         viewingTeam={viewingTeam} setViewingTeam={setViewingTeam}
                         viewingTerritory={viewingTerritory} setViewingTerritory={setViewingTerritory}

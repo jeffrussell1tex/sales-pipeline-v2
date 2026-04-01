@@ -57,15 +57,10 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 const stageColors = { 'Prospecting':'#6366f1','Qualified':'#8b5cf6','Demo':'#3b82f6','Proposal':'#f59e0b','Negotiation':'#f97316','Closed Won':'#10b981','Closed Lost':'#ef4444' };
 
                 // Build slice options (only for managers/admins)
-                const repOnlyUsers = new Set(
-                    (settings.users || [])
-                        .filter(u => u.userType === 'Sales Rep')
-                        .map(u => u.name)
-                        .filter(Boolean)
-                );
+                const excludedRoles = new Set(['Admin', 'Manager']);
                 const rAllReps = canSeeAll ? [...new Set([
-                    ...repOnlyUsers,
-                    ...visibleOpportunities.filter(o => o.salesRep && repOnlyUsers.has(o.salesRep)).map(o => o.salesRep)
+                    ...(settings.users || []).filter(u => u.name && !excludedRoles.has(u.userType)).map(u => u.name),
+                    ...visibleOpportunities.filter(o => o.salesRep).map(o => o.salesRep)
                 ])].sort() : [];
                 const rAllTeams = [...new Set((settings.users || []).filter(u => u.team).map(u => u.team))].sort();
                 const rAllTerritories = [...new Set((settings.users || []).filter(u => u.territory).map(u => u.territory))].sort();
