@@ -15,7 +15,6 @@ import ReportsTab from './Tabs/ReportsTab';
 import ContactsTab from './Tabs/ContactsTab';
 import LeadsTab from './Tabs/LeadsTab';
 import AccountsTab from './Tabs/AccountsTab';
-import OpportunitiesTab from './Tabs/OpportunitiesTab';
 import PipelineTab from './Tabs/PipelineTab';
 import TasksTab from './Tabs/TasksTab';
 import HomeTab from './Tabs/HomeTab';
@@ -397,15 +396,15 @@ dbFetch('/.netlify/functions/users?me=true')
                 case '2':
                     e.preventDefault(); setActiveTab('pipeline'); break;
                 case '3':
-                    e.preventDefault(); setActiveTab('opportunities'); break;
-                case '4':
                     e.preventDefault(); setActiveTab('tasks'); break;
-                case '5':
+                case '4':
                     e.preventDefault(); setActiveTab('accounts'); break;
-                case '6':
+                case '5':
                     e.preventDefault(); setActiveTab('contacts'); break;
-                case '7':
+                case '6':
                     e.preventDefault(); setActiveTab('leads'); break;
+                case '7':
+                    e.preventDefault(); setActiveTab('quotes'); break;
                 case '8':
                     e.preventDefault(); setActiveTab('reports'); break;
                 case 'o': case 'O':
@@ -1174,6 +1173,13 @@ dbFetch('/.netlify/functions/users?me=true')
         }
     }, [settings.quotesEnabled]);
 
+    // Redirect any user who had 'opportunities' stored in localStorage to 'pipeline'
+    useEffect(() => {
+        if (activeTab === 'opportunities') {
+            setActiveTab('pipeline');
+        }
+    }, []);
+
     // Deep link: navigate to Quotes tab pre-filtered to a specific opportunity
     // (state lives in useQuotes, exposed via AppContext)
 
@@ -1296,7 +1302,6 @@ dbFetch('/.netlify/functions/users?me=true')
         viewingTerritory, setViewingTerritory,
         // UI state
         exportingCSV, setExportingCSV,
-        setUndoToast,
         getKpiColor,
         // Calendar log-from-cal
         logFromCalOpen, setLogFromCalOpen,
@@ -1460,12 +1465,6 @@ dbFetch('/.netlify/functions/users?me=true')
                     PIPELINE
                 </button>
                 <button 
-                    className={`nav-tab ${activeTab === 'opportunities' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('opportunities')}
-                >
-                    OPPORTUNITIES
-                </button>
-                <button 
                     className={`nav-tab ${activeTab === 'tasks' ? 'active' : ''}`}
                     onClick={() => setActiveTab('tasks')}
                     style={{ position: 'relative' }}
@@ -1551,12 +1550,6 @@ dbFetch('/.netlify/functions/users?me=true')
             {activeTab === 'pipeline' && (
                 <ErrorBoundary tabName="Pipeline">
                     <PipelineTab />
-                </ErrorBoundary>
-            )}
-
-            {activeTab === 'opportunities' && (
-                <ErrorBoundary tabName="Opportunities">
-                    <OpportunitiesTab />
                 </ErrorBoundary>
             )}
 

@@ -134,6 +134,7 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
     // dealDiscount removed — avg line discount is now read-only computed from line items
     const [lineItems, setLineItems] = useState(editingQuote?.lineItems || []);
     const [notes, setNotes] = useState(editingQuote?.notes || '');
+    const [billingContact, setBillingContact] = useState(editingQuote?.billingContact || '');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
     const [compareMode, setCompareMode] = useState(false);
@@ -151,6 +152,7 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
             // dealDiscount no longer in state
             setLineItems(editingQuote.lineItems || []);
             setNotes(editingQuote.notes || '');
+            setBillingContact(editingQuote.billingContact || '');
         }
     }, [editingQuote?.id]);
 
@@ -234,6 +236,7 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
                 dealDiscount: 0,
                 lineItems,
                 notes,
+                billingContact,
                 status,
                 createdBy: editingQuote?.createdBy || currentUser,
             };
@@ -263,6 +266,7 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
                 dealDiscount: 0,
                 lineItems: [...(editingQuote.lineItems || [])],
                 notes: editingQuote.notes,
+                billingContact: editingQuote.billingContact || billingContact,
                 status: 'Draft',
                 createdBy: currentUser,
             };
@@ -493,6 +497,22 @@ function QuoteBuilder({ quote, onSave, onClose, opportunities, products, setting
                                 <option key={t} value={t}>{t}</option>
                             ))}
                         </select>
+                    </div>
+                </div>
+
+                {/* Billing contact row */}
+                <div style={{ padding: '0 1.25rem 0.875rem', background: '#fff', borderBottom: '1px solid #ddd8cf', display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexShrink: 0 }}>
+                    <div style={{ flex: 1 }}>
+                        <label style={lbl}>
+                            Billing Contact Email
+                            <span style={{ fontWeight: '400', color: '#94a3b8', marginLeft: '0.375rem' }}>— used when sending the quote to the customer</span>
+                        </label>
+                        <input
+                            value={billingContact}
+                            onChange={e => setBillingContact(e.target.value)}
+                            placeholder="Karen Russell <karen@acme.com>  or  karen@acme.com"
+                            style={{ ...inp, width: '100%', boxSizing: 'border-box' }}
+                        />
                     </div>
                 </div>
 
@@ -1142,27 +1162,94 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
 
 // ─── APPROVALS SUB-TAB ────────────────────────────────────────────────────────
 
-function ApprovalsView({ quotes, opportunities, currentUser, userRole, onApprove, onReject, onEdit }) {
+// ─── QUOTE NOTICE MODAL ───────────────────────────────────────────────────────
+function QuoteNoticeModal({ notice, onClose }) {
+    if (!notice) return null;
+    const isSuccess = notice.type === 'success';
+    return (
+        <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999, padding: '1rem',
+        }} onClick={onClose}>
+            <div style={{
+                background: '#fff', borderRadius: '16px', padding: '2rem 2rem 1.5rem',
+                maxWidth: '440px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+                border: `1.5px solid ${isSuccess ? '#bbf7d0' : '#fecaca'}`,
+                textAlign: 'center',
+            }} onClick={e => e.stopPropagation()}>
+                <div style={{
+                    width: '56px', height: '56px', borderRadius: '50%', margin: '0 auto 1rem',
+                    background: isSuccess ? '#f0fdf4' : '#fef2f2',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '1.5rem', color: isSuccess ? '#16a34a' : '#dc2626',
+                }}>
+                    {isSuccess ? '✓' : '⚠'}
+                </div>
+                <div style={{ fontSize: '1.0625rem', fontWeight: '700', color: '#1c1917', marginBottom: '0.5rem' }}>
+                    {notice.title}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#64748b', lineHeight: 1.6, marginBottom: notice.detail ? '0.75rem' : '1.5rem' }}>
+                    {notice.message}
+                </div>
+                {notice.detail && (
+                    <div style={{ background: '#f8f6f3', border: '1px solid #e8e3da', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8125rem', color: '#44403c', textAlign: 'left', lineHeight: 1.6 }}>
+                        {notice.detail}
+                    </div>
+                )}
+                <button onClick={onClose} style={{
+                    background: isSuccess ? '#16a34a' : '#1c1917',
+                    color: '#fff', border: 'none', borderRadius: '8px',
+                    padding: '0.6rem 2rem', fontSize: '0.875rem', fontWeight: '600',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                }}>
+                    {isSuccess ? 'Great, thanks!' : 'Got it'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function ApprovalsView({ quotes, opportunities, currentUser, userRole, settings, onApprove, onReject, onEdit }) {
     const isManager = userRole === 'Manager';
     const isAdmin = userRole === 'Admin';
 
     const pending = useMemo(() => (quotes || []).filter(q => q.status === 'Pending Approval'), [quotes]);
 
+    const [notice, setNotice] = useState(null);
+
+    const getManagerName = (repName) => {
+        if (!repName || !settings?.users) return null;
+        const rep = settings.users.find(u => u.name === repName);
+        return rep?.managedBy || rep?.manager || null;
+    };
+
     const handleSendToCustomer = async (quote) => {
         try {
-            await dbFetch('/.netlify/functions/quote-email', {
+            const res = await dbFetch('/.netlify/functions/quote-email', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ quoteId: quote.id }),
             });
-            alert('Quote sent to customer successfully.');
+            const data = await res.json();
+            if (!res.ok) {
+                setNotice({ type: 'error', title: 'Send Failed', message: data.error || 'The quote could not be sent. Please try again.' });
+                return;
+            }
+            setNotice({
+                type: 'success',
+                title: 'Quote Sent!',
+                message: `The quote was delivered successfully.`,
+                detail: `Sent to: ${data.customerName || 'Customer'}\nEmail: ${data.customerEmail || '—'}\nQuote: ${data.quoteNumber || quote.quoteNumber || '—'}`,
+            });
         } catch {
-            alert('Failed to send email. Please try again.');
+            setNotice({ type: 'error', title: 'Send Failed', message: 'A network error occurred. Please check your connection and try again.' });
         }
     };
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <QuoteNoticeModal notice={notice} onClose={() => setNotice(null)} />
             <div className="table-container">
                 <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f0ece4', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>
@@ -1184,6 +1271,13 @@ function ApprovalsView({ quotes, opportunities, currentUser, userRole, onApprove
                                         <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
                                             {opp ? (opp.opportunityName || opp.account) : '—'} · Rep: {q.createdBy || '—'} · Avg Discount: {pct(avgDisc)}
                                         </div>
+                                        {(() => { const mgr = getManagerName(q.createdBy); return mgr ? (
+                                            <div style={{ fontSize: '0.6875rem', color: '#d97706', marginTop: '0.25rem' }}>
+                                                <span style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '0.1rem 0.4rem', fontWeight: '600' }}>
+                                                    ⏳ Awaiting approval from {mgr}
+                                                </span>
+                                            </div>
+                                        ) : null; })()}
                                     </div>
                                     <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1c1917', flexShrink: 0 }}>{fmtFull(totalValue)}</div>
                                     <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
@@ -1194,7 +1288,6 @@ function ApprovalsView({ quotes, opportunities, currentUser, userRole, onApprove
                                                 <button onClick={() => onReject(q)} style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>✕ Reject</button>
                                             </>
                                         )}
-                                        <button onClick={() => handleSendToCustomer(q)} style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>📧 Send</button>
                                     </div>
                                 </div>
                             );
@@ -1416,6 +1509,7 @@ export default function QuotesTab() {
                     opportunities={opportunities}
                     currentUser={currentUser}
                     userRole={userRole}
+                    settings={settings}
                     onApprove={handleApprove}
                     onReject={handleReject}
                     onEdit={(q) => openBuilder(q)}

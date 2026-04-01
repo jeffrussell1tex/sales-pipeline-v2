@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../AppContext';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function ViewingContactPanel({
     setEditingOpp, setShowModal,
@@ -30,6 +31,7 @@ export default function ViewingContactPanel({
     const isManager = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit = !isReadOnly;
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
 
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
     const handleEditAccount = (a) => { setEditingAccount(a); setEditingSubAccount(null); setShowAccountModal(true); };
@@ -60,46 +62,36 @@ const ctOpps = activeDeals; // alias for Prep button — active deals linked to 
     <div className="modal-overlay" onClick={() => setViewingContact(null)} style={{ alignItems: 'flex-start', paddingTop: '0', overflowY: 'auto' }}>
       <div onClick={e => e.stopPropagation()} style={{
           width: '100%', maxWidth: '1100px', minHeight: '100vh', margin: '0 auto',
-          background: '#f8fafc', boxShadow: '0 0 40px rgba(0,0,0,0.15)'
+          background: '#f8fafc', boxShadow: '0 0 40px rgba(0,0,0,0.15)', ...dragOffsetStyle
       }}>
           {/* Header bar */}
-          <div style={{ background: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '1.25rem 2rem', position: 'sticky', top: 0, zIndex: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-                      <button onClick={() => setViewingContact(null)}
-                          style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.5rem 0.875rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '600', color: '#475569', fontFamily: 'inherit', marginTop: '0.125rem' }}
-                      >← Back</button>
-                      <div>
-                          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '800', color: '#0f172a' }}>{ct.firstName} {ct.lastName}</h1>
-                          {ct.title && <div style={{ color: '#64748b', fontWeight: '600', fontSize: '0.875rem', marginTop: '0.125rem' }}>{ct.title}</div>}
-                          {ct.company && (
-                              <div style={{ color: '#2563eb', fontWeight: '600', fontSize: '0.875rem', marginTop: '0.125rem', cursor: 'pointer' }}
-                                  onClick={() => { if (relatedAccount) { setViewingContact(null); setActiveTab('accounts'); setTimeout(() => setViewingAccount(relatedAccount), 100); } }}
-                                  onMouseEnter={e => e.target.style.textDecoration = 'underline'}
-                                  onMouseLeave={e => e.target.style.textDecoration = 'none'}
-                              >{ct.company}</div>
-                          )}
-                          <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginTop: '0.375rem', fontSize: '0.8125rem', color: '#64748b' }}>
-                              {ct.email && <a href={'mailto:' + ct.email} style={{ color: '#2563eb', textDecoration: 'none' }}>✉️ {ct.email}</a>}
-                              {ct.phone && <span>📞 {ct.phone}</span>}
-                              {ct.mobile && <span>📱 {ct.mobile}</span>}
-                              {(ct.address || ct.city || ct.state || ct.zip) && (
-                                  <span>📍 {[ct.address, [ct.city, ct.state].filter(Boolean).join(', '), ct.zip].filter(Boolean).join(', ')}</span>
-                              )}
+          <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: '#1c1917', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '0.875rem 1.5rem', position: 'sticky', top: 0, zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 0, minHeight: '52px', cursor: 'grab' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0, flex: 1 }}>
+                  <button onClick={() => setViewingContact(null)}
+                      style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '6px', padding: '0.375rem 0.75rem', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: '600', color: '#f5f1eb', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' }}
+                  >← Back</button>
+                  <div style={{ minWidth: 0 }}>
+                      <h1 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: '700', color: '#f5f1eb', userSelect: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ct.firstName} {ct.lastName}</h1>
+                      {(ct.title || ct.company) && (
+                          <div style={{ fontSize: '0.75rem', color: 'rgba(245,241,235,0.55)', marginTop: '0.125rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {[ct.title, ct.company].filter(Boolean).join(' · ')}
                           </div>
-                      </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
-                      <button onClick={() => { setActivityInitialContext({ companyName: ct.company || '', contactName: ctFullName }); setEditingActivity(null); setShowActivityModal(true); }}
-                          style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'none', background:'#1c1917', color:'#f5f1eb', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
-                          title="Quick log activity">⚡ Log</button>
-                      {ctOpps.length > 0 && (
-                          <button onClick={() => { setMeetingPrepEvent({ summary: ctFullName, start: { date: new Date().toISOString().split('T')[0] }, attendeeCount: 0 }); setMeetingPrepOppId(ctOpps[0].id); setMeetingPrepOpen(true); }}
-                              style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'1px solid #ddd8cf', background:'#f0ece4', color:'#1c1917', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
-                              title="Meeting prep">📋 Prep</button>
                       )}
-                      <button className="btn" onClick={() => { setViewingContact(null); handleEditContact(ct); }}>Edit Contact</button>
                   </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
+                  <button onClick={() => { setActivityInitialContext({ companyName: ct.company || '', contactName: ctFullName }); setEditingActivity(null); setShowActivityModal(true); }}
+                      style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'1px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.1)', color:'#f5f1eb', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
+                      title="Quick log activity">⚡ Log</button>
+                  {ctOpps.length > 0 && (
+                      <button onClick={() => { setMeetingPrepEvent({ summary: ctFullName, start: { date: new Date().toISOString().split('T')[0] }, attendeeCount: 0 }); setMeetingPrepOppId(ctOpps[0].id); setMeetingPrepOpen(true); }}
+                          style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'1px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.08)', color:'#f5f1eb', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
+                          title="Meeting prep">📋 Prep</button>
+                  )}
+                  <button onClick={() => { setViewingContact(null); handleEditContact(ct); }}
+                      style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'1px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.08)', color:'#f5f1eb', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
+                      Edit Contact</button>
+                  <span style={{ fontSize: '0.6875rem', color: 'rgba(245,241,235,0.35)', fontWeight: '500', letterSpacing: '0.03em', marginLeft: '0.25rem' }}>⠿ drag</span>
               </div>
           </div>
     

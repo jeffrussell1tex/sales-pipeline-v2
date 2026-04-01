@@ -328,11 +328,11 @@ export default function ModalLayer() {
                             { section: 'Navigation', icon: '🧭', shortcuts: [
                                 { keys: ['1'], desc: 'Home' },
                                 { keys: ['2'], desc: 'Pipeline' },
-                                { keys: ['3'], desc: 'Opportunities' },
-                                { keys: ['4'], desc: 'Tasks' },
-                                { keys: ['5'], desc: 'Accounts' },
-                                { keys: ['6'], desc: 'Contacts' },
-                                { keys: ['7'], desc: 'Leads' },
+                                { keys: ['3'], desc: 'Tasks' },
+                                { keys: ['4'], desc: 'Accounts' },
+                                { keys: ['5'], desc: 'Contacts' },
+                                { keys: ['6'], desc: 'Leads' },
+                                { keys: ['7'], desc: 'Quotes' },
                                 { keys: ['8'], desc: 'Reports' },
                             ]},
                             { section: 'Create', icon: '✏️', shortcuts: [

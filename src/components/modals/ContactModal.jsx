@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function ContactModal({ contact, contacts, accounts, settings, onClose, onSave, onSaveNewContact, onAddAccount, errorMessage, onDismissError, saving }) {
     const [formData, setFormData] = useState(contact || {
@@ -61,6 +62,7 @@ export default function ContactModal({ contact, contacts, accounts, settings, on
     };
 
     const [duplicateContactWarning, setDuplicateContactWarning] = useState(null);
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -186,9 +188,16 @@ export default function ContactModal({ contact, contacts, accounts, settings, on
             </div>
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      <div className="modal-overlay" onClick={e => e.stopPropagation()}>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '650px' }}>
-                <h2>{contact ? 'Edit Contact' : 'New Contact'}</h2>
+      <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, maxWidth: '650px', padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                {/* ── Drag handle header bar ── */}
+                <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: '#1c1917', padding: '0.875rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px 12px 0 0', minHeight: '52px' }}>
+                    <h2 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: '700', color: '#f5f1eb', cursor: 'inherit', userSelect: 'none' }}>
+                        {contact ? 'Edit Contact' : 'New Contact'}
+                    </h2>
+                    <span style={{ fontSize: '0.6875rem', color: 'rgba(245,241,235,0.35)', fontWeight: '500', letterSpacing: '0.03em' }}>⠿ drag</span>
+                </div>
+                <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, minHeight: 0 }}>
 
                 <div style={{ display: 'flex', background: '#f1f3f5', borderRadius: '6px', padding: '3px', marginBottom: '1.25rem' }}>
                     <button type="button" onClick={() => setActiveContactTab('primary')} style={tabBtnStyle(activeContactTab === 'primary')}>Primary Info</button>
@@ -307,6 +316,7 @@ export default function ContactModal({ contact, contacts, accounts, settings, on
                         </button>
                     </div>
                 </form>
+                </div>{/* end padding wrapper */}
             </div>
 
             {nestedModal && (

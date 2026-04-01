@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
+import LeadForm from '../components/LeadForm';
 
 export default function LeadsTab() {
     const {

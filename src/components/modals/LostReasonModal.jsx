@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function LostReasonModal({ oppName, onSave, onSkip }) {
     const lostCategories = ['Pricing / Budget', 'Competitor', 'No Decision / Stalled', 'Product Fit', 'Timing', 'Relationship / Trust', 'Internal Priority Change', 'Other'];
     const [category, setCategory] = useState('');
     const [notes, setNotes] = useState('');
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
     return (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onClick={onSkip}>
-            <div style={{ background: '#fff', borderRadius: '16px', width: '480px', maxWidth: '92vw', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.25)', animation: 'slideUp 0.2s ease' }}
+            <div style={{ background: '#fff', borderRadius: '16px', width: '480px', maxWidth: '92vw', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.25)', animation: 'slideUp 0.2s ease', ...dragOffsetStyle }}
                 onClick={e => e.stopPropagation()}>
-                <div style={{ background: 'linear-gradient(135deg, #b91c1c, #ef4444)', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+                <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: 'linear-gradient(135deg, #b91c1c, #ef4444)', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
                     <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.375rem', flexShrink: 0 }}>😞</div>
                     <div>
                         <div style={{ fontWeight: '800', fontSize: '1rem', color: '#fff' }}>Opportunity Closed Lost</div>

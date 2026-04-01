@@ -998,8 +998,7 @@ export default function PipelineTab() {
                                             return (
                                         <React.Fragment key={opp.id}>
                                         <tr
-                                            style={{ background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : selectedOpps.includes(opp.id) ? '#dbeafe' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc', borderLeft: selectedPipelineOpp?.id === opp.id ? '3px solid #2563eb' : '3px solid transparent', cursor: 'pointer' }}
-                                            onClick={() => setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp)}
+                                            style={{ background: selectedPipelineOpp?.id === opp.id ? '#eff6ff' : selectedOpps.includes(opp.id) ? '#dbeafe' : oppIdx % 2 === 0 ? '#ffffff' : '#f8fafc', borderLeft: selectedPipelineOpp?.id === opp.id ? '3px solid #2563eb' : '3px solid transparent' }}
                                         >
                                             <td style={{ width: '36px' }} onClick={e => e.stopPropagation()}>
                                                 <input type="checkbox"
@@ -1061,7 +1060,7 @@ export default function PipelineTab() {
                                             </td>
                                             <td style={{ whiteSpace: 'nowrap' }}>{opp.salesRep || '-'}</td>
                                             <td>{opp.account}{opp.site ? ' · ' + opp.site : ''}</td>
-                                            <td><span style={{ cursor: 'pointer', color: '#2563eb', fontWeight: '600' }} onClick={(e) => { e.stopPropagation(); setEditingOpp(opp); setShowModal(true); }}>{opp.opportunityName || '-'}</span></td>
+                                            <td><span onClick={() => handleEdit(opp)} style={{ color: '#2563eb', fontWeight: '600', cursor: 'pointer', textDecoration: 'underline' }} onMouseEnter={e => e.currentTarget.style.color='#1d4ed8'} onMouseLeave={e => e.currentTarget.style.color='#2563eb'}>{opp.opportunityName || '-'}</span></td>
                                             <td onClick={e => e.stopPropagation()}>
                                                 {inlineEdit && inlineEdit.oppId === opp.id && inlineEdit.field === 'stage' ? (
                                                     <select autoFocus

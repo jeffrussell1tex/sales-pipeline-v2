@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useDraggable } from '../../hooks/useDraggable';
 
 const LEAD_FIELDS = [
     { key: 'firstName',    label: 'First Name',     required: true },
@@ -152,9 +153,10 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
 
     // ── Shared styles ─────────────────────────────────────────────────────────
     const overlay  = { position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:'1rem' };
-    const modal    = { background:'#fff', borderRadius:'14px', width:'100%', maxWidth:'680px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' };
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
+    const modal    = { background:'#fff', borderRadius:'14px', width:'100%', maxWidth:'680px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden', ...dragOffsetStyle };
     const hdr      = { padding:'1rem 1.25rem', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 };
-    const body     = { padding:'1.25rem', overflowY:'auto', flex:1 };
+    const body     = { padding:'1.25rem', overflowY:'auto', flex:1, minHeight:0 };
     const ftr      = { padding:'0.875rem 1.25rem', borderTop:'1px solid #e2e8f0', display:'flex', justifyContent:'flex-end', gap:'0.625rem', flexShrink:0 };
     const btn      = (bg,color='#fff') => ({ padding:'0.4rem 1rem', border:'none', borderRadius:'7px', background:bg, color, fontSize:'0.8125rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' });
     const lblStyle = { fontSize:'0.6875rem', fontWeight:'700', color:'#475569', marginBottom:'0.3rem', display:'block' };
@@ -171,7 +173,7 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
         <div style={overlay} onClick={e => e.target===e.currentTarget && onClose()}>
             <div style={modal}>
                 {/* Header */}
-                <div style={hdr}>
+                <div {...dragHandleProps} style={{ ...dragHandleProps.style, ...hdr }}>
                     <div>
                         <h3 style={{ fontSize:'1rem', fontWeight:'800', color:'#0f172a', margin:0 }}>📥 Import Leads</h3>
                         <p style={{ fontSize:'0.75rem', color:'#64748b', margin:'0.125rem 0 0' }}>Upload a CSV file to bulk-import leads</p>

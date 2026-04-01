@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function ActivityModal({ activity, opportunities, contacts, accounts, onClose, onSave, initialContext, onSaveNewContact, onSaveNewAccount, onAddContact, onAddAccount, onAddOpportunity, errorMessage, onDismissError, saving }) {
     const [formData, setFormData] = useState(activity || {
@@ -12,6 +13,7 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
     });
 
     const [nestedModal, setNestedModal] = useState(null);
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
 
     const [opportunitySearch, setOpportunitySearch] = useState(
         activity ? (opportunities || []).find(o => o.id === activity.opportunityId)?.opportunityName || '' : (initialContext?.opportunityName || '')
@@ -70,9 +72,16 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
             </div>
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <div className="modal-overlay">
-            <div className="modal" onClick={e => e.stopPropagation()}>
-                <h2>{activity ? 'Edit Activity' : 'Log Activity'}</h2>
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                {/* ── Drag handle header bar ── */}
+                <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: '#1c1917', padding: '0.875rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px 12px 0 0', minHeight: '52px' }}>
+                    <h2 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: '700', color: '#f5f1eb', cursor: 'inherit', userSelect: 'none' }}>
+                        {activity ? 'Edit Activity' : 'Log Activity'}
+                    </h2>
+                    <span style={{ fontSize: '0.6875rem', color: 'rgba(245,241,235,0.35)', fontWeight: '500', letterSpacing: '0.03em' }}>⠿ drag</span>
+                </div>
+                <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, minHeight: 0 }}>
                 <form onSubmit={handleSubmit}>
                     <div className="form-grid">
                         <div className="form-group">
@@ -261,6 +270,7 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
                         </button>
                     </div>
                 </form>
+                </div>{/* end padding wrapper */}
             </div>
             {nestedModal && nestedModal.type === 'contact' && (
                 <div className="modal-overlay" style={{ zIndex: 2000 }} onClick={() => setNestedModal(null)}>
