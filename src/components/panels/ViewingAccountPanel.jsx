@@ -94,35 +94,33 @@ const CONTACT_LIMIT = 8;
           background: '#f8fafc', boxShadow: '0 0 40px rgba(0,0,0,0.15)', ...dragOffsetStyle
       }}>
           {/* Header bar */}
-          <div style={{ background: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '1.25rem 2rem', position: 'sticky', top: 0, zIndex: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-                      <button onClick={() => setViewingAccount(null)}
-                          style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.5rem 0.875rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '600', color: '#475569', fontFamily: 'inherit', marginTop: '0.125rem' }}
-                      >← Back</button>
-                      <div {...dragHandleProps} style={{ ...dragHandleProps.style }}>
-                          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '800', color: '#0f172a' }}>{acc.name}</h1>
-                          {acc.accountOwner && <div style={{ color: '#2563eb', fontWeight: '600', fontSize: '0.875rem', marginTop: '0.125rem' }}>{acc.accountOwner}</div>}
-                          <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginTop: '0.375rem', fontSize: '0.8125rem', color: '#64748b' }}>
-                              {(acc.address || acc.city || acc.state || acc.zip) && (
-                                  <span>📍 {[acc.address, [acc.city, acc.state].filter(Boolean).join(', '), acc.zip].filter(Boolean).join(', ')}</span>
-                              )}
-                              {acc.phone && <span>📞 {acc.phone}</span>}
-                              {acc.website && <a href={acc.website} target="_blank" style={{ color: '#2563eb', textDecoration: 'none' }}>🌐 {acc.website.replace(/^https?:/, '').replace(/^\/\//, '').replace(/^www\./, '')}</a>}
+          <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: '#1c1917', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '0.875rem 1.5rem', position: 'sticky', top: 0, zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 0, minHeight: '52px', cursor: 'grab' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0, flex: 1 }}>
+                  <button onClick={() => setViewingAccount(null)}
+                      style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '6px', padding: '0.375rem 0.75rem', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: '600', color: '#f5f1eb', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' }}
+                  >← Back</button>
+                  <div style={{ minWidth: 0 }}>
+                      <h1 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: '700', color: '#f5f1eb', userSelect: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{acc.name}</h1>
+                      {(acc.verticalMarket || acc.city || acc.state) && (
+                          <div style={{ fontSize: '0.75rem', color: 'rgba(245,241,235,0.55)', marginTop: '0.125rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {[acc.verticalMarket, [acc.city, acc.state].filter(Boolean).join(', ')].filter(Boolean).join(' · ')}
                           </div>
-                      </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
-                      <button onClick={() => { setActivityInitialContext({ companyName: acc.name }); setEditingActivity(null); setShowActivityModal(true); }}
-                          style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'none', background:'#1c1917', color:'#f5f1eb', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
-                          title="Quick log activity">⚡ Log</button>
-                      {openOpps.length > 0 && (
-                          <button onClick={() => { setMeetingPrepEvent({ summary: acc.name, start: { date: new Date().toISOString().split('T')[0] }, attendeeCount: 0 }); setMeetingPrepOppId(openOpps[0].id); setMeetingPrepOpen(true); }}
-                              style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'1px solid #ddd8cf', background:'#f0ece4', color:'#1c1917', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
-                              title="Meeting prep">📋 Prep</button>
                       )}
-                      <button className="btn" onClick={() => { setViewingAccount(null); handleEditAccount(acc); }}>Edit Account</button>
                   </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
+                  <button onClick={() => { setActivityInitialContext({ companyName: acc.name }); setEditingActivity(null); setShowActivityModal(true); }}
+                      style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'1px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.1)', color:'#f5f1eb', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
+                      title="Quick log activity">⚡ Log</button>
+                  {openOpps.length > 0 && (
+                      <button onClick={() => { setMeetingPrepEvent({ summary: acc.name, start: { date: new Date().toISOString().split('T')[0] }, attendeeCount: 0 }); setMeetingPrepOppId(openOpps[0].id); setMeetingPrepOpen(true); }}
+                          style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'1px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.08)', color:'#f5f1eb', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'0.25rem' }}
+                          title="Meeting prep">📋 Prep</button>
+                  )}
+                  <button onClick={() => { setViewingAccount(null); handleEditAccount(acc); }}
+                      style={{ height:'32px', padding:'0 0.75rem', borderRadius:'8px', border:'1px solid rgba(255,255,255,0.2)', background:'rgba(255,255,255,0.08)', color:'#f5f1eb', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
+                      Edit Account</button>
+                  <span style={{ fontSize: '0.6875rem', color: 'rgba(245,241,235,0.35)', fontWeight: '500', letterSpacing: '0.03em', marginLeft: '0.25rem' }}>⠿ drag</span>
               </div>
           </div>
     

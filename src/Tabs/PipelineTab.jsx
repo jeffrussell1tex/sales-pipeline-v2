@@ -1060,7 +1060,7 @@ export default function PipelineTab() {
                                             </td>
                                             <td style={{ whiteSpace: 'nowrap' }}>{opp.salesRep || '-'}</td>
                                             <td>{opp.account}{opp.site ? ' · ' + opp.site : ''}</td>
-                                            <td><span style={{ color: '#2563eb', fontWeight: '600' }}>{opp.opportunityName || '-'}</span></td>
+                                            <td><span onClick={() => handleEdit(opp)} style={{ color: '#2563eb', fontWeight: '600', cursor: 'pointer', textDecoration: 'underline' }} onMouseEnter={e => e.currentTarget.style.color='#1d4ed8'} onMouseLeave={e => e.currentTarget.style.color='#2563eb'}>{opp.opportunityName || '-'}</span></td>
                                             <td onClick={e => e.stopPropagation()}>
                                                 {inlineEdit && inlineEdit.oppId === opp.id && inlineEdit.field === 'stage' ? (
                                                     <select autoFocus
