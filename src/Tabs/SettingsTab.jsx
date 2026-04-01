@@ -552,6 +552,7 @@ export default function SettingsTab() {
     const [auditEntries, setAuditEntries] = useState([]);
     const [auditLoading, setAuditLoading] = useState(false);
     const [newPainPointInput, setNewPainPointInput] = useState('');
+    const [newCtInput, setNewCtInput] = useState('');
     const [newProductInput, setNewProductInput] = useState('');
     const [newVerticalMarketInput, setNewVerticalMarketInput] = useState('');
     const [exportingBackup, setExportingBackup] = useState(false);
@@ -1525,91 +1526,91 @@ export default function SettingsTab() {
                     )}
 
                     {/* ── Customer Types (admin-only) ── */}
-                    {settingsView === 'customer-types' && (() => {
-                        if (!isAdmin) return (
+                    {settingsView === 'customer-types' && (
+                        !isAdmin ? (
                             <div className="table-container">
                                 <div className="table-header"><button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button><h2>CUSTOMER TYPES</h2></div>
                                 <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>Admin access required to manage customer types.</div>
                             </div>
-                        );
-                        const [newCtInput, setNewCtInput] = React.useState('');
-                        const allCt = [...(settings.customerTypes || [])].sort((a, b) => a.localeCompare(b));
-                        return (
-                            <div className="table-container">
-                                <div className="table-header">
-                                    <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
-                                    <h2>CUSTOMER TYPES</h2>
-                                </div>
-                                <div style={{ padding: '1.5rem' }}>
-                                    <p style={{ fontSize: '0.875rem', color: '#78716c', marginBottom: '1.25rem', marginTop: 0 }}>
-                                        Define the classification tags that appear in the Customer Type field on account records. Only admins can manage this list.
-                                    </p>
-                                    <div style={{ marginBottom: '1.5rem' }}>
-                                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' }}>Add New Type</label>
-                                        <div style={{ display: 'flex', gap: '0.5rem', maxWidth: isMobile ? '100%' : '420px' }}>
-                                            <input
-                                                type="text"
-                                                value={newCtInput}
-                                                onChange={e => setNewCtInput(e.target.value)}
-                                                placeholder="e.g. Prospect, Partner, Enterprise..."
-                                                style={{ flex: 1, background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.5rem 0.75rem', color: '#1c1917', fontSize: '0.875rem', fontFamily: 'inherit', outline: 'none' }}
-                                                onKeyPress={e => {
-                                                    if (e.key === 'Enter') {
+                        ) : (() => {
+                            const allCt = [...(settings.customerTypes || [])].sort((a, b) => a.localeCompare(b));
+                            return (
+                                <div className="table-container">
+                                    <div className="table-header">
+                                        <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
+                                        <h2>CUSTOMER TYPES</h2>
+                                    </div>
+                                    <div style={{ padding: '1.5rem' }}>
+                                        <p style={{ fontSize: '0.875rem', color: '#78716c', marginBottom: '1.25rem', marginTop: 0 }}>
+                                            Define the classification tags that appear in the Customer Type field on account records. Only admins can manage this list.
+                                        </p>
+                                        <div style={{ marginBottom: '1.5rem' }}>
+                                            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' }}>Add New Type</label>
+                                            <div style={{ display: 'flex', gap: '0.5rem', maxWidth: isMobile ? '100%' : '420px' }}>
+                                                <input
+                                                    type="text"
+                                                    value={newCtInput}
+                                                    onChange={e => setNewCtInput(e.target.value)}
+                                                    placeholder="e.g. Prospect, Partner, Enterprise..."
+                                                    style={{ flex: 1, background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.5rem 0.75rem', color: '#1c1917', fontSize: '0.875rem', fontFamily: 'inherit', outline: 'none' }}
+                                                    onKeyPress={e => {
+                                                        if (e.key === 'Enter') {
+                                                            const v = newCtInput.trim();
+                                                            if (v && !(settings.customerTypes || []).includes(v)) {
+                                                                setSettings(prev => ({ ...prev, customerTypes: [...(prev.customerTypes || []), v] }));
+                                                                setNewCtInput('');
+                                                            }
+                                                        }
+                                                    }}
+                                                />
+                                                <button
+                                                    className="btn"
+                                                    onClick={() => {
                                                         const v = newCtInput.trim();
                                                         if (v && !(settings.customerTypes || []).includes(v)) {
                                                             setSettings(prev => ({ ...prev, customerTypes: [...(prev.customerTypes || []), v] }));
                                                             setNewCtInput('');
                                                         }
-                                                    }
-                                                }}
-                                            />
-                                            <button
-                                                className="btn"
-                                                onClick={() => {
-                                                    const v = newCtInput.trim();
-                                                    if (v && !(settings.customerTypes || []).includes(v)) {
-                                                        setSettings(prev => ({ ...prev, customerTypes: [...(prev.customerTypes || []), v] }));
-                                                        setNewCtInput('');
-                                                    }
-                                                }}
-                                            >+ ADD</button>
+                                                    }}
+                                                >+ ADD</button>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '0.75rem' }}>
+                                                Defined Types ({allCt.length}) <span style={{ fontSize: '0.75rem', fontWeight: '400', color: '#94a3b8' }}>— sorted A–Z</span>
+                                            </h3>
+                                            {allCt.length === 0 ? (
+                                                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b', background: '#f0ece4', borderRadius: '8px', fontSize: '0.875rem' }}>
+                                                    No customer types defined yet. Add one above.
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid #e5e2db', borderRadius: '8px', overflow: 'hidden' }}>
+                                                    {allCt.map((ct, idx, arr) => (
+                                                        <div key={ct} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0.875rem', borderBottom: idx < arr.length - 1 ? '1px solid #f0ece4' : 'none', background: idx % 2 === 0 ? '#ffffff' : '#fafaf9' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                                                                <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#c8b99a', minWidth: '20px', textAlign: 'right' }}>{idx + 1}</span>
+                                                                <span style={{ display: 'inline-block', background: '#1c1917', color: '#f5f1eb', borderRadius: '4px', padding: '0.2rem 0.625rem', fontSize: '0.75rem', fontWeight: '600' }}>{ct}</span>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => showConfirm(`Remove "${ct}" from customer types?`, () => {
+                                                                    setSettings(prev => ({ ...prev, customerTypes: (prev.customerTypes || []).filter(t => t !== ct) }));
+                                                                })}
+                                                                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '1rem', padding: '0.125rem 0.375rem', lineHeight: 1, borderRadius: '4px', fontFamily: 'inherit' }}
+                                                                onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; }}
+                                                                onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+                                                            >×</button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
-
-                                    <div>
-                                        <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '0.75rem' }}>
-                                            Defined Types ({allCt.length}) <span style={{ fontSize: '0.75rem', fontWeight: '400', color: '#94a3b8' }}>— sorted A–Z</span>
-                                        </h3>
-                                        {allCt.length === 0 ? (
-                                            <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b', background: '#f0ece4', borderRadius: '8px', fontSize: '0.875rem' }}>
-                                                No customer types defined yet. Add one above.
-                                            </div>
-                                        ) : (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid #e5e2db', borderRadius: '8px', overflow: 'hidden' }}>
-                                                {allCt.map((ct, idx, arr) => (
-                                                    <div key={ct} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0.875rem', borderBottom: idx < arr.length - 1 ? '1px solid #f0ece4' : 'none', background: idx % 2 === 0 ? '#ffffff' : '#fafaf9' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                                                            <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#c8b99a', minWidth: '20px', textAlign: 'right' }}>{idx + 1}</span>
-                                                            <span style={{ display: 'inline-block', background: '#1c1917', color: '#f5f1eb', borderRadius: '4px', padding: '0.2rem 0.625rem', fontSize: '0.75rem', fontWeight: '600' }}>{ct}</span>
-                                                        </div>
-                                                        <button
-                                                            onClick={() => showConfirm(`Remove "${ct}" from customer types?`, () => {
-                                                                setSettings(prev => ({ ...prev, customerTypes: (prev.customerTypes || []).filter(t => t !== ct) }));
-                                                            })}
-                                                            style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '1rem', padding: '0.125rem 0.375rem', lineHeight: 1, borderRadius: '4px', fontFamily: 'inherit' }}
-                                                            onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; }}
-                                                            onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-                                                        >×</button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
+                                    <SaveCancelBar />
                                 </div>
-                                <SaveCancelBar />
-                            </div>
-                        );
-                    })()}
+                            );
+                        })()
+                    )}
 
 
 
