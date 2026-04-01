@@ -1830,6 +1830,12 @@ export default function SettingsTab() {
                                         { value: 'info', label: 'Indigo', swatch: '#6366f1' },
                                         { value: 'neutral', label: 'Gray', swatch: '#475569' }
                                     ];
+
+                                    // KPIs that support quota-relative thresholds
+                                    const QUOTA_RELATIVE_IDS = ['totalPipelineARR', 'nextQForecast', 'quota'];
+                                    const supportsQuotaPct = QUOTA_RELATIVE_IDS.includes(kpi.id);
+                                    const isQuotaPct = supportsQuotaPct && kpi.thresholdType === 'percent_of_quota';
+
                                     return (
                                         <div key={kpi.id} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1.25rem', marginBottom: '1rem', background: '#ffffff' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -1868,14 +1874,46 @@ export default function SettingsTab() {
                                                 >Delete</button>
                                             </div>
 
+                                            {/* ── Threshold type toggle (quota-relative KPIs only) ── */}
+                                            {supportsQuotaPct && (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', padding: '0.625rem 0.875rem', background: isQuotaPct ? '#eff6ff' : '#f8fafc', border: `1px solid ${isQuotaPct ? '#bfdbfe' : '#e2e8f0'}`, borderRadius: '8px', transition: 'all 0.2s' }}>
+                                                    <div
+                                                        onClick={() => {
+                                                            const updated = [...(settings.kpiConfig || [])];
+                                                            const next = isQuotaPct ? 'value' : 'percent_of_quota';
+                                                            updated[kIdx] = { ...updated[kIdx], thresholdType: next };
+                                                            setSettings(prev => ({ ...prev, kpiConfig: updated }));
+                                                        }}
+                                                        style={{ width: '36px', height: '20px', borderRadius: '999px', background: isQuotaPct ? '#2563eb' : '#d6d3ce', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background 0.2s' }}
+                                                    >
+                                                        <div style={{ position: 'absolute', width: '14px', height: '14px', background: '#fff', borderRadius: '50%', top: '3px', left: isQuotaPct ? '19px' : '3px', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: isQuotaPct ? '#2563eb' : '#57534e' }}>
+                                                            {isQuotaPct ? '% of Assigned Quota' : 'Fixed Dollar Value'}
+                                                        </div>
+                                                        <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>
+                                                            {isQuotaPct
+                                                                ? 'Thresholds are calculated as a percentage of each rep\'s annual quota'
+                                                                : 'Toggle to use quota-relative thresholds instead of fixed amounts'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             {/* Tolerances */}
                                             <div style={{ background: '#f8fafc', borderRadius: '6px', padding: '0.75rem', border: '1px solid #f1f3f5' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                                    <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tolerance Thresholds</span>
+                                                    <div>
+                                                        <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tolerance Thresholds</span>
+                                                        {isQuotaPct && (
+                                                            <span style={{ marginLeft: '0.5rem', fontSize: '0.6875rem', fontWeight: '600', color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '0.1rem 0.4rem' }}>% of quota</span>
+                                                        )}
+                                                    </div>
                                                     <button onClick={() => {
                                                         const updated = [...(settings.kpiConfig || [])];
                                                         const tols = [...(updated[kIdx].tolerances || [])];
-                                                        tols.push({ label: 'New Level', min: 0, color: '#64748b' });
+                                                        tols.push({ label: 'New Level', min: isQuotaPct ? 100 : 0, color: '#64748b' });
                                                         updated[kIdx] = { ...updated[kIdx], tolerances: tols };
                                                         setSettings(prev => ({ ...prev, kpiConfig: updated }));
                                                     }}
@@ -1909,16 +1947,21 @@ export default function SettingsTab() {
                                                                     style={{ flex: 1, border: '1px solid #e2e8f0', borderRadius: '4px', padding: '0.3rem 0.5rem', fontSize: '0.8125rem', fontFamily: 'inherit' }}
                                                                 />
                                                                 <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600', whiteSpace: 'nowrap' }}>≥</span>
-                                                                <input type="number" value={tol.min} placeholder="Min value"
-                                                                    onChange={e => {
-                                                                        const updated = [...(settings.kpiConfig || [])];
-                                                                        const tols = [...(updated[kIdx].tolerances || [])];
-                                                                        tols[tIdx] = { ...tols[tIdx], min: parseFloat(e.target.value) || 0 };
-                                                                        updated[kIdx] = { ...updated[kIdx], tolerances: tols };
-                                                                        setSettings(prev => ({ ...prev, kpiConfig: updated }));
-                                                                    }}
-                                                                    style={{ width: '100px', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '0.3rem 0.5rem', fontSize: '0.8125rem', fontFamily: 'inherit' }}
-                                                                />
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                                    <input type="number" value={tol.min} placeholder={isQuotaPct ? '% of quota' : 'Min value'}
+                                                                        onChange={e => {
+                                                                            const updated = [...(settings.kpiConfig || [])];
+                                                                            const tols = [...(updated[kIdx].tolerances || [])];
+                                                                            tols[tIdx] = { ...tols[tIdx], min: parseFloat(e.target.value) || 0 };
+                                                                            updated[kIdx] = { ...updated[kIdx], tolerances: tols };
+                                                                            setSettings(prev => ({ ...prev, kpiConfig: updated }));
+                                                                        }}
+                                                                        style={{ width: isQuotaPct ? '72px' : '100px', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '0.3rem 0.5rem', fontSize: '0.8125rem', fontFamily: 'inherit' }}
+                                                                    />
+                                                                    {isQuotaPct && (
+                                                                        <span style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#2563eb', whiteSpace: 'nowrap' }}>%</span>
+                                                                    )}
+                                                                </div>
                                                                 <button onClick={() => {
                                                                     const updated = [...(settings.kpiConfig || [])];
                                                                     const tols = [...(updated[kIdx].tolerances || [])].filter((_, i) => i !== tIdx);
