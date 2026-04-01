@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function CsvImportModal({ importType, contacts, accounts, onClose, onImportContacts, onImportAccounts, onImportOpportunities }) {
     const [step, setStep] = useState('upload'); // upload, mapping, preview, results
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
     const [csvHeaders, setCsvHeaders] = useState([]);
     const [csvRows, setCsvRows] = useState([]);
     const [fieldMapping, setFieldMapping] = useState({});
@@ -204,8 +206,8 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
     return (
         <div className="modal-overlay">
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '85vh', overflow: 'auto' }}>
-                <h2>Import {importType === 'contacts' ? 'Contacts' : importType === 'opportunities' ? 'Opportunities' : 'Accounts'} from CSV</h2>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '85vh', overflow: 'auto', ...dragOffsetStyle }}>
+                <h2 {...dragHandleProps}>Import {importType === 'contacts' ? 'Contacts' : importType === 'opportunities' ? 'Opportunities' : 'Accounts'} from CSV</h2>
 
                 {step === 'upload' && (
                     <div>

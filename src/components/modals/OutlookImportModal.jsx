@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function OutlookImportModal({ contacts, opportunities, activities, onClose, onImport }) {
     const [step, setStep] = useState('upload'); // upload, preview, results
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
     const [parsedEmails, setParsedEmails] = useState([]);
     const [matchResults, setMatchResults] = useState([]);
     const [importSelections, setImportSelections] = useState({});
@@ -238,9 +240,9 @@ export default function OutlookImportModal({ contacts, opportunities, activities
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '900px', maxHeight: '90vh' }}>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '900px', maxHeight: '90vh', ...dragOffsetStyle }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                    <h2 style={{ margin: 0 }}>📧 Import Outlook Sent Emails</h2>
+                    <h2 {...dragHandleProps} style={{ ...dragHandleProps.style, margin: 0 }}>📧 Import Outlook Sent Emails</h2>
                     <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#64748b' }}>×</button>
                 </div>
 

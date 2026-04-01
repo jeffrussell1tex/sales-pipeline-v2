@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function ViewingAccountPanel({
     setEditingOpp, setShowModal,
@@ -36,6 +37,7 @@ export default function ViewingAccountPanel({
     const isManager = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit = !isReadOnly;
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
 
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
     const handleEditAccount = (a, isSub) => { if (isSub) { setEditingSubAccount(a); setEditingAccount(null); } else { setEditingAccount(a); setEditingSubAccount(null); } setShowAccountModal(true); };
@@ -89,7 +91,7 @@ const CONTACT_LIMIT = 8;
     <div className="modal-overlay" onClick={() => setViewingAccount(null)} style={{ alignItems: 'flex-start', paddingTop: '0', overflowY: 'auto' }}>
       <div onClick={e => e.stopPropagation()} style={{ 
           width: '100%', maxWidth: '1100px', minHeight: '100vh', margin: '0 auto',
-          background: '#f8fafc', boxShadow: '0 0 40px rgba(0,0,0,0.15)'
+          background: '#f8fafc', boxShadow: '0 0 40px rgba(0,0,0,0.15)', ...dragOffsetStyle
       }}>
           {/* Header bar */}
           <div style={{ background: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '1.25rem 2rem', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -98,7 +100,7 @@ const CONTACT_LIMIT = 8;
                       <button onClick={() => setViewingAccount(null)}
                           style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.5rem 0.875rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '600', color: '#475569', fontFamily: 'inherit', marginTop: '0.125rem' }}
                       >← Back</button>
-                      <div>
+                      <div {...dragHandleProps} style={{ ...dragHandleProps.style }}>
                           <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '800', color: '#0f172a' }}>{acc.name}</h1>
                           {acc.accountOwner && <div style={{ color: '#2563eb', fontWeight: '600', fontSize: '0.875rem', marginTop: '0.125rem' }}>{acc.accountOwner}</div>}
                           <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', marginTop: '0.375rem', fontSize: '0.8125rem', color: '#64748b' }}>

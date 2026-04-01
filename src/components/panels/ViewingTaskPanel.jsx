@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../AppContext';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function ViewingTaskPanel({
     setEditingTask, setShowTaskModal,
@@ -23,6 +24,7 @@ export default function ViewingTaskPanel({
 
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit = !isReadOnly;
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
 
     const handleEditTask = (t) => { setEditingTask(t); setShowTaskModal(true); };
     const handleEditOpp = (o) => { setEditingOpp(o); setShowModal(true); };
@@ -52,10 +54,10 @@ const taskActivities = activities.filter(a => {
 
     return (
       <div className="modal-overlay" onClick={() => setViewingTask(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px', ...dragOffsetStyle }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
                   <div>
-                      <h2 style={{ margin: '0 0 0.5rem 0' }}>{t.title}</h2>
+                      <h2 {...dragHandleProps} style={{ ...dragHandleProps.style, margin: '0 0 0.5rem 0' }}>{t.title}</h2>
                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                           <span style={{ background: sc.bg, color: sc.color, padding: '0.2rem 0.625rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '700' }}>{status}</span>
                           <span style={{ background: '#2563eb', color: 'white', padding: '0.2rem 0.625rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '700' }}>{t.type}</span>

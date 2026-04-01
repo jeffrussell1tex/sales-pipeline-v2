@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../AppContext';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function ViewingContactPanel({
     setEditingOpp, setShowModal,
@@ -30,6 +31,7 @@ export default function ViewingContactPanel({
     const isManager = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit = !isReadOnly;
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
 
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
     const handleEditAccount = (a) => { setEditingAccount(a); setEditingSubAccount(null); setShowAccountModal(true); };
@@ -60,7 +62,7 @@ const ctOpps = activeDeals; // alias for Prep button — active deals linked to 
     <div className="modal-overlay" onClick={() => setViewingContact(null)} style={{ alignItems: 'flex-start', paddingTop: '0', overflowY: 'auto' }}>
       <div onClick={e => e.stopPropagation()} style={{
           width: '100%', maxWidth: '1100px', minHeight: '100vh', margin: '0 auto',
-          background: '#f8fafc', boxShadow: '0 0 40px rgba(0,0,0,0.15)'
+          background: '#f8fafc', boxShadow: '0 0 40px rgba(0,0,0,0.15)', ...dragOffsetStyle
       }}>
           {/* Header bar */}
           <div style={{ background: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '1.25rem 2rem', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -69,7 +71,7 @@ const ctOpps = activeDeals; // alias for Prep button — active deals linked to 
                       <button onClick={() => setViewingContact(null)}
                           style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.5rem 0.875rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '600', color: '#475569', fontFamily: 'inherit', marginTop: '0.125rem' }}
                       >← Back</button>
-                      <div>
+                      <div {...dragHandleProps} style={{ ...dragHandleProps.style }}>
                           <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '800', color: '#0f172a' }}>{ct.firstName} {ct.lastName}</h1>
                           {ct.title && <div style={{ color: '#64748b', fontWeight: '600', fontSize: '0.875rem', marginTop: '0.125rem' }}>{ct.title}</div>}
                           {ct.company && (

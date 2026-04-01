@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../AppContext';
+import { useDraggable } from '../../hooks/useDraggable';
 
 export default function UserModal({ user, settings: settingsProp, onClose, onSave, errorMessage, onDismissError, saving }) {
     // Always use context settings to ensure territories/teams/verticals are current
@@ -14,6 +15,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
         homeAddress: '', notes: ''
     });
     const [activeUserTab, setActiveUserTab] = useState('primary');
+    const { dragHandleProps, dragOffsetStyle } = useDraggable();
 
     // Auto-switch to the tab containing the email field when an error arrives
     React.useEffect(() => {
@@ -61,8 +63,8 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div className="modal-overlay">
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '650px' }}>
-                <h2>{user ? 'Edit User' : 'New User'}</h2>
+            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '650px', ...dragOffsetStyle }}>
+                <h2 {...dragHandleProps}>{user ? 'Edit User' : 'New User'}</h2>
 
                 <div style={{ display: 'flex', background: '#f1f3f5', borderRadius: '6px', padding: '3px', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '2px' }}>
                     <button type="button" onClick={() => setActiveUserTab('primary')} style={tabBtnStyle(activeUserTab === 'primary')}>Primary Info</button>
