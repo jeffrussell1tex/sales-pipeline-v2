@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useDraggable } from '../../hooks/useDraggable';
+import { useDraggable } from '../hooks/useDraggable';
 
 export default function LeadForm({ lead, onSave, onClose, canSeeAll, allReps }) {
     const [form, setForm] = React.useState(lead || { firstName:'', lastName:'', company:'', title:'', email:'', phone:'', source:'', status:'New', score:50, estimatedARR:0, assignedTo:'', notes:'' });
