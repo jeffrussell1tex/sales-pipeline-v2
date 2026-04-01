@@ -33,6 +33,8 @@ export default function AccountModal({ account, isSubAccount, parentTier, settin
         country: '',
         website: '',
         phone: '',
+        doNotContact: false,
+        customerTypes: [],
     });
 
     const [verticalSearch, setVerticalSearch] = useState(account?.verticalMarket || '');
@@ -50,6 +52,8 @@ export default function AccountModal({ account, isSubAccount, parentTier, settin
     });
     const [showParentSuggestions, setShowParentSuggestions] = useState(false);
     const [duplicateWarning, setDuplicateWarning] = useState(null);
+    const [customerTypeInput, setCustomerTypeInput] = useState('');
+    const [showCustomerTypeSuggestions, setShowCustomerTypeSuggestions] = useState(false);
     const { dragHandleProps, dragOffsetStyle } = useDraggable();
 
     const allRepNames = [...new Set([
@@ -69,7 +73,7 @@ export default function AccountModal({ account, isSubAccount, parentTier, settin
     const handleSubmit = (e) => {
         e.preventDefault();
         const selectedParent = (existingAccounts || []).find(a => a.name === parentSearch);
-        const saveData = { ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: selectedParent ? selectedParent.id : (formData.parentAccountId || null), accountTier: derivedTier };
+        const saveData = { ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: selectedParent ? selectedParent.id : (formData.parentAccountId || null), accountTier: derivedTier, doNotContact: formData.doNotContact === true, customerTypes: formData.customerTypes || [] };
         // Fuzzy duplicate check — catches exact, case-insensitive, and near matches
         const normalize = s => (s || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
         const inputNorm = normalize(saveData.name);
@@ -387,6 +391,84 @@ export default function AccountModal({ account, isSubAccount, parentTier, settin
                                 </div>
                             )}
                         </div>
+
+                        {/* ── Customer Types — multi-select typeahead ── */}
+                        <div className="form-group full" style={{ position: 'relative' }}>
+                            <label>Customer Type</label>
+                            {/* Selected tags */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginBottom: (formData.customerTypes || []).length > 0 ? '0.5rem' : 0 }}>
+                                {(formData.customerTypes || []).map((ct, i) => (
+                                    <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: '#1c1917', color: '#f5f1eb', borderRadius: '4px', padding: '0.2rem 0.5rem', fontSize: '0.75rem', fontWeight: '600' }}>
+                                        {ct}
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData(prev => ({ ...prev, customerTypes: (prev.customerTypes || []).filter((_, j) => j !== i) }))}
+                                            style={{ background: 'none', border: 'none', color: '#a8a29e', cursor: 'pointer', padding: '0 0 0 2px', lineHeight: 1, fontSize: '0.875rem', fontFamily: 'inherit' }}
+                                        >×</button>
+                                    </span>
+                                ))}
+                            </div>
+                            <input
+                                type="text"
+                                value={customerTypeInput}
+                                onChange={e => { setCustomerTypeInput(e.target.value); setShowCustomerTypeSuggestions(true); }}
+                                onFocus={() => setShowCustomerTypeSuggestions(true)}
+                                onBlur={() => setTimeout(() => setShowCustomerTypeSuggestions(false), 200)}
+                                placeholder="Type to search or add a type..."
+                                autoComplete="off"
+                            />
+                            {showCustomerTypeSuggestions && (
+                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                    {(settings?.customerTypes || [])
+                                        .filter(ct => ct.toLowerCase().includes(customerTypeInput.toLowerCase()) && !(formData.customerTypes || []).includes(ct))
+                                        .map((ct, i) => (
+                                            <div key={i}
+                                                onMouseDown={e => e.preventDefault()}
+                                                onClick={() => {
+                                                    setFormData(prev => ({ ...prev, customerTypes: [...(prev.customerTypes || []), ct] }));
+                                                    setCustomerTypeInput('');
+                                                    setShowCustomerTypeSuggestions(false);
+                                                }}
+                                                style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', fontSize: '0.875rem' }}
+                                                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                            >{ct}</div>
+                                        ))
+                                    }
+                                    {(settings?.customerTypes || []).filter(ct => ct.toLowerCase().includes(customerTypeInput.toLowerCase()) && !(formData.customerTypes || []).includes(ct)).length === 0 && (
+                                        <div style={{ padding: '0.625rem 0.75rem', color: '#94a3b8', fontSize: '0.8125rem' }}>
+                                            {(settings?.customerTypes || []).length === 0
+                                                ? 'No types defined yet — add them in Settings → Configuration → Customer Types'
+                                                : 'No matching types — all already selected or no match'}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ── Do Not Contact flag ── */}
+                        <div className="form-group full">
+                            <label>Do Not Contact</label>
+                            <div
+                                onClick={() => setFormData(prev => ({ ...prev, doNotContact: !prev.doNotContact }))}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', userSelect: 'none', padding: '0.625rem 0.875rem', borderRadius: '8px', border: formData.doNotContact ? '1px solid #fca5a5' : '1px solid #e5e2db', background: formData.doNotContact ? '#fef2f2' : '#f0ece4', transition: 'all 0.15s' }}
+                            >
+                                {/* Toggle pill */}
+                                <div style={{ width: '36px', height: '20px', borderRadius: '999px', background: formData.doNotContact ? '#dc2626' : '#d6d3ce', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                                    <div style={{ position: 'absolute', width: '14px', height: '14px', background: '#fff', borderRadius: '50%', top: '3px', left: formData.doNotContact ? '19px' : '3px', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.875rem', fontWeight: '600', color: formData.doNotContact ? '#dc2626' : '#57534e' }}>
+                                        {formData.doNotContact ? '🚫 Do Not Contact — flagged' : 'Not flagged'}
+                                    </div>
+                                    {formData.doNotContact && (
+                                        <div style={{ fontSize: '0.75rem', color: '#b91c1c', marginTop: '0.125rem' }}>
+                                            Emails blocked · Activity warnings active
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     {duplicateWarning && (
                         <div style={{ margin: '0 0 1rem', padding: '1rem', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '8px' }}>
@@ -412,7 +494,7 @@ export default function AccountModal({ account, isSubAccount, parentTier, settin
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                                 <button type="button"
-                                    onClick={() => { setDuplicateWarning(null); const p2 = (existingAccounts || []).find(a => a.name === parentSearch); onSave({ ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: p2 ? p2.id : (formData.parentAccountId || null), accountTier: derivedTier }); }}
+                                    onClick={() => { setDuplicateWarning(null); const p2 = (existingAccounts || []).find(a => a.name === parentSearch); onSave({ ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: p2 ? p2.id : (formData.parentAccountId || null), accountTier: derivedTier, doNotContact: formData.doNotContact === true, customerTypes: formData.customerTypes || [] }); }}
                                     style={{ padding: '0.375rem 0.75rem', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit' }}>
                                     Create Anyway
                                 </button>

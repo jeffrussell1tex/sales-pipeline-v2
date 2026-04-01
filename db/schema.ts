@@ -45,6 +45,8 @@ export const accounts = pgTable('accounts', {
     parentAccountId:   text('parent_account_id'),
     accountTier:       varchar('account_tier', { length: 20 }).default('account'),
     notes:             text('notes'),
+    doNotContact:      boolean('do_not_contact').default(false),
+    customerTypes:     jsonb('customer_types').default('[]'),
     createdAt:         timestamp('created_at').notNull().defaultNow(),
     orgId:             text('org_id').notNull(),
     updatedAt:         timestamp('updated_at').notNull().defaultNow(),

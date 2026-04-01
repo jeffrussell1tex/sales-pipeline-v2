@@ -77,7 +77,7 @@ function calcTotals(lineItems = [], dealDiscountPct = 0) {
 }
 
 // ── PDF builder ───────────────────────────────────────────────────────────────
-function buildPDF(quote, opportunity, inputLines) {
+function buildPDF(quote, opportunity, inputLines, companyProfile) {
     return new Promise((resolve, reject) => {
         const doc = new PDFDocument({
             size: 'LETTER',
@@ -105,12 +105,16 @@ function buildPDF(quote, opportunity, inputLines) {
 
         const oppName  = opportunity ? (opportunity.opportunityName || opportunity.account || '') : '';
         const repName  = quote.createdBy || '';
+        const cp       = companyProfile || {};
 
         // ── HEADER BAND ────────────────────────────────────────────────────
-        doc.rect(0, 0, PW, 88).fill(hex(COLOR.nearBlack));
+        // Taller header when company address/phone is present
+        const hasContactInfo = !!(cp.address || cp.phone);
+        const headerH = hasContactInfo ? 110 : 88;
+        doc.rect(0, 0, PW, headerH).fill(hex(COLOR.nearBlack));
 
         // Gold accent bar
-        doc.rect(ML, 20, 4, 48).fill(hex(COLOR.gold));
+        doc.rect(ML, 20, 4, hasContactInfo ? 68 : 48).fill(hex(COLOR.gold));
 
         // Company / app name
         doc.fillColor(hex(COLOR.gold)).fontSize(9).font('Helvetica-Bold')
@@ -119,6 +123,20 @@ function buildPDF(quote, opportunity, inputLines) {
         // Quote name
         doc.fillColor(hex(COLOR.cream)).fontSize(18).font('Helvetica-Bold')
             .text(quote.name || quote.quoteNumber || 'Sales Quote', ML + 14, 36, { width: CW - 160 });
+
+        // Company address & phone below quote name
+        if (hasContactInfo) {
+            let cpY = 60;
+            if (cp.address) {
+                doc.fillColor(hex(COLOR.dimmed)).fontSize(7.5).font('Helvetica')
+                    .text(cp.address, ML + 14, cpY, { width: CW - 160 });
+                cpY += 11;
+            }
+            if (cp.phone) {
+                doc.fillColor(hex(COLOR.dimmed)).fontSize(7.5).font('Helvetica')
+                    .text(cp.phone, ML + 14, cpY, { width: CW - 160 });
+            }
+        }
 
         // Quote number + version top-right
         doc.fillColor(hex(COLOR.dimmed)).fontSize(8).font('Helvetica')
@@ -141,7 +159,7 @@ function buildPDF(quote, opportunity, inputLines) {
             .text((quote.status || 'DRAFT').toUpperCase(), MR - 100, 53, { width: 100, align: 'center', characterSpacing: 0.8 });
 
         // ── META ROW ───────────────────────────────────────────────────────
-        let y = 100;
+        let y = headerH + 12;
         const metaItems = [
             ['Opportunity',   oppName   || '—'],
             ['Rep',           repName   || '—'],
@@ -286,14 +304,16 @@ function buildPDF(quote, opportunity, inputLines) {
         y += 52;
 
         // ── NOTES / TERMS ──────────────────────────────────────────────────
-        if (quote.notes && quote.notes.trim()) {
+        const notesText = (quote.notes && quote.notes.trim()) ? quote.notes
+            : (cp.notes && cp.notes.trim()) ? cp.notes : null;
+        if (notesText) {
             y += 8;
             doc.fillColor(hex(COLOR.muted)).fontSize(7.5).font('Helvetica-Bold')
                 .text('NOTES & TERMS', ML, y, { characterSpacing: 0.8 });
             y += 12;
             doc.fillColor(hex(COLOR.nearBlack)).fontSize(8.5).font('Helvetica')
-                .text(quote.notes, ML, y, { width: CW, lineGap: 2 });
-            y += doc.heightOfString(quote.notes, { width: CW, lineGap: 2 }) + 8;
+                .text(notesText, ML, y, { width: CW, lineGap: 2 });
+            y += doc.heightOfString(notesText, { width: CW, lineGap: 2 }) + 8;
         }
 
         // ── FOOTER ─────────────────────────────────────────────────────────
@@ -332,13 +352,13 @@ export const handler = async (event) => {
 
     try {
         const body = JSON.parse(event.body || '{}');
-        const { quote, opportunity, lines } = body;
+        const { quote, opportunity, lines, companyProfile } = body;
 
         if (!quote) {
             return { statusCode: 400, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'quote is required' }) };
         }
 
-        const pdfBuffer = await buildPDF(quote, opportunity, lines);
+        const pdfBuffer = await buildPDF(quote, opportunity, lines, companyProfile);
 
         const filename = (quote.quoteNumber || 'quote') + '-v' + (quote.version || 1) + '.pdf';
 
