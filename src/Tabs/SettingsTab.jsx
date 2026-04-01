@@ -1948,11 +1948,16 @@ export default function SettingsTab() {
                                                                 />
                                                                 <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600', whiteSpace: 'nowrap' }}>≥</span>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                                                    <input type="number" value={tol.min} placeholder={isQuotaPct ? '% of quota' : 'Min value'}
-                                                                        onChange={e => {
+                                                                    <input
+                                                                        key={`tol-min-${kIdx}-${tIdx}`}
+                                                                        type="number"
+                                                                        defaultValue={tol.min}
+                                                                        placeholder={isQuotaPct ? '% of quota' : 'Min value'}
+                                                                        onBlur={e => {
+                                                                            const coerced = parseFloat(e.target.value);
                                                                             const updated = [...(settings.kpiConfig || [])];
                                                                             const tols = [...(updated[kIdx].tolerances || [])];
-                                                                            tols[tIdx] = { ...tols[tIdx], min: parseFloat(e.target.value) || 0 };
+                                                                            tols[tIdx] = { ...tols[tIdx], min: isNaN(coerced) ? 0 : coerced };
                                                                             updated[kIdx] = { ...updated[kIdx], tolerances: tols };
                                                                             setSettings(prev => ({ ...prev, kpiConfig: updated }));
                                                                         }}
