@@ -145,6 +145,7 @@ export default function AppHeader({
                                         lastName:  currentUser.split(' ').slice(1).join(' ') || '',
                                         email:     clerkUser?.emailAddresses?.[0]?.emailAddress || '',
                                         phone:     '',
+                                        mobile:    '',
                                         title:     '',
                                     });
                                 }
@@ -350,12 +351,13 @@ export default function AppHeader({
                                                     </div>
                                                     <div style={{ marginBottom: '0.875rem' }}><label style={labelStyle}>Work Email</label><input style={inputStyle} type="email" value={profileForm.email} onChange={e => setProfileForm(p => ({ ...p, email: e.target.value }))} /></div>
                                                     <div style={{ marginBottom: '0.875rem' }}><label style={labelStyle}>Phone</label><input style={inputStyle} type="tel" value={profileForm.phone} onChange={e => setProfileForm(p => ({ ...p, phone: e.target.value }))} /></div>
+                                                    <div style={{ marginBottom: '0.875rem' }}><label style={labelStyle}>Mobile <span style={{ fontWeight: '400', color: '#94a3b8' }}>(used for SMS notifications)</span></label><input style={inputStyle} type="tel" placeholder="+1 (555) 000-0000" value={profileForm.mobile || ''} onChange={e => setProfileForm(p => ({ ...p, mobile: e.target.value }))} /></div>
                                                     <div style={{ marginBottom: '1.25rem' }}><label style={labelStyle}>Title</label><input style={inputStyle} value={profileForm.title} onChange={e => setProfileForm(p => ({ ...p, title: e.target.value }))} /></div>
                                                     <div style={{ padding: '0.75rem', background: '#f0ece4', borderRadius: '8px', fontSize: '0.75rem', color: '#78716c', marginBottom: '1rem', border: '1px solid #e5e2db' }}>
                                                         🔑 Password is managed via Clerk. <a href="https://accounts.clerk.dev" target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>Change password →</a>
                                                     </div>
                                                     <button
-                                                        onClick={() => saveProfile({ firstName: profileForm.firstName, lastName: profileForm.lastName, email: profileForm.email, phone: profileForm.phone, title: profileForm.title })}
+                                                        onClick={() => saveProfile({ firstName: profileForm.firstName, lastName: profileForm.lastName, email: profileForm.email, phone: profileForm.phone, mobile: profileForm.mobile, title: profileForm.title })}
                                                         disabled={profileSaving}
                                                         style={{ width: '100%', padding: '0.625rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                                                         {profileSaving ? 'Saving…' : 'Save Profile'}
@@ -447,8 +449,55 @@ export default function AppHeader({
                                                         </React.Fragment>
                                                     );
                                                 })}
+                                                {/* SMS Notifications */}
+                                                {(() => {
+                                                    const sms = myProfile?.smsNotifications || {};
+                                                    const smsEnabled = !!sms.enabled;
+                                                    const setSms = (key, val) => saveProfile({ smsNotifications: { ...sms, [key]: val } });
+                                                    const SmsToggle = ({ label, desc, smsKey }) => (
+                                                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid #f1f3f5' }}>
+                                                            <div style={{ flex: 1 }}>
+                                                                <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: smsEnabled ? '#1e293b' : '#94a3b8' }}>{label}</div>
+                                                                {desc && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{desc}</div>}
+                                                            </div>
+                                                            <button onClick={() => smsEnabled && setSms(smsKey, !sms[smsKey])}
+                                                                style={{ width: '36px', height: '20px', borderRadius: '999px', border: 'none', cursor: smsEnabled ? 'pointer' : 'not-allowed', background: sms[smsKey] && smsEnabled ? '#1c1917' : '#d1d5db', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                                                                <span style={{ position: 'absolute', top: '2px', left: sms[smsKey] && smsEnabled ? '18px' : '2px', width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }} />
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                    return (
+                                                        <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
+                                                            <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.625rem' }}>💬 SMS Notifications</div>
+                                                            {!(myProfile?.mobile || myProfile?.phone) && (
+                                                                <div style={{ fontSize: '0.75rem', color: '#f59e0b', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', padding: '0.5rem 0.75rem', marginBottom: '0.75rem', lineHeight: 1.5 }}>
+                                                                    Add a mobile number in the Profile tab to enable SMS.
+                                                                </div>
+                                                            )}
+                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #f1f3f5' }}>
+                                                                <div>
+                                                                    <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>Enable SMS</div>
+                                                                    <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>
+                                                                        {myProfile?.mobile || myProfile?.phone ? `Texts to ${myProfile?.mobile || myProfile?.phone}` : 'Set a mobile number in Profile first'}
+                                                                    </div>
+                                                                </div>
+                                                                <button onClick={() => setSms('enabled', !smsEnabled)}
+                                                                    style={{ width: '36px', height: '20px', borderRadius: '999px', border: 'none', cursor: 'pointer', background: smsEnabled ? '#1c1917' : '#d1d5db', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                                                                    <span style={{ position: 'absolute', top: '2px', left: smsEnabled ? '18px' : '2px', width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s', display: 'block' }} />
+                                                                </button>
+                                                            </div>
+                                                            <div style={{ opacity: smsEnabled ? 1 : 0.45, transition: 'opacity 0.2s' }}>
+                                                                <SmsToggle label="Pipeline Alerts"        desc="Silent deals, stuck stages, lapsed dates"   smsKey="pipelineAlerts" />
+                                                                <SmsToggle label="Task Reminders"         desc="Due today &amp; overdue nudges"              smsKey="taskReminders"  />
+                                                                <SmsToggle label="Daily Digest"           desc="Morning summary text"                        smsKey="digest"         />
+                                                                <SmsToggle label="Mentions &amp; Assignments" desc="When a deal or task is assigned to you"  smsKey="mentions"       />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
+
                                                 <button
-                                                    onClick={() => saveProfile({ notificationPrefs: prefs, digestTime })}
+                                                    onClick={() => saveProfile({ notificationPrefs: prefs, digestTime, smsNotifications: myProfile?.smsNotifications })}
                                                     disabled={profileSaving}
                                                     style={{ width: '100%', padding: '0.625rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', marginTop: '1rem' }}>
                                                     {profileSaving ? 'Saving…' : 'Save Notification Settings'}

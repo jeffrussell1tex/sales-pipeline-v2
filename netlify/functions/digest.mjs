@@ -15,6 +15,7 @@ import { db } from '../../db/index.js';
 import { users, opportunities, tasks, activities } from '../../db/schema.js';
 import { gte, eq, and } from 'drizzle-orm';
 import { sendEmail, emailTemplates } from './send-email.mjs';
+import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
 
 const DEFAULT_PREFS = {
     stageChanged:        { enabled: true,  mode: 'instant' },
@@ -36,6 +37,23 @@ function getPref(profile, alertType) {
 function wantsDigest(profile, alertType) {
     const pref = getPref(profile, alertType);
     return pref.enabled && pref.mode === 'digest';
+}
+
+function wantsSms(profile, smsKey) {
+    const smsPrefs = profile?.smsNotifications || {};
+    if (!smsPrefs.enabled) return false;
+    return smsPrefs[smsKey] === true;
+}
+
+async function trySendSms(to, body, label) {
+    try {
+        const phone = normalizePhone(to);
+        if (!phone) { console.warn(`digest SMS: invalid phone for ${label}`); return; }
+        await sendSms({ to: phone, body });
+        console.log(`digest SMS sent → ${phone} (${label})`);
+    } catch (err) {
+        console.error(`digest SMS error (${label}):`, err.message);
+    }
 }
 
 export const handler = async () => {
@@ -86,6 +104,14 @@ export const handler = async () => {
                                 })),
                             }),
                         });
+                        if (wantsSms(profile, 'digest')) {
+                            const smsPhone = profile.mobile || profile.phone;
+                            await trySendSms(
+                                smsPhone,
+                                smsTemplates.digestSummary({ repName: user.name, taskCount: dueTodayTasks.length, overdueCount: 0 }),
+                                `taskDigest/${user.name}`
+                            );
+                        }
                         console.log(`taskDigest sent to ${user.email} (${dueTodayTasks.length} tasks)`);
                     } catch (err) {
                         console.error(`taskDigest error for ${user.email}:`, err.message);
@@ -119,6 +145,14 @@ export const handler = async () => {
                                 }),
                             }),
                         });
+                        if (wantsSms(profile, 'digest')) {
+                            const smsPhone = profile.mobile || profile.phone;
+                            await trySendSms(
+                                smsPhone,
+                                smsTemplates.digestSummary({ repName: user.name, taskCount: 0, overdueCount: overdueTasks.length }),
+                                `overdueNudge/${user.name}`
+                            );
+                        }
                         console.log(`overdueTaskNudge sent to ${user.email} (${overdueTasks.length} overdue)`);
                     } catch (err) {
                         console.error(`overdueTaskNudge error for ${user.email}:`, err.message);

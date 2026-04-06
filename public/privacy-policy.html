@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Accelerep</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary:       #f0ece4;
+      --bg-secondary:     #ffffff;
+      --accent-primary:   #1c1917;
+      --accent-gold:      #c8b99a;
+      --text-primary:     #1c1917;
+      --text-secondary:   #78716c;
+      --text-tertiary:    #a8a29e;
+      --border-color:     #ddd8cf;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 0.9375rem;
+      line-height: 1.75;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--accent-primary);
+      padding: 0 2rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+
+    .header-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      text-decoration: none;
+    }
+
+    .header-logo-mark {
+      width: 28px;
+      height: 28px;
+      background: var(--accent-gold);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .header-logo-mark svg {
+      width: 16px;
+      height: 16px;
+      fill: var(--accent-primary);
+    }
+
+    .header-logo-text {
+      font-size: 0.9375rem;
+      font-weight: 700;
+      color: #f5f1eb;
+      letter-spacing: 0.02em;
+    }
+
+    .header-back {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #a8a29e;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      transition: color 0.15s;
+    }
+
+    .header-back:hover { color: #f5f1eb; }
+
+    /* ── Hero ── */
+    .hero {
+      background: var(--accent-primary);
+      padding: 3.5rem 2rem 3rem;
+      text-align: center;
+      border-bottom: 3px solid var(--accent-gold);
+    }
+
+    .hero-label {
+      display: inline-block;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent-gold);
+      margin-bottom: 0.75rem;
+    }
+
+    .hero h1 {
+      font-size: clamp(1.75rem, 4vw, 2.5rem);
+      font-weight: 700;
+      color: #f5f1eb;
+      margin-bottom: 0.75rem;
+      line-height: 1.2;
+    }
+
+    .hero-date {
+      font-size: 0.8125rem;
+      color: #a8a29e;
+    }
+
+    /* ── Layout ── */
+    .layout {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 3rem 2rem 5rem;
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 3rem;
+      align-items: start;
+    }
+
+    @media (max-width: 768px) {
+      .layout { grid-template-columns: 1fr; gap: 2rem; padding: 1.5rem 1rem 4rem; }
+      .toc { display: none; }
+    }
+
+    /* ── TOC ── */
+    .toc {
+      position: sticky;
+      top: 72px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: 0 1px 3px rgba(28,25,23,0.07);
+    }
+
+    .toc-title {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-tertiary);
+      margin-bottom: 0.875rem;
+    }
+
+    .toc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+    }
+
+    .toc-list a {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-decoration: none;
+      padding: 0.3rem 0.5rem;
+      border-radius: 6px;
+      transition: all 0.15s;
+      line-height: 1.4;
+    }
+
+    .toc-list a:hover {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    /* ── Content ── */
+    .content {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(28,25,23,0.07);
+      overflow: hidden;
+    }
+
+    .section {
+      padding: 2rem 2.25rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .section:last-child { border-bottom: none; }
+
+    .section-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .section-number {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      background: var(--accent-primary);
+      color: var(--accent-gold);
+      border-radius: 6px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 0.125rem;
+    }
+
+    .section h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.3;
+    }
+
+    .section h3 {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 1.25rem 0 0.5rem;
+    }
+
+    .section p {
+      font-size: 0.875rem;
+      color: #44403c;
+      line-height: 1.75;
+      margin-bottom: 0.875rem;
+    }
+
+    .section p:last-child { margin-bottom: 0; }
+
+    .section ul {
+      list-style: none;
+      margin: 0.5rem 0 0.875rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+    }
+
+    .section ul li {
+      font-size: 0.875rem;
+      color: #44403c;
+      line-height: 1.65;
+      padding-left: 1.25rem;
+      position: relative;
+    }
+
+    .section ul li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0.625rem;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent-gold);
+    }
+
+    .section ul li strong {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* Sub-processor pills */
+    .sub-processors {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin: 0.75rem 0;
+    }
+
+    .sub-processor {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.625rem 0.875rem;
+    }
+
+    .sp-label {
+      flex-shrink: 0;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-tertiary);
+      width: 90px;
+      padding-top: 0.05rem;
+    }
+
+    .sp-text {
+      font-size: 0.8125rem;
+      color: #44403c;
+      line-height: 1.55;
+    }
+
+    .sp-text strong {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* Contact block */
+    .contact-block {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-left: 3px solid var(--accent-gold);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-top: 0.75rem;
+      font-size: 0.875rem;
+      color: #44403c;
+      line-height: 1.75;
+    }
+
+    .contact-block a {
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .contact-block a:hover { text-decoration: underline; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 2rem;
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+      border-top: 1px solid var(--border-color);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <a href="/" class="header-logo">
+      <div class="header-logo-mark">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="8" width="3" height="6" rx="1"/>
+          <rect x="6.5" y="5" width="3" height="9" rx="1"/>
+          <rect x="11" y="2" width="3" height="12" rx="1"/>
+        </svg>
+      </div>
+      <span class="header-logo-text">Accelerep</span>
+    </a>
+    <a href="/" class="header-back">
+      ← Back to app
+    </a>
+  </header>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-label">Legal</div>
+    <h1>Privacy Policy</h1>
+    <div class="hero-date">Effective Date: April 6, 2025</div>
+  </div>
+
+  <!-- Body -->
+  <div class="layout">
+
+    <!-- TOC -->
+    <nav class="toc" aria-label="Table of contents">
+      <div class="toc-title">Contents</div>
+      <ol class="toc-list">
+        <li><a href="#s1">1. Who This Policy Applies To</a></li>
+        <li><a href="#s2">2. Information We Collect</a></li>
+        <li><a href="#s3">3. How We Use Your Information</a></li>
+        <li><a href="#s4">4. Legal Bases (EEA/UK)</a></li>
+        <li><a href="#s5">5. Data Sharing & Disclosure</a></li>
+        <li><a href="#s6">6. Data Retention</a></li>
+        <li><a href="#s7">7. Data Security</a></li>
+        <li><a href="#s8">8. Your Rights</a></li>
+        <li><a href="#s9">9. Cookies & Local Storage</a></li>
+        <li><a href="#s10">10. International Transfers</a></li>
+        <li><a href="#s11">11. Children's Privacy</a></li>
+        <li><a href="#s12">12. Changes to This Policy</a></li>
+        <li><a href="#s13">13. Contact Us</a></li>
+      </ol>
+    </nav>
+
+    <!-- Content -->
+    <main class="content">
+
+      <!-- Intro -->
+      <div class="section">
+        <p>Accelerep ("Accelerep," "we," "our," or "us") provides a B2B SaaS sales pipeline and CRM platform accessible at <strong>salespipelinetracker.com</strong> (the "Service"). This Privacy Policy explains what information we collect, how we use it, with whom we share it, and what rights you have with respect to it.</p>
+        <p>By accessing or using the Service, you agree to the practices described in this Privacy Policy. If you do not agree, please discontinue use of the Service.</p>
+      </div>
+
+      <!-- 1 -->
+      <div class="section" id="s1">
+        <div class="section-header">
+          <div class="section-number">1</div>
+          <h2>Who This Policy Applies To</h2>
+        </div>
+        <p>This policy applies to:</p>
+        <ul>
+          <li>Organizational administrators ("Admins") who create and manage an Accelerep account on behalf of a business;</li>
+          <li>Sales managers and sales representatives ("Users") who are invited into an organization's Accelerep workspace; and</li>
+          <li>Visitors to our website or marketing pages who have not yet signed up.</li>
+        </ul>
+        <p>Accelerep is a business-to-business (B2B) platform and is not directed at consumers or individuals under the age of 18. If you believe a minor has provided us with personal data, please contact us immediately.</p>
+      </div>
+
+      <!-- 2 -->
+      <div class="section" id="s2">
+        <div class="section-header">
+          <div class="section-number">2</div>
+          <h2>Information We Collect</h2>
+        </div>
+
+        <h3>2.1 Account & Identity Information</h3>
+        <p>When an organization signs up for Accelerep, we collect:</p>
+        <ul>
+          <li>Name and email address of the account administrator</li>
+          <li>Organization name</li>
+          <li>Account credentials managed through our authentication provider, Clerk</li>
+          <li>User roles assigned within your organization (Admin, Manager, Sales Rep, Read-Only)</li>
+        </ul>
+
+        <h3>2.2 CRM & Pipeline Data</h3>
+        <p>As you use the Service, you and your team enter and store business data, including:</p>
+        <ul>
+          <li>Sales opportunities, pipeline stages, deal values, and close dates</li>
+          <li>Account records (company names, industry, parent/sub-account relationships)</li>
+          <li>Contact records (names, email addresses, phone numbers, job titles)</li>
+          <li>Lead records and lead source information</li>
+          <li>Tasks, activities, and notes</li>
+          <li>Quotes and line-item pricing data</li>
+          <li>Commission plans, quota targets, and performance data</li>
+        </ul>
+        <p>This data belongs to your organization. We process it solely to provide the Service.</p>
+
+        <h3>2.3 Calendar & Integration Data</h3>
+        <p>If you connect Google Calendar, we access calendar event metadata (titles, times, attendees) through the Google Calendar API to display and create events within the Service. We store OAuth tokens necessary to maintain that connection. We do not access calendar data beyond what is required for the Service features you use.</p>
+
+        <h3>2.4 Usage & Log Data</h3>
+        <p>We automatically collect technical data when you access the Service:</p>
+        <ul>
+          <li>IP address and browser/device information</li>
+          <li>Pages visited, features accessed, and timestamps</li>
+          <li>Error logs and performance diagnostics</li>
+        </ul>
+        <p>This data is used to operate, maintain, and improve the Service.</p>
+
+        <h3>2.5 Communications</h3>
+        <p>If you contact us for support or send us an email, we retain those communications to resolve your request and improve our support quality.</p>
+      </div>
+
+      <!-- 3 -->
+      <div class="section" id="s3">
+        <div class="section-header">
+          <div class="section-number">3</div>
+          <h2>How We Use Your Information</h2>
+        </div>
+        <p>We use the information we collect to:</p>
+        <ul>
+          <li>Provide, operate, and maintain the Service for your organization</li>
+          <li>Authenticate users and enforce organization-level access controls</li>
+          <li>Send transactional emails (e.g., task reminders, pipeline alerts, digest notifications) via Resend</li>
+          <li>Send SMS notifications where you have configured and opted in to that feature via Twilio</li>
+          <li>Sync with Google Calendar when you have authorized that integration</li>
+          <li>Generate PDF documents (e.g., approved quotes) on your behalf</li>
+          <li>Analyze usage patterns to improve features and fix bugs</li>
+          <li>Respond to support requests and communicate Service updates</li>
+          <li>Enforce our Terms of Service and prevent fraud or abuse</li>
+        </ul>
+      </div>
+
+      <!-- 4 -->
+      <div class="section" id="s4">
+        <div class="section-header">
+          <div class="section-number">4</div>
+          <h2>Legal Bases for Processing (EEA/UK Users)</h2>
+        </div>
+        <p>If you are located in the European Economic Area or the United Kingdom, we process your personal data on the following legal bases:</p>
+        <ul>
+          <li><strong>Contract:</strong> Processing necessary to provide the Service under our agreement with your organization.</li>
+          <li><strong>Legitimate Interests:</strong> Processing for fraud prevention, security, and Service improvement, where those interests are not overridden by your rights.</li>
+          <li><strong>Legal Obligation:</strong> Processing required to comply with applicable law.</li>
+          <li><strong>Consent:</strong> Where we have obtained your consent (e.g., for optional communications), you may withdraw it at any time.</li>
+        </ul>
+      </div>
+
+      <!-- 5 -->
+      <div class="section" id="s5">
+        <div class="section-header">
+          <div class="section-number">5</div>
+          <h2>Data Sharing & Disclosure</h2>
+        </div>
+        <p>We do not sell your personal data. We share data only as described below.</p>
+
+        <h3>5.1 Sub-Processors & Service Providers</h3>
+        <p>We engage the following sub-processors to operate the Service:</p>
+        <div class="sub-processors">
+          <div class="sub-processor">
+            <div class="sp-label">Authentication</div>
+            <div class="sp-text"><strong>Clerk</strong> — manages user identity, organization membership, and session tokens.</div>
+          </div>
+          <div class="sub-processor">
+            <div class="sp-label">Database</div>
+            <div class="sp-text"><strong>Neon</strong> — provides PostgreSQL database infrastructure on which your organization's data is stored.</div>
+          </div>
+          <div class="sub-processor">
+            <div class="sp-label">Hosting</div>
+            <div class="sp-text"><strong>Netlify</strong> — hosts the web application and serverless backend functions.</div>
+          </div>
+          <div class="sub-processor">
+            <div class="sp-label">Email</div>
+            <div class="sp-text"><strong>Resend</strong> — delivers transactional emails on your behalf.</div>
+          </div>
+          <div class="sub-processor">
+            <div class="sp-label">SMS</div>
+            <div class="sp-text"><strong>Twilio</strong> — delivers SMS notifications where configured.</div>
+          </div>
+          <div class="sub-processor">
+            <div class="sp-label">Calendar</div>
+            <div class="sp-text"><strong>Google</strong> — processes calendar data when you authorize the Google Calendar integration.</div>
+          </div>
+        </div>
+        <p>Each sub-processor is contractually bound to process data only on our instructions and to maintain appropriate security measures.</p>
+
+        <h3>5.2 Within Your Organization</h3>
+        <p>Data you enter is visible to other members of your Accelerep organization according to the role-based access controls you configure. Admins can view all data; Managers can view data for their team; Sales Reps can view only their own data by default.</p>
+
+        <h3>5.3 Legal Requirements</h3>
+        <p>We may disclose information if required by law, court order, or governmental authority, or to protect the rights, property, or safety of Accelerep, our customers, or the public.</p>
+
+        <h3>5.4 Business Transfers</h3>
+        <p>In the event of a merger, acquisition, or sale of assets, your data may be transferred as part of that transaction. We will notify affected organizations and honor the commitments made in this policy.</p>
+      </div>
+
+      <!-- 6 -->
+      <div class="section" id="s6">
+        <div class="section-header">
+          <div class="section-number">6</div>
+          <h2>Data Retention</h2>
+        </div>
+        <p>We retain your organization's data for as long as your account is active. If you cancel or terminate your account, we will delete your data within 90 days unless we are legally required to retain it longer.</p>
+        <p>Usage logs and aggregated analytics may be retained for up to 24 months for security and product improvement purposes.</p>
+      </div>
+
+      <!-- 7 -->
+      <div class="section" id="s7">
+        <div class="section-header">
+          <div class="section-number">7</div>
+          <h2>Data Security</h2>
+        </div>
+        <p>We implement industry-standard security measures to protect your data, including:</p>
+        <ul>
+          <li>All data transmitted between your browser and the Service is encrypted via TLS/HTTPS.</li>
+          <li>Authentication tokens are verified on every request using Clerk's cryptographically signed JWTs.</li>
+          <li>All database queries are scoped to your organization's unique identifier, ensuring strict tenant isolation.</li>
+          <li>Access to production infrastructure is restricted to authorized personnel.</li>
+        </ul>
+        <p>No security measure is perfect. While we work to protect your data, we cannot guarantee absolute security. Please notify us immediately at the contact address below if you suspect a security incident.</p>
+      </div>
+
+      <!-- 8 -->
+      <div class="section" id="s8">
+        <div class="section-header">
+          <div class="section-number">8</div>
+          <h2>Your Rights</h2>
+        </div>
+        <p>Depending on your location, you may have the following rights regarding your personal data:</p>
+        <ul>
+          <li><strong>Access:</strong> Request a copy of the personal data we hold about you.</li>
+          <li><strong>Correction:</strong> Request that we correct inaccurate data.</li>
+          <li><strong>Deletion:</strong> Request that we delete your personal data, subject to legal retention requirements.</li>
+          <li><strong>Portability:</strong> Request your data in a machine-readable format.</li>
+          <li><strong>Restriction / Objection:</strong> Object to or request restriction of certain processing.</li>
+          <li><strong>Withdraw Consent:</strong> Where processing is based on consent, withdraw it at any time without affecting the lawfulness of prior processing.</li>
+        </ul>
+        <p>Organization Admins can exercise many of these rights directly within the Service (Settings → Security & Data). For additional requests, contact us at the address below. We will respond within 30 days.</p>
+      </div>
+
+      <!-- 9 -->
+      <div class="section" id="s9">
+        <div class="section-header">
+          <div class="section-number">9</div>
+          <h2>Cookies & Local Storage</h2>
+        </div>
+        <p>Accelerep uses browser localStorage to cache certain non-sensitive settings (such as your last active tab) for a faster experience. We do not use third-party advertising cookies. Our authentication provider, Clerk, may set session cookies necessary to maintain your login state.</p>
+        <p>You can clear localStorage at any time through your browser's developer tools or privacy settings. Doing so will not affect your data stored in the Accelerep database.</p>
+      </div>
+
+      <!-- 10 -->
+      <div class="section" id="s10">
+        <div class="section-header">
+          <div class="section-number">10</div>
+          <h2>International Data Transfers</h2>
+        </div>
+        <p>Accelerep is operated from the United States. If you access the Service from outside the United States, your data may be transferred to, stored, and processed in the United States or other countries where our sub-processors operate. We rely on appropriate transfer mechanisms (such as Standard Contractual Clauses) where required by applicable law.</p>
+      </div>
+
+      <!-- 11 -->
+      <div class="section" id="s11">
+        <div class="section-header">
+          <div class="section-number">11</div>
+          <h2>Children's Privacy</h2>
+        </div>
+        <p>The Service is intended for business use by adults. We do not knowingly collect personal data from individuals under the age of 18. If we become aware that we have inadvertently collected such data, we will delete it promptly.</p>
+      </div>
+
+      <!-- 12 -->
+      <div class="section" id="s12">
+        <div class="section-header">
+          <div class="section-number">12</div>
+          <h2>Changes to This Policy</h2>
+        </div>
+        <p>We may update this Privacy Policy from time to time. When we make material changes, we will update the Effective Date above and, where appropriate, notify organization Admins by email. Your continued use of the Service after the updated policy takes effect constitutes acceptance of the revised terms.</p>
+      </div>
+
+      <!-- 13 -->
+      <div class="section" id="s13">
+        <div class="section-header">
+          <div class="section-number">13</div>
+          <h2>Contact Us</h2>
+        </div>
+        <p>If you have questions about this Privacy Policy or wish to exercise your data rights, please contact us:</p>
+        <div class="contact-block">
+          <strong>Accelerep</strong><br />
+          Email: <a href="mailto:privacy@salespipelinetracker.com">privacy@salespipelinetracker.com</a><br />
+          Website: <a href="https://salespipelinetracker.com" target="_blank" rel="noopener noreferrer">salespipelinetracker.com</a>
+        </div>
+        <p style="margin-top: 0.875rem;">We will respond to all requests within 30 days.</p>
+      </div>
+
+    </main>
+  </div>
+
+  <footer>
+    &copy; <script>document.write(new Date().getFullYear())</script> Accelerep. All rights reserved.
+    &nbsp;·&nbsp;
+    <a href="/" style="color: inherit; text-decoration: none;">salespipelinetracker.com</a>
+  </footer>
+
+</body>
+</html>

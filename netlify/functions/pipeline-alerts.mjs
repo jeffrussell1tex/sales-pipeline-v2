@@ -24,6 +24,7 @@ import { db } from '../../db/index.js';
 import { opportunities, activities, users, recommendationLog } from '../../db/schema.js';
 import { eq, and, gte } from 'drizzle-orm';
 import { sendEmail, emailTemplates } from './send-email.mjs';
+import { sendSms, smsTemplates, normalizePhone } from './send-sms.mjs';
 
 const DEDUP_DAYS = 7;
 const today = new Date();
@@ -43,6 +44,26 @@ function wantsAlert(profile, alertType) {
     const prefs = profile?.notificationPrefs || {};
     const pref  = prefs[alertType] ?? DEFAULT_PREFS[alertType] ?? { enabled: false };
     return pref.enabled === true;
+}
+
+// Returns true if the user has SMS enabled globally AND for this specific alert type
+function wantsSms(profile, alertType) {
+    const smsPrefs = profile?.smsNotifications || {};
+    if (!smsPrefs.enabled) return false;
+    // alertType keys: pipelineAlerts, taskReminders, digest, mentions
+    return smsPrefs.pipelineAlerts === true;
+}
+
+// Fire-and-forget SMS — never throws, just logs. Always used alongside email.
+async function trySendSms(to, body, label) {
+    try {
+        const phone = normalizePhone(to);
+        if (!phone) { console.warn(`pipeline-alerts SMS: invalid phone for ${label}`); return; }
+        await sendSms({ to: phone, body });
+        console.log(`SMS sent → ${phone} (${label})`);
+    } catch (err) {
+        console.error(`pipeline-alerts SMS error (${label}):`, err.message);
+    }
 }
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
@@ -184,6 +205,10 @@ export const handler = async () => {
                             to: repUser.email,
                             ...emailTemplates.dealSilent({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent, opportunityId: opp.id }),
                         });
+                        if (wantsSms(profile, 'pipelineAlerts')) {
+                            const smsPhone = profile.mobile || profile.phone;
+                            await trySendSms(smsPhone, smsTemplates.dealSilent({ dealName: name, daysSilent }), `dealSilent/${repName}`);
+                        }
                         await logAlert(orgId, repName, 'stale', opp, `No activity in ${daysSilent} days`);
                         emailsSent++;
                         console.log(`dealSilent → ${repUser.email} (${name}, ${daysSilent}d)`);
@@ -194,6 +219,10 @@ export const handler = async () => {
                                 to: manager.email,
                                 ...emailTemplates.managerDealAlert({ managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'silent', detail: `No activity in ${daysSilent} days`, opportunityId: opp.id }),
                             });
+                            if (wantsSms(manager.profile || {}, 'pipelineAlerts')) {
+                                const mgPhone = (manager.profile || {}).mobile || (manager.profile || {}).phone;
+                                await trySendSms(mgPhone, smsTemplates.managerDealAlert({ repName, dealName: name, alertType: 'silent' }), `managerAlert-silent/${manager.name}`);
+                            }
                             emailsSent++;
                         }
                     } catch (err) {
@@ -211,6 +240,10 @@ export const handler = async () => {
                             to: repUser.email,
                             ...emailTemplates.dealStuck({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage, opportunityId: opp.id }),
                         });
+                        if (wantsSms(profile, 'pipelineAlerts')) {
+                            const smsPhone = profile.mobile || profile.phone;
+                            await trySendSms(smsPhone, smsTemplates.dealStuck({ dealName: name, stage: opp.stage, daysInStage }), `dealStuck/${repName}`);
+                        }
                         await logAlert(orgId, repName, 'stuck', opp, `${daysInStage} days in ${opp.stage}${avgForStage ? ` (avg ${avgForStage}d)` : ''}`);
                         emailsSent++;
                         console.log(`dealStuck → ${repUser.email} (${name}, ${daysInStage}d)`);
@@ -222,6 +255,10 @@ export const handler = async () => {
                                 to: manager.email,
                                 ...emailTemplates.managerDealAlert({ managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'stuck', detail: `${daysInStage} days in ${opp.stage}${avgForStage ? ` (avg ${avgForStage}d)` : ''}`, opportunityId: opp.id }),
                             });
+                            if (wantsSms(manager.profile || {}, 'pipelineAlerts')) {
+                                const mgPhone = (manager.profile || {}).mobile || (manager.profile || {}).phone;
+                                await trySendSms(mgPhone, smsTemplates.managerDealAlert({ repName, dealName: name, alertType: 'stuck' }), `managerAlert-stuck/${manager.name}`);
+                            }
                             emailsSent++;
                         }
                     } catch (err) {
@@ -239,6 +276,10 @@ export const handler = async () => {
                             to: repUser.email,
                             ...emailTemplates.closeDateLapsed({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate, opportunityId: opp.id }),
                         });
+                        if (wantsSms(profile, 'pipelineAlerts')) {
+                            const smsPhone = profile.mobile || profile.phone;
+                            await trySendSms(smsPhone, smsTemplates.closeDateLapsed({ dealName: name, daysLapsed }), `closeLapsed/${repName}`);
+                        }
                         await logAlert(orgId, repName, 'lapsed', opp, `Close date ${opp.forecastedCloseDate} passed ${daysLapsed} days ago`);
                         emailsSent++;
                         console.log(`closeLapsed → ${repUser.email} (${name}, ${daysLapsed}d overdue)`);
@@ -249,6 +290,10 @@ export const handler = async () => {
                                 to: manager.email,
                                 ...emailTemplates.managerDealAlert({ managerName: manager.name, repName, dealName: name, account: opp.account, arr, stage: opp.stage, alertType: 'lapsed', detail: `Close date ${opp.forecastedCloseDate} passed ${daysLapsed} days ago`, opportunityId: opp.id }),
                             });
+                            if (wantsSms(manager.profile || {}, 'pipelineAlerts')) {
+                                const mgPhone = (manager.profile || {}).mobile || (manager.profile || {}).phone;
+                                await trySendSms(mgPhone, smsTemplates.managerDealAlert({ repName, dealName: name, alertType: 'lapsed' }), `managerAlert-lapsed/${manager.name}`);
+                            }
                             emailsSent++;
                         }
                     } catch (err) {
