@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Terms & Conditions — Accelerep</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary:     #f0ece4;
+      --bg-secondary:   #ffffff;
+      --accent-primary: #1c1917;
+      --accent-gold:    #c8b99a;
+      --text-primary:   #1c1917;
+      --text-secondary: #78716c;
+      --text-tertiary:  #a8a29e;
+      --border-color:   #ddd8cf;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 0.9375rem;
+      line-height: 1.75;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--accent-primary);
+      padding: 0 2rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+
+    .header-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      text-decoration: none;
+    }
+
+    .header-logo-mark {
+      width: 28px;
+      height: 28px;
+      background: var(--accent-gold);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .header-logo-mark svg {
+      width: 16px;
+      height: 16px;
+      fill: var(--accent-primary);
+    }
+
+    .header-logo-text {
+      font-size: 0.9375rem;
+      font-weight: 700;
+      color: #f5f1eb;
+      letter-spacing: 0.02em;
+    }
+
+    .header-back {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #a8a29e;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      transition: color 0.15s;
+    }
+    .header-back:hover { color: #f5f1eb; }
+
+    /* ── Hero ── */
+    .hero {
+      background: var(--accent-primary);
+      padding: 3.5rem 2rem 3rem;
+      text-align: center;
+      border-bottom: 3px solid var(--accent-gold);
+    }
+
+    .hero-label {
+      display: inline-block;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent-gold);
+      margin-bottom: 0.75rem;
+    }
+
+    .hero h1 {
+      font-size: clamp(1.75rem, 4vw, 2.5rem);
+      font-weight: 700;
+      color: #f5f1eb;
+      margin-bottom: 0.75rem;
+      line-height: 1.2;
+    }
+
+    .hero-date {
+      font-size: 0.8125rem;
+      color: #a8a29e;
+    }
+
+    /* ── Layout ── */
+    .layout {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 3rem 2rem 5rem;
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 3rem;
+      align-items: start;
+    }
+
+    @media (max-width: 768px) {
+      .layout { grid-template-columns: 1fr; gap: 2rem; padding: 1.5rem 1rem 4rem; }
+      .toc { display: none; }
+    }
+
+    /* ── TOC ── */
+    .toc {
+      position: sticky;
+      top: 72px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: 0 1px 3px rgba(28,25,23,0.07);
+    }
+
+    .toc-title {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-tertiary);
+      margin-bottom: 0.875rem;
+    }
+
+    .toc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+    }
+
+    .toc-list a {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-decoration: none;
+      padding: 0.3rem 0.5rem;
+      border-radius: 6px;
+      transition: all 0.15s;
+      line-height: 1.4;
+    }
+    .toc-list a:hover {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    .toc-divider {
+      height: 1px;
+      background: var(--border-color);
+      margin: 0.5rem 0;
+    }
+
+    .toc-section-label {
+      font-size: 0.625rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-tertiary);
+      padding: 0.25rem 0.5rem 0.125rem;
+    }
+
+    /* ── Content ── */
+    .content {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(28,25,23,0.07);
+      overflow: hidden;
+    }
+
+    /* SMS compliance highlight box */
+    .sms-highlight {
+      background: #1c1917;
+      padding: 1.5rem 2.25rem;
+      border-bottom: 3px solid var(--accent-gold);
+    }
+
+    .sms-highlight-label {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent-gold);
+      margin-bottom: 0.75rem;
+    }
+
+    .sms-highlight-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #f5f1eb;
+      margin-bottom: 0.875rem;
+    }
+
+    .sms-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .sms-pill {
+      background: rgba(200,185,154,0.15);
+      border: 1px solid rgba(200,185,154,0.35);
+      color: var(--accent-gold);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+    }
+
+    .sms-opt-out {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-size: 0.8125rem;
+      color: #a8a29e;
+      line-height: 1.6;
+    }
+
+    .sms-opt-out strong {
+      color: #f5f1eb;
+      font-weight: 600;
+    }
+
+    .section {
+      padding: 2rem 2.25rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .section:last-child { border-bottom: none; }
+
+    .section-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .section-number {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      background: var(--accent-primary);
+      color: var(--accent-gold);
+      border-radius: 6px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 0.125rem;
+    }
+
+    .section h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.3;
+    }
+
+    .section h3 {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 1.25rem 0 0.5rem;
+    }
+
+    .section p {
+      font-size: 0.875rem;
+      color: #44403c;
+      line-height: 1.75;
+      margin-bottom: 0.875rem;
+    }
+    .section p:last-child { margin-bottom: 0; }
+
+    .section ul {
+      list-style: none;
+      margin: 0.5rem 0 0.875rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.375rem;
+    }
+
+    .section ul li {
+      font-size: 0.875rem;
+      color: #44403c;
+      line-height: 1.65;
+      padding-left: 1.25rem;
+      position: relative;
+    }
+
+    .section ul li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0.625rem;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent-gold);
+    }
+
+    .section ul li strong {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* Info callout */
+    .callout {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-left: 3px solid var(--accent-gold);
+      border-radius: 8px;
+      padding: 0.875rem 1.125rem;
+      font-size: 0.8125rem;
+      color: #44403c;
+      line-height: 1.65;
+      margin: 0.75rem 0;
+    }
+    .callout strong { font-weight: 600; color: var(--text-primary); }
+
+    /* Message type table */
+    .msg-types {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.75rem 0;
+      font-size: 0.8125rem;
+    }
+    .msg-types th {
+      background: var(--bg-primary);
+      text-align: left;
+      padding: 0.5rem 0.875rem;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-tertiary);
+      border-bottom: 1px solid var(--border-color);
+    }
+    .msg-types td {
+      padding: 0.625rem 0.875rem;
+      border-bottom: 1px solid var(--border-color);
+      color: #44403c;
+      vertical-align: top;
+      line-height: 1.55;
+    }
+    .msg-types tr:last-child td { border-bottom: none; }
+    .msg-types td:first-child { font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+
+    /* Contact block */
+    .contact-block {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-left: 3px solid var(--accent-gold);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-top: 0.75rem;
+      font-size: 0.875rem;
+      color: #44403c;
+      line-height: 1.75;
+    }
+    .contact-block a { color: #2563eb; text-decoration: none; font-weight: 500; }
+    .contact-block a:hover { text-decoration: underline; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 2rem;
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+      border-top: 1px solid var(--border-color);
+    }
+    footer a { color: inherit; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <a href="/" class="header-logo">
+      <div class="header-logo-mark">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="8" width="3" height="6" rx="1"/>
+          <rect x="6.5" y="5" width="3" height="9" rx="1"/>
+          <rect x="11" y="2" width="3" height="12" rx="1"/>
+        </svg>
+      </div>
+      <span class="header-logo-text">Accelerep</span>
+    </a>
+    <a href="/" class="header-back">← Back to app</a>
+  </header>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-label">Legal</div>
+    <h1>Terms &amp; Conditions</h1>
+    <div class="hero-date">Effective Date: April 6, 2025</div>
+  </div>
+
+  <!-- Body -->
+  <div class="layout">
+
+    <!-- TOC -->
+    <nav class="toc" aria-label="Table of contents">
+      <div class="toc-title">Contents</div>
+      <div class="toc-section-label">General</div>
+      <ol class="toc-list">
+        <li><a href="#s1">1. Acceptance of Terms</a></li>
+        <li><a href="#s2">2. The Service</a></li>
+        <li><a href="#s3">3. Accounts &amp; Organizations</a></li>
+        <li><a href="#s4">4. Acceptable Use</a></li>
+        <li><a href="#s5">5. Your Data</a></li>
+        <li><a href="#s6">6. Intellectual Property</a></li>
+        <li><a href="#s7">7. Fees &amp; Payment</a></li>
+        <li><a href="#s8">8. Disclaimers</a></li>
+        <li><a href="#s9">9. Limitation of Liability</a></li>
+        <li><a href="#s10">10. Indemnification</a></li>
+        <li><a href="#s11">11. Term &amp; Termination</a></li>
+        <li><a href="#s12">12. Governing Law</a></li>
+      </ol>
+      <div class="toc-divider"></div>
+      <div class="toc-section-label">SMS Messaging</div>
+      <ol class="toc-list">
+        <li><a href="#s13">13. SMS Notifications</a></li>
+      </ol>
+      <div class="toc-divider"></div>
+      <ol class="toc-list">
+        <li><a href="#s14">14. Changes to Terms</a></li>
+        <li><a href="#s15">15. Contact Us</a></li>
+      </ol>
+    </nav>
+
+    <!-- Content -->
+    <main class="content">
+
+      <!-- Intro -->
+      <div class="section">
+        <p>These Terms and Conditions ("Terms") govern your access to and use of the Accelerep sales pipeline and CRM platform, accessible at <strong>salespipelinetracker.com</strong> (the "Service"), operated by Accelerep ("we," "our," or "us").</p>
+        <p>By creating an account, joining an organization workspace, or otherwise using the Service, you agree to be bound by these Terms. If you are using the Service on behalf of an organization, you represent that you have authority to bind that organization to these Terms.</p>
+      </div>
+
+      <!-- 1 -->
+      <div class="section" id="s1">
+        <div class="section-header">
+          <div class="section-number">1</div>
+          <h2>Acceptance of Terms</h2>
+        </div>
+        <p>By accessing or using the Service, you confirm that you are at least 18 years old, have read and understood these Terms, and agree to be legally bound by them. If you do not agree to these Terms, you may not use the Service.</p>
+      </div>
+
+      <!-- 2 -->
+      <div class="section" id="s2">
+        <div class="section-header">
+          <div class="section-number">2</div>
+          <h2>The Service</h2>
+        </div>
+        <p>Accelerep provides a B2B SaaS platform for managing sales pipelines, leads, opportunities, accounts, contacts, tasks, and team performance. The Service includes:</p>
+        <ul>
+          <li>Pipeline and opportunity tracking with stage management</li>
+          <li>Account, contact, and lead management</li>
+          <li>Task assignment, scheduling, and reminders</li>
+          <li>Quota management and sales performance reporting</li>
+          <li>CPQ (Configure, Price, Quote) functionality</li>
+          <li>Team management with role-based access controls</li>
+          <li>Email and SMS notifications for workflow events</li>
+          <li>Google Calendar integration</li>
+        </ul>
+        <p>We reserve the right to modify, suspend, or discontinue any part of the Service at any time with reasonable notice where practicable.</p>
+      </div>
+
+      <!-- 3 -->
+      <div class="section" id="s3">
+        <div class="section-header">
+          <div class="section-number">3</div>
+          <h2>Accounts &amp; Organizations</h2>
+        </div>
+        <h3>3.1 Account Registration</h3>
+        <p>To use the Service, you must create an account through our authentication provider, Clerk. You agree to provide accurate, current, and complete information and to keep your account credentials secure. You are responsible for all activity that occurs under your account.</p>
+
+        <h3>3.2 Organizations &amp; Multi-Tenancy</h3>
+        <p>The Service operates on a multi-tenant basis. Each organization ("workspace") is logically isolated — your data is accessible only to members of your organization according to the roles assigned by your administrator. You may not attempt to access another organization's data.</p>
+
+        <h3>3.3 User Roles</h3>
+        <p>Access within your organization is governed by roles assigned by your Admin:</p>
+        <ul>
+          <li><strong>Admin:</strong> Full access to all data, settings, and user management</li>
+          <li><strong>Manager:</strong> View and manage data for their assigned team</li>
+          <li><strong>Sales Rep:</strong> Create and manage their own records</li>
+          <li><strong>Read-Only:</strong> View access only; no ability to create or edit records</li>
+        </ul>
+        <p>Admins are responsible for managing user access and ensuring that role assignments are appropriate for each user.</p>
+      </div>
+
+      <!-- 4 -->
+      <div class="section" id="s4">
+        <div class="section-header">
+          <div class="section-number">4</div>
+          <h2>Acceptable Use</h2>
+        </div>
+        <p>You agree to use the Service only for lawful business purposes and in accordance with these Terms. You may not:</p>
+        <ul>
+          <li>Use the Service to send unsolicited communications, spam, or messages to individuals who have not consented to receive them</li>
+          <li>Attempt to gain unauthorized access to any part of the Service or another organization's data</li>
+          <li>Reverse engineer, decompile, or attempt to extract the source code of the Service</li>
+          <li>Use the Service to store or transmit malicious code, viruses, or harmful data</li>
+          <li>Interfere with or disrupt the integrity or performance of the Service</li>
+          <li>Resell, sublicense, or otherwise commercialize access to the Service without our written consent</li>
+          <li>Use the Service in any way that violates applicable laws or regulations</li>
+        </ul>
+        <p>We reserve the right to suspend or terminate accounts that violate these acceptable use requirements.</p>
+      </div>
+
+      <!-- 5 -->
+      <div class="section" id="s5">
+        <div class="section-header">
+          <div class="section-number">5</div>
+          <h2>Your Data</h2>
+        </div>
+        <h3>5.1 Ownership</h3>
+        <p>You retain all ownership rights to the data your organization inputs into the Service ("Customer Data"). We do not claim ownership of your Customer Data.</p>
+
+        <h3>5.2 License to Operate</h3>
+        <p>You grant us a limited, non-exclusive license to store, process, and transmit your Customer Data solely to the extent necessary to provide the Service to you.</p>
+
+        <h3>5.3 Data Responsibility</h3>
+        <p>You are responsible for ensuring that your use of the Service and any Customer Data you upload or enter complies with applicable laws, including data protection and privacy laws. You represent that you have the necessary rights and consents to input any personal data of third parties (such as contact records) into the Service.</p>
+
+        <h3>5.4 Backups</h3>
+        <p>While we take reasonable measures to protect your data, we recommend maintaining your own backups of critical business data. We are not liable for data loss caused by factors outside our reasonable control.</p>
+      </div>
+
+      <!-- 6 -->
+      <div class="section" id="s6">
+        <div class="section-header">
+          <div class="section-number">6</div>
+          <h2>Intellectual Property</h2>
+        </div>
+        <p>The Service, including its design, software, features, and content (excluding Customer Data), is owned by Accelerep and protected by intellectual property laws. These Terms do not transfer any ownership rights in the Service to you.</p>
+        <p>You may not copy, modify, distribute, sell, or lease any part of the Service, or create derivative works based on it, without our prior written consent.</p>
+      </div>
+
+      <!-- 7 -->
+      <div class="section" id="s7">
+        <div class="section-header">
+          <div class="section-number">7</div>
+          <h2>Fees &amp; Payment</h2>
+        </div>
+        <p>Access to the Service may require payment of subscription fees as described at the time of sign-up or as subsequently communicated. All fees are due in advance and are non-refundable except as expressly stated in a separate agreement or as required by applicable law.</p>
+        <p>We reserve the right to change our pricing with reasonable notice. Continued use of the Service after a price change takes effect constitutes acceptance of the new pricing.</p>
+      </div>
+
+      <!-- 8 -->
+      <div class="section" id="s8">
+        <div class="section-header">
+          <div class="section-number">8</div>
+          <h2>Disclaimers</h2>
+        </div>
+        <p>THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT.</p>
+        <p>We do not warrant that the Service will be uninterrupted, error-free, or free of viruses or other harmful components. We do not warrant that any results obtained from use of the Service will be accurate or reliable.</p>
+      </div>
+
+      <!-- 9 -->
+      <div class="section" id="s9">
+        <div class="section-header">
+          <div class="section-number">9</div>
+          <h2>Limitation of Liability</h2>
+        </div>
+        <p>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, ACCELEREP SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING LOSS OF PROFITS, DATA, OR GOODWILL, ARISING OUT OF OR IN CONNECTION WITH THESE TERMS OR YOUR USE OF THE SERVICE.</p>
+        <p>IN NO EVENT SHALL OUR TOTAL LIABILITY TO YOU FOR ALL CLAIMS ARISING UNDER THESE TERMS EXCEED THE GREATER OF (A) THE AMOUNTS PAID BY YOU TO ACCELEREP IN THE TWELVE MONTHS PRECEDING THE CLAIM OR (B) ONE HUNDRED DOLLARS ($100).</p>
+      </div>
+
+      <!-- 10 -->
+      <div class="section" id="s10">
+        <div class="section-header">
+          <div class="section-number">10</div>
+          <h2>Indemnification</h2>
+        </div>
+        <p>You agree to indemnify, defend, and hold harmless Accelerep and its officers, directors, employees, and agents from and against any claims, damages, losses, liabilities, costs, and expenses (including reasonable attorneys' fees) arising out of or relating to: (a) your use of the Service; (b) your Customer Data; (c) your violation of these Terms; or (d) your violation of any rights of a third party.</p>
+      </div>
+
+      <!-- 11 -->
+      <div class="section" id="s11">
+        <div class="section-header">
+          <div class="section-number">11</div>
+          <h2>Term &amp; Termination</h2>
+        </div>
+        <p>These Terms remain in effect for as long as you use the Service. Either party may terminate at any time. Upon termination:</p>
+        <ul>
+          <li>Your access to the Service will be revoked</li>
+          <li>We will retain your Customer Data for up to 90 days to allow for export, after which it will be deleted</li>
+          <li>Provisions of these Terms that by their nature should survive (including disclaimers, limitations of liability, and indemnification) will continue to apply</li>
+        </ul>
+      </div>
+
+      <!-- 12 -->
+      <div class="section" id="s12">
+        <div class="section-header">
+          <div class="section-number">12</div>
+          <h2>Governing Law</h2>
+        </div>
+        <p>These Terms are governed by the laws of the State of Texas, United States, without regard to its conflict of law provisions. Any disputes arising under these Terms shall be resolved in the state or federal courts located in Texas, and you consent to personal jurisdiction in those courts.</p>
+      </div>
+
+      <!-- 13 — SMS (Twilio A2P compliance) -->
+      <div class="section" id="s13">
+        <div class="section-header">
+          <div class="section-number">13</div>
+          <h2>SMS Notifications</h2>
+        </div>
+
+        <!-- Compliance highlight block -->
+        <div class="sms-highlight">
+          <div class="sms-highlight-label">SMS &amp; Messaging Program</div>
+          <div class="sms-highlight-title">Accelerep Workforce Notifications</div>
+          <div class="sms-pills">
+            <span class="sms-pill">Task &amp; Deadline Reminders</span>
+            <span class="sms-pill">Pipeline &amp; Deal Alerts</span>
+            <span class="sms-pill">Daily Digest Summaries</span>
+            <span class="sms-pill">Quote Approval Notifications</span>
+          </div>
+          <div class="sms-opt-out">
+            <strong>To opt out:</strong> Reply <strong>STOP</strong> to any message. To re-enable, reply <strong>START</strong>. For help, reply <strong>HELP</strong> or email <a href="mailto:support@salespipelinetracker.com" style="color: var(--accent-gold);">support@salespipelinetracker.com</a>.<br />
+            <strong>Message and data rates may apply.</strong> Message frequency varies based on your activity and notification settings.
+          </div>
+        </div>
+
+        <h3>13.1 Program Description</h3>
+        <p>Accelerep operates an SMS notification program that sends transactional, workflow-driven text messages to authorized users — specifically sales representatives, managers, and administrators — within your organization's Accelerep workspace. SMS messages are sent exclusively to internal team members; they are never sent to your customers or external contacts.</p>
+
+        <p>The types of messages sent under this program include:</p>
+        <table class="msg-types">
+          <thead>
+            <tr>
+              <th>Message Type</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Task &amp; Deadline Reminders</td>
+              <td>Alerts sent when a task is approaching its due date or has become overdue, to help reps stay on top of follow-ups and commitments.</td>
+            </tr>
+            <tr>
+              <td>Pipeline &amp; Deal Alerts</td>
+              <td>Notifications when a deal changes stage, stalls, or requires attention — including high-value opportunity alerts for managers.</td>
+            </tr>
+            <tr>
+              <td>Daily Digest Summaries</td>
+              <td>A daily summary of open tasks, upcoming deadlines, and pipeline activity delivered to keep reps and managers informed.</td>
+            </tr>
+            <tr>
+              <td>Quote Approval Notifications</td>
+              <td>Alerts sent when a quote is submitted for manager approval or when an approval decision has been made on a pending quote.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>13.2 Consent</h3>
+        <p>SMS notifications are an optional feature of the Service. By enabling SMS notifications within your Accelerep account settings and providing a mobile phone number, you expressly consent to receive text messages from Accelerep at the number provided. Consent to receive SMS messages is not a condition of using the Service.</p>
+        <p>Organization Admins who enable SMS notifications for other users are responsible for ensuring those users have been informed about the messaging program and have provided appropriate consent.</p>
+
+        <h3>13.3 Opt-Out</h3>
+        <p>You may opt out of SMS notifications at any time by:</p>
+        <ul>
+          <li>Replying <strong>STOP</strong> to any message you receive from Accelerep — you will receive a confirmation and no further messages will be sent to that number</li>
+          <li>Disabling SMS notifications in your Accelerep account settings (Settings → Notifications)</li>
+          <li>Contacting us at <a href="mailto:support@salespipelinetracker.com">support@salespipelinetracker.com</a> to request removal</li>
+        </ul>
+        <p>To re-enable notifications after opting out via STOP, reply <strong>START</strong> to any prior message or re-enable the feature in your account settings.</p>
+
+        <h3>13.4 HELP</h3>
+        <p>Reply <strong>HELP</strong> to any SMS message to receive assistance information, including our support email address and a link to these Terms.</p>
+
+        <h3>13.5 Message Frequency &amp; Rates</h3>
+        <div class="callout">
+          <strong>Message and data rates may apply.</strong> Message frequency varies based on your pipeline activity, task volume, and the notification preferences configured in your account. You are responsible for any charges applied by your mobile carrier.
+        </div>
+        <p>Accelerep is not responsible for any charges billed to you by your wireless carrier in connection with SMS messages. Supported carriers include, but are not limited to, all major US carriers. Carrier availability may vary.</p>
+
+        <h3>13.6 Supported Carriers</h3>
+        <p>SMS delivery is supported across all major US wireless carriers. Accelerep is not liable for delayed or undelivered messages due to carrier routing issues outside our control.</p>
+
+        <h3>13.7 Privacy</h3>
+        <p>Mobile phone numbers collected for SMS notifications are used solely to deliver the messages described in this section. We do not share your phone number with third parties for marketing purposes. For full details on how we handle personal data, see our <a href="/privacy-policy.html">Privacy Policy</a>.</p>
+      </div>
+
+      <!-- 14 -->
+      <div class="section" id="s14">
+        <div class="section-header">
+          <div class="section-number">14</div>
+          <h2>Changes to These Terms</h2>
+        </div>
+        <p>We may update these Terms from time to time. When we make material changes, we will update the Effective Date at the top of this page and, where appropriate, notify organization Admins by email. Your continued use of the Service after updated Terms take effect constitutes acceptance of the revised Terms.</p>
+      </div>
+
+      <!-- 15 -->
+      <div class="section" id="s15">
+        <div class="section-header">
+          <div class="section-number">15</div>
+          <h2>Contact Us</h2>
+        </div>
+        <p>If you have any questions about these Terms or the SMS messaging program, please contact us:</p>
+        <div class="contact-block">
+          <strong>Accelerep</strong><br />
+          Email: <a href="mailto:support@salespipelinetracker.com">support@salespipelinetracker.com</a><br />
+          Legal inquiries: <a href="mailto:legal@salespipelinetracker.com">legal@salespipelinetracker.com</a><br />
+          Website: <a href="https://salespipelinetracker.com" target="_blank" rel="noopener noreferrer">salespipelinetracker.com</a>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <footer>
+    &copy; <script>document.write(new Date().getFullYear())</script> Accelerep. All rights reserved.
+    &nbsp;·&nbsp;
+    <a href="/privacy-policy.html">Privacy Policy</a>
+    &nbsp;·&nbsp;
+    <a href="/">salespipelinetracker.com</a>
+  </footer>
+
+</body>
+</html>
