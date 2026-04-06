@@ -56,6 +56,27 @@ async function trySendSms(to, body, label) {
     }
 }
 
+
+// Convert a local hour (0-23) to UTC using the user's IANA timezone.
+// Falls back to treating the hour as UTC if the timezone is invalid.
+function localHourToUtc(localHour, timezone) {
+    try {
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone,
+            hour: 'numeric',
+            hour12: false,
+        });
+        const utcHour   = now.getUTCHours();
+        const localNow  = parseInt(formatter.format(now), 10);
+        const offsetHrs = ((localNow - utcHour) + 24) % 24;
+        return ((localHour - offsetHrs) + 24) % 24;
+    } catch {
+        console.warn('digest: unrecognized timezone ' + timezone + ', treating as UTC');
+        return localHour;
+    }
+}
+
 export const handler = async () => {
     const now       = new Date();
     const nowHour   = now.getUTCHours();
@@ -72,12 +93,11 @@ export const handler = async () => {
             if (!user.email || !user.active) continue;
 
             const profile     = user.profile || {};
-            const digestTime  = profile.digestTime || '08:00'; // e.g. "08:00"
+            const digestTime  = profile.digestTime || '08:00'; // local time e.g. "08:00"
+            const userTz      = profile.timezone || 'UTC';
             const [dHour]     = digestTime.split(':').map(Number);
-
-            // Only send if current UTC hour matches user's digest hour
-            // (runs every hour, fires once when hour matches)
-            if (dHour !== nowHour) continue;
+            const localHourUtc = localHourToUtc(dHour, userTz);
+            if (localHourUtc !== nowHour) continue;
 
             console.log(`digest: processing user ${user.name} (${user.email}) at digestTime ${digestTime}`);
 
@@ -224,8 +244,10 @@ export const handler = async () => {
                 if (!wantsDigest(profile, 'managerTeamDigest')) continue;
 
                 const digestTime = profile.digestTime || '08:00';
-                const [dHour] = digestTime.split(':').map(Number);
-                if (dHour !== nowHour) continue;
+                const userTz     = profile.timezone || 'UTC';
+                const [dHour]    = digestTime.split(':').map(Number);
+                const localHourUtc = localHourToUtc(dHour, userTz);
+                if (localHourUtc !== nowHour) continue;
 
                 console.log(`managerTeamDigest: building for ${mgr.name} (${mgr.email})`);
 

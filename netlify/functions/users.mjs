@@ -63,6 +63,7 @@ export const handler = async (event) => {
             notificationPrefs: data.notificationPrefs || null,
             digestTime:    data.digestTime    || '08:00',
             smsNotifications: data.smsNotifications || null,
+            timezone:         data.timezone         || null,
             // Quota fields — stored in profile jsonb so they survive DB round-trips
             annualQuota:   data.annualQuota   ?? null,
             q1Quota:       data.q1Quota       ?? null,
