@@ -150,16 +150,16 @@ export default function AppHeader({
                                         }).catch(() => {});
                                     });
                                 }
-                                if (!myProfile) {
-                                    setProfileForm({
-                                        firstName: currentUser.split(' ')[0] || '',
-                                        lastName:  currentUser.split(' ').slice(1).join(' ') || '',
-                                        email:     clerkUser?.emailAddresses?.[0]?.emailAddress || '',
-                                        phone:     '',
-                                        mobile:    '',
-                                        title:     '',
-                                    });
-                                }
+                                // Always sync profileForm from myProfile so saved values
+                                // are shown correctly on every panel open, not just the first.
+                                setProfileForm({
+                                    firstName: myProfile?.firstName || currentUser.split(' ')[0] || '',
+                                    lastName:  myProfile?.lastName  || currentUser.split(' ').slice(1).join(' ') || '',
+                                    email:     myProfile?.email     || clerkUser?.emailAddresses?.[0]?.emailAddress || '',
+                                    phone:     myProfile?.phone     || '',
+                                    mobile:    myProfile?.mobile    || '',
+                                    title:     myProfile?.title     || '',
+                                });
                             }}
                             title="My profile & settings"
                             style={{ 
