@@ -70,6 +70,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                     <button type="button" onClick={() => setActiveUserTab('primary')} style={tabBtnStyle(activeUserTab === 'primary')}>Primary Info</button>
                     <button type="button" onClick={() => setActiveUserTab('role')} style={tabBtnStyle(activeUserTab === 'role')}>Role &amp; Access</button>
                     <button type="button" onClick={() => setActiveUserTab('additional')} style={tabBtnStyle(activeUserTab === 'additional')}>Additional Info</button>
+                    <button type="button" onClick={() => setActiveUserTab('notifications')} style={tabBtnStyle(activeUserTab === 'notifications')}>Notifications</button>
                 </div>
 
                 <form onSubmit={handleSubmit}>
@@ -159,6 +160,121 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                         </div>
                     </div>
                     )}
+
+                    {activeUserTab === 'notifications' && (() => {
+                        const smsPrefs = formData.smsNotifications || {};
+                        const setSmsPrefs = (patch) => handleChange('smsNotifications', { ...smsPrefs, ...patch });
+
+                        const Toggle = ({ label, desc, checked, onChange }) => (
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', padding: '0.75rem 0', borderBottom: '1px solid #f1f5f9' }}>
+                                <div>
+                                    <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1e293b' }}>{label}</div>
+                                    {desc && <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>{desc}</div>}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => onChange(!checked)}
+                                    style={{
+                                        flexShrink: 0, width: '42px', height: '24px', borderRadius: '12px', border: 'none',
+                                        background: checked ? '#1c1917' : '#cbd5e1', cursor: 'pointer', position: 'relative',
+                                        transition: 'background 0.2s',
+                                    }}
+                                    aria-pressed={checked}
+                                >
+                                    <span style={{
+                                        position: 'absolute', top: '3px', left: checked ? '21px' : '3px',
+                                        width: '18px', height: '18px', borderRadius: '50%', background: '#fff',
+                                        transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                                    }} />
+                                </button>
+                            </div>
+                        );
+
+                        const smsEnabled = !!smsPrefs.enabled;
+
+                        return (
+                            <div style={{ maxWidth: '480px' }}>
+                                {/* Mobile phone for SMS */}
+                                <div style={{ marginBottom: '1.25rem' }}>
+                                    <div style={{ fontWeight: '700', fontSize: '0.8125rem', color: '#1e293b', marginBottom: '0.625rem' }}>SMS Phone Number</div>
+                                    <div className="form-group" style={{ marginBottom: '0.5rem' }}>
+                                        <label>Mobile (preferred for SMS)</label>
+                                        <input
+                                            type="tel"
+                                            value={formData.mobile || ''}
+                                            onChange={e => handleChange('mobile', e.target.value)}
+                                            placeholder="+1 (555) 000-0000"
+                                        />
+                                    </div>
+                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                        <label>Work Phone (fallback if no mobile)</label>
+                                        <input
+                                            type="tel"
+                                            value={formData.phone || ''}
+                                            onChange={e => handleChange('phone', e.target.value)}
+                                            placeholder="+1 (555) 000-0000"
+                                        />
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.375rem' }}>
+                                        Enter number in any format — we'll normalize it. US 10-digit numbers are assumed +1.
+                                    </div>
+                                </div>
+
+                                {/* Master SMS toggle */}
+                                <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '1rem' }}>
+                                    <Toggle
+                                        label="Enable SMS Notifications"
+                                        desc="Send text messages in addition to email for the categories below"
+                                        checked={smsEnabled}
+                                        onChange={val => setSmsPrefs({ enabled: val })}
+                                    />
+                                </div>
+
+                                {/* Per-type SMS toggles */}
+                                <div style={{
+                                    padding: '1rem',
+                                    background: smsEnabled ? '#fff' : '#f8fafc',
+                                    borderRadius: '8px',
+                                    border: '1px solid #e2e8f0',
+                                    opacity: smsEnabled ? 1 : 0.5,
+                                    pointerEvents: smsEnabled ? 'auto' : 'none',
+                                    transition: 'opacity 0.2s',
+                                }}>
+                                    <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>
+                                        SMS Alert Types
+                                    </div>
+                                    <Toggle
+                                        label="Pipeline Alerts"
+                                        desc="Silent deals, stuck stages, lapsed close dates"
+                                        checked={!!smsPrefs.pipelineAlerts}
+                                        onChange={val => setSmsPrefs({ pipelineAlerts: val })}
+                                    />
+                                    <Toggle
+                                        label="Task Reminders"
+                                        desc="Due today and overdue task nudges"
+                                        checked={!!smsPrefs.taskReminders}
+                                        onChange={val => setSmsPrefs({ taskReminders: val })}
+                                    />
+                                    <Toggle
+                                        label="Daily Digest"
+                                        desc="Morning summary of tasks and pipeline activity"
+                                        checked={!!smsPrefs.digest}
+                                        onChange={val => setSmsPrefs({ digest: val })}
+                                    />
+                                    <Toggle
+                                        label="Mentions &amp; Assignments"
+                                        desc="When a deal or comment is assigned to you"
+                                        checked={!!smsPrefs.mentions}
+                                        onChange={val => setSmsPrefs({ mentions: val })}
+                                    />
+                                </div>
+
+                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.75rem', lineHeight: 1.5 }}>
+                                    SMS is sent via Twilio. Standard carrier messaging rates may apply. These settings are saved when you click Save/Update.
+                                </div>
+                            </div>
+                        );
+                    })()}
 
                     <div className="modal-actions">
                         <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
