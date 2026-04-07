@@ -34,12 +34,12 @@ function getPref(profile, alertType) {
     return prefs[alertType] || DEFAULT_PREFS[alertType] || { enabled: false, mode: 'digest' };
 }
 
-function wantsDigest(profile, alertType) {
+function wantsDigest(resolvedProfile, alertType) {
     const pref = getPref(profile, alertType);
     return pref.enabled && pref.mode === 'digest';
 }
 
-function wantsSms(profile, smsKey) {
+function wantsSms(resolvedProfile, smsKey) {
     const smsPrefs = profile?.smsNotifications || {};
     if (!smsPrefs.enabled) return false;
     return smsPrefs[smsKey] === true;
@@ -122,17 +122,37 @@ export const handler = async () => {
         for (const user of allUsers) {
             if (!user.email || !user.active) continue;
 
-            const profile     = user.profile || {};
-            const digestTime  = profile.digestTime || '08:00'; // local time e.g. "08:00"
-            const userTz      = profile.timezone || 'UTC';
-            const [dHour]     = digestTime.split(':').map(Number);
+            // AppHeader.saveProfile saves these fields flat on the user row (top-level),
+            // not nested inside user.profile. Read from top-level first, fall back to
+            // user.profile for any older records that may have nested values.
+            const profile           = user.profile || {};
+            const digestTime        = user.digestTime        || profile.digestTime        || '08:00';
+            const userTz            = user.timezone          || profile.timezone          || 'UTC';
+            const smsNotifications  = user.smsNotifications  || profile.smsNotifications  || {};
+            const notificationPrefs = user.notificationPrefs || profile.notificationPrefs || {};
+            const mobile            = user.mobile            || profile.mobile            || null;
+            const phone             = user.phone             || profile.phone             || null;
+
+            // Build a normalized profile-like object so all downstream helpers
+            // (wantsDigest, wantsSms) work without modification.
+            const resolvedProfile = {
+                ...profile,
+                digestTime,
+                timezone: userTz,
+                smsNotifications,
+                notificationPrefs,
+                mobile,
+                phone,
+            };
+
+            const [dHour]       = digestTime.split(':').map(Number);
             const targetUtcHour = localHourToUtc(dHour, userTz);
             if (targetUtcHour !== nowHour) continue;
 
             console.log(`digest: processing user ${user.name} (${user.email}) — digestTime=${digestTime} tz=${userTz} → fires at UTC ${targetUtcHour}`);
 
             // ── Tasks due today ────────────────────────────────────────────────
-            if (wantsDigest(profile, 'taskDigest')) {
+            if (wantsDigest(resolvedProfile, 'taskDigest')) {
                 const todayTasks = await db.select().from(tasks)
                     .where(and(eq(tasks.orgId, user.orgId), eq(tasks.assignedTo, user.name)));
                 const dueTodayTasks = todayTasks.filter(t =>
@@ -152,8 +172,8 @@ export const handler = async () => {
                                 })),
                             }),
                         });
-                        if (wantsSms(profile, 'digest')) {
-                            const smsPhone = profile.mobile || profile.phone;
+                        if (wantsSms(resolvedProfile, 'digest')) {
+                            const smsPhone = mobile || phone;
                             await trySendSms(
                                 smsPhone,
                                 smsTemplates.digestSummary({ repName: user.name, taskCount: dueTodayTasks.length, overdueCount: 0 }),
@@ -168,7 +188,7 @@ export const handler = async () => {
             }
 
             // ── Overdue tasks ─────────────────────────────────────────────────
-            if (wantsDigest(profile, 'overdueTaskNudge')) {
+            if (wantsDigest(resolvedProfile, 'overdueTaskNudge')) {
                 const allTasks = await db.select().from(tasks)
                     .where(and(eq(tasks.orgId, user.orgId), eq(tasks.assignedTo, user.name)));
                 const overdueTasks = allTasks.filter(t =>
@@ -193,8 +213,8 @@ export const handler = async () => {
                                 }),
                             }),
                         });
-                        if (wantsSms(profile, 'digest')) {
-                            const smsPhone = profile.mobile || profile.phone;
+                        if (wantsSms(resolvedProfile, 'digest')) {
+                            const smsPhone = mobile || phone;
                             await trySendSms(
                                 smsPhone,
                                 smsTemplates.digestSummary({ repName: user.name, taskCount: 0, overdueCount: overdueTasks.length }),
@@ -209,7 +229,7 @@ export const handler = async () => {
             }
 
             // ── Opportunity updates digest ─────────────────────────────────────
-            if (wantsDigest(profile, 'opportunityUpdated') || wantsDigest(profile, 'stageChanged') || wantsDigest(profile, 'commentAdded')) {
+            if (wantsDigest(resolvedProfile, 'opportunityUpdated') || wantsDigest(resolvedProfile, 'stageChanged') || wantsDigest(resolvedProfile, 'commentAdded')) {
                 const recentOpps = await db.select().from(opportunities)
                     .where(and(eq(opportunities.orgId, user.orgId), eq(opportunities.salesRep, user.name)));
 
@@ -269,10 +289,10 @@ export const handler = async () => {
 
             for (const mgr of managers) {
                 const profile = mgr.profile || {};
-                if (!wantsDigest(profile, 'managerTeamDigest')) continue;
+                if (!wantsDigest(resolvedProfile, 'managerTeamDigest')) continue;
 
-                const digestTime = profile.digestTime || '08:00';
-                const userTz     = profile.timezone || 'UTC';
+                const digestTime = mgr.digestTime || profile.digestTime || '08:00';
+                const userTz     = mgr.timezone   || profile.timezone   || 'UTC';
                 const [dHour]    = digestTime.split(':').map(Number);
                 const targetUtcHour = localHourToUtc(dHour, userTz);
                 if (targetUtcHour !== nowHour) continue;

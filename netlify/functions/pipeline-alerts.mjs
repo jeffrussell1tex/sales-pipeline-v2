@@ -39,7 +39,7 @@ const DEFAULT_PREFS = {
     scoreDropAlert: { enabled: true  },
 };
 
-function wantsAlert(profile, alertType) {
+function wantsAlert(resolvedProfile, alertType) {
     const prefs = profile?.notificationPrefs || {};
     const pref  = prefs[alertType] ?? DEFAULT_PREFS[alertType] ?? { enabled: false };
     return pref.enabled === true;
@@ -57,7 +57,7 @@ function wantsAlert(profile, alertType) {
  *     digest: true,
  *   }
  */
-function wantsSms(profile) {
+function wantsSms(resolvedProfile) {
     const smsPrefs = profile?.smsNotifications || {};
     return smsPrefs.enabled === true && smsPrefs.pipelineAlerts === true;
 }
@@ -219,22 +219,34 @@ export const handler = async () => {
             // Cross-tenant safety: skip if the matched user belongs to a different org
             if (repUser.orgId && repUser.orgId !== orgId) continue;
 
-            const profile = repUser.profile || {};
+            // AppHeader.saveProfile saves these fields flat on the user row (top-level),
+            // not nested inside user.profile. Read top-level first, fall back to
+            // user.profile for any older records that may have nested values.
+            const profile           = repUser.profile || {};
+            const userTz            = repUser.timezone          || profile.timezone          || 'UTC';
+            const alertTimeStr      = repUser.alertTime          || repUser.digestTime        || profile.alertTime || profile.digestTime || '08:00';
+            const smsNotifications  = repUser.smsNotifications  || profile.smsNotifications  || {};
+            const notificationPrefs = repUser.notificationPrefs || profile.notificationPrefs || {};
+            const mobile            = repUser.mobile            || profile.mobile            || null;
+            const phone             = repUser.phone             || profile.phone             || null;
 
-            // ── Timezone gate: only alert this user during their configured alert hour ──
-            // Uses profile.alertTime if set, otherwise falls back to profile.digestTime,
-            // otherwise defaults to "08:00" in the user's local timezone.
-            const alertTimeStr = profile.alertTime || profile.digestTime || '08:00';
-            const userTz       = profile.timezone || 'UTC';
+            // Normalized profile for wantsAlert/wantsSms helpers
+            const resolvedProfile = {
+                ...profile,
+                timezone: userTz,
+                smsNotifications,
+                notificationPrefs,
+                mobile,
+                phone,
+            };
             const [alertHour]  = alertTimeStr.split(':').map(Number);
             const targetUtcHour = localHourToUtc(alertHour, userTz);
             if (targetUtcHour !== nowHour) continue;
 
-            const arr     = parseFloat(opp.arr) || 0;
-            const name    = opp.opportunityName || opp.account || 'Unnamed deal';
-            const manager = managerByRep[repName] || (repUser.team ? managerByTeam[repUser.team] : null);
-
-            const smsPhone = profile.mobile || profile.phone || null;
+            const arr      = parseFloat(opp.arr) || 0;
+            const name     = opp.opportunityName || opp.account || 'Unnamed deal';
+            const manager  = managerByRep[repName] || (repUser.team ? managerByTeam[repUser.team] : null);
+            const smsPhone = mobile || phone || null;
 
             const oppActs = allActs
                 .filter(a => a.opportunityId === opp.id)
@@ -252,7 +264,7 @@ export const handler = async () => {
             const stageCount     = (opp.stageHistory || []).length;
 
             // ── Signal 1: Silent deal (14+ days no activity) ──────────────────
-            if (daysSilent !== null && daysSilent >= 14 && wantsAlert(profile, 'dealSilent')) {
+            if (daysSilent !== null && daysSilent >= 14 && wantsAlert(resolvedProfile, 'dealSilent')) {
                 const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'stale');
                 if (!alerted) {
                     try {
@@ -261,7 +273,7 @@ export const handler = async () => {
                             ...emailTemplates.dealSilent({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysSilent, opportunityId: opp.id }),
                         });
                         emailsSent++;
-                        if (wantsSms(profile) && smsPhone) {
+                        if (wantsSms(resolvedProfile) && smsPhone) {
                             await trySendSms(smsPhone, smsTemplates.dealSilent({ dealName: name, daysSilent }), `dealSilent/${repName}`);
                             smsSent++;
                         }
@@ -290,7 +302,7 @@ export const handler = async () => {
             }
 
             // ── Signal 2: Stuck in stage ──────────────────────────────────────
-            if (daysInStage !== null && daysInStage >= stuckThreshold && daysInStage >= 14 && wantsAlert(profile, 'dealStuck')) {
+            if (daysInStage !== null && daysInStage >= stuckThreshold && daysInStage >= 14 && wantsAlert(resolvedProfile, 'dealStuck')) {
                 const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'stuck');
                 if (!alerted) {
                     try {
@@ -299,7 +311,7 @@ export const handler = async () => {
                             ...emailTemplates.dealStuck({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysInStage, avgDays: avgForStage, opportunityId: opp.id }),
                         });
                         emailsSent++;
-                        if (wantsSms(profile) && smsPhone) {
+                        if (wantsSms(resolvedProfile) && smsPhone) {
                             await trySendSms(smsPhone, smsTemplates.dealStuck({ dealName: name, stage: opp.stage, daysInStage }), `dealStuck/${repName}`);
                             smsSent++;
                         }
@@ -329,7 +341,7 @@ export const handler = async () => {
             }
 
             // ── Signal 3: Close date lapsed ───────────────────────────────────
-            if (daysLapsed !== null && daysLapsed > 0 && wantsAlert(profile, 'closeLapsed')) {
+            if (daysLapsed !== null && daysLapsed > 0 && wantsAlert(resolvedProfile, 'closeLapsed')) {
                 const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'lapsed');
                 if (!alerted) {
                     try {
@@ -338,7 +350,7 @@ export const handler = async () => {
                             ...emailTemplates.closeDateLapsed({ repName, dealName: name, account: opp.account, arr, stage: opp.stage, daysLapsed, originalCloseDate: opp.forecastedCloseDate, opportunityId: opp.id }),
                         });
                         emailsSent++;
-                        if (wantsSms(profile) && smsPhone) {
+                        if (wantsSms(resolvedProfile) && smsPhone) {
                             await trySendSms(smsPhone, smsTemplates.closeDateLapsed({ dealName: name, daysLapsed }), `closeLapsed/${repName}`);
                             smsSent++;
                         }
@@ -370,7 +382,7 @@ export const handler = async () => {
             if (
                 createdDays !== null && createdDays <= 14 && stageCount >= 2 &&
                 !['Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'].includes(opp.stage) &&
-                wantsAlert(profile, 'dealMomentum')
+                wantsAlert(resolvedProfile, 'dealMomentum')
             ) {
                 const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'velocity');
                 if (!alerted) {
@@ -392,7 +404,7 @@ export const handler = async () => {
             if (
                 opp.aiScore?.score !== undefined &&
                 opp.aiScore.score < 40 &&
-                wantsAlert(profile, 'scoreDropAlert')
+                wantsAlert(resolvedProfile, 'scoreDropAlert')
             ) {
                 const alerted = await wasRecentlyAlerted(orgId, repName, opp.id, 'scoreDrop');
                 if (!alerted) {
