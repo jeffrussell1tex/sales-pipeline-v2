@@ -501,10 +501,10 @@ export default function AppHeader({
                                                                 </button>
                                                             </div>
                                                             <div style={{ opacity: smsEnabled ? 1 : 0.45, transition: 'opacity 0.2s' }}>
-                                                                <SmsToggle label="Pipeline Alerts"        desc="Silent deals, stuck stages, lapsed dates"   smsKey="pipelineAlerts" />
-                                                                <SmsToggle label="Task Reminders"         desc="Due today &amp; overdue nudges"              smsKey="taskReminders"  />
-                                                                <SmsToggle label="Daily Digest"           desc="Morning summary text"                        smsKey="digest"         />
-                                                                <SmsToggle label="Mentions &amp; Assignments" desc="When a deal or task is assigned to you"  smsKey="mentions"       />
+                                                                <SmsToggle label="Pipeline Alerts"           desc="Once daily · Silent deals, stuck stages, lapsed dates"      smsKey="pipelineAlerts" />
+                                                                <SmsToggle label="Task Reminders"            desc="At due time · Text when a task comes due"                    smsKey="taskReminders"  />
+                                                                <SmsToggle label="Daily Digest"              desc="Once daily · Morning summary of tasks &amp; pipeline"        smsKey="digest"         />
+                                                                <SmsToggle label="Mentions &amp; Assignments" desc="On occurrence · When a deal or task is assigned to you"     smsKey="mentions"       />
                                                             </div>
                                                         </div>
                                                     );

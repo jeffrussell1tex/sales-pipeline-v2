@@ -5,6 +5,9 @@ schedule = "0 * * * *"
 [functions."pipeline-alerts"]
 schedule = "0 * * * *"
 
+[functions."task-reminders"]
+schedule = "* * * * *"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

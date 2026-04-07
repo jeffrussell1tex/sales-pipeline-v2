@@ -1,6 +1,20 @@
 import { useState } from 'react';
 import { dbFetch } from '../utils/storage';
 
+// Fire-and-forget SMS for deal assignments and stage changes.
+// Calls mention-sms.mjs which resolves assignee prefs server-side.
+async function fireMentionSms(payload) {
+    try {
+        await dbFetch('/.netlify/functions/mention-sms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+    } catch (err) {
+        console.warn('mention-sms (non-blocking):', err.message);
+    }
+}
+
 export function useOpportunities(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel } = deps;
 
@@ -114,6 +128,18 @@ export function useOpportunities(deps) {
                     if (!res.ok) { setOppModalError(data.error || 'Failed to save opportunity. Please try again.'); return; }
                     setOpportunities(prev => prev.map(opp => opp.id === editingOpp.id ? (data.opportunity || updatedOpp) : opp));
                     addAudit('update', 'opportunity', editingOpp.id, enrichedData.opportunityName || enrichedData.account || editingOpp.id, enrichedData.account || '');
+                    // SMS: rep reassigned
+                    if (enrichedData.salesRep && prevOpp?.salesRep !== enrichedData.salesRep) {
+                        fireMentionSms({ type: 'dealAssigned', assigneeName: enrichedData.salesRep, assignedBy: currentUser, dealName: enrichedData.opportunityName || enrichedData.account, account: enrichedData.account });
+                    }
+                    // SMS: stage changed
+                    if (stageChanged && enrichedData.salesRep) {
+                        if (enrichedData.stage === 'Closed Won') {
+                            fireMentionSms({ type: 'dealClosedWon', assigneeName: enrichedData.salesRep, assignedBy: currentUser, dealName: enrichedData.opportunityName || enrichedData.account, account: enrichedData.account, arr: enrichedData.arr });
+                        } else {
+                            fireMentionSms({ type: 'stageChanged', assigneeName: enrichedData.salesRep, assignedBy: currentUser, dealName: enrichedData.opportunityName || enrichedData.account, fromStage: prevOpp?.stage, toStage: enrichedData.stage });
+                        }
+                    }
                     setShowModal(false); setOppModalError(null);
                 })
                 .catch(err => { console.error('Failed to update opportunity:', err); setOppModalError('Failed to save opportunity. Please check your connection and try again.'); })
@@ -128,6 +154,10 @@ export function useOpportunities(deps) {
                     if (!res.ok) { setOppModalError(data.error || 'Failed to save opportunity. Please try again.'); return; }
                     setOpportunities(prev => [...prev, data.opportunity || newOpp]);
                     addAudit('create', 'opportunity', newId, enrichedData.opportunityName || enrichedData.account || newId, enrichedData.account || '');
+                    // SMS: deal assigned to rep on creation
+                    if (enrichedData.salesRep) {
+                        fireMentionSms({ type: 'dealAssigned', assigneeName: enrichedData.salesRep, assignedBy: currentUser, dealName: enrichedData.opportunityName || enrichedData.account, account: enrichedData.account });
+                    }
                     setShowModal(false); setOppModalError(null);
                 })
                 .catch(err => { console.error('Failed to save opportunity:', err); setOppModalError('Failed to save opportunity. Please check your connection and try again.'); })
