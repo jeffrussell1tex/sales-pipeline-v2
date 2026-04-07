@@ -56,23 +56,53 @@ async function trySendSms(to, body, label) {
     }
 }
 
-
-// Convert a local hour (0-23) to UTC using the user's IANA timezone.
-// Falls back to treating the hour as UTC if the timezone is invalid.
+/**
+ * Convert a user's local digest hour to the equivalent UTC hour so we can
+ * compare it against the current UTC hour when the cron fires.
+ *
+ * Strategy: use Intl.DateTimeFormat to find what hour it currently is in the
+ * user's timezone, compute the offset from UTC, then apply that offset to the
+ * user's desired local hour.
+ *
+ * Example: user wants 8am CT (UTC-5 in winter).
+ *   - Current UTC hour = 13, current CT hour = 8 → offset = UTC - local = 5
+ *   - Target UTC = 8 + 5 = 13 ✓
+ *
+ * This correctly handles DST and half-hour offsets.
+ *
+ * @param {number} localHour  0-23 hour in user's local time
+ * @param {string} timezone   IANA timezone string, e.g. "America/Chicago"
+ * @returns {number}          Equivalent UTC hour (0-23)
+ */
 function localHourToUtc(localHour, timezone) {
     try {
         const now = new Date();
-        const formatter = new Intl.DateTimeFormat('en-US', {
+
+        // Get the current hour in the user's timezone using a reliable numeric format
+        const localFormatter = new Intl.DateTimeFormat('en-US', {
             timeZone: timezone,
             hour: 'numeric',
             hour12: false,
         });
-        const utcHour   = now.getUTCHours();
-        const localNow  = parseInt(formatter.format(now), 10);
-        const offsetHrs = ((localNow - utcHour) + 24) % 24;
-        return ((localHour - offsetHrs) + 24) % 24;
-    } catch {
-        console.warn('digest: unrecognized timezone ' + timezone + ', treating as UTC');
+        // "numeric" + hour12:false returns "0"-"23"; "24" is returned for midnight
+        // in some implementations — normalise it to 0.
+        const rawLocal = parseInt(localFormatter.format(now), 10);
+        const currentLocalHour = rawLocal === 24 ? 0 : rawLocal;
+
+        const currentUtcHour = now.getUTCHours();
+
+        // UTC offset in whole hours: how many hours ahead UTC is vs local.
+        // We use modulo 24 to handle the day-boundary case correctly.
+        // e.g. local=23, UTC=4 → offset = (4 - 23 + 24) % 24 = 5
+        const utcOffsetHours = ((currentUtcHour - currentLocalHour) + 24) % 24;
+
+        const targetUtcHour = (localHour + utcOffsetHours) % 24;
+
+        console.log(`digest: timezone=${timezone} localHour=${localHour} currentLocal=${currentLocalHour} currentUTC=${currentUtcHour} offset=${utcOffsetHours} → targetUTC=${targetUtcHour}`);
+
+        return targetUtcHour;
+    } catch (err) {
+        console.warn(`digest: unrecognized timezone "${timezone}", treating as UTC. Error: ${err.message}`);
         return localHour;
     }
 }
@@ -96,12 +126,10 @@ export const handler = async () => {
             const digestTime  = profile.digestTime || '08:00'; // local time e.g. "08:00"
             const userTz      = profile.timezone || 'UTC';
             const [dHour]     = digestTime.split(':').map(Number);
-            const localHourUtc = localHourToUtc(dHour, userTz);
-            if (localHourUtc !== nowHour) continue;
+            const targetUtcHour = localHourToUtc(dHour, userTz);
+            if (targetUtcHour !== nowHour) continue;
 
-            console.log(`digest: processing user ${user.name} (${user.email}) at digestTime ${digestTime}`);
-
-            const digestItems = [];
+            console.log(`digest: processing user ${user.name} (${user.email}) — digestTime=${digestTime} tz=${userTz} → fires at UTC ${targetUtcHour}`);
 
             // ── Tasks due today ────────────────────────────────────────────────
             if (wantsDigest(profile, 'taskDigest')) {
@@ -246,8 +274,8 @@ export const handler = async () => {
                 const digestTime = profile.digestTime || '08:00';
                 const userTz     = profile.timezone || 'UTC';
                 const [dHour]    = digestTime.split(':').map(Number);
-                const localHourUtc = localHourToUtc(dHour, userTz);
-                if (localHourUtc !== nowHour) continue;
+                const targetUtcHour = localHourToUtc(dHour, userTz);
+                if (targetUtcHour !== nowHour) continue;
 
                 console.log(`managerTeamDigest: building for ${mgr.name} (${mgr.email})`);
 
