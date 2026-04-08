@@ -104,20 +104,21 @@ export default function AccountModal({
         ...((settings?.users || []).filter(u => u.territory).map(u => u.territory)),
     ])].sort();
 
-    // Industry list: merge Settings-defined verticalMarkets (alphabetically) with built-in list
+    // Industry list: preserve parent→sub hierarchy from settings, sorted alphabetically at each level.
+    // Falls back to flat built-in list when settings has no verticalMarkets defined.
     const verticalMarkets = React.useMemo(() => {
         const raw = settings?.verticalMarkets || [];
-        const options = [];
-        raw.forEach(m => {
-            if (typeof m === 'string') options.push(m);
-            else {
-                options.push(m.name);
-                (m.subs || []).forEach(s => options.push(s));
-            }
-        });
-        // Fall back to built-in list if settings has none defined
-        const base = options.length > 0 ? options : INDUSTRIES;
-        return [...new Set(base)].sort((a, b) => a.localeCompare(b));
+        if (raw.length === 0) {
+            // Flat fallback list — already sorted
+            return INDUSTRIES.map(name => ({ name, subs: [] }));
+        }
+        // Normalise to { name, subs[] } objects, sort parents then subs
+        const groups = raw.map(m =>
+            typeof m === 'string'
+                ? { name: m, subs: [] }
+                : { name: m.name || '', subs: (m.subs || []).slice().sort((a, b) => a.localeCompare(b)) }
+        );
+        return groups.sort((a, b) => a.name.localeCompare(b.name));
     }, [settings?.verticalMarkets]);
 
     // ── handlers ─────────────────────────────────────────────────────────────
@@ -380,21 +381,48 @@ export default function AccountModal({
                                     autoComplete="off"
                                 />
                                 {showVerticalSugg && (
-                                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '220px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                                        {verticalMarkets
-                                            .filter(v => v.toLowerCase().includes(verticalSearch.toLowerCase()))
-                                            .map((v, i) => (
-                                                <div key={i}
-                                                    onMouseDown={e => e.preventDefault()}
-                                                    onClick={() => { setVerticalSearch(v); setShowVerticalSugg(false); }}
-                                                    style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '0.8125rem', color: '#1e293b', transition: 'background 0.15s' }}
-                                                    onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
-                                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                                >{v}</div>
-                                            ))}
-                                        {verticalMarkets.filter(v => v.toLowerCase().includes(verticalSearch.toLowerCase())).length === 0 && (
-                                            <div style={{ padding: '0.75rem', color: '#94a3b8', fontSize: '0.8125rem' }}>No industries found.</div>
-                                        )}
+                                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '240px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                        {(() => {
+                                            const q = verticalSearch.toLowerCase();
+                                            const rows = [];
+                                            verticalMarkets.forEach((group, gi) => {
+                                                const nameMatch    = group.name.toLowerCase().includes(q);
+                                                const matchingSubs = group.subs.filter(s => s.toLowerCase().includes(q));
+                                                if (!nameMatch && matchingSubs.length === 0) return;
+                                                // Parent row
+                                                rows.push(
+                                                    <div key={'p-' + gi}
+                                                        onMouseDown={e => e.preventDefault()}
+                                                        onClick={() => { setVerticalSearch(group.name); setShowVerticalSugg(false); }}
+                                                        style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                    >
+                                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{group.name}</span>
+                                                        {group.subs.length > 0 && <span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>{group.subs.length} sub{group.subs.length > 1 ? 's' : ''}</span>}
+                                                    </div>
+                                                );
+                                                // Sub rows — show all when parent matched, otherwise only matching subs
+                                                (nameMatch ? group.subs : matchingSubs).forEach((sub, si) => {
+                                                    rows.push(
+                                                        <div key={'s-' + gi + '-' + si}
+                                                            onMouseDown={e => e.preventDefault()}
+                                                            onClick={() => { setVerticalSearch(sub); setShowVerticalSugg(false); }}
+                                                            style={{ padding: '0.4rem 0.75rem 0.4rem 1.5rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                                        >
+                                                            <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>↳</span>
+                                                            <span style={{ fontSize: '0.8125rem', color: '#475569' }}>{sub}</span>
+                                                        </div>
+                                                    );
+                                                });
+                                            });
+                                            if (rows.length === 0) {
+                                                return <div style={{ padding: '0.75rem', color: '#94a3b8', fontSize: '0.8125rem' }}>No industries found.</div>;
+                                            }
+                                            return rows;
+                                        })()}
                                     </div>
                                 )}
                             </div>
@@ -567,7 +595,7 @@ export default function AccountModal({
 
                             {/* Company Description */}
                             <div className="form-group full">
-                                <label>Company Description</label>
+                                <label>Company Description <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>optional</span></label>
                                 <textarea
                                     value={formData.description || ''}
                                     onChange={e => handleChange('description', e.target.value)}
@@ -579,7 +607,7 @@ export default function AccountModal({
 
                             {/* Total Employees */}
                             <div className="form-group">
-                                <label>Total Employees</label>
+                                <label>Total Employees <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>optional</span></label>
                                 <input
                                     type="number"
                                     min="0"
@@ -591,7 +619,7 @@ export default function AccountModal({
 
                             {/* Annual Revenue */}
                             <div className="form-group">
-                                <label>Annual Revenue ($)</label>
+                                <label>Annual Revenue ($) <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>optional</span></label>
                                 <input
                                     type="number"
                                     min="0"
@@ -604,7 +632,7 @@ export default function AccountModal({
 
                             {/* Founded Year */}
                             <div className="form-group">
-                                <label>Founded Year</label>
+                                <label>Founded Year <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>optional</span></label>
                                 <input
                                     type="number"
                                     min="1800"
@@ -617,7 +645,7 @@ export default function AccountModal({
 
                             {/* Fiscal Year End */}
                             <div className="form-group">
-                                <label>Fiscal Year End</label>
+                                <label>Fiscal Year End <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>optional</span></label>
                                 <select
                                     value={formData.fiscalYearEnd || ''}
                                     onChange={e => handleChange('fiscalYearEnd', e.target.value)}
@@ -629,15 +657,15 @@ export default function AccountModal({
                                 </select>
                             </div>
 
-                            {/* LinkedIn URL */}
+                            {/* Website URL (Account Details tab) */}
                             <div className="form-group">
-                                <label>LinkedIn URL</label>
+                                <label>Website <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>optional</span></label>
                                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                     <input
                                         type="url"
                                         value={formData.linkedInUrl || ''}
                                         onChange={e => handleChange('linkedInUrl', e.target.value)}
-                                        placeholder="https://linkedin.com/company/..."
+                                        placeholder="https://..."
                                         style={{ flex: 1 }}
                                     />
                                     {formData.linkedInUrl && (
@@ -645,9 +673,11 @@ export default function AccountModal({
                                             href={ensureHttp(formData.linkedInUrl)}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            title="Open LinkedIn"
-                                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '34px', height: '34px', borderRadius: '6px', background: '#0a66c2', color: '#fff', fontSize: '0.75rem', fontWeight: '700', textDecoration: 'none', flexShrink: 0 }}
-                                        >in</a>
+                                            title="Open website"
+                                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '34px', height: '34px', borderRadius: '6px', background: '#1c1917', color: '#f5f1eb', fontSize: '0.875rem', textDecoration: 'none', flexShrink: 0 }}
+                                            onMouseEnter={e => e.currentTarget.style.background = '#44403c'}
+                                            onMouseLeave={e => e.currentTarget.style.background = '#1c1917'}
+                                        >↗</a>
                                     )}
                                 </div>
                             </div>
