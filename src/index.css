@@ -34,9 +34,6 @@
             background: var(--bg-primary);
             color: var(--text-primary);
             line-height: 1.6;
-            /* overflow-x:hidden removed — it traps position:fixed children inside the
-               viewport boundary, preventing modals from being dragged to a second monitor.
-               Horizontal overflow is contained by .app-container instead. */
         }
 
         /* Ensure all form elements inherit font */
@@ -50,7 +47,7 @@
             max-width: 100%;
             margin: 0 auto;
             padding: 1.5rem;
-            overflow-x: hidden; /* keeps layout tidy without trapping fixed-pos modals */
+            overflow-x: hidden;
         }
 
         /* ══════════════════════════════════════════
@@ -431,7 +428,9 @@
             width: 100%;
             height: 100%;
             background: rgba(28,25,23,0.45);
-            backdrop-filter: blur(4px);
+            /* backdrop-filter removed: it creates a new containing block for
+               position:fixed children, clipping draggable modals to the browser
+               window boundary. The semi-transparent background is sufficient. */
             display: flex;
             align-items: center;
             justify-content: center;
