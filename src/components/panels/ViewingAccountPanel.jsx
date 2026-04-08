@@ -1,37 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
-import { useDraggable } from '../../hooks/useDraggable';
+import { useDraggable, useResizable, ResizeHandles } from '../../hooks/useDraggable';
 
-// ─── resize handle hook ───────────────────────────────────────────────────────
-function useResizable(initialW, initialH, minW = 520, minH = 400) {
-    const [size, setSize] = useState({ w: initialW, h: initialH });
-    const resizing = useRef(false);
-    const startRef = useRef({});
 
-    const onResizeMouseDown = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        resizing.current = true;
-        startRef.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
-
-        const onMove = (ev) => {
-            if (!resizing.current) return;
-            const newW = Math.max(minW, startRef.current.w + ev.clientX - startRef.current.x);
-            const newH = Math.max(minH, startRef.current.h + ev.clientY - startRef.current.y);
-            setSize({ w: newW, h: newH });
-        };
-        const onUp = () => {
-            resizing.current = false;
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
-        };
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp);
-    }, [size.w, size.h, minW, minH]);
-
-    return { size, onResizeMouseDown };
-}
 
 export default function ViewingAccountPanel({
     setEditingOpp, setShowModal,
@@ -66,7 +38,7 @@ export default function ViewingAccountPanel({
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit = !isReadOnly;
     const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
-    const { size, onResizeMouseDown } = useResizable(860, 600);
+    const { size, getResizeHandleProps } = useResizable(860, 600, 520, 400);
 
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
     const handleEditAccount = (a, isSub) => {
@@ -120,9 +92,9 @@ export default function ViewingAccountPanel({
         <>
         {/* Dimmed backdrop — click outside closes */}
         <div
-            style={{ ...overlayStyle, background: 'rgba(0,0,0,0.35)' }}
-            onClick={() => setViewingAccount(null)}
+            style={{ ...overlayStyle }}
         />
+        <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={() => setViewingAccount(null)} />
 
         {/* Floating panel — fixed-positioned, draggable, resizable */}
         <div
@@ -405,26 +377,7 @@ export default function ViewingAccountPanel({
                 </div>
             </div>
 
-            {/* ── Resize handle ── */}
-            <div
-                onMouseDown={onResizeMouseDown}
-                style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    right: 0,
-                    width: '20px',
-                    height: '20px',
-                    cursor: 'se-resize',
-                    display: 'flex',
-                    alignItems: 'flex-end',
-                    justifyContent: 'flex-end',
-                    padding: '3px',
-                    color: '#cbd5e1',
-                    fontSize: '0.75rem',
-                    userSelect: 'none',
-                }}
-                title="Drag to resize"
-            >⇲</div>
+            <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
         </div>
         </>
     );

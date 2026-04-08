@@ -72,7 +72,8 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
             </div>
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <div style={{ ...overlayStyle, background: 'rgba(0,0,0,0.35)' }} onClick={e => e.target === e.currentTarget && onClose()} />
+        <div style={{ ...overlayStyle }} />
+        <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={e => e.target === e.currentTarget && onClose()} />
         <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: '96vw', maxWidth: '600px', background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db', padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', maxHeight: '90vh' }}>
                 {/* ── Drag handle header bar ── */}
                 <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: '#1c1917', padding: '0.875rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px 12px 0 0', minHeight: '52px' }}>

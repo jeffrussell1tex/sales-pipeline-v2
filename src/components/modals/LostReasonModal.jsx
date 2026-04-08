@@ -8,7 +8,8 @@ export default function LostReasonModal({ oppName, onSave, onSkip }) {
     const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
     return (
         <>
-        <div style={{ ...overlayStyle, background: 'rgba(0,0,0,0.55)' }} onClick={onSkip} />
+        <div style={{ ...overlayStyle }} />
+        <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={onSkip} />
         <div ref={containerRef} style={{ ...dragOffsetStyle, background: '#fff', borderRadius: '16px', width: '480px', maxWidth: '92vw', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.25)' }}
                 onClick={e => e.stopPropagation()}>
                 <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: 'linear-gradient(135deg, #b91c1c, #ef4444)', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>

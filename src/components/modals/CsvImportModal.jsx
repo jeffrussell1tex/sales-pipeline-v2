@@ -206,7 +206,8 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
     return (
         <>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <div style={{ ...overlayStyle, background: 'rgba(0,0,0,0.35)' }} onClick={onClose} />
+        <div style={{ ...overlayStyle }} />
+        <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={onClose} />
         <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: '96vw', maxWidth: '800px', maxHeight: '85vh', overflow: 'auto', background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db' }}>
                 <h2 {...dragHandleProps}>Import {importType === 'contacts' ? 'Contacts' : importType === 'opportunities' ? 'Opportunities' : 'Accounts'} from CSV</h2>
 

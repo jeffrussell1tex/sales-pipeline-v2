@@ -3,163 +3,193 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 /**
  * useDraggable — drag-to-move hook for modals and panels.
  *
- * Supports dragging BEYOND the browser viewport — useful on ultrawide screens
- * where the app occupies one portion and you want to pull a modal over to
- * another application running alongside it.
+ * KEY DESIGN DECISIONS for cross-screen (ultrawide) dragging:
  *
- * Implementation:
- *   - Modal renders as position:fixed using screen-absolute left/top coordinates.
- *   - Starts centered on screen (calculated from viewport dimensions).
- *   - The backing overlay becomes pointer-events:none while dragging so that
- *     mouse events outside the browser still register on the modal.
- *   - A high zIndex is applied during drag and held until the user clicks
- *     on another surface beneath it.
- *
- * Usage:
- *   const { dragHandleProps, dragContainerStyle, overlayStyle, bringToFront } = useDraggable();
- *
- *   // Modal container — replaces .modal class positioning:
- *   <div style={{ ...dragContainerStyle, maxWidth: '860px' }}>
- *
- *   // Drag handle header:
- *   <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: '#1c1917', ... }}>
- *
- *   // Overlay (pass overlayStyle to the backdrop div):
- *   <div className="modal-overlay" style={overlayStyle} onClick={...}>
- *
- * NOTE: dragOffsetStyle is kept as an alias for dragContainerStyle so that any
- * existing callers that destructure dragOffsetStyle continue to work unchanged.
+ * 1. Modal is position:fixed with explicit left/top — never inside a flex overlay.
+ * 2. The backdrop overlay is ALWAYS pointer-events:none so the mouse can leave
+ *    the browser window without losing the drag. The click-outside-to-close is
+ *    handled by a separate transparent capture div that is only active when NOT dragging.
+ * 3. mousemove/mouseup listeners are on `document` at the capture phase so they
+ *    fire even when the cursor exits the browser chrome.
+ * 4. We set document.body.style.userSelect = 'none' during drag to prevent
+ *    text selection across iframes and other app surfaces.
  */
 
-// Global z-index counter so the most-recently-touched modal is always on top
 let _globalZ = 10000;
 function nextZ() { return ++_globalZ; }
 
 export function useDraggable() {
-    // null = not yet initialised (will be set on first mount measurement)
-    const [pos, setPos] = useState(null);
+    const [pos, setPos]       = useState(null);
     const [zIndex, setZIndex] = useState(10000);
-    const isDragging = useRef(false);
-    const dragState = useRef({ startMouse: { x: 0, y: 0 }, startPos: { x: 0, y: 0 } });
+    const dragging     = useRef(false);
+    const dragState    = useRef({ startMouse: { x: 0, y: 0 }, startPos: { x: 0, y: 0 } });
     const containerRef = useRef(null);
+    const posRef       = useRef(null);
 
-    // Initialise position to screen-centre on first render
+    useEffect(() => { posRef.current = pos; }, [pos]);
+
+    // Centre on first paint
     useEffect(() => {
         if (pos !== null) return;
-        // Use a rAF so the modal has been painted and has a measurable size
-        const raf = requestAnimationFrame(() => {
-            if (containerRef.current) {
-                const rect = containerRef.current.getBoundingClientRect();
-                setPos({
-                    x: Math.round((window.innerWidth  - rect.width)  / 2),
-                    y: Math.round((window.innerHeight - rect.height) / 2),
-                });
+        const id = requestAnimationFrame(() => {
+            const el = containerRef.current;
+            if (el) {
+                const rect = el.getBoundingClientRect();
+                const x = Math.round((window.innerWidth  - rect.width)  / 2);
+                const y = Math.round((window.innerHeight - rect.height) / 2);
+                setPos({ x, y });
+                posRef.current = { x, y };
             } else {
-                // Fallback: rough centre before measurement
-                setPos({
-                    x: Math.round(window.innerWidth  * 0.5 - 430),
-                    y: Math.round(window.innerHeight * 0.5 - 300),
-                });
+                const fallback = { x: Math.round(window.innerWidth * 0.5 - 430), y: 80 };
+                setPos(fallback);
+                posRef.current = fallback;
             }
         });
-        return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        return () => cancelAnimationFrame(id);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const bringToFront = useCallback(() => {
-        setZIndex(nextZ());
-    }, []);
+    const bringToFront = useCallback(() => setZIndex(nextZ()), []);
 
     const onMouseDown = useCallback((e) => {
         if (e.button !== 0) return;
         if (e.target.closest('button, input, select, textarea, a, [role="button"]')) return;
-
         e.preventDefault();
         bringToFront();
 
-        const currentPos = pos || { x: 0, y: 0 };
-        isDragging.current = true;
+        const cur = posRef.current || { x: 0, y: 0 };
+        dragging.current = true;
         dragState.current = {
             startMouse: { x: e.clientX, y: e.clientY },
-            startPos:   { x: currentPos.x, y: currentPos.y },
+            startPos:   { x: cur.x,     y: cur.y },
         };
 
-        // Make overlay non-blocking so pointer events reach content outside the window
-        const overlays = document.querySelectorAll('.modal-overlay');
-        overlays.forEach(o => { o._prevPE = o.style.pointerEvents; o.style.pointerEvents = 'none'; });
+        const prevSelect = document.body.style.userSelect;
+        document.body.style.userSelect = 'none';
 
         const onMove = (ev) => {
-            if (!isDragging.current) return;
-            setPos({
-                x: dragState.current.startPos.x + ev.clientX - dragState.current.startMouse.x,
-                y: dragState.current.startPos.y + ev.clientY - dragState.current.startMouse.y,
-            });
+            if (!dragging.current) return;
+            const nx = dragState.current.startPos.x + ev.clientX - dragState.current.startMouse.x;
+            const ny = dragState.current.startPos.y + ev.clientY - dragState.current.startMouse.y;
+            setPos({ x: nx, y: ny });
+            posRef.current = { x: nx, y: ny };
         };
 
         const onUp = () => {
-            isDragging.current = false;
-            // Restore overlay pointer events
-            const overlays2 = document.querySelectorAll('.modal-overlay');
-            overlays2.forEach(o => { o.style.pointerEvents = o._prevPE || ''; });
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup',   onUp);
+            dragging.current = false;
+            document.body.style.userSelect = prevSelect;
+            document.removeEventListener('mousemove', onMove, true);
+            document.removeEventListener('mouseup',   onUp,   true);
         };
 
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup',   onUp);
-    }, [pos, bringToFront]);
+        document.addEventListener('mousemove', onMove, true);
+        document.addEventListener('mouseup',   onUp,   true);
+    }, [bringToFront]);
 
-    // While pos is not yet initialised render the modal invisibly so the
-    // measurement rAF can get a real rect without a layout flash.
     const dragContainerStyle = pos === null
-        ? {
-            position: 'fixed',
-            visibility: 'hidden',
-            left: '50%',
-            top:  '50%',
-            transform: 'translate(-50%, -50%)',
-            zIndex,
-        }
-        : {
-            position: 'fixed',
-            left: pos.x,
-            top:  pos.y,
-            transform: 'none',
-            zIndex,
-            // Remove any maxWidth constraints imposed by .modal CSS class
-            // (callers supply their own maxWidth inline)
-            margin: 0,
-        };
+        ? { position: 'fixed', visibility: 'hidden', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex }
+        : { position: 'fixed', left: pos.x, top: pos.y, transform: 'none', margin: 0, zIndex };
 
-    // The overlay must NOT be centered-flex while the modal is fixed-positioned;
-    // it becomes a transparent full-screen click-capture layer only.
+    // Overlay is purely visual — pointer-events:none so mouse always passes through
     const overlayStyle = {
-        position: 'fixed',
-        inset: 0,
-        // Keep a light backdrop but don't use flexbox centering — the modal
-        // positions itself with fixed left/top.
-        background: 'rgba(0,0,0,0.35)',
-        zIndex: zIndex - 1,
+        position:      'fixed',
+        inset:         0,
+        background:    'rgba(0,0,0,0.35)',
+        zIndex:        zIndex - 1,
+        pointerEvents: 'none',
     };
 
     const dragHandleProps = {
         onMouseDown,
         onClick: bringToFront,
-        style: {
-            cursor: isDragging.current ? 'grabbing' : 'grab',
-            userSelect: 'none',
-        },
+        style: { cursor: 'grab', userSelect: 'none' },
     };
 
-    // Alias kept for backward compatibility with existing modals
     const dragOffsetStyle = dragContainerStyle;
 
-    return {
-        dragHandleProps,
-        dragOffsetStyle,
-        dragContainerStyle,
-        overlayStyle,
-        bringToFront,
-        containerRef,
-    };
+    return { dragHandleProps, dragOffsetStyle, dragContainerStyle, overlayStyle, bringToFront, containerRef };
+}
+
+
+/**
+ * useResizable — 8-direction resize (n, ne, e, se, s, sw, w, nw).
+ * Uses document capture-phase listeners so resize works across screen boundaries.
+ */
+export function useResizable(initialW, initialH, minW = 400, minH = 320) {
+    const [size, setSize] = useState({ w: initialW, h: initialH });
+    const resizing     = useRef(false);
+    const resizeState  = useRef({});
+    const sizeRef      = useRef({ w: initialW, h: initialH });
+
+    useEffect(() => { sizeRef.current = size; }, [size]);
+
+    const getResizeHandleProps = useCallback((direction) => ({
+        onMouseDown: (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (resizing.current) return;
+            resizing.current = true;
+
+            const prevSelect = document.body.style.userSelect;
+            document.body.style.userSelect = 'none';
+
+            resizeState.current = {
+                direction,
+                startX: e.clientX,
+                startY: e.clientY,
+                startW: sizeRef.current.w,
+                startH: sizeRef.current.h,
+            };
+
+            const onMove = (ev) => {
+                if (!resizing.current) return;
+                const { direction: dir, startX, startY, startW, startH } = resizeState.current;
+                const dx = ev.clientX - startX;
+                const dy = ev.clientY - startY;
+                let newW = startW;
+                let newH = startH;
+                if (dir.includes('e')) newW = Math.max(minW, startW + dx);
+                if (dir.includes('w')) newW = Math.max(minW, startW - dx);
+                if (dir.includes('s')) newH = Math.max(minH, startH + dy);
+                if (dir.includes('n')) newH = Math.max(minH, startH - dy);
+                const next = { w: newW, h: newH };
+                setSize(next);
+                sizeRef.current = next;
+            };
+
+            const onUp = () => {
+                resizing.current = false;
+                document.body.style.userSelect = prevSelect;
+                document.removeEventListener('mousemove', onMove, true);
+                document.removeEventListener('mouseup',   onUp,   true);
+            };
+
+            document.addEventListener('mousemove', onMove, true);
+            document.addEventListener('mouseup',   onUp,   true);
+        },
+    }), [minW, minH]);
+
+    return { size, getResizeHandleProps };
+}
+
+
+/**
+ * ResizeHandles — 8 invisible resize zones around a fixed/relative container.
+ * No visual indicator. Cursor changes on hover to show resize direction.
+ */
+export function ResizeHandles({ getResizeHandleProps }) {
+    const E = 6;   // edge handle thickness px
+    const C = 16;  // corner handle size px
+    const s = (cursor, extra) => ({ position: 'absolute', zIndex: 10, background: 'transparent', cursor, ...extra });
+    return (
+        <>
+            <div {...getResizeHandleProps('nw')} style={s('nw-resize', { top: 0,    left: 0,   width: C, height: C })} />
+            <div {...getResizeHandleProps('ne')} style={s('ne-resize', { top: 0,    right: 0,  width: C, height: C })} />
+            <div {...getResizeHandleProps('se')} style={s('se-resize', { bottom: 0, right: 0,  width: C, height: C })} />
+            <div {...getResizeHandleProps('sw')} style={s('sw-resize', { bottom: 0, left: 0,   width: C, height: C })} />
+            <div {...getResizeHandleProps('n')}  style={s('n-resize',  { top: 0,    left: C,   right: C,    height: E })} />
+            <div {...getResizeHandleProps('s')}  style={s('s-resize',  { bottom: 0, left: C,   right: C,    height: E })} />
+            <div {...getResizeHandleProps('w')}  style={s('w-resize',  { left: 0,   top: C,    bottom: C,   width: E  })} />
+            <div {...getResizeHandleProps('e')}  style={s('e-resize',  { right: 0,  top: C,    bottom: C,   width: E  })} />
+        </>
+    );
 }

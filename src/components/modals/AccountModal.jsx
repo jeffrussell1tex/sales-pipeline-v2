@@ -206,7 +206,8 @@ export default function AccountModal({
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
         {/* Overlay — transparent backdrop; click-outside closes */}
-        <div className="modal-overlay" style={overlayStyle} onClick={e => e.target === e.currentTarget && onClose()} />
+        <div style={{ ...overlayStyle }} />
+        <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={e => e.target === e.currentTarget && onClose()} />
 
         {/* Modal — fixed-positioned, freely draggable */}
         <div

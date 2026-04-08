@@ -1,36 +1,8 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useApp } from '../../AppContext';
-import { useDraggable } from '../../hooks/useDraggable';
+import { useDraggable, useResizable, ResizeHandles } from '../../hooks/useDraggable';
 
-function useResizable(initialW, initialH, minW = 480, minH = 380) {
-    const [size, setSize] = useState({ w: initialW, h: initialH });
-    const resizing = useRef(false);
-    const startRef = useRef({});
 
-    const onResizeMouseDown = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        resizing.current = true;
-        startRef.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
-
-        const onMove = (ev) => {
-            if (!resizing.current) return;
-            setSize({
-                w: Math.max(minW, startRef.current.w + ev.clientX - startRef.current.x),
-                h: Math.max(minH, startRef.current.h + ev.clientY - startRef.current.y),
-            });
-        };
-        const onUp = () => {
-            resizing.current = false;
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
-        };
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp);
-    }, [size.w, size.h, minW, minH]);
-
-    return { size, onResizeMouseDown };
-}
 
 export default function ViewingContactPanel({
     setEditingOpp, setShowModal,
@@ -60,7 +32,7 @@ export default function ViewingContactPanel({
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit    = !isReadOnly;
     const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
-    const { size, onResizeMouseDown } = useResizable(760, 580);
+    const { size, getResizeHandleProps } = useResizable(760, 580, 480, 380);
 
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
     const handleEditAccount = (a) => { setEditingAccount(a); setEditingSubAccount(null); setShowAccountModal(true); };
@@ -89,9 +61,9 @@ export default function ViewingContactPanel({
         <>
         {/* Dimmed backdrop */}
         <div
-            style={{ ...overlayStyle, background: 'rgba(0,0,0,0.35)' }}
-            onClick={() => setViewingContact(null)}
+            style={{ ...overlayStyle }}
         />
+        <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={() => setViewingContact(null)} />
 
         {/* Floating panel */}
         <div
@@ -338,12 +310,7 @@ export default function ViewingContactPanel({
                 })()}
             </div>
 
-            {/* ── Resize handle ── */}
-            <div
-                onMouseDown={onResizeMouseDown}
-                style={{ position: 'absolute', bottom: 0, right: 0, width: '20px', height: '20px', cursor: 'se-resize', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', padding: '3px', color: '#cbd5e1', fontSize: '0.75rem', userSelect: 'none' }}
-                title="Drag to resize"
-            >⇲</div>
+            <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
         </div>
         </>
     );
