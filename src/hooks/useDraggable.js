@@ -92,6 +92,25 @@ export function useDraggable() {
             document.removeEventListener('mousemove', onMove, true);
             document.removeEventListener('mouseup',   onUp,   true);
             document.documentElement.removeEventListener('mouseleave', onLeave, true);
+
+            // Safety net: if modal has been dragged entirely off-screen, snap it back
+            // so the user can always retrieve it.
+            setPos(current => {
+                if (!current) return current;
+                const el = containerRef.current;
+                const W = el ? el.offsetWidth  : 400;
+                const H = el ? el.offsetHeight : 300;
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                const MARGIN = 80; // px of modal that must remain visible
+                let { x, y } = current;
+                // Clamp so at least MARGIN px is visible on each axis
+                x = Math.min(x, vw - MARGIN);   // don't go too far right
+                x = Math.max(x, MARGIN - W);     // don't go too far left
+                y = Math.min(y, vh - MARGIN);    // don't go too far down
+                y = Math.max(y, 0);              // don't go above top of screen
+                return { x, y };
+            });
         };
 
         document.addEventListener('mousemove', onMove, true);

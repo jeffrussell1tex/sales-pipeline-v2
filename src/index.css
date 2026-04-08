@@ -33,8 +33,10 @@
             font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
-            overflow-x: hidden;
             line-height: 1.6;
+            /* overflow-x:hidden removed — it traps position:fixed children inside the
+               viewport boundary, preventing modals from being dragged to a second monitor.
+               Horizontal overflow is contained by .app-container instead. */
         }
 
         /* Ensure all form elements inherit font */
@@ -48,6 +50,7 @@
             max-width: 100%;
             margin: 0 auto;
             padding: 1.5rem;
+            overflow-x: hidden; /* keeps layout tidy without trapping fixed-pos modals */
         }
 
         /* ══════════════════════════════════════════
