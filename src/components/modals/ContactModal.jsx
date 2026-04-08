@@ -29,7 +29,7 @@ export default function ContactModal({
     const [nestedModal,            setNestedModal]            = useState(null);
     const [duplicateContactWarning, setDuplicateContactWarning] = useState(null);
 
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(680, 540, 480, 360);
 
     const contactAllRepNames = [...new Set(
@@ -207,7 +207,7 @@ export default function ContactModal({
 
         {/* Overlay — transparent backdrop */}
         <div style={{ ...overlayStyle }} />
-        <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={e => e.target === e.currentTarget && onClose()} />
+        <div style={clickCatcherStyle} onClick={e => e.target === e.currentTarget && onClose()} />
 
         {/* Modal — fixed-positioned, freely draggable */}
         <div

@@ -154,7 +154,7 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
 
     // ── Shared styles ─────────────────────────────────────────────────────────
     const overlay  = { position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:'1rem' };
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(680, 540, 480, 360);
     const modal    = { background:'#fff', borderRadius:'14px', width:'96vw', maxWidth:'680px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' };
     const hdr      = { padding:'1rem 1.25rem', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 };
@@ -174,7 +174,7 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
     return (
         <>
         <div style={{ ...overlayStyle }} />
-        <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={e => e.target===e.currentTarget && onClose()} />
+        <div style={clickCatcherStyle} onClick={e => e.target===e.currentTarget && onClose()} />
         <div ref={containerRef} style={{ ...dragOffsetStyle, ...modal, width: size.w, height: size.h, maxWidth: 'none', maxHeight: 'none' }} onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div {...dragHandleProps} style={{ ...dragHandleProps.style, ...hdr }}>

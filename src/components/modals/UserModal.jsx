@@ -16,7 +16,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
         homeAddress: '', notes: ''
     });
     const [activeUserTab, setActiveUserTab] = useState('primary');
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(650, 520, 440, 340);
 
     // Auto-switch to the tab containing the email field when an error arrives
@@ -65,7 +65,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div style={{ ...overlayStyle }} />
-        <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={onClose} />
+        <div style={clickCatcherStyle} onClick={onClose} />
         <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: size.w, height: size.h, background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db', padding: '1.5rem', overflowY: 'auto' }}>
                 <h2 {...dragHandleProps} style={{ ...dragHandleProps.style, marginBottom: '1rem' }}>{user ? 'Edit User' : 'New User'}</h2>
 

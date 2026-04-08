@@ -38,7 +38,7 @@ export default function ViewingAccountPanel({
 
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit = !isReadOnly;
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(860, 600, 520, 400);
 
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
@@ -95,7 +95,7 @@ export default function ViewingAccountPanel({
         <div
             style={{ ...overlayStyle }}
         />
-        <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={() => setViewingAccount(null)} />
+        <div style={clickCatcherStyle} onClick={() => setViewingAccount(null)} />
 
         {/* Floating panel — fixed-positioned, draggable, resizable */}
         <div

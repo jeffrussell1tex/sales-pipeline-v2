@@ -4,19 +4,25 @@ import { useState, useRef, useCallback, useEffect } from 'react';
  * useDraggable — drag-to-move hook for modals and panels.
  *
  * Cross-screen dragging on ultrawide setups:
- * - Modal is position:fixed with explicit left/top.
- * - Overlay is pointer-events:none always (visual only).
- * - Click-outside handled by a separate transparent pointer-events:auto sibling div.
- * - mousemove/mouseup on document capture phase — fires even outside browser window.
- * - userSelect:none on body during drag prevents text selection glitches.
+ * - Modal is position:fixed. Negative left/top values let it live off-screen.
+ * - Overlay is pointer-events:none — purely visual, never intercepts mouse.
+ * - Click-catcher is also pointer-events:none WHILE the mouse button is held,
+ *   so dragging off the browser edge never accidentally closes the modal.
+ * - Drag uses mousemove on document (capture phase) + a mouseleave fallback
+ *   that freezes position when the cursor exits the browser entirely.
  */
 
 let _globalZ = 10000;
 function nextZ() { return ++_globalZ; }
 
+// Global flag — true while ANY modal drag is in progress.
+// Click-catchers read this to suppress their onClick during drag.
+let _anyDragging = false;
+
 export function useDraggable() {
-    const [pos, setPos]       = useState(null);
-    const [zIndex, setZIndex] = useState(10000);
+    const [pos, setPos]         = useState(null);
+    const [zIndex, setZIndex]   = useState(10000);
+    const [isDragging, setIsDragging] = useState(false);
     const dragging     = useRef(false);
     const dragState    = useRef({ startMouse: { x: 0, y: 0 }, startPos: { x: 0, y: 0 } });
     const containerRef = useRef(null);
@@ -54,6 +60,8 @@ export function useDraggable() {
 
         const cur = posRef.current || { x: 0, y: 0 };
         dragging.current = true;
+        _anyDragging = true;
+        setIsDragging(true);
         dragState.current = {
             startMouse: { x: e.clientX, y: e.clientY },
             startPos:   { x: cur.x,     y: cur.y },
@@ -70,22 +78,32 @@ export function useDraggable() {
             posRef.current = { x: nx, y: ny };
         };
 
+        // When mouse exits the browser window, freeze position (don't snap back)
+        const onLeave = () => {
+            // Position is already frozen at last known coords — nothing to do.
+            // The modal stays exactly where it was when the cursor left.
+        };
+
         const onUp = () => {
             dragging.current = false;
+            _anyDragging = false;
+            setIsDragging(false);
             document.body.style.userSelect = prevSelect;
             document.removeEventListener('mousemove', onMove, true);
             document.removeEventListener('mouseup',   onUp,   true);
+            document.documentElement.removeEventListener('mouseleave', onLeave, true);
         };
 
         document.addEventListener('mousemove', onMove, true);
         document.addEventListener('mouseup',   onUp,   true);
+        document.documentElement.addEventListener('mouseleave', onLeave, true);
     }, [bringToFront]);
 
     const dragContainerStyle = pos === null
         ? { position: 'fixed', visibility: 'hidden', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex }
         : { position: 'fixed', left: pos.x, top: pos.y, transform: 'none', margin: 0, zIndex };
 
-    // Purely visual — never blocks mouse events
+    // Purely visual backdrop — never intercepts mouse events
     const overlayStyle = {
         position:      'fixed',
         inset:         0,
@@ -94,21 +112,40 @@ export function useDraggable() {
         pointerEvents: 'none',
     };
 
+    // Click-catcher: enabled only when not dragging.
+    // IMPORTANT: pointer-events:none during any drag so moving off-screen
+    // never triggers onClose on a different modal's catcher.
+    const clickCatcherStyle = {
+        position:      'fixed',
+        inset:         0,
+        zIndex:        zIndex - 1,
+        background:    'transparent',
+        pointerEvents: isDragging ? 'none' : 'auto',
+    };
+
     const dragHandleProps = {
         onMouseDown,
         onClick: bringToFront,
-        style: { cursor: 'grab', userSelect: 'none' },
+        style: { cursor: isDragging ? 'grabbing' : 'grab', userSelect: 'none' },
     };
 
-    // Back-compat alias
     const dragOffsetStyle = dragContainerStyle;
 
-    return { dragHandleProps, dragOffsetStyle, dragContainerStyle, overlayStyle, bringToFront, containerRef };
+    return {
+        dragHandleProps,
+        dragOffsetStyle,
+        dragContainerStyle,
+        overlayStyle,
+        clickCatcherStyle,
+        isDragging,
+        bringToFront,
+        containerRef,
+    };
 }
 
 
 /**
- * useResizable — 8-direction resize (n, ne, e, se, s, sw, w, nw).
+ * useResizable — 4-corner resize.
  * Document capture-phase listeners work across screen boundaries.
  */
 export function useResizable(initialW, initialH, minW = 400, minH = 320) {

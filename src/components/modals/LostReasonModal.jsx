@@ -6,12 +6,12 @@ export default function LostReasonModal({ oppName, onSave, onSkip }) {
     const lostCategories = ['Pricing / Budget', 'Competitor', 'No Decision / Stalled', 'Product Fit', 'Timing', 'Relationship / Trust', 'Internal Priority Change', 'Other'];
     const [category, setCategory] = useState('');
     const [notes, setNotes] = useState('');
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(480, 440, 360, 320);
     return (
         <>
         <div style={{ ...overlayStyle }} />
-        <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={onSkip} />
+        <div style={clickCatcherStyle} onClick={onSkip} />
         <div ref={containerRef} style={{ ...dragOffsetStyle, background: '#fff', borderRadius: '16px', width: size.w, height: size.h, overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.25)' }}
                 onClick={e => e.stopPropagation()}>
                 <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: 'linear-gradient(135deg, #b91c1c, #ef4444)', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>

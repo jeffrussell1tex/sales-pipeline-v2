@@ -4,7 +4,7 @@ import ResizeHandles from '../../hooks/ResizeHandles';
 
 export default function OutlookImportModal({ contacts, opportunities, activities, onClose, onImport }) {
     const [step, setStep] = useState('upload'); // upload, preview, results
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(900, 580, 560, 360);
     const [parsedEmails, setParsedEmails] = useState([]);
     const [matchResults, setMatchResults] = useState([]);
@@ -243,7 +243,7 @@ export default function OutlookImportModal({ contacts, opportunities, activities
     return (
         <>
         <div style={{ ...overlayStyle }} />
-        <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={onClose} />
+        <div style={clickCatcherStyle} onClick={onClose} />
         <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: size.w, height: size.h, background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                     <h2 {...dragHandleProps} style={{ ...dragHandleProps.style, margin: 0 }}>📧 Import Outlook Sent Emails</h2>
