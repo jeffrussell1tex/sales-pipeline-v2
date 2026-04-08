@@ -64,7 +64,7 @@ export default function ViewingContactPanel({
         <div
             style={{ ...overlayStyle }}
         />
-        <div style={clickCatcherStyle} onClick={() => setViewingContact(null)} />
+        <div style={clickCatcherStyle} />
 
         {/* Floating panel */}
         <div

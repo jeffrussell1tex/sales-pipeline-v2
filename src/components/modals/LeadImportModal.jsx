@@ -174,7 +174,7 @@ export default function LeadImportModal({ onClose, onImport, existingLeads = [] 
     return (
         <>
         <div style={{ ...overlayStyle }} />
-        <div style={clickCatcherStyle} onClick={e => e.target===e.currentTarget && onClose()} />
+        <div style={clickCatcherStyle} />
         <div ref={containerRef} style={{ ...dragOffsetStyle, ...modal, width: size.w, height: size.h, maxWidth: 'none', maxHeight: 'none' }} onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div {...dragHandleProps} style={{ ...dragHandleProps.style, ...hdr }}>

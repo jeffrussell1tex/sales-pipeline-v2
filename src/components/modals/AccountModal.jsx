@@ -209,7 +209,7 @@ export default function AccountModal({
 
         {/* Overlay — transparent backdrop; click-outside closes */}
         <div style={{ ...overlayStyle }} />
-        <div style={clickCatcherStyle} onClick={e => e.target === e.currentTarget && onClose()} />
+        <div style={clickCatcherStyle} />
 
         {/* Modal — fixed-positioned, freely draggable */}
         <div
@@ -370,6 +370,32 @@ export default function AccountModal({
                                 </div>
                             </div>
 
+                            {/* ── Address block ── */}
+                            <div className="form-group full">
+                                <label>Street Address</label>
+                                <input type="text" value={formData.address} onChange={e => handleChange('address', e.target.value)} placeholder="123 Main Street" />
+                            </div>
+                            <div className="form-group full">
+                                <label>Address Line 2 <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>Suite, floor, unit, etc.</span></label>
+                                <input type="text" value={formData.address2 || ''} onChange={e => handleChange('address2', e.target.value)} placeholder="Suite 100" />
+                            </div>
+                            <div className="form-group">
+                                <label>City</label>
+                                <input type="text" value={formData.city} onChange={e => handleChange('city', e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <label>State</label>
+                                <input type="text" value={formData.state} onChange={e => handleChange('state', e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <label>ZIP Code</label>
+                                <input type="text" value={formData.zip} onChange={e => handleChange('zip', e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <label>Country</label>
+                                <input type="text" value={formData.country} onChange={e => handleChange('country', e.target.value)} />
+                            </div>
+
                             {/* Industry — alphabetical typeahead */}
                             <div className="form-group" style={{ position: 'relative' }}>
                                 <label>Industry</label>
@@ -487,32 +513,6 @@ export default function AccountModal({
                                         )}
                                     </div>
                                 )}
-                            </div>
-
-                            {/* ── Address block ── */}
-                            <div className="form-group full">
-                                <label>Street Address</label>
-                                <input type="text" value={formData.address} onChange={e => handleChange('address', e.target.value)} placeholder="123 Main Street" />
-                            </div>
-                            <div className="form-group full">
-                                <label>Address Line 2 <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>Suite, floor, unit, etc.</span></label>
-                                <input type="text" value={formData.address2 || ''} onChange={e => handleChange('address2', e.target.value)} placeholder="Suite 100" />
-                            </div>
-                            <div className="form-group">
-                                <label>City</label>
-                                <input type="text" value={formData.city} onChange={e => handleChange('city', e.target.value)} />
-                            </div>
-                            <div className="form-group">
-                                <label>State</label>
-                                <input type="text" value={formData.state} onChange={e => handleChange('state', e.target.value)} />
-                            </div>
-                            <div className="form-group">
-                                <label>ZIP Code</label>
-                                <input type="text" value={formData.zip} onChange={e => handleChange('zip', e.target.value)} />
-                            </div>
-                            <div className="form-group">
-                                <label>Country</label>
-                                <input type="text" value={formData.country} onChange={e => handleChange('country', e.target.value)} />
                             </div>
 
                             {/* ── Customer Types ── */}

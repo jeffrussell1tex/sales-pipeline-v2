@@ -11,7 +11,7 @@ export default function LostReasonModal({ oppName, onSave, onSkip }) {
     return (
         <>
         <div style={{ ...overlayStyle }} />
-        <div style={clickCatcherStyle} onClick={onSkip} />
+        <div style={clickCatcherStyle} />
         <div ref={containerRef} style={{ ...dragOffsetStyle, background: '#fff', borderRadius: '16px', width: size.w, height: size.h, overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.25)' }}
                 onClick={e => e.stopPropagation()}>
                 <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: 'linear-gradient(135deg, #b91c1c, #ef4444)', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
