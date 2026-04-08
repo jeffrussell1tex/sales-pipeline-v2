@@ -1822,9 +1822,9 @@ dbFetch('/.netlify/functions/users?me=true')
                 );
             })()}
 
-            <ModalLayer />
-            <QuickLogFab />
         </div>
+        <ModalLayer />
+        <QuickLogFab />
         </AppProvider>
     );
 }

@@ -47,7 +47,6 @@
             max-width: 100%;
             margin: 0 auto;
             padding: 1.5rem;
-            overflow-x: hidden;
         }
 
         /* ══════════════════════════════════════════
@@ -428,9 +427,7 @@
             width: 100%;
             height: 100%;
             background: rgba(28,25,23,0.45);
-            /* backdrop-filter removed: it creates a new containing block for
-               position:fixed children, clipping draggable modals to the browser
-               window boundary. The semi-transparent background is sufficient. */
+            /* backdrop-filter removed — creates containing block that clips position:fixed children */
             display: flex;
             align-items: center;
             justify-content: center;
