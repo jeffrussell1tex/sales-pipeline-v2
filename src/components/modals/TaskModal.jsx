@@ -40,7 +40,7 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
     const [accountSearch, setAccountSearch] = useState('');
     const [showAccountSuggestions, setShowAccountSuggestions] = useState(false);
     const [nestedModal, setNestedModal] = useState(null);
-    const { dragHandleProps, dragOffsetStyle } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
 
     const handleChange = (field, value) => {
         setFormData({ ...formData, [field]: value });
@@ -84,8 +84,8 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
             </div>
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ ...overlayStyle, background: 'rgba(0,0,0,0.35)' }} onClick={e => e.target === e.currentTarget && onClose()} />
+        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: '96vw', maxWidth: '760px', background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db', padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', maxHeight: '90vh' }}>
                 {/* ── Drag handle header bar ── */}
                 <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: '#1c1917', padding: '0.875rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px 12px 0 0', minHeight: '52px' }}>
                     <h2 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: '700', color: '#f5f1eb', cursor: 'inherit', userSelect: 'none' }}>
@@ -429,7 +429,6 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                     </div>
                 </div>
             )}
-        </div>
         </>
     );
 }
