@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../AppContext';
-import { useDraggable } from '../../hooks/useDraggable';
+import { useDraggable, useResizable } from '../../hooks/useDraggable';
+import ResizeHandles from '../../hooks/ResizeHandles';
 
 export default function UserModal({ user, settings: settingsProp, onClose, onSave, errorMessage, onDismissError, saving }) {
     // Always use context settings to ensure territories/teams/verticals are current
@@ -15,7 +16,8 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
         homeAddress: '', notes: ''
     });
     const [activeUserTab, setActiveUserTab] = useState('primary');
-    const { dragHandleProps, dragOffsetStyle } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
+    const { size, getResizeHandleProps } = useResizable(650, 520, 440, 340);
 
     // Auto-switch to the tab containing the email field when an error arrives
     React.useEffect(() => {
@@ -62,9 +64,10 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
             </div>
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <div className="modal-overlay">
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '650px', ...dragOffsetStyle }}>
-                <h2 {...dragHandleProps}>{user ? 'Edit User' : 'New User'}</h2>
+        <div style={{ ...overlayStyle }} />
+        <div style={clickCatcherStyle} onClick={onClose} />
+        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: size.w, height: size.h, background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db', padding: '1.5rem', overflowY: 'auto' }}>
+                <h2 {...dragHandleProps} style={{ ...dragHandleProps.style, marginBottom: '1rem' }}>{user ? 'Edit User' : 'New User'}</h2>
 
                 <div style={{ display: 'flex', background: '#f1f3f5', borderRadius: '6px', padding: '3px', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '2px' }}>
                     <button type="button" onClick={() => setActiveUserTab('primary')} style={tabBtnStyle(activeUserTab === 'primary')}>Primary Info</button>
@@ -284,7 +287,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                         </button>
                     </div>
                 </form>
-            </div>
+            <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
         </div>
         </>
     );

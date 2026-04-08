@@ -139,16 +139,27 @@ export default function AppHeader({
                             onClick={() => {
                                 setShowProfilePanel(v => !v);
                                 setProfilePanelTab('profile');
-                                if (!myProfile) {
-                                    setProfileForm({
-                                        firstName: currentUser.split(' ')[0] || '',
-                                        lastName:  currentUser.split(' ').slice(1).join(' ') || '',
-                                        email:     clerkUser?.emailAddresses?.[0]?.emailAddress || '',
-                                        phone:     '',
-                                        mobile:    '',
-                                        title:     '',
+                                // Auto-detect and persist timezone if not already saved
+                                const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                                if (detectedTz && myProfile && myProfile.timezone !== detectedTz) {
+                                    import('../../utils/storage').then(({ dbFetch }) => {
+                                        const base = myProfile || {};
+                                        dbFetch('/.netlify/functions/users?me=true', {
+                                            method: 'PUT',
+                                            body: JSON.stringify({ ...base, timezone: detectedTz }),
+                                        }).catch(() => {});
                                     });
                                 }
+                                // Always sync profileForm from myProfile so saved values
+                                // are shown correctly on every panel open, not just the first.
+                                setProfileForm({
+                                    firstName: myProfile?.firstName || currentUser.split(' ')[0] || '',
+                                    lastName:  myProfile?.lastName  || currentUser.split(' ').slice(1).join(' ') || '',
+                                    email:     myProfile?.email     || clerkUser?.emailAddresses?.[0]?.emailAddress || '',
+                                    phone:     myProfile?.phone     || '',
+                                    mobile:    myProfile?.mobile    || '',
+                                    title:     myProfile?.title     || '',
+                                });
                             }}
                             title="My profile & settings"
                             style={{ 
@@ -251,6 +262,7 @@ export default function AppHeader({
                             };
                             const prefs = myProfile?.notificationPrefs || DEFAULT_PREFS;
                             const digestTime = myProfile?.digestTime || '08:00';
+                            const userTimezone = myProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
                             const saveProfile = async (updates) => {
                                 setProfileSaving(true);
@@ -377,12 +389,14 @@ export default function AppHeader({
                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '1rem' }}>
                                                     <div>
                                                         <div style={{ fontWeight: '600', fontSize: '0.8125rem', color: '#1e293b' }}>Daily digest time</div>
-                                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>When to send your daily digest email (UTC)</div>
+                                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                                                            Your local time — <span style={{ fontWeight: '600', color: '#1e293b' }}>{userTimezone}</span>
+                                                        </div>
                                                     </div>
                                                     <input
                                                         type="time"
                                                         value={digestTime}
-                                                        onChange={e => saveProfile({ digestTime: e.target.value })}
+                                                        onChange={e => saveProfile({ digestTime: e.target.value, timezone: userTimezone })}
                                                         style={{ padding: '0.375rem 0.5rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#fff' }}
                                                     />
                                                 </div>
@@ -487,17 +501,17 @@ export default function AppHeader({
                                                                 </button>
                                                             </div>
                                                             <div style={{ opacity: smsEnabled ? 1 : 0.45, transition: 'opacity 0.2s' }}>
-                                                                <SmsToggle label="Pipeline Alerts"        desc="Silent deals, stuck stages, lapsed dates"   smsKey="pipelineAlerts" />
-                                                                <SmsToggle label="Task Reminders"         desc="Due today &amp; overdue nudges"              smsKey="taskReminders"  />
-                                                                <SmsToggle label="Daily Digest"           desc="Morning summary text"                        smsKey="digest"         />
-                                                                <SmsToggle label="Mentions &amp; Assignments" desc="When a deal or task is assigned to you"  smsKey="mentions"       />
+                                                                <SmsToggle label="Pipeline Alerts"           desc="Once daily · Silent deals, stuck stages, lapsed dates"      smsKey="pipelineAlerts" />
+                                                                <SmsToggle label="Task Reminders"            desc="At due time · Text when a task comes due"                    smsKey="taskReminders"  />
+                                                                <SmsToggle label="Daily Digest"              desc="Once daily · Morning summary of tasks &amp; pipeline"        smsKey="digest"         />
+                                                                <SmsToggle label="Mentions &amp; Assignments" desc="On occurrence · When a deal or task is assigned to you"     smsKey="mentions"       />
                                                             </div>
                                                         </div>
                                                     );
                                                 })()}
 
                                                 <button
-                                                    onClick={() => saveProfile({ notificationPrefs: prefs, digestTime, smsNotifications: myProfile?.smsNotifications })}
+                                                    onClick={() => saveProfile({ notificationPrefs: prefs, digestTime, timezone: userTimezone, smsNotifications: myProfile?.smsNotifications })}
                                                     disabled={profileSaving}
                                                     style={{ width: '100%', padding: '0.625rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit', marginTop: '1rem' }}>
                                                     {profileSaving ? 'Saving…' : 'Save Notification Settings'}

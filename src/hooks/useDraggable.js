@@ -1,71 +1,225 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 /**
  * useDraggable — drag-to-move hook for modals and panels.
  *
- * Usage:
- *   const { dragHandleProps, dragContainerStyle, DragHandle } = useDraggable(title);
- *
- *   // Apply dragContainerStyle to the modal container div:
- *   <div className="modal" style={{ ...dragContainerStyle, maxWidth: '860px' }}>
- *
- *   // Replace the existing h2 with the DragHandle component:
- *   <DragHandle />   ← renders a styled header bar that is the drag target
- *
- *   // OR if you need to keep your own h2 layout, spread dragHandleProps:
- *   <h2 {...dragHandleProps} style={{ ...dragHandleProps.style }}>...</h2>
- *
- * Uses position:relative + left/top on the modal container.
- * This works regardless of any CSS class transform/animation on .modal.
+ * Cross-screen dragging on ultrawide setups:
+ * - Modal is position:fixed. Negative left/top values let it live off-screen.
+ * - Overlay is pointer-events:none — purely visual, never intercepts mouse.
+ * - Click-catcher is also pointer-events:none WHILE the mouse button is held,
+ *   so dragging off the browser edge never accidentally closes the modal.
+ * - Drag uses mousemove on document (capture phase) + a mouseleave fallback
+ *   that freezes position when the cursor exits the browser entirely.
  */
+
+let _globalZ = 10000;
+function nextZ() { return ++_globalZ; }
+
+// Global flag — true while ANY modal drag is in progress.
+// Click-catchers read this to suppress their onClick during drag.
+let _anyDragging = false;
+
 export function useDraggable() {
-    const [pos, setPos] = useState({ x: 0, y: 0 });
-    const state = useRef({ dragging: false, startMouse: { x: 0, y: 0 }, startPos: { x: 0, y: 0 } });
+    const [pos, setPos]         = useState(null);
+    const [zIndex, setZIndex]   = useState(10000);
+    const [isDragging, setIsDragging] = useState(false);
+    const dragging     = useRef(false);
+    const dragState    = useRef({ startMouse: { x: 0, y: 0 }, startPos: { x: 0, y: 0 } });
+    const containerRef = useRef(null);
+    const posRef       = useRef(null);
+
+    useEffect(() => { posRef.current = pos; }, [pos]);
+
+    // Centre on first paint via rAF measurement
+    useEffect(() => {
+        if (pos !== null) return;
+        const id = requestAnimationFrame(() => {
+            const el = containerRef.current;
+            if (el) {
+                const rect = el.getBoundingClientRect();
+                const x = Math.round((window.innerWidth  - rect.width)  / 2);
+                const y = Math.round((window.innerHeight - rect.height) / 2);
+                setPos({ x, y });
+                posRef.current = { x, y };
+            } else {
+                const fallback = { x: Math.round(window.innerWidth * 0.5 - 430), y: 80 };
+                setPos(fallback);
+                posRef.current = fallback;
+            }
+        });
+        return () => cancelAnimationFrame(id);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const bringToFront = useCallback(() => setZIndex(nextZ()), []);
 
     const onMouseDown = useCallback((e) => {
         if (e.button !== 0) return;
-        // Allow clicks on interactive elements to pass through without starting drag
         if (e.target.closest('button, input, select, textarea, a, [role="button"]')) return;
-
         e.preventDefault();
-        state.current.dragging = true;
-        state.current.startMouse = { x: e.clientX, y: e.clientY };
-        state.current.startPos = { x: pos.x, y: pos.y };
+        bringToFront();
+
+        const cur = posRef.current || { x: 0, y: 0 };
+        dragging.current = true;
+        _anyDragging = true;
+        setIsDragging(true);
+        dragState.current = {
+            startMouse: { x: e.clientX, y: e.clientY },
+            startPos:   { x: cur.x,     y: cur.y },
+        };
+
+        const prevSelect = document.body.style.userSelect;
+        document.body.style.userSelect = 'none';
 
         const onMove = (ev) => {
-            if (!state.current.dragging) return;
-            setPos({
-                x: state.current.startPos.x + ev.clientX - state.current.startMouse.x,
-                y: state.current.startPos.y + ev.clientY - state.current.startMouse.y,
+            if (!dragging.current) return;
+            const nx = dragState.current.startPos.x + ev.clientX - dragState.current.startMouse.x;
+            const ny = dragState.current.startPos.y + ev.clientY - dragState.current.startMouse.y;
+            setPos({ x: nx, y: ny });
+            posRef.current = { x: nx, y: ny };
+        };
+
+        // When mouse exits the browser window, freeze position (don't snap back)
+        const onLeave = () => {
+            // Position is already frozen at last known coords — nothing to do.
+            // The modal stays exactly where it was when the cursor left.
+        };
+
+        const onUp = () => {
+            dragging.current = false;
+            _anyDragging = false;
+            setIsDragging(false);
+            document.body.style.userSelect = prevSelect;
+            document.removeEventListener('mousemove', onMove, true);
+            document.removeEventListener('mouseup',   onUp,   true);
+            document.documentElement.removeEventListener('mouseleave', onLeave, true);
+
+            // Safety net: if modal has been dragged entirely off-screen, snap it back
+            // so the user can always retrieve it.
+            setPos(current => {
+                if (!current) return current;
+                const el = containerRef.current;
+                const W = el ? el.offsetWidth  : 400;
+                const H = el ? el.offsetHeight : 300;
+                const vw = window.innerWidth;
+                const vh = window.innerHeight;
+                const MARGIN = 80; // px of modal that must remain visible
+                let { x, y } = current;
+                // Clamp so at least MARGIN px is visible on each axis
+                x = Math.min(x, vw - MARGIN);   // don't go too far right
+                x = Math.max(x, MARGIN - W);     // don't go too far left
+                y = Math.min(y, vh - MARGIN);    // don't go too far down
+                y = Math.max(y, 0);              // don't go above top of screen
+                return { x, y };
             });
         };
-        const onUp = () => {
-            state.current.dragging = false;
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
-        };
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp);
-    }, [pos.x, pos.y]);
 
-    // Use position:relative + left/top — works regardless of .modal CSS class transforms
-    const dragContainerStyle = {
-        position: 'relative',
-        left: pos.x,
-        top: pos.y,
+        document.addEventListener('mousemove', onMove, true);
+        document.addEventListener('mouseup',   onUp,   true);
+        document.documentElement.addEventListener('mouseleave', onLeave, true);
+    }, [bringToFront]);
+
+    const dragContainerStyle = pos === null
+        ? { position: 'fixed', visibility: 'hidden', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex }
+        : { position: 'fixed', left: pos.x, top: pos.y, transform: 'none', margin: 0, zIndex };
+
+    // Purely visual backdrop — never intercepts mouse events
+    const overlayStyle = {
+        position:      'fixed',
+        inset:         0,
+        background:    'rgba(0,0,0,0.35)',
+        zIndex:        zIndex - 1,
+        pointerEvents: 'none',
+    };
+
+    // Click-catcher: enabled only when not dragging.
+    // IMPORTANT: pointer-events:none during any drag so moving off-screen
+    // never triggers onClose on a different modal's catcher.
+    const clickCatcherStyle = {
+        position:      'fixed',
+        inset:         0,
+        zIndex:        zIndex - 1,
+        background:    'transparent',
+        pointerEvents: isDragging ? 'none' : 'auto',
     };
 
     const dragHandleProps = {
         onMouseDown,
-        style: {
-            cursor: pos.x === 0 && pos.y === 0 ? 'grab' : 'grabbing',
-            userSelect: 'none',
-        },
+        onClick: bringToFront,
+        style: { cursor: isDragging ? 'grabbing' : 'grab', userSelect: 'none' },
     };
 
-    // Keep dragOffsetStyle as an alias so existing modals (AccountModal etc.) 
-    // that already use it continue to work — now uses left/top instead of transform
     const dragOffsetStyle = dragContainerStyle;
 
-    return { dragHandleProps, dragOffsetStyle, dragContainerStyle };
+    return {
+        dragHandleProps,
+        dragOffsetStyle,
+        dragContainerStyle,
+        overlayStyle,
+        clickCatcherStyle,
+        isDragging,
+        bringToFront,
+        containerRef,
+    };
+}
+
+
+/**
+ * useResizable — 4-corner resize.
+ * Document capture-phase listeners work across screen boundaries.
+ */
+export function useResizable(initialW, initialH, minW = 400, minH = 320) {
+    const [size, setSize] = useState({ w: initialW, h: initialH });
+    const resizing    = useRef(false);
+    const resizeState = useRef({});
+    const sizeRef     = useRef({ w: initialW, h: initialH });
+
+    useEffect(() => { sizeRef.current = size; }, [size]);
+
+    const getResizeHandleProps = useCallback((direction) => ({
+        onMouseDown: (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (resizing.current) return;
+            resizing.current = true;
+
+            const prevSelect = document.body.style.userSelect;
+            document.body.style.userSelect = 'none';
+
+            resizeState.current = {
+                direction,
+                startX: e.clientX,
+                startY: e.clientY,
+                startW: sizeRef.current.w,
+                startH: sizeRef.current.h,
+            };
+
+            const onMove = (ev) => {
+                if (!resizing.current) return;
+                const { direction: dir, startX, startY, startW, startH } = resizeState.current;
+                const dx = ev.clientX - startX;
+                const dy = ev.clientY - startY;
+                let newW = startW;
+                let newH = startH;
+                if (dir.includes('e')) newW = Math.max(minW, startW + dx);
+                if (dir.includes('w')) newW = Math.max(minW, startW - dx);
+                if (dir.includes('s')) newH = Math.max(minH, startH + dy);
+                if (dir.includes('n')) newH = Math.max(minH, startH - dy);
+                const next = { w: newW, h: newH };
+                setSize(next);
+                sizeRef.current = next;
+            };
+
+            const onUp = () => {
+                resizing.current = false;
+                document.body.style.userSelect = prevSelect;
+                document.removeEventListener('mousemove', onMove, true);
+                document.removeEventListener('mouseup',   onUp,   true);
+            };
+
+            document.addEventListener('mousemove', onMove, true);
+            document.addEventListener('mouseup',   onUp,   true);
+        },
+    }), [minW, minH]);
+
+    return { size, getResizeHandleProps };
 }

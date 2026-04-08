@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { stages } from '../../utils/constants';
 import { dbFetch } from '../../utils/storage';
 import { useApp } from '../../AppContext';
-import { useDraggable } from '../../hooks/useDraggable';
+import { useDraggable, useResizable } from '../../hooks/useDraggable';
+import ResizeHandles from '../../hooks/ResizeHandles';
 
 // ─────────────────────────────────────────────────────────────
 //  Deal History Tab
@@ -1048,7 +1049,8 @@ if (formData.account && formData.account.trim()) {
 
     // Modal tab state
     const [modalTab, setModalTab] = React.useState('details');
-    const { dragHandleProps, dragOffsetStyle } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
+    const { size, getResizeHandleProps } = useResizable(860, 620, 560, 400);
 
     // Activity log state (inside modal)
     const [showLogActivity, setShowLogActivity] = React.useState(false);
@@ -1150,8 +1152,9 @@ if (formData.account && formData.account.trim()) {
             </div>
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, maxWidth: '860px', padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ ...overlayStyle }} />
+        <div style={clickCatcherStyle} onClick={e => e.target === e.currentTarget && onClose()} />
+        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: size.w, height: size.h, background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db', padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 {/* ── Drag handle header bar ── */}
                 <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: '#1c1917', padding: '0.875rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px 12px 0 0', minHeight: '52px' }}>
                     <h2 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: '700', color: '#f5f1eb', cursor: 'inherit', userSelect: 'none' }}>
@@ -2131,6 +2134,7 @@ if (formData.account && formData.account.trim()) {
                 </form>
                 </div>{/* end details tab */}
                 </div>{/* end padding wrapper */}
+            <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
             </div>
 
             {nestedModal && nestedModal.type === 'contact' && (
@@ -2156,7 +2160,6 @@ if (formData.account && formData.account.trim()) {
                     </div>
                 </div>
             )}
-        </div>
         </>
     );
 }

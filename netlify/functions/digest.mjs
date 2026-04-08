@@ -34,12 +34,12 @@ function getPref(profile, alertType) {
     return prefs[alertType] || DEFAULT_PREFS[alertType] || { enabled: false, mode: 'digest' };
 }
 
-function wantsDigest(profile, alertType) {
+function wantsDigest(resolvedProfile, alertType) {
     const pref = getPref(profile, alertType);
     return pref.enabled && pref.mode === 'digest';
 }
 
-function wantsSms(profile, smsKey) {
+function wantsSms(resolvedProfile, smsKey) {
     const smsPrefs = profile?.smsNotifications || {};
     if (!smsPrefs.enabled) return false;
     return smsPrefs[smsKey] === true;
@@ -53,6 +53,57 @@ async function trySendSms(to, body, label) {
         console.log(`digest SMS sent → ${phone} (${label})`);
     } catch (err) {
         console.error(`digest SMS error (${label}):`, err.message);
+    }
+}
+
+/**
+ * Convert a user's local digest hour to the equivalent UTC hour so we can
+ * compare it against the current UTC hour when the cron fires.
+ *
+ * Strategy: use Intl.DateTimeFormat to find what hour it currently is in the
+ * user's timezone, compute the offset from UTC, then apply that offset to the
+ * user's desired local hour.
+ *
+ * Example: user wants 8am CT (UTC-5 in winter).
+ *   - Current UTC hour = 13, current CT hour = 8 → offset = UTC - local = 5
+ *   - Target UTC = 8 + 5 = 13 ✓
+ *
+ * This correctly handles DST and half-hour offsets.
+ *
+ * @param {number} localHour  0-23 hour in user's local time
+ * @param {string} timezone   IANA timezone string, e.g. "America/Chicago"
+ * @returns {number}          Equivalent UTC hour (0-23)
+ */
+function localHourToUtc(localHour, timezone) {
+    try {
+        const now = new Date();
+
+        // Get the current hour in the user's timezone using a reliable numeric format
+        const localFormatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone,
+            hour: 'numeric',
+            hour12: false,
+        });
+        // "numeric" + hour12:false returns "0"-"23"; "24" is returned for midnight
+        // in some implementations — normalise it to 0.
+        const rawLocal = parseInt(localFormatter.format(now), 10);
+        const currentLocalHour = rawLocal === 24 ? 0 : rawLocal;
+
+        const currentUtcHour = now.getUTCHours();
+
+        // UTC offset in whole hours: how many hours ahead UTC is vs local.
+        // We use modulo 24 to handle the day-boundary case correctly.
+        // e.g. local=23, UTC=4 → offset = (4 - 23 + 24) % 24 = 5
+        const utcOffsetHours = ((currentUtcHour - currentLocalHour) + 24) % 24;
+
+        const targetUtcHour = (localHour + utcOffsetHours) % 24;
+
+        console.log(`digest: timezone=${timezone} localHour=${localHour} currentLocal=${currentLocalHour} currentUTC=${currentUtcHour} offset=${utcOffsetHours} → targetUTC=${targetUtcHour}`);
+
+        return targetUtcHour;
+    } catch (err) {
+        console.warn(`digest: unrecognized timezone "${timezone}", treating as UTC. Error: ${err.message}`);
+        return localHour;
     }
 }
 
@@ -71,20 +122,37 @@ export const handler = async () => {
         for (const user of allUsers) {
             if (!user.email || !user.active) continue;
 
-            const profile     = user.profile || {};
-            const digestTime  = profile.digestTime || '08:00'; // e.g. "08:00"
-            const [dHour]     = digestTime.split(':').map(Number);
+            // AppHeader.saveProfile saves these fields flat on the user row (top-level),
+            // not nested inside user.profile. Read from top-level first, fall back to
+            // user.profile for any older records that may have nested values.
+            const profile           = user.profile || {};
+            const digestTime        = user.digestTime        || profile.digestTime        || '08:00';
+            const userTz            = user.timezone          || profile.timezone          || 'UTC';
+            const smsNotifications  = user.smsNotifications  || profile.smsNotifications  || {};
+            const notificationPrefs = user.notificationPrefs || profile.notificationPrefs || {};
+            const mobile            = user.mobile            || profile.mobile            || null;
+            const phone             = user.phone             || profile.phone             || null;
 
-            // Only send if current UTC hour matches user's digest hour
-            // (runs every hour, fires once when hour matches)
-            if (dHour !== nowHour) continue;
+            // Build a normalized profile-like object so all downstream helpers
+            // (wantsDigest, wantsSms) work without modification.
+            const resolvedProfile = {
+                ...profile,
+                digestTime,
+                timezone: userTz,
+                smsNotifications,
+                notificationPrefs,
+                mobile,
+                phone,
+            };
 
-            console.log(`digest: processing user ${user.name} (${user.email}) at digestTime ${digestTime}`);
+            const [dHour]       = digestTime.split(':').map(Number);
+            const targetUtcHour = localHourToUtc(dHour, userTz);
+            if (targetUtcHour !== nowHour) continue;
 
-            const digestItems = [];
+            console.log(`digest: processing user ${user.name} (${user.email}) — digestTime=${digestTime} tz=${userTz} → fires at UTC ${targetUtcHour}`);
 
             // ── Tasks due today ────────────────────────────────────────────────
-            if (wantsDigest(profile, 'taskDigest')) {
+            if (wantsDigest(resolvedProfile, 'taskDigest')) {
                 const todayTasks = await db.select().from(tasks)
                     .where(and(eq(tasks.orgId, user.orgId), eq(tasks.assignedTo, user.name)));
                 const dueTodayTasks = todayTasks.filter(t =>
@@ -104,8 +172,8 @@ export const handler = async () => {
                                 })),
                             }),
                         });
-                        if (wantsSms(profile, 'digest')) {
-                            const smsPhone = profile.mobile || profile.phone;
+                        if (wantsSms(resolvedProfile, 'digest')) {
+                            const smsPhone = mobile || phone;
                             await trySendSms(
                                 smsPhone,
                                 smsTemplates.digestSummary({ repName: user.name, taskCount: dueTodayTasks.length, overdueCount: 0 }),
@@ -120,7 +188,7 @@ export const handler = async () => {
             }
 
             // ── Overdue tasks ─────────────────────────────────────────────────
-            if (wantsDigest(profile, 'overdueTaskNudge')) {
+            if (wantsDigest(resolvedProfile, 'overdueTaskNudge')) {
                 const allTasks = await db.select().from(tasks)
                     .where(and(eq(tasks.orgId, user.orgId), eq(tasks.assignedTo, user.name)));
                 const overdueTasks = allTasks.filter(t =>
@@ -145,8 +213,8 @@ export const handler = async () => {
                                 }),
                             }),
                         });
-                        if (wantsSms(profile, 'digest')) {
-                            const smsPhone = profile.mobile || profile.phone;
+                        if (wantsSms(resolvedProfile, 'digest')) {
+                            const smsPhone = mobile || phone;
                             await trySendSms(
                                 smsPhone,
                                 smsTemplates.digestSummary({ repName: user.name, taskCount: 0, overdueCount: overdueTasks.length }),
@@ -161,7 +229,7 @@ export const handler = async () => {
             }
 
             // ── Opportunity updates digest ─────────────────────────────────────
-            if (wantsDigest(profile, 'opportunityUpdated') || wantsDigest(profile, 'stageChanged') || wantsDigest(profile, 'commentAdded')) {
+            if (wantsDigest(resolvedProfile, 'opportunityUpdated') || wantsDigest(resolvedProfile, 'stageChanged') || wantsDigest(resolvedProfile, 'commentAdded')) {
                 const recentOpps = await db.select().from(opportunities)
                     .where(and(eq(opportunities.orgId, user.orgId), eq(opportunities.salesRep, user.name)));
 
@@ -221,11 +289,13 @@ export const handler = async () => {
 
             for (const mgr of managers) {
                 const profile = mgr.profile || {};
-                if (!wantsDigest(profile, 'managerTeamDigest')) continue;
+                if (!wantsDigest(resolvedProfile, 'managerTeamDigest')) continue;
 
-                const digestTime = profile.digestTime || '08:00';
-                const [dHour] = digestTime.split(':').map(Number);
-                if (dHour !== nowHour) continue;
+                const digestTime = mgr.digestTime || profile.digestTime || '08:00';
+                const userTz     = mgr.timezone   || profile.timezone   || 'UTC';
+                const [dHour]    = digestTime.split(':').map(Number);
+                const targetUtcHour = localHourToUtc(dHour, userTz);
+                if (targetUtcHour !== nowHour) continue;
 
                 console.log(`managerTeamDigest: building for ${mgr.name} (${mgr.email})`);
 

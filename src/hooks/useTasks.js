@@ -1,6 +1,19 @@
 import { useState } from 'react';
 import { dbFetch } from '../utils/storage';
 
+// Fire-and-forget SMS for task assignments.
+async function fireMentionSms(payload) {
+    try {
+        await dbFetch('/.netlify/functions/mention-sms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+    } catch (err) {
+        console.warn('mention-sms (non-blocking):', err.message);
+    }
+}
+
 export function useTasks(deps) {
     const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel } = deps;
 
@@ -89,6 +102,10 @@ export function useTasks(deps) {
                 if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
                 setTasks(prev => prev.map(t => t.id === editingTask.id ? (data.task || payload) : t));
                 addAudit('update', 'task', editingTask.id, taskData.title || editingTask.id, taskData.type || '');
+                // SMS: task reassigned to a different person
+                if (taskData.assignedTo && editingTask.assignedTo !== taskData.assignedTo) {
+                    fireMentionSms({ type: 'taskAssigned', assigneeName: taskData.assignedTo, assignedBy: taskData.createdBy || '', taskTitle: taskData.title });
+                }
                 fireCalendarEvent(payload, opportunities);
                 setShowTaskModal(false); setTaskModalError(null);
             } catch (err) {
@@ -104,6 +121,10 @@ export function useTasks(deps) {
                 if (!res.ok) { setTaskModalError(data.error || 'Failed to save task. Please try again.'); setTaskModalSaving(false); return; }
                 setTasks(prev => [...prev, data.task || newTask]);
                 addAudit('create', 'task', newId, taskData.title || newId, taskData.type || '');
+                // SMS: task assigned to someone on creation
+                if (taskData.assignedTo) {
+                    fireMentionSms({ type: 'taskAssigned', assigneeName: taskData.assignedTo, assignedBy: taskData.createdBy || '', taskTitle: taskData.title });
+                }
                 fireCalendarEvent(newTask, opportunities);
                 setShowTaskModal(false); setTaskModalError(null);
             } catch (err) {
