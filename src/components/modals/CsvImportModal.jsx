@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useDraggable } from '../../hooks/useDraggable';
+import { useDraggable, useResizable } from '../../hooks/useDraggable';
+import ResizeHandles from '../../hooks/ResizeHandles';
 
 export default function CsvImportModal({ importType, contacts, accounts, onClose, onImportContacts, onImportAccounts, onImportOpportunities }) {
     const [step, setStep] = useState('upload'); // upload, mapping, preview, results
     const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
+    const { size, getResizeHandleProps } = useResizable(800, 560, 520, 360);
     const [csvHeaders, setCsvHeaders] = useState([]);
     const [csvRows, setCsvRows] = useState([]);
     const [fieldMapping, setFieldMapping] = useState({});
@@ -208,7 +210,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div style={{ ...overlayStyle }} />
         <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={onClose} />
-        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: '96vw', maxWidth: '800px', maxHeight: '85vh', overflow: 'auto', background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db' }}>
+        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: size.w, height: size.h, overflow: 'auto', background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db' }}>
                 <h2 {...dragHandleProps}>Import {importType === 'contacts' ? 'Contacts' : importType === 'opportunities' ? 'Opportunities' : 'Accounts'} from CSV</h2>
 
                 {step === 'upload' && (
@@ -384,6 +386,7 @@ export default function CsvImportModal({ importType, contacts, accounts, onClose
                         )}
                     </div>
                 )}
+            <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
         </div>
         </>
     );

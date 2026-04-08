@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../AppContext';
-import { useDraggable, useResizable, ResizeHandles } from '../../hooks/useDraggable';
+import { useDraggable, useResizable } from '../../hooks/useDraggable';
+import ResizeHandles from '../../hooks/ResizeHandles';
 
 // ── Local resize hook (same pattern as Viewing panels) ────────────────────────
 

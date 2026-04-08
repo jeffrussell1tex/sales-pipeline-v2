@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useDraggable } from '../../hooks/useDraggable';
+import { useDraggable, useResizable } from '../../hooks/useDraggable';
+import ResizeHandles from '../../hooks/ResizeHandles';
 
 export default function ContactModal({
     contact, contacts, accounts, settings,
@@ -29,6 +30,7 @@ export default function ContactModal({
     const [duplicateContactWarning, setDuplicateContactWarning] = useState(null);
 
     const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
+    const { size, getResizeHandleProps } = useResizable(680, 540, 480, 360);
 
     const contactAllRepNames = [...new Set(
         (settings?.users || []).filter(u => u.name).map(u => u.name)
@@ -213,8 +215,8 @@ export default function ContactModal({
             onClick={e => e.stopPropagation()}
             style={{
                 ...dragOffsetStyle,
-                width: '96vw',
-                maxWidth: '680px',
+                width: size.w,
+                height: size.h,
                 padding: 0,
                 display: 'flex',
                 flexDirection: 'column',
@@ -223,7 +225,6 @@ export default function ContactModal({
                 borderRadius: '12px',
                 boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
                 border: '1px solid #e5e2db',
-                maxHeight: '92vh',
             }}
         >
             {/* ── Drag handle header ── */}
@@ -440,6 +441,7 @@ export default function ContactModal({
                     </div>
                 </form>
             </div>
+            <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
         </div>
 
         {/* Nested new contact modal */}

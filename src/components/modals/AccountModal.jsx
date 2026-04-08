@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../AppContext';
-import { useDraggable } from '../../hooks/useDraggable';
+import { useDraggable, useResizable } from '../../hooks/useDraggable';
+import ResizeHandles from '../../hooks/ResizeHandles';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ export default function AccountModal({
     const [showCustomerTypeSugg, setShowCustomerTypeSugg] = useState(false);
 
     const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
+    const { size, getResizeHandleProps } = useResizable(800, 560, 520, 360);
 
     // ── derived lists ────────────────────────────────────────────────────────
     const allRepNames = [...new Set(
@@ -215,8 +217,8 @@ export default function AccountModal({
             onClick={e => e.stopPropagation()}
             style={{
                 ...dragOffsetStyle,
-                width: '96vw',
-                maxWidth: '800px',
+                width: size.w,
+                height: size.h,
                 padding: 0,
                 display: 'flex',
                 flexDirection: 'column',
@@ -225,7 +227,6 @@ export default function AccountModal({
                 borderRadius: '12px',
                 boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
                 border: '1px solid #e5e2db',
-                maxHeight: '90vh',
             }}
         >
             {/* ── Drag handle header ── */}
@@ -765,6 +766,7 @@ export default function AccountModal({
                     </div>
                 </form>
             </div>
+            <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
         </div>
         </>
     );

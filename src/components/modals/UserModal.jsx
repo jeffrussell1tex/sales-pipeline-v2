@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../AppContext';
-import { useDraggable } from '../../hooks/useDraggable';
+import { useDraggable, useResizable } from '../../hooks/useDraggable';
+import ResizeHandles from '../../hooks/ResizeHandles';
 
 export default function UserModal({ user, settings: settingsProp, onClose, onSave, errorMessage, onDismissError, saving }) {
     // Always use context settings to ensure territories/teams/verticals are current
@@ -16,6 +17,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
     });
     const [activeUserTab, setActiveUserTab] = useState('primary');
     const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
+    const { size, getResizeHandleProps } = useResizable(650, 520, 440, 340);
 
     // Auto-switch to the tab containing the email field when an error arrives
     React.useEffect(() => {
@@ -64,7 +66,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div style={{ ...overlayStyle }} />
         <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={onClose} />
-        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: '96vw', maxWidth: '650px', background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: size.w, height: size.h, background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db', padding: '1.5rem', overflowY: 'auto' }}>
                 <h2 {...dragHandleProps} style={{ ...dragHandleProps.style, marginBottom: '1rem' }}>{user ? 'Edit User' : 'New User'}</h2>
 
                 <div style={{ display: 'flex', background: '#f1f3f5', borderRadius: '6px', padding: '3px', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '2px' }}>
@@ -285,6 +287,7 @@ export default function UserModal({ user, settings: settingsProp, onClose, onSav
                         </button>
                     </div>
                 </form>
+            <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
         </div>
         </>
     );

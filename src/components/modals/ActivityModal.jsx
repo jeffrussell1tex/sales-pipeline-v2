@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useDraggable } from '../../hooks/useDraggable';
+import { useDraggable, useResizable } from '../../hooks/useDraggable';
+import ResizeHandles from '../../hooks/ResizeHandles';
 
 export default function ActivityModal({ activity, opportunities, contacts, accounts, onClose, onSave, initialContext, onSaveNewContact, onSaveNewAccount, onAddContact, onAddAccount, onAddOpportunity, errorMessage, onDismissError, saving }) {
     const [formData, setFormData] = useState(activity || {
@@ -14,6 +15,7 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
 
     const [nestedModal, setNestedModal] = useState(null);
     const { dragHandleProps, dragOffsetStyle, overlayStyle, containerRef } = useDraggable();
+    const { size, getResizeHandleProps } = useResizable(600, 500, 400, 300);
 
     const [opportunitySearch, setOpportunitySearch] = useState(
         activity ? (opportunities || []).find(o => o.id === activity.opportunityId)?.opportunityName || '' : (initialContext?.opportunityName || '')
@@ -74,7 +76,7 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div style={{ ...overlayStyle }} />
         <div style={{ ...overlayStyle, background: 'transparent', pointerEvents: 'auto' }} onClick={e => e.target === e.currentTarget && onClose()} />
-        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: '96vw', maxWidth: '600px', background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db', padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', maxHeight: '90vh' }}>
+        <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ ...dragOffsetStyle, width: size.w, height: size.h, background: '#fff', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', border: '1px solid #e5e2db', padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 {/* ── Drag handle header bar ── */}
                 <div {...dragHandleProps} style={{ ...dragHandleProps.style, background: '#1c1917', padding: '0.875rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '12px 12px 0 0', minHeight: '52px' }}>
                     <h2 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: '700', color: '#f5f1eb', cursor: 'inherit', userSelect: 'none' }}>
@@ -272,6 +274,7 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
                     </div>
                 </form>
                 </div>{/* end padding wrapper */}
+            <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
             </div>
             {nestedModal && nestedModal.type === 'contact' && (
                 <div className="modal-overlay" style={{ zIndex: 2000 }} onClick={() => setNestedModal(null)}>

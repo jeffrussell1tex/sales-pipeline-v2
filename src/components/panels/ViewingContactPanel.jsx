@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useApp } from '../../AppContext';
-import { useDraggable, useResizable, ResizeHandles } from '../../hooks/useDraggable';
+import { useDraggable, useResizable } from '../../hooks/useDraggable';
+import ResizeHandles from '../../hooks/ResizeHandles';
 
 
 

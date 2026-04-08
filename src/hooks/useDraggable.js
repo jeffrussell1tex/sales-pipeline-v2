@@ -3,16 +3,12 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 /**
  * useDraggable — drag-to-move hook for modals and panels.
  *
- * KEY DESIGN DECISIONS for cross-screen (ultrawide) dragging:
- *
- * 1. Modal is position:fixed with explicit left/top — never inside a flex overlay.
- * 2. The backdrop overlay is ALWAYS pointer-events:none so the mouse can leave
- *    the browser window without losing the drag. The click-outside-to-close is
- *    handled by a separate transparent capture div that is only active when NOT dragging.
- * 3. mousemove/mouseup listeners are on `document` at the capture phase so they
- *    fire even when the cursor exits the browser chrome.
- * 4. We set document.body.style.userSelect = 'none' during drag to prevent
- *    text selection across iframes and other app surfaces.
+ * Cross-screen dragging on ultrawide setups:
+ * - Modal is position:fixed with explicit left/top.
+ * - Overlay is pointer-events:none always (visual only).
+ * - Click-outside handled by a separate transparent pointer-events:auto sibling div.
+ * - mousemove/mouseup on document capture phase — fires even outside browser window.
+ * - userSelect:none on body during drag prevents text selection glitches.
  */
 
 let _globalZ = 10000;
@@ -28,7 +24,7 @@ export function useDraggable() {
 
     useEffect(() => { posRef.current = pos; }, [pos]);
 
-    // Centre on first paint
+    // Centre on first paint via rAF measurement
     useEffect(() => {
         if (pos !== null) return;
         const id = requestAnimationFrame(() => {
@@ -89,7 +85,7 @@ export function useDraggable() {
         ? { position: 'fixed', visibility: 'hidden', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex }
         : { position: 'fixed', left: pos.x, top: pos.y, transform: 'none', margin: 0, zIndex };
 
-    // Overlay is purely visual — pointer-events:none so mouse always passes through
+    // Purely visual — never blocks mouse events
     const overlayStyle = {
         position:      'fixed',
         inset:         0,
@@ -104,6 +100,7 @@ export function useDraggable() {
         style: { cursor: 'grab', userSelect: 'none' },
     };
 
+    // Back-compat alias
     const dragOffsetStyle = dragContainerStyle;
 
     return { dragHandleProps, dragOffsetStyle, dragContainerStyle, overlayStyle, bringToFront, containerRef };
@@ -112,13 +109,13 @@ export function useDraggable() {
 
 /**
  * useResizable — 8-direction resize (n, ne, e, se, s, sw, w, nw).
- * Uses document capture-phase listeners so resize works across screen boundaries.
+ * Document capture-phase listeners work across screen boundaries.
  */
 export function useResizable(initialW, initialH, minW = 400, minH = 320) {
     const [size, setSize] = useState({ w: initialW, h: initialH });
-    const resizing     = useRef(false);
-    const resizeState  = useRef({});
-    const sizeRef      = useRef({ w: initialW, h: initialH });
+    const resizing    = useRef(false);
+    const resizeState = useRef({});
+    const sizeRef     = useRef({ w: initialW, h: initialH });
 
     useEffect(() => { sizeRef.current = size; }, [size]);
 
@@ -169,27 +166,4 @@ export function useResizable(initialW, initialH, minW = 400, minH = 320) {
     }), [minW, minH]);
 
     return { size, getResizeHandleProps };
-}
-
-
-/**
- * ResizeHandles — 8 invisible resize zones around a fixed/relative container.
- * No visual indicator. Cursor changes on hover to show resize direction.
- */
-export function ResizeHandles({ getResizeHandleProps }) {
-    const E = 6;   // edge handle thickness px
-    const C = 16;  // corner handle size px
-    const s = (cursor, extra) => ({ position: 'absolute', zIndex: 10, background: 'transparent', cursor, ...extra });
-    return (
-        <>
-            <div {...getResizeHandleProps('nw')} style={s('nw-resize', { top: 0,    left: 0,   width: C, height: C })} />
-            <div {...getResizeHandleProps('ne')} style={s('ne-resize', { top: 0,    right: 0,  width: C, height: C })} />
-            <div {...getResizeHandleProps('se')} style={s('se-resize', { bottom: 0, right: 0,  width: C, height: C })} />
-            <div {...getResizeHandleProps('sw')} style={s('sw-resize', { bottom: 0, left: 0,   width: C, height: C })} />
-            <div {...getResizeHandleProps('n')}  style={s('n-resize',  { top: 0,    left: C,   right: C,    height: E })} />
-            <div {...getResizeHandleProps('s')}  style={s('s-resize',  { bottom: 0, left: C,   right: C,    height: E })} />
-            <div {...getResizeHandleProps('w')}  style={s('w-resize',  { left: 0,   top: C,    bottom: C,   width: E  })} />
-            <div {...getResizeHandleProps('e')}  style={s('e-resize',  { right: 0,  top: C,    bottom: C,   width: E  })} />
-        </>
-    );
 }
