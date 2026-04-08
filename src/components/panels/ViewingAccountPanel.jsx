@@ -95,7 +95,7 @@ export default function ViewingAccountPanel({
         <div
             style={{ ...overlayStyle }}
         />
-        <div style={clickCatcherStyle} onClick={() => setViewingAccount(null)} />
+        <div style={clickCatcherStyle} />
 
         {/* Floating panel — fixed-positioned, draggable, resizable */}
         <div

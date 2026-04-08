@@ -66,7 +66,7 @@ export default function ViewingTaskPanel({
         <div
             style={{ ...overlayStyle }}
         />
-        <div style={clickCatcherStyle} onClick={() => setViewingTask(null)} />
+        <div style={clickCatcherStyle} />
 
         {/* Floating panel — fixed-positioned, draggable, resizable */}
         <div
