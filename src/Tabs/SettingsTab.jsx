@@ -726,8 +726,23 @@ export default function SettingsTab() {
         }
     };
     const handleDeleteUser = (userId) => {
-        showConfirm('Are you sure you want to delete this user?', async () => {
+        const user = (settings.users || []).find(u => u.id === userId);
+        if (!user) return;
+        const userName = user.name || user.email || userId;
+        showConfirm(`Are you sure you want to delete "${userName}"? This cannot be undone.`, async () => {
+            // Snapshot the users list for undo
+            const snapshot = (settings.users || []).slice();
+            // Optimistic removal from settings
+            setSettings(prev => ({ ...prev, users: (prev.users || []).filter(u => u.id !== userId) }));
             await dbFetch('/.netlify/functions/users?id=' + userId, { method: 'DELETE' }).catch(console.error);
+            softDelete(
+                `User "${userName}"`,
+                () => {},
+                () => {
+                    setSettings(prev => ({ ...prev, users: snapshot }));
+                    setUndoToast(null);
+                }
+            );
         });
     };
 
