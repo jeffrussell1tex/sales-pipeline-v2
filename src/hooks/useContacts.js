@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { dbFetch } from '../utils/storage';
 
 export function useContacts(deps) {
-    const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel } = deps;
+    const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel, showBlockedDelete, opportunities } = deps;
 
     const [contacts, setContacts] = useState([]);
     const [contactModalError, setContactModalError] = useState(null);
@@ -27,6 +27,27 @@ export function useContacts(deps) {
         // Fallback: read directly (state read above may not flush synchronously in all cases)
         if (!contact) {
             // Can't find it — nothing to delete
+            return;
+        }
+
+        // Block delete if contact is linked to any active (non-closed) opportunity
+        const fullName = ((contact.firstName || '') + ' ' + (contact.lastName || '')).trim();
+        const closedStages = ['closed won', 'closed lost', 'won', 'lost'];
+        const linkedActiveOpp = (opportunities || []).find(opp => {
+            const isActive = !closedStages.includes((opp.stage || '').toLowerCase());
+            if (!isActive) return false;
+            // Match by contactIds array (primary) or contacts name string (legacy)
+            const byId = opp.contactIds && opp.contactIds.includes(contactId);
+            const byName = fullName && opp.contacts && opp.contacts.split(',')
+                .map(s => s.trim().toLowerCase())
+                .some(n => n.startsWith(fullName.toLowerCase()));
+            return byId || byName;
+        });
+        if (linkedActiveOpp) {
+            showBlockedDelete(
+                `Cannot Delete "${fullName}"`,
+                `This contact is linked to an active opportunity ("${linkedActiveOpp.opportunityName || linkedActiveOpp.account}"). Please remove them from that opportunity before deleting.`
+            );
             return;
         }
 

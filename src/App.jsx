@@ -199,6 +199,7 @@ function App() {
     const _getQuarterRef    = useRef(null);
     const _getQuarterLabelRef = useRef(null);
     const _showBlockedDeleteRef = useRef(null);
+    const _opportunitiesRef = useRef([]);
     const _deps = {
         get addAudit()            { return _addAuditRef.current; },
         get showConfirm()         { return _showConfirmRef.current; },
@@ -207,6 +208,7 @@ function App() {
         get getQuarter()          { return _getQuarterRef.current; },
         get getQuarterLabel()     { return _getQuarterLabelRef.current; },
         get showBlockedDelete()   { return _showBlockedDeleteRef.current; },
+        get opportunities()       { return _opportunitiesRef.current; },
     };
 
     const {
@@ -290,6 +292,7 @@ function App() {
     _softDeleteRef.current  = softDelete;
     _setUndoRef.current     = setUndoToast;
     _showBlockedDeleteRef.current = showBlockedDelete;
+    _opportunitiesRef.current = opportunities;
 
     // Quota & Commission
 
