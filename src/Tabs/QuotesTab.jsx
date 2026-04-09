@@ -977,6 +977,7 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
     const [form, setForm] = useState(EMPTY);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
+    const [pbSearch, setPbSearch] = useState('');
 
     const openNew = () => { setForm(EMPTY); setEditing('new'); setError(null); };
     const openEdit = (p) => {
@@ -1023,18 +1024,50 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
         }
     };
 
-    // Always alpha-sorted
+    // Always alpha-sorted, then filtered by search
     const sortedProducts = [...(products || [])].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const filteredProducts = pbSearch.trim()
+        ? sortedProducts.filter(p => {
+            const q = pbSearch.toLowerCase();
+            return (
+                (p.name || '').toLowerCase().includes(q) ||
+                (p.category || '').toLowerCase().includes(q) ||
+                (p.description || '').toLowerCase().includes(q) ||
+                (p.productType || p.type || '').toLowerCase().includes(q)
+            );
+          })
+        : sortedProducts;
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {/* Toolbar */}
             <div className="table-container" style={{ marginBottom: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', padding: '0.625rem 1.25rem' }}>
-                    <span style={{ fontSize: '0.8125rem', color: '#64748b' }}>{sortedProducts.length} product{sortedProducts.length !== 1 ? 's' : ''} in Price Book</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 1.25rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.8125rem', color: '#64748b', flexShrink: 0 }}>
+                        {filteredProducts.length !== sortedProducts.length
+                            ? `${filteredProducts.length} of ${sortedProducts.length} product${sortedProducts.length !== 1 ? 's' : ''}`
+                            : `${sortedProducts.length} product${sortedProducts.length !== 1 ? 's' : ''} in Price Book`}
+                    </span>
+                    {/* Search input */}
+                    <div style={{ position: 'relative', flex: '1', minWidth: '160px', maxWidth: '280px' }}>
+                        <span style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: '#a8a29e', fontSize: '0.8125rem', pointerEvents: 'none', lineHeight: 1 }}>🔍</span>
+                        <input
+                            type="text"
+                            value={pbSearch}
+                            onChange={e => setPbSearch(e.target.value)}
+                            placeholder="Search price book..."
+                            style={{ width: '100%', paddingLeft: '1.875rem', paddingRight: pbSearch ? '1.75rem' : '0.75rem', paddingTop: '0.375rem', paddingBottom: '0.375rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.8125rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                        {pbSearch && (
+                            <button onClick={() => setPbSearch('')}
+                                style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#a8a29e', cursor: 'pointer', fontSize: '0.875rem', lineHeight: 1, padding: 0 }}>
+                                ×
+                            </button>
+                        )}
+                    </div>
                     {isAdmin && (
                         <button onClick={openNew}
-                            style={{ marginLeft: 'auto', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>
+                            style={{ marginLeft: 'auto', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
                             + Add Product
                         </button>
                     )}
@@ -1117,7 +1150,7 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
                         </tr>
                     </thead>
                     <tbody>
-                        {sortedProducts.map(prod => (
+                        {filteredProducts.map(prod => (
                             <tr key={prod.id} style={{ borderBottom: '1px solid #f0ece4' }}
                                 onMouseEnter={e => e.currentTarget.style.background = '#faf9f7'}
                                 onMouseLeave={e => e.currentTarget.style.background = ''}>
@@ -1148,9 +1181,14 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
                                 )}
                             </tr>
                         ))}
-                        {sortedProducts.length === 0 && (
+                        {filteredProducts.length === 0 && (
                             <tr><td colSpan={isAdmin ? 7 : 6} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem', fontStyle: 'italic' }}>
-                                No products yet. {isAdmin ? 'Click "+ Add Product" to build your Price Book.' : 'Contact your admin to add products.'}
+                                {pbSearch.trim() ? (
+                                    <>No products match <strong>"{pbSearch}"</strong>.{' '}
+                                    <button onClick={() => setPbSearch('')} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '0.875rem', fontFamily: 'inherit', padding: 0, textDecoration: 'underline' }}>Clear search</button></>
+                                ) : (
+                                    isAdmin ? 'No products yet. Click "+ Add Product" to build your Price Book.' : 'Contact your admin to add products.'
+                                )}
                             </td></tr>
                         )}
                     </tbody>

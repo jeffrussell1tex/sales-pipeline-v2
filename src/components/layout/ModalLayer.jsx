@@ -40,6 +40,7 @@ export default function ModalLayer() {
         showOutlookImportModal, setShowOutlookImportModal,
         showSpiffClaimModal, setShowSpiffClaimModal, spiffClaimContext, setSpiffClaimContext,
         confirmModal, setConfirmModal,
+        blockedDeleteModal, setBlockedDeleteModal,
         lostReasonModal, setLostReasonModal, completeLostSave,
         notesPopover, setNotesPopover,
         undoToast, setUndoToast,
@@ -748,6 +749,44 @@ export default function ModalLayer() {
                                 onMouseEnter={e => e.target.style.opacity = '0.9'}
                                 onMouseLeave={e => e.target.style.opacity = '1'}
                             >{confirmModal.danger !== false ? 'Delete' : 'Confirm'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ════ BLOCKED DELETE MODAL ════ */}
+            {blockedDeleteModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(28,25,23,0.55)', zIndex: 10200, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? '0' : '1rem' }}
+                    onClick={() => setBlockedDeleteModal(null)}>
+                    <div style={{ background: '#ffffff', borderRadius: isMobile ? '16px 16px 0 0' : '14px', padding: 0, width: '100%', maxWidth: isMobile ? '100%' : '440px', boxShadow: '0 20px 60px rgba(0,0,0,0.28)', overflow: 'hidden' }}
+                        onClick={e => e.stopPropagation()}>
+                        {/* Header band */}
+                        <div style={{ background: '#dc2626', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <span style={{ fontSize: '1.125rem', lineHeight: 1 }}>🚫</span>
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: '800', fontSize: '0.9375rem', color: '#ffffff', lineHeight: 1.2 }}>
+                                    {blockedDeleteModal.title}
+                                </div>
+                            </div>
+                            <button onClick={() => setBlockedDeleteModal(null)}
+                                style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '6px', color: '#ffffff', cursor: 'pointer', fontSize: '1.125rem', lineHeight: 1, padding: '0.25rem 0.5rem', fontFamily: 'inherit', flexShrink: 0 }}>
+                                ×
+                            </button>
+                        </div>
+                        {/* Body */}
+                        <div style={{ padding: '1.5rem 1.5rem 0.75rem' }}>
+                            <p style={{ margin: '0 0 1.25rem', fontSize: '0.9rem', color: '#44403c', lineHeight: '1.6' }}>
+                                {blockedDeleteModal.message}
+                            </p>
+                        </div>
+                        {/* Footer */}
+                        <div style={{ padding: '0 1.5rem 1.25rem', display: 'flex', justifyContent: 'flex-end' }}>
+                            <button onClick={() => setBlockedDeleteModal(null)}
+                                style={{ padding: '0.6rem 1.75rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                                OK, Got It
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -31,6 +31,7 @@ export function useModalState() {
     const [lastCreatedRepName, setLastCreatedRepName] = useState(null);
 
     const [confirmModal, setConfirmModal] = useState(null);
+    const [blockedDeleteModal, setBlockedDeleteModal] = useState(null); // { title, message }
     const [lostReasonModal, setLostReasonModal] = useState(null);
     const [notesPopover, setNotesPopover] = useState(null);
     const [undoToast, setUndoToast] = useState(null);
@@ -73,6 +74,7 @@ export function useModalState() {
         pendingOppFormData, setPendingOppFormData,
         lastCreatedRepName, setLastCreatedRepName,
         confirmModal, setConfirmModal,
+        blockedDeleteModal, setBlockedDeleteModal,
         lostReasonModal, setLostReasonModal,
         notesPopover, setNotesPopover,
         undoToast, setUndoToast,

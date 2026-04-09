@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { dbFetch } from '../utils/storage';
 
 export function useAccounts(deps) {
-    const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel } = deps;
+    const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel, showBlockedDelete } = deps;
 
     const [accounts, setAccounts] = useState([]);
     const [accountModalError, setAccountModalError] = useState(null);
@@ -42,7 +42,10 @@ export function useAccounts(deps) {
 
         const hasActiveOpportunities = (opportunities || []).some(opp => allNames.includes(opp.account));
         if (hasActiveOpportunities) {
-            alert(`Cannot delete "${account.name}" because it has active opportunities. Please close or reassign them first.`);
+            showBlockedDelete(
+                `Cannot Delete "${account.name}"`,
+                `This account has active opportunities linked to it. Please close or reassign those opportunities before deleting this account.`
+            );
             return;
         }
 

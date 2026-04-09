@@ -198,13 +198,15 @@ function App() {
     const _setUndoRef     = useRef(null);
     const _getQuarterRef    = useRef(null);
     const _getQuarterLabelRef = useRef(null);
+    const _showBlockedDeleteRef = useRef(null);
     const _deps = {
-        get addAudit()         { return _addAuditRef.current; },
-        get showConfirm()      { return _showConfirmRef.current; },
-        get softDelete()       { return _softDeleteRef.current; },
-        get setUndoToast()     { return _setUndoRef.current; },
-        get getQuarter()       { return _getQuarterRef.current; },
-        get getQuarterLabel()  { return _getQuarterLabelRef.current; },
+        get addAudit()            { return _addAuditRef.current; },
+        get showConfirm()         { return _showConfirmRef.current; },
+        get softDelete()          { return _softDeleteRef.current; },
+        get setUndoToast()        { return _setUndoRef.current; },
+        get getQuarter()          { return _getQuarterRef.current; },
+        get getQuarterLabel()     { return _getQuarterLabelRef.current; },
+        get showBlockedDelete()   { return _showBlockedDeleteRef.current; },
     };
 
     const {
@@ -261,6 +263,10 @@ function App() {
         setConfirmModal({ message, onConfirm, danger });
     };
 
+    const showBlockedDelete = (title, message) => {
+        setBlockedDeleteModal({ title, message });
+    };
+
     const addAudit = (action, entity, entityId, label, detail = '') => {
         const entry = {
             id: 'audit_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
@@ -283,6 +289,7 @@ function App() {
     _showConfirmRef.current = showConfirm;
     _softDeleteRef.current  = softDelete;
     _setUndoRef.current     = setUndoToast;
+    _showBlockedDeleteRef.current = showBlockedDelete;
 
     // Quota & Commission
 
