@@ -821,7 +821,19 @@ export default function PipelineTab() {
     softDelete(
         `${idsToDelete.length} opportunit${idsToDelete.length === 1 ? 'y' : 'ies'}`,
         () => {},
-        () => { setOpportunities(snapshot); setUndoToast(null); }
+        () => {
+            setOpportunities(snapshot);
+            setUndoToast(null);
+            // Re-insert the deleted opportunities back to the DB
+            const deletedOpps = snapshot.filter(o => idsToDelete.includes(o.id));
+            deletedOpps.forEach(o => {
+                dbFetch('/.netlify/functions/opportunities', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(o),
+                }).catch(err => console.error('Failed to restore opportunity to DB:', err));
+            });
+        }
     );
 });
                                 }} style={{ padding: '0.2rem 0.625rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>

@@ -134,7 +134,19 @@ export default function AccountsTab() {
                                         softDelete(
                                             `${accountIdsToDelete.length} account${accountIdsToDelete.length === 1 ? '' : 's'}`,
                                             () => {},
-                                            () => { setAccounts(snapshot); setUndoToast(null); }
+                                            () => {
+                                                setAccounts(snapshot);
+                                                setUndoToast(null);
+                                                // Re-insert deleted accounts back to DB
+                                                const deletedAccounts = snapshot.filter(a => accountIdsToDelete.includes(a.id));
+                                                deletedAccounts.forEach(a => {
+                                                    dbFetch('/.netlify/functions/accounts', {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify(a),
+                                                    }).catch(err => console.error('Failed to restore account to DB:', err));
+                                                });
+                                            }
                                         );
                                     });
                                 }}>Delete ({selectedAccounts.length})</button>

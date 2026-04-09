@@ -75,7 +75,16 @@ export default function LeadsTab() {
             softDelete(
                 `Lead "${[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || 'Unnamed'}"`,
                 () => {},
-                () => { setLeads(snapshot); setUndoToast(null); }
+                () => {
+                    setLeads(snapshot);
+                    setUndoToast(null);
+                    // Re-insert the deleted lead back to the DB
+                    dbFetch('/.netlify/functions/leads', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(lead),
+                    }).catch(err => console.error('Failed to restore lead to DB:', err));
+                }
             );
         });
     };

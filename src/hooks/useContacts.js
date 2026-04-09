@@ -87,7 +87,16 @@ export function useContacts(deps) {
             softDelete(
                 `Contact "${((contact.firstName || '') + ' ' + (contact.lastName || '')).trim()}"`,
                 () => {},
-                () => { setContacts(snapshot); setUndoToast(null); }
+                () => {
+                    setContacts(snapshot);
+                    setUndoToast(null);
+                    // Re-insert the deleted contact back to the DB
+                    dbFetch('/.netlify/functions/contacts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(contact),
+                    }).catch(err => console.error('Failed to restore contact to DB:', err));
+                }
             );
         });
     };
