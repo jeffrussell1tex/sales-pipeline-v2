@@ -415,6 +415,8 @@ export default function SalesManagerTab() {
         getQuarter, getQuarterLabel,
         exportToCSV,
         showConfirm,
+        softDelete,
+        setUndoToast,
         activeTab, setActiveTab,
         spiffClaims, setSpiffClaims,
         isMobile,
@@ -1008,12 +1010,25 @@ export default function SalesManagerTab() {
                                                                 style={{ padding:'0.2rem 0.625rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'5px', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>💳 Mark Paid</button>
                                                         )}
                                                         {(claim.status === 'rejected' || claim.status === 'paid') && (
-                                                            <button onClick={async () => { if (window.confirm('Remove this claim?')) {
-                                                                try {
-                                                                    await dbFetch(`/.netlify/functions/spiff-claims?id=${claim.id}`, { method:'DELETE' });
+                                                            <button onClick={() => {
+                                                                const claimLabel = `SPIFF claim "${claim.spiffName || 'Unnamed'}"`;
+                                                                showConfirm(`Remove this ${claimLabel}?`, async () => {
+                                                                    const snapshot = spiffClaims.slice();
                                                                     setSpiffClaims(prev => prev.filter(c => c.id !== claim.id));
-                                                                } catch(err) { console.error('delete claim error:', err.message); }
-                                                            }}}
+                                                                    try {
+                                                                        await dbFetch(`/.netlify/functions/spiff-claims?id=${claim.id}`, { method:'DELETE' });
+                                                                    } catch(err) {
+                                                                        console.error('delete claim error:', err.message);
+                                                                        setSpiffClaims(snapshot);
+                                                                        return;
+                                                                    }
+                                                                    softDelete(
+                                                                        claimLabel,
+                                                                        () => {},
+                                                                        () => { setSpiffClaims(snapshot); setUndoToast(null); }
+                                                                    );
+                                                                });
+                                                            }}
                                                                 style={{ background:'none', border:'none', color:'#94a3b8', cursor:'pointer', fontSize:'0.875rem', padding:'0', lineHeight:1, flexShrink:0 }}>×</button>
                                                         )}
                                                     </div>

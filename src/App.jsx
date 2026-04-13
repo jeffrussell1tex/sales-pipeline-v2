@@ -154,7 +154,7 @@ function App() {
         accountCreatedFromOppForm, setAccountCreatedFromOppForm,
         pendingOppFormData, setPendingOppFormData,
         lastCreatedRepName, setLastCreatedRepName,
-        confirmModal, setConfirmModal, lostReasonModal, setLostReasonModal,
+        confirmModal, setConfirmModal, blockedDeleteModal, setBlockedDeleteModal, lostReasonModal, setLostReasonModal,
         notesPopover, setNotesPopover, undoToast, setUndoToast,
         taskReminderPopup, setTaskReminderPopup,
         taskReminderSnoozeH, setTaskReminderSnoozeH, taskReminderSnoozeM, setTaskReminderSnoozeM,
@@ -198,13 +198,17 @@ function App() {
     const _setUndoRef     = useRef(null);
     const _getQuarterRef    = useRef(null);
     const _getQuarterLabelRef = useRef(null);
+    const _showBlockedDeleteRef = useRef(null);
+    const _opportunitiesRef = useRef([]);
     const _deps = {
-        get addAudit()         { return _addAuditRef.current; },
-        get showConfirm()      { return _showConfirmRef.current; },
-        get softDelete()       { return _softDeleteRef.current; },
-        get setUndoToast()     { return _setUndoRef.current; },
-        get getQuarter()       { return _getQuarterRef.current; },
-        get getQuarterLabel()  { return _getQuarterLabelRef.current; },
+        get addAudit()            { return _addAuditRef.current; },
+        get showConfirm()         { return _showConfirmRef.current; },
+        get softDelete()          { return _softDeleteRef.current; },
+        get setUndoToast()        { return _setUndoRef.current; },
+        get getQuarter()          { return _getQuarterRef.current; },
+        get getQuarterLabel()     { return _getQuarterLabelRef.current; },
+        get showBlockedDelete()   { return _showBlockedDeleteRef.current; },
+        get opportunities()       { return _opportunitiesRef.current; },
     };
 
     const {
@@ -261,6 +265,10 @@ function App() {
         setConfirmModal({ message, onConfirm, danger });
     };
 
+    const showBlockedDelete = (title, message) => {
+        setBlockedDeleteModal({ title, message });
+    };
+
     const addAudit = (action, entity, entityId, label, detail = '') => {
         const entry = {
             id: 'audit_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
@@ -283,6 +291,8 @@ function App() {
     _showConfirmRef.current = showConfirm;
     _softDeleteRef.current  = softDelete;
     _setUndoRef.current     = setUndoToast;
+    _showBlockedDeleteRef.current = showBlockedDelete;
+    _opportunitiesRef.current = opportunities;
 
     // Quota & Commission
 
@@ -1388,6 +1398,7 @@ dbFetch('/.netlify/functions/users?me=true')
         showSpiffClaimModal, setShowSpiffClaimModal,
         spiffClaimContext, setSpiffClaimContext,
         confirmModal, setConfirmModal,
+        blockedDeleteModal, setBlockedDeleteModal,
         lostReasonModal, setLostReasonModal,
         notesPopover, setNotesPopover,
         undoToast, setUndoToast,

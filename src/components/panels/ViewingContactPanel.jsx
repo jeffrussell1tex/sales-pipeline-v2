@@ -40,6 +40,25 @@ export default function ViewingContactPanel({
     const handleEditTask    = (t) => { setEditingTask(t); setShowTaskModal(true); };
     const handleAddActivity = (ctx) => { setActivityInitialContext(ctx || null); setEditingActivity(null); setShowActivityModal(true); };
 
+    const [panelTab, setPanelTab] = React.useState(
+        () => localStorage.getItem('panel:contact:tab') || 'overview'
+    );
+    const switchPanelTab = (t) => { setPanelTab(t); localStorage.setItem('panel:contact:tab', t); };
+
+    const panelTabStyle = (t) => ({
+        padding: '0.5rem 1.25rem',
+        border: 'none',
+        borderBottom: panelTab === t ? '2px solid #2563eb' : '2px solid transparent',
+        background: 'transparent',
+        color: panelTab === t ? '#2563eb' : '#64748b',
+        fontWeight: panelTab === t ? '700' : '500',
+        fontSize: '0.875rem',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        transition: 'all 0.15s',
+        whiteSpace: 'nowrap',
+    });
+
     if (!viewingContact) return null;
 
     const ct         = viewingContact;
@@ -134,9 +153,16 @@ export default function ViewingContactPanel({
                 </div>
             </div>
 
+            {/* ── Sub-tab row ── */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#ffffff', flexShrink: 0, paddingLeft: '0.25rem' }}>
+                <button style={panelTabStyle('overview')} onClick={() => switchPanelTab('overview')}>Overview</button>
+                <button style={panelTabStyle('info')} onClick={() => switchPanelTab('info')}>Info</button>
+            </div>
+
             {/* ── Scrollable body ── */}
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
 
+                {panelTab === 'overview' && (<>
                 {/* KPI cards */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.25rem' }}>
                     <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', textAlign: 'center', borderLeft: '4px solid #2563eb', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
@@ -309,6 +335,86 @@ export default function ViewingContactPanel({
                         </div>
                     );
                 })()}
+                </>)}
+
+                {panelTab === 'info' && (
+                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+
+                            {/* Full Name — full width */}
+                            <div style={{ gridColumn: '1 / -1' }}>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Name</div>
+                                <div style={{ fontSize: '0.9375rem', fontWeight: '700', color: '#1e293b' }}>
+                                    {[ct.prefix, ct.firstName, ct.middleName, ct.lastName, ct.suffix].filter(Boolean).join(' ') || '—'}
+                                </div>
+                            </div>
+
+                            {/* Title */}
+                            <div>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Title</div>
+                                <div style={{ fontSize: '0.875rem', color: '#1e293b' }}>{ct.title || <span style={{ color: '#94a3b8' }}>—</span>}</div>
+                            </div>
+
+                            {/* Company Name */}
+                            <div>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Company</div>
+                                {ct.company ? (
+                                    relatedAccount ? (
+                                        <div style={{ fontSize: '0.875rem', color: '#2563eb', fontWeight: '600', cursor: 'pointer' }}
+                                            onClick={() => { setViewingContact(null); setViewingAccount(relatedAccount); }}
+                                            onMouseEnter={e => e.target.style.textDecoration = 'underline'}
+                                            onMouseLeave={e => e.target.style.textDecoration = 'none'}
+                                        >{ct.company}</div>
+                                    ) : (
+                                        <div style={{ fontSize: '0.875rem', color: '#1e293b' }}>{ct.company}</div>
+                                    )
+                                ) : <span style={{ fontSize: '0.875rem', color: '#94a3b8' }}>—</span>}
+                            </div>
+
+                            {/* Work Location */}
+                            <div>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Work Location</div>
+                                <div style={{ fontSize: '0.875rem', color: '#1e293b' }}>{ct.workLocation || <span style={{ color: '#94a3b8' }}>—</span>}</div>
+                            </div>
+
+                            {/* Work Email */}
+                            <div>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Work Email</div>
+                                {ct.email
+                                    ? <a href={`mailto:${ct.email}`} style={{ fontSize: '0.875rem', color: '#2563eb', textDecoration: 'none' }}
+                                        onMouseEnter={e => e.target.style.textDecoration = 'underline'}
+                                        onMouseLeave={e => e.target.style.textDecoration = 'none'}
+                                      >{ct.email}</a>
+                                    : <span style={{ fontSize: '0.875rem', color: '#94a3b8' }}>—</span>}
+                            </div>
+
+                            {/* Work Phone */}
+                            <div>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Work Phone</div>
+                                <div style={{ fontSize: '0.875rem', color: '#1e293b' }}>{ct.phone || <span style={{ color: '#94a3b8' }}>—</span>}</div>
+                            </div>
+
+                            {/* Mobile Phone */}
+                            <div>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Mobile Phone</div>
+                                <div style={{ fontSize: '0.875rem', color: '#1e293b' }}>{ct.mobile || <span style={{ color: '#94a3b8' }}>—</span>}</div>
+                            </div>
+
+                            {/* Address */}
+                            <div style={{ gridColumn: '1 / -1' }}>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Address</div>
+                                <div style={{ fontSize: '0.875rem', color: '#1e293b', lineHeight: 1.5 }}>
+                                    {ct.address || ct.city || ct.state || ct.zip || ct.country ? (<>
+                                        {ct.address && <div>{ct.address}</div>}
+                                        {(ct.city || ct.state || ct.zip) && <div>{[ct.city, ct.state, ct.zip].filter(Boolean).join(', ')}</div>}
+                                        {ct.country && <div>{ct.country}</div>}
+                                    </>) : <span style={{ color: '#94a3b8' }}>—</span>}
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                )}
             </div>
 
             <ResizeHandles getResizeHandleProps={getResizeHandleProps} />

@@ -11,6 +11,7 @@ export default function LeadsTab() {
         contacts,
         settings, currentUser, canSeeAll, softDelete, showConfirm,
         addAudit,
+        setUndoToast,
         isMobile,
     } = useApp();
     const [leadDragging, setLeadDragging] = React.useState(null); // { leadId, fromStage }
@@ -74,7 +75,16 @@ export default function LeadsTab() {
             softDelete(
                 `Lead "${[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || 'Unnamed'}"`,
                 () => {},
-                () => { setLeads(snapshot); }
+                () => {
+                    setLeads(snapshot);
+                    setUndoToast(null);
+                    // Re-insert the deleted lead back to the DB
+                    dbFetch('/.netlify/functions/leads', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(lead),
+                    }).catch(err => console.error('Failed to restore lead to DB:', err));
+                }
             );
         });
     };

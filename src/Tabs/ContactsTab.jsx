@@ -121,7 +121,19 @@ export default function ContactsTab() {
     softDelete(
         `${contactIdsToDelete.length} contact${contactIdsToDelete.length === 1 ? '' : 's'}`,
         () => {},
-        () => { setContacts(snapshot); setUndoToast(null); }
+        () => {
+            setContacts(snapshot);
+            setUndoToast(null);
+            // Re-insert deleted contacts back to DB
+            const deletedContacts = snapshot.filter(c => contactIdsToDelete.includes(c.id));
+            deletedContacts.forEach(c => {
+                dbFetch('/.netlify/functions/contacts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(c),
+                }).catch(err => console.error('Failed to restore contact to DB:', err));
+            });
+        }
     );
 });
                             }}

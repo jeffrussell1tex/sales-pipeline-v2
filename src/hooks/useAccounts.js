@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { dbFetch } from '../utils/storage';
 
 export function useAccounts(deps) {
-    const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel } = deps;
+    const { addAudit, showConfirm, softDelete, setUndoToast, getQuarter, getQuarterLabel, showBlockedDelete } = deps;
 
     const [accounts, setAccounts] = useState([]);
     const [accountModalError, setAccountModalError] = useState(null);
@@ -40,9 +40,16 @@ export function useAccounts(deps) {
         const allIds = [accountId, ...subs.map(s => s.id)];
         const allNames = [account.name, ...subs.map(s => s.name)];
 
-        const hasActiveOpportunities = (opportunities || []).some(opp => allNames.includes(opp.account));
+        const closedStages = ['closed won', 'closed lost', 'won', 'lost'];
+        const hasActiveOpportunities = (opportunities || []).some(opp =>
+            allNames.includes(opp.account) &&
+            !closedStages.includes((opp.stage || '').toLowerCase())
+        );
         if (hasActiveOpportunities) {
-            alert(`Cannot delete "${account.name}" because it has active opportunities. Please close or reassign them first.`);
+            showBlockedDelete(
+                `Cannot Delete "${account.name}"`,
+                `This account has active opportunities linked to it. Please close or reassign those opportunities before deleting this account.`
+            );
             return;
         }
 
@@ -75,7 +82,19 @@ export function useAccounts(deps) {
             softDelete(
                 `Account "${account.name}"`,
                 () => {},
-                () => { setAccounts(snapshot); setUndoToast(null); }
+                () => {
+                    setAccounts(snapshot);
+                    setUndoToast(null);
+                    // Re-insert all deleted accounts back to the DB
+                    const deletedAccounts = snapshot.filter(a => allIds.includes(a.id));
+                    deletedAccounts.forEach(a => {
+                        dbFetch('/.netlify/functions/accounts', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(a),
+                        }).catch(err => console.error('Failed to restore account to DB:', err));
+                    });
+                }
             );
         });
     };

@@ -64,7 +64,16 @@ export function useTasks(deps) {
             softDelete(
                 `Task "${task.title || task.subject || 'Untitled'}"`,
                 () => {},
-                () => { setTasks(snapshot); setUndoToast(null); }
+                () => {
+                    setTasks(snapshot);
+                    setUndoToast(null);
+                    // Re-insert the deleted task back to the DB
+                    dbFetch('/.netlify/functions/tasks', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(task),
+                    }).catch(err => console.error('Failed to restore task to DB:', err));
+                }
             );
         });
     };
