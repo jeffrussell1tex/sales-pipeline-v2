@@ -500,39 +500,38 @@ export default function ModalLayer() {
                     importType={csvImportType}
                     contacts={contacts}
                     accounts={accounts}
+                    opportunities={opportunities}
                     onClose={() => setShowCsvImportModal(false)}
-                    onImportContacts={async (newContacts) => {
+                    onImportContacts={async (newContacts, overwrites = []) => {
                         // Lower concurrency to avoid Neon connection limits with large imports
                         const CONCURRENCY = 3;   // max simultaneous DB calls
                         const BATCH_SIZE = 50;   // records processed per progress tick
                         const RETRY = 2;         // retry each record up to 2 times on failure
                         const DELAY_MS = 100;    // ms pause between batches
 
-                        const saveOne = async (url, item, retriesLeft = RETRY) => {
+                        const saveOne = async (url, method, item, retriesLeft = RETRY) => {
                             try {
-                                const r = await dbFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) });
+                                const r = await dbFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) });
                                 if (!r || !r.ok) throw new Error('HTTP ' + (r?.status || 'no response'));
                                 return true;
                             } catch (e) {
                                 if (retriesLeft > 0) {
                                     await new Promise(res => setTimeout(res, 300));
-                                    return saveOne(url, item, retriesLeft - 1);
+                                    return saveOne(url, method, item, retriesLeft - 1);
                                 }
                                 return false;
                             }
                         };
 
-                        const saveAll = async (url, items, progressOffset = 0, progressTotal = items.length) => {
+                        const saveAll = async (url, method, items, progressOffset = 0, progressTotal = items.length) => {
                             let failed = 0, done = 0;
-                            // Process in batches, each batch has limited concurrency
                             for (let i = 0; i < items.length; i += BATCH_SIZE) {
                                 const batch = items.slice(i, i + BATCH_SIZE);
-                                // Run batch with limited concurrency
                                 const queue = [...batch];
                                 const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
                                     while (queue.length > 0) {
                                         const item = queue.shift();
-                                        const ok = await saveOne(url, item);
+                                        const ok = await saveOne(url, method, item);
                                         if (!ok) failed++;
                                         done++;
                                         if (typeof window.__importProgressCb === 'function') {
@@ -548,13 +547,9 @@ export default function ModalLayer() {
                             return failed;
                         };
 
-                        const contactsWithIds = newContacts.map((c) => ({
-                            ...c,
-                            id: crypto.randomUUID(),
-                            createdAt: new Date().toISOString()
-                        }));
+                        const totalProgress = newContacts.length + overwrites.length;
 
-                        // Step 1: Auto-add new companies to accounts first
+                        // Step 1: Auto-add new companies to accounts first (from newContacts only — overwrites keep existing account linkage)
                         const existingNames = accounts.map(a => a.name.toLowerCase());
                         const newCompanies = [...new Set(
                             newContacts.map(c => c.company).filter(c => c && !existingNames.includes(c.toLowerCase()))
@@ -566,25 +561,52 @@ export default function ModalLayer() {
                                 zip: '', country: '', website: '', phone: '', accountOwner: '',
                             }));
                             setAccounts(prev => [...prev, ...newAccts]);
-                            await saveAll('/.netlify/functions/accounts', newAccts);
+                            await saveAll('/.netlify/functions/accounts', 'POST', newAccts);
                         }
 
-                        // Step 2: Save contacts
-                        setContacts(prev => [...prev, ...contactsWithIds]);
-                        const contactsFailed = await saveAll('/.netlify/functions/contacts', contactsWithIds, 0, contactsWithIds.length);
-                        if (contactsFailed > 0) {
-                            throw new Error(`${contactsFailed} of ${contactsWithIds.length} contacts failed to save. The rest imported successfully — try re-importing the failed records.`);
+                        // Step 2: POST new contacts
+                        const contactsWithIds = newContacts.map((c) => ({
+                            ...c,
+                            id: crypto.randomUUID(),
+                            createdAt: new Date().toISOString()
+                        }));
+                        if (contactsWithIds.length > 0) {
+                            setContacts(prev => [...prev, ...contactsWithIds]);
+                            const contactsFailed = await saveAll('/.netlify/functions/contacts', 'POST', contactsWithIds, 0, totalProgress);
+                            if (contactsFailed > 0) {
+                                throw new Error(`${contactsFailed} of ${contactsWithIds.length} contacts failed to save. The rest imported successfully — try re-importing the failed records.`);
+                            }
+                        }
+
+                        // Step 3: PUT overwrites — use the existing record's id
+                        if (overwrites.length > 0) {
+                            const overwritesWithIds = overwrites.map((c) => ({
+                                ...c,
+                                id: c._existingId,
+                                updatedAt: new Date().toISOString(),
+                                _existingId: undefined,
+                            }));
+                            setContacts(prev => prev.map(existing => {
+                                const ow = overwritesWithIds.find(o => o.id === existing.id);
+                                return ow ? { ...existing, ...ow } : existing;
+                            }));
+                            const overwritesFailed = await saveAll('/.netlify/functions/contacts', 'PUT', overwritesWithIds, contactsWithIds.length, totalProgress);
+                            if (overwritesFailed > 0) {
+                                throw new Error(`${overwritesFailed} of ${overwrites.length} overwrites failed to save. Try re-importing the failed records.`);
+                            }
                         }
                     }}
-                    onImportAccounts={async (newAccounts) => {
-                        // Pass 1: parents (no parentAccount field)
+                    onImportAccounts={async (newAccounts, overwrites = []) => {
+                        const totalProgress = newAccounts.length + overwrites.length;
+
+                        // Pass 1: new accounts — parents first, then sub-accounts
                         const parents = newAccounts.filter(a => !a.parentAccount?.trim());
                         const parentsWithIds = parents.map(a => {
                             const { parentAccount: _drop, ...rest } = a;
                             return { ...rest, id: crypto.randomUUID(), parentAccountId: null };
                         });
 
-                        // Pass 2: sub-accounts — resolve parentAccountId from parents
+                        // Pass 2: new sub-accounts — resolve parentAccountId
                         const subs = newAccounts.filter(a => a.parentAccount?.trim());
                         const allAccountsSoFar = [...accounts, ...parentsWithIds];
                         const subsWithIds = subs.map(a => {
@@ -596,32 +618,54 @@ export default function ModalLayer() {
                         });
 
                         const allWithIds = [...parentsWithIds, ...subsWithIds];
-                        if (allWithIds.length === 0) return;
 
-                        // Optimistic UI update
-                        setAccounts(prev => [...prev, ...allWithIds]);
-                        if (typeof window.__importProgressCb === 'function') window.__importProgressCb(0, allWithIds.length);
+                        if (allWithIds.length > 0) {
+                            setAccounts(prev => [...prev, ...allWithIds]);
+                            if (typeof window.__importProgressCb === 'function') window.__importProgressCb(0, totalProgress);
 
-                        // Single bulk POST — one auth check, one DB call
-                        const r = await dbFetch('/.netlify/functions/accounts', {
-                            method: 'POST',
-                            body: JSON.stringify(allWithIds),
-                        });
-                        const result = await r.json();
+                            const r = await dbFetch('/.netlify/functions/accounts', {
+                                method: 'POST',
+                                body: JSON.stringify(allWithIds),
+                            });
+                            const result = await r.json();
 
-                        if (typeof window.__importProgressCb === 'function') window.__importProgressCb(allWithIds.length, allWithIds.length);
+                            if (typeof window.__importProgressCb === 'function') window.__importProgressCb(allWithIds.length, totalProgress);
 
-                        if (!r.ok) throw new Error(result.error || 'Bulk import failed. Please try again.');
+                            if (!r.ok) throw new Error(result.error || 'Bulk import failed. Please try again.');
 
-                        const insertedCount = result.inserted ?? result.accounts?.length ?? allWithIds.length;
-                        const failedCount = allWithIds.length - insertedCount;
-                        if (failedCount > 0) throw new Error(`${failedCount} of ${allWithIds.length} accounts failed to save. The rest imported successfully.`);
+                            const insertedCount = result.inserted ?? result.accounts?.length ?? allWithIds.length;
+                            const failedCount = allWithIds.length - insertedCount;
+                            if (failedCount > 0) throw new Error(`${failedCount} of ${allWithIds.length} accounts failed to save. The rest imported successfully.`);
+                        }
+
+                        // Overwrites — PUT each with its existing id
+                        if (overwrites.length > 0) {
+                            const overwritesWithIds = overwrites.map(a => {
+                                const { parentAccount: _drop, _existingId, ...rest } = a;
+                                return { ...rest, id: _existingId };
+                            });
+                            setAccounts(prev => prev.map(existing => {
+                                const ow = overwritesWithIds.find(o => o.id === existing.id);
+                                return ow ? { ...existing, ...ow } : existing;
+                            }));
+                            const r2 = await dbFetch('/.netlify/functions/accounts', {
+                                method: 'PUT',
+                                body: JSON.stringify(overwritesWithIds),
+                            });
+                            if (typeof window.__importProgressCb === 'function') window.__importProgressCb(totalProgress, totalProgress);
+                            if (!r2.ok) {
+                                const res2 = await r2.json();
+                                throw new Error(res2.error || 'Overwrite failed. Please try again.');
+                            }
+                        }
                     }}
-                    onImportOpportunities={async (newOpps) => {
+                    onImportOpportunities={async (newOpps, overwrites = []) => {
                         const today = new Date().toISOString().split('T')[0];
                         const activePipelineId = allPipelines?.[0]?.id || 'default';
-                        const oppsWithIds = newOpps.map((o) => ({
-                            id: crypto.randomUUID(),
+                        const totalProgress = newOpps.length + overwrites.length;
+
+                        const buildOpp = (o, existingId) => ({
+                            id: existingId || crypto.randomUUID(),
                             pipelineId: activePipelineId,
                             opportunityName: o.opportunityName || o.account || 'Imported Deal',
                             account:              o.account              || '',
@@ -641,26 +685,46 @@ export default function ModalLayer() {
                             stageHistory:         [],
                             comments:             [],
                             contactIds:           [],
-                        }));
-
-                        // Optimistic UI update
-                        setOpportunities(prev => [...prev, ...oppsWithIds]);
-                        if (typeof window.__importProgressCb === 'function') window.__importProgressCb(0, oppsWithIds.length);
-
-                        // Single bulk POST
-                        const r = await dbFetch('/.netlify/functions/opportunities', {
-                            method: 'POST',
-                            body: JSON.stringify(oppsWithIds),
                         });
-                        const result = await r.json();
 
-                        if (typeof window.__importProgressCb === 'function') window.__importProgressCb(oppsWithIds.length, oppsWithIds.length);
+                        // POST new opps
+                        if (newOpps.length > 0) {
+                            const oppsWithIds = newOpps.map(o => buildOpp(o, null));
+                            setOpportunities(prev => [...prev, ...oppsWithIds]);
+                            if (typeof window.__importProgressCb === 'function') window.__importProgressCb(0, totalProgress);
 
-                        if (!r.ok) throw new Error(result.error || 'Bulk import failed. Please try again.');
+                            const r = await dbFetch('/.netlify/functions/opportunities', {
+                                method: 'POST',
+                                body: JSON.stringify(oppsWithIds),
+                            });
+                            const result = await r.json();
 
-                        const insertedCount = result.inserted ?? result.opportunities?.length ?? oppsWithIds.length;
-                        const failedCount = oppsWithIds.length - insertedCount;
-                        if (failedCount > 0) throw new Error(`${failedCount} of ${oppsWithIds.length} opportunities failed to save. The rest imported successfully.`);
+                            if (typeof window.__importProgressCb === 'function') window.__importProgressCb(newOpps.length, totalProgress);
+
+                            if (!r.ok) throw new Error(result.error || 'Bulk import failed. Please try again.');
+
+                            const insertedCount = result.inserted ?? result.opportunities?.length ?? oppsWithIds.length;
+                            const failedCount = oppsWithIds.length - insertedCount;
+                            if (failedCount > 0) throw new Error(`${failedCount} of ${oppsWithIds.length} opportunities failed to save. The rest imported successfully.`);
+                        }
+
+                        // PUT overwrites
+                        if (overwrites.length > 0) {
+                            const overwritesBuilt = overwrites.map(o => buildOpp(o, o._existingId));
+                            setOpportunities(prev => prev.map(existing => {
+                                const ow = overwritesBuilt.find(o => o.id === existing.id);
+                                return ow ? { ...existing, ...ow } : existing;
+                            }));
+                            const r2 = await dbFetch('/.netlify/functions/opportunities', {
+                                method: 'PUT',
+                                body: JSON.stringify(overwritesBuilt),
+                            });
+                            if (typeof window.__importProgressCb === 'function') window.__importProgressCb(totalProgress, totalProgress);
+                            if (!r2.ok) {
+                                const res2 = await r2.json();
+                                throw new Error(res2.error || 'Overwrite failed. Please try again.');
+                            }
+                        }
                     }}
                 />
             )}
