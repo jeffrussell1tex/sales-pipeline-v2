@@ -611,10 +611,15 @@ export default function AccountModal({
                             <div className="form-group">
                                 <label>Total Employees <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>optional</span></label>
                                 <input
-                                    type="number"
-                                    min="0"
-                                    value={formData.totalEmployees || ''}
-                                    onChange={e => handleChange('totalEmployees', e.target.value)}
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={formData.totalEmployees
+                                        ? Number(String(formData.totalEmployees).replace(/,/g, '')).toLocaleString('en-US')
+                                        : ''}
+                                    onChange={e => {
+                                        const raw = e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '');
+                                        handleChange('totalEmployees', raw);
+                                    }}
                                     placeholder="e.g. 250"
                                 />
                             </div>
@@ -623,12 +628,16 @@ export default function AccountModal({
                             <div className="form-group">
                                 <label>Annual Revenue ($) <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>optional</span></label>
                                 <input
-                                    type="number"
-                                    min="0"
-                                    step="1000"
-                                    value={formData.annualRevenue || ''}
-                                    onChange={e => handleChange('annualRevenue', e.target.value)}
-                                    placeholder="e.g. 5000000"
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={formData.annualRevenue
+                                        ? Number(String(formData.annualRevenue).replace(/,/g, '')).toLocaleString('en-US')
+                                        : ''}
+                                    onChange={e => {
+                                        const raw = e.target.value.replace(/,/g, '').replace(/[^0-9]/g, '');
+                                        handleChange('annualRevenue', raw);
+                                    }}
+                                    placeholder="e.g. 5,000,000"
                                 />
                             </div>
 
