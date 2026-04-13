@@ -51,6 +51,25 @@ export default function ViewingAccountPanel({
     const handleEditOpp     = (o) => { setEditingOpp(o); setShowModal(true); };
     const handleAddActivity = (ctx) => { setActivityInitialContext(ctx || null); setEditingActivity(null); setShowActivityModal(true); };
 
+    const [panelTab, setPanelTab] = React.useState(
+        () => localStorage.getItem('panel:account:tab') || 'overview'
+    );
+    const switchPanelTab = (t) => { setPanelTab(t); localStorage.setItem('panel:account:tab', t); };
+
+    const panelTabStyle = (t) => ({
+        padding: '0.5rem 1.25rem',
+        border: 'none',
+        borderBottom: panelTab === t ? '2px solid #2563eb' : '2px solid transparent',
+        background: 'transparent',
+        color: panelTab === t ? '#2563eb' : '#64748b',
+        fontWeight: panelTab === t ? '700' : '500',
+        fontSize: '0.875rem',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        transition: 'all 0.15s',
+        whiteSpace: 'nowrap',
+    });
+
     if (!viewingAccount) return null;
 
     const acc     = viewingAccount;
@@ -165,9 +184,16 @@ export default function ViewingAccountPanel({
                 </div>
             </div>
 
+            {/* ── Sub-tab row ── */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#ffffff', flexShrink: 0, paddingLeft: '0.25rem' }}>
+                <button style={panelTabStyle('overview')} onClick={() => switchPanelTab('overview')}>Overview</button>
+                <button style={panelTabStyle('account_info')} onClick={() => switchPanelTab('account_info')}>Account Info</button>
+            </div>
+
             {/* ── Scrollable body ── */}
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
 
+                {panelTab === 'overview' && (<>
                 {/* Account metadata + sub-accounts */}
                 {(acc.verticalMarket || acc.country || hasSubs) && (
                     <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.25rem 1.5rem', marginBottom: '1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
@@ -376,6 +402,91 @@ export default function ViewingAccountPanel({
                         </div>
                     )}
                 </div>
+                </>)}
+
+                {panelTab === 'account_info' && (
+                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+
+                            {/* Company Name — full width */}
+                            <div style={{ gridColumn: '1 / -1' }}>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Company Name</div>
+                                <div style={{ fontSize: '0.9375rem', fontWeight: '700', color: '#1e293b' }}>{acc.name || '—'}</div>
+                            </div>
+
+                            {/* Address */}
+                            <div style={{ gridColumn: '1 / -1' }}>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Address</div>
+                                <div style={{ fontSize: '0.875rem', color: '#1e293b', lineHeight: 1.5 }}>
+                                    {acc.address || acc.address2 || acc.city || acc.state || acc.zip || acc.country ? (<>
+                                        {acc.address  && <div>{acc.address}</div>}
+                                        {acc.address2 && <div>{acc.address2}</div>}
+                                        {(acc.city || acc.state || acc.zip) && <div>{[acc.city, acc.state, acc.zip].filter(Boolean).join(', ')}</div>}
+                                        {acc.country  && <div>{acc.country}</div>}
+                                    </>) : <span style={{ color: '#94a3b8' }}>—</span>}
+                                </div>
+                            </div>
+
+                            {/* Phone */}
+                            <div>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Phone</div>
+                                <div style={{ fontSize: '0.875rem', color: '#1e293b' }}>{acc.phone || <span style={{ color: '#94a3b8' }}>—</span>}</div>
+                            </div>
+
+                            {/* Website */}
+                            <div>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Website</div>
+                                {acc.linkedInUrl ? (
+                                    <a href={/^https?:\/\//i.test(acc.linkedInUrl) ? acc.linkedInUrl : 'https://' + acc.linkedInUrl}
+                                        target="_blank" rel="noopener noreferrer"
+                                        style={{ fontSize: '0.875rem', color: '#2563eb', textDecoration: 'none', wordBreak: 'break-all' }}
+                                        onMouseEnter={e => e.target.style.textDecoration = 'underline'}
+                                        onMouseLeave={e => e.target.style.textDecoration = 'none'}
+                                    >{acc.linkedInUrl}</a>
+                                ) : <span style={{ fontSize: '0.875rem', color: '#94a3b8' }}>—</span>}
+                            </div>
+
+                            {/* Company Description — full width */}
+                            {acc.description && (
+                                <div style={{ gridColumn: '1 / -1' }}>
+                                    <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Company Description</div>
+                                    <div style={{ fontSize: '0.875rem', color: '#1e293b', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{acc.description}</div>
+                                </div>
+                            )}
+
+                            {/* Total Employees */}
+                            <div>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Total Employees</div>
+                                <div style={{ fontSize: '0.875rem', color: '#1e293b' }}>
+                                    {acc.totalEmployees
+                                        ? Number(String(acc.totalEmployees).replace(/,/g, '')).toLocaleString('en-US')
+                                        : <span style={{ color: '#94a3b8' }}>—</span>}
+                                </div>
+                            </div>
+
+                            {/* Annual Revenue */}
+                            <div>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Annual Revenue</div>
+                                <div style={{ fontSize: '0.875rem', color: '#1e293b' }}>
+                                    {acc.annualRevenue
+                                        ? '$' + Number(String(acc.annualRevenue).replace(/,/g, '')).toLocaleString('en-US')
+                                        : <span style={{ color: '#94a3b8' }}>—</span>}
+                                </div>
+                            </div>
+
+                            {/* Fiscal Year End */}
+                            <div>
+                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Fiscal Year End</div>
+                                <div style={{ fontSize: '0.875rem', color: '#1e293b' }}>
+                                    {acc.fiscalYearEnd
+                                        ? new Date(2000, parseInt(acc.fiscalYearEnd, 10) - 1, 1).toLocaleString('en-US', { month: 'long' })
+                                        : <span style={{ color: '#94a3b8' }}>—</span>}
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                )}
             </div>
 
             <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
