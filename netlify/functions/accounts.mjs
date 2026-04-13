@@ -16,6 +16,7 @@ export const handler = async (event) => {
         verticalMarket:    d.verticalMarket    || null,
         industry:          d.industry          || null,
         address:           d.address           || null,
+        address2:          d.address2          || null,
         city:              d.city              || null,
         state:             d.state             || null,
         zip:               d.zip               || null,
@@ -30,6 +31,15 @@ export const handler = async (event) => {
         notes:             d.notes             || null,
         doNotContact:      d.doNotContact      === true ? true : false,
         customerTypes:     Array.isArray(d.customerTypes) ? d.customerTypes : [],
+        // Account Details tab fields
+        description:       d.description       || null,
+        totalEmployees:    d.totalEmployees     || null,
+        annualRevenue:     d.annualRevenue      || null,
+        fiscalYearEnd:     d.fiscalYearEnd      || null,
+        foundedYear:       d.foundedYear        || null,
+        linkedInUrl:       d.linkedInUrl        || null,
+        sicCode:           d.sicCode            || null,
+        naicsCode:         d.naicsCode          || null,
     });
 
     try {
