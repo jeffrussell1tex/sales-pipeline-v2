@@ -32,7 +32,7 @@ export default function ViewingContactPanel({
 
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit    = !isReadOnly;
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef, isMobile } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(760, 580, 480, 380);
 
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
@@ -91,14 +91,14 @@ export default function ViewingContactPanel({
             onClick={e => e.stopPropagation()}
             style={{
                 ...dragOffsetStyle,
-                width:  isMobile ? '100%' : size.w,
-                height: isMobile ? '100%' : size.h,
-                minWidth:  isMobile ? 'unset' : 480,
-                minHeight: isMobile ? 'unset' : 380,
+                width:  size.w,
+                height: size.h,
+                minWidth:  480,
+                minHeight: 380,
                 display: 'flex',
                 flexDirection: 'column',
                 background: '#f8fafc',
-                borderRadius: isMobile ? 0 : '12px',
+                borderRadius: '12px',
                 boxShadow: '0 16px 48px rgba(0,0,0,0.22)',
                 border: '1px solid #e2e8f0',
                 overflow: 'hidden',
@@ -115,7 +115,7 @@ export default function ViewingContactPanel({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    borderRadius: isMobile ? 0 : '12px 12px 0 0',
+                    borderRadius: '12px 12px 0 0',
                     minHeight: '52px',
                     flexShrink: 0,
                 }}
@@ -160,7 +160,7 @@ export default function ViewingContactPanel({
             </div>
 
             {/* ── Scrollable body ── */}
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1.25rem 1.5rem', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
 
                 {panelTab === 'overview' && (<>
                 {/* KPI cards */}

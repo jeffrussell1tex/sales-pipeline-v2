@@ -29,7 +29,7 @@ export default function ViewingTaskPanel({
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit = !isReadOnly;
 
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef, isMobile } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(600, 480, 400, 320);
 
     const handleEditTask = (t) => { setEditingTask(t); setShowTaskModal(true); };
@@ -74,14 +74,14 @@ export default function ViewingTaskPanel({
             onClick={e => e.stopPropagation()}
             style={{
                 ...dragOffsetStyle,
-                width:     isMobile ? '100%' : size.w,
-                height:    isMobile ? '100%' : size.h,
-                minWidth:  isMobile ? 'unset' : 400,
-                minHeight: isMobile ? 'unset' : 320,
+                width:     size.w,
+                height:    size.h,
+                minWidth:  400,
+                minHeight: 320,
                 display: 'flex',
                 flexDirection: 'column',
                 background: '#fff',
-                borderRadius: isMobile ? 0 : '12px',
+                borderRadius: '12px',
                 boxShadow: '0 16px 48px rgba(0,0,0,0.22)',
                 border: '1px solid #e5e2db',
                 overflow: 'hidden',
@@ -97,7 +97,7 @@ export default function ViewingTaskPanel({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    borderRadius: isMobile ? 0 : '12px 12px 0 0',
+                    borderRadius: '12px 12px 0 0',
                     minHeight: '52px',
                     flexShrink: 0,
                 }}
@@ -121,7 +121,7 @@ export default function ViewingTaskPanel({
             </div>
 
             {/* ── Scrollable body ── */}
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1.25rem 1.5rem', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
 
                 {t.description && (
                     <div style={{ padding: '0.75rem 1rem', background: '#f8f9fa', borderRadius: '6px', marginBottom: '1rem', fontSize: '0.875rem', color: '#475569', lineHeight: 1.5 }}>
