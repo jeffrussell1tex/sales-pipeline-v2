@@ -38,7 +38,7 @@ export default function ViewingAccountPanel({
 
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit = !isReadOnly;
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef, isMobile } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(860, 600, 520, 400);
 
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
@@ -122,14 +122,14 @@ export default function ViewingAccountPanel({
             onClick={e => e.stopPropagation()}
             style={{
                 ...dragOffsetStyle,
-                width:  size.w,
-                height: size.h,
-                minWidth:  520,
-                minHeight: 400,
+                width:  isMobile ? '100%' : size.w,
+                height: isMobile ? '100%' : size.h,
+                minWidth:  isMobile ? 'unset' : 520,
+                minHeight: isMobile ? 'unset' : 400,
                 display: 'flex',
                 flexDirection: 'column',
                 background: '#f8fafc',
-                borderRadius: '12px',
+                borderRadius: isMobile ? 0 : '12px',
                 boxShadow: '0 16px 48px rgba(0,0,0,0.22)',
                 border: '1px solid #e2e8f0',
                 overflow: 'hidden',
@@ -146,7 +146,7 @@ export default function ViewingAccountPanel({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    borderRadius: '12px 12px 0 0',
+                    borderRadius: isMobile ? 0 : '12px 12px 0 0',
                     minHeight: '52px',
                     flexShrink: 0,
                 }}
