@@ -1,68 +1,100 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useApp } from '../AppContext';
+
+const T = {
+    bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
+    border: '#e6ddd0', borderStrong: '#d4c8b4',
+    ink: '#2a2622', inkMid: '#5a544c', inkMuted: '#8a8378',
+    danger: '#9c3a2e',
+    stages: {
+        'Prospecting': '#b0a088', 'Qualification': '#c8a978', 'Discovery': '#b07a55',
+        'Evaluation (Demo)': '#b07a55', 'Proposal': '#b87333',
+        'Negotiation': '#7a5a3c', 'Negotiation/Review': '#7a5a3c',
+        'Contracts': '#4d6b3d', 'Closing': '#4d6b3d',
+        'Closed Won': '#3a5530', 'Closed Lost': '#9c3a2e',
+    },
+    sans: '"Plus Jakarta Sans", system-ui, sans-serif',
+    r: 3, rMd: 4,
+};
+const stageColor = (s) => T.stages[s] || T.inkMuted;
 
 export default function FunnelView({ pipelineFilteredOpps, funnelExpandedStage, setFunnelExpandedStage, handleEdit, handleDelete }) {
     const { stages, settings } = useApp();
-    const stageColors = ['#6366f1','#8b5cf6','#0ea5e9','#f59e0b','#f97316','#10b981','#16a34a','#ef4444'];
+    const maxCount = Math.max(...stages.map(s => pipelineFilteredOpps.filter(o => o.stage === s).length), 1);
+    const fmtARR = (n) => { if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'; if (n >= 1000) return '$' + Math.round(n/1000) + 'K'; return '$' + n.toLocaleString(); };
+
     return (
-        <div style={{ padding: '1.25rem 1.5rem' }}>
-            {stages.map((stage, idx) => {
+        <div style={{ padding: '0.75rem 1.5rem 1.5rem', fontFamily: T.sans }}>
+            {stages.map(stage => {
                 const stageOpps = pipelineFilteredOpps.filter(o => o.stage === stage);
-                const stageARR = stageOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
-                const maxCount = Math.max(...stages.map(s2 => pipelineFilteredOpps.filter(o => o.stage === s2).length), 1);
-                const barPct = stageOpps.length === 0 ? 4 : Math.max(8, Math.round((stageOpps.length / maxCount) * 100));
-                const color = stageColors[idx % stageColors.length];
+                const stageARR  = stageOpps.reduce((s, o) => s + (parseFloat(o.arr)||0), 0);
+                const pct       = stageOpps.length === 0 ? 3 : Math.max(6, Math.round((stageOpps.length / maxCount) * 100));
+                const color     = stageColor(stage);
                 const isExpanded = funnelExpandedStage === stage;
-                const stDef = (settings.funnelStages || []).find(s2 => s2.name === stage);
+                const stDef     = (settings.funnelStages||[]).find(s2 => s2.name === stage);
                 return (
-                    <div key={stage}>
-                        <div
-                            onClick={() => setFunnelExpandedStage(isExpanded ? null : stage)}
-                            style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.375rem', cursor: 'pointer', padding: '0.25rem 0.5rem', borderRadius: '6px' }}
-                            onMouseEnter={e => { e.currentTarget.style.background = '#f1f5f9'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                            <div style={{ width: 'clamp(90px, 25vw, 170px)', flexShrink: 0, textAlign: 'right', paddingRight: '0.75rem' }}>
-                                <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#475569', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stage}</div>
-                                <div style={{ fontSize: '0.6875rem', color: color, fontWeight: '700' }}>{Math.round(stageARR/1000)}K - {stageOpps.length} deal{stageOpps.length !== 1 ? 's' : ''}</div>
-                            </div>
-                            <div style={{ flex: 1, height: '38px', display: 'flex', alignItems: 'center' }}>
-                                <div style={{ width: barPct + '%', height: '100%', borderRadius: '5px', background: color, opacity: stageOpps.length === 0 ? 0.15 : 0.85, display: 'flex', alignItems: 'center', paddingLeft: '0.625rem', minWidth: '28px' }}>
-                                    {stageOpps.length > 0 && <span style={{ fontSize: '0.6875rem', fontWeight: '800', color: '#fff' }}>{stageOpps.length}</span>}
+                    <div key={stage} style={{ marginBottom: 2 }}>
+                        <div onClick={() => setFunnelExpandedStage(isExpanded ? null : stage)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '5px 6px', borderRadius: T.r, cursor: 'pointer', transition: 'background 120ms' }}
+                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            {/* Stage label */}
+                            <div style={{ width: 'clamp(90px,22vw,160px)', flexShrink: 0, textAlign: 'right', paddingRight: 10 }}>
+                                <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stage}</div>
+                                <div style={{ fontSize: 11, color, fontWeight: 600, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
+                                    {fmtARR(stageARR)} · {stageOpps.length}
                                 </div>
                             </div>
-                            <div style={{ width: '80px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                {stDef && <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{stDef.weight}% prob</span>}
-                                <span style={{ fontSize: '0.625rem', color: '#94a3b8' }}>{isExpanded ? '▲' : '▼'}</span>
+                            {/* Bar */}
+                            <div style={{ flex: 1, height: 36, display: 'flex', alignItems: 'center' }}>
+                                <div style={{ width: pct + '%', height: '100%', borderRadius: T.r, background: color, opacity: stageOpps.length === 0 ? 0.12 : 0.8, display: 'flex', alignItems: 'center', paddingLeft: 8, minWidth: 24, transition: 'width 400ms ease' }}>
+                                    {stageOpps.length > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>{stageOpps.length}</span>}
+                                </div>
+                            </div>
+                            {/* Right meta */}
+                            <div style={{ width: 72, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                                {stDef && <span style={{ fontSize: 11, color: T.inkMuted }}>{stDef.weight}%</span>}
+                                <span style={{ fontSize: 10, color: T.inkMuted, display: 'inline-block', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 200ms' }}>▼</span>
                             </div>
                         </div>
+                        {/* Expanded rows */}
                         {isExpanded && stageOpps.length > 0 && (
-                            <div style={{ marginLeft: 'clamp(90px, 25vw, 170px)', marginBottom: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#fff', overflowX: 'auto' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 80px 90px 80px', padding: '0.375rem 0.75rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', gap: '0.75rem' }}>
-                                    <span>Opportunity</span>
-                                    <span>Account</span>
-                                    <span style={{ textAlign: 'right' }}>ARR</span>
-                                    <span style={{ textAlign: 'center' }}>Close Date</span>
-                                    <span style={{ textAlign: 'center' }}>Actions</span>
+                            <div style={{ marginLeft: 'clamp(90px,22vw,160px)', marginBottom: 6, border: `1px solid ${T.border}`, borderRadius: T.rMd, overflow: 'hidden', background: T.surface, overflowX: 'auto' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 90px 100px 80px', padding: '6px 12px', background: T.bg, borderBottom: `1px solid ${T.border}`, gap: 12 }}>
+                                    {['Opportunity','Account','ARR','Close Date','Actions'].map((h, i) => (
+                                        <span key={h} style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: i >= 2 ? 'right' : 'left' }}>{h}</span>
+                                    ))}
                                 </div>
                                 {stageOpps.map(opp => (
                                     <div key={opp.id}
-                                        style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 80px 90px 80px', padding: '0.5rem 0.75rem', borderBottom: '1px solid #f1f5f9', fontSize: '0.8125rem', alignItems: 'center', gap: '0.75rem' }}
-                                        onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; }}
-                                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                                        <span style={{ fontWeight: '600', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp.opportunityName || opp.account}</span>
-                                        <span style={{ color: '#64748b', fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp.account}</span>
-                                        <span style={{ fontWeight: '700', color: '#2563eb', fontSize: '0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>${(parseFloat(opp.arr)||0).toLocaleString()}</span>
-                                        <span style={{ color: '#94a3b8', fontSize: '0.6875rem', whiteSpace: 'nowrap', textAlign: 'center' }}>{opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'}) : '—'}</span>
-                                        <div style={{ display: 'flex', gap: '0.375rem', justifyContent: 'center' }}>
-                                            <button className="action-btn" onClick={e => { e.stopPropagation(); handleEdit(opp); }} style={{ padding: '0.15rem 0.5rem', fontSize: '0.6875rem' }}>Edit</button>
-                                            <button className="action-btn delete" onClick={e => { e.stopPropagation(); handleDelete(opp.id); }} style={{ padding: '0.15rem 0.5rem', fontSize: '0.6875rem' }}>Del</button>
+                                        style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 90px 100px 80px', padding: '8px 12px', borderBottom: `1px solid ${T.border}`, fontSize: 12.5, alignItems: 'center', gap: 12, cursor: 'pointer', transition: 'background 120ms' }}
+                                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                        onClick={() => handleEdit(opp)}>
+                                        <span style={{ fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp.opportunityName || opp.account}</span>
+                                        <span style={{ color: T.inkMid, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opp.account}</span>
+                                        <span style={{ fontWeight: 700, color: T.ink, fontSize: 12, textAlign: 'right', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>${(parseFloat(opp.arr)||0).toLocaleString()}</span>
+                                        <span style={{ color: T.inkMuted, fontSize: 11, whiteSpace: 'nowrap', textAlign: 'right' }}>
+                                            {opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}
+                                        </span>
+                                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                                            <button onClick={e => { e.stopPropagation(); handleEdit(opp); }}
+                                                style={{ padding: '3px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, color: T.inkMid, fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}
+                                                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                                onMouseLeave={e => e.currentTarget.style.background = T.surface}>Edit</button>
+                                            <button onClick={e => { e.stopPropagation(); handleDelete(opp.id); }}
+                                                style={{ padding: '3px 8px', border: '1px solid rgba(156,58,46,0.3)', borderRadius: T.r, background: 'rgba(156,58,46,0.06)', color: T.danger, fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}
+                                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(156,58,46,0.12)'}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(156,58,46,0.06)'}>Del</button>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         )}
                         {isExpanded && stageOpps.length === 0 && (
-                            <div style={{ marginLeft: 'clamp(90px, 25vw, 170px)', marginBottom: '0.75rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '8px', fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center', border: '1px dashed #e2e8f0' }}>No deals in this stage</div>
+                            <div style={{ marginLeft: 'clamp(90px,22vw,160px)', marginBottom: 6, padding: '0.75rem', background: T.bg, borderRadius: T.rMd, fontSize: 12, color: T.inkMuted, textAlign: 'center', border: `1px dashed ${T.border}`, fontStyle: 'italic' }}>
+                                No deals in this stage
+                            </div>
                         )}
                     </div>
                 );
@@ -70,5 +102,3 @@ export default function FunnelView({ pipelineFilteredOpps, funnelExpandedStage, 
         </div>
     );
 }
-
-
