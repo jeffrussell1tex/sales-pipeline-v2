@@ -1454,6 +1454,14 @@ dbFetch('/.netlify/functions/users?me=true')
                 setViewingContact={setViewingContact}
                 dbOffline={dbOffline}
                 setDbOffline={setDbOffline}
+                overdueTaskCount={(() => {
+                    const now = new Date(); now.setHours(0,0,0,0);
+                    return visibleTasks.filter(t => {
+                        const s = t.status || (t.completed ? 'Completed' : 'Open');
+                        return (s === 'Open' || s === 'In-Process') && t.dueDate && new Date(t.dueDate + 'T12:00:00') < now;
+                    }).length;
+                })()}
+                mentionCount={(opportunities || []).reduce((acc, opp) => acc + (opp.comments || []).filter(c => c.timestamp > feedLastRead && c.author !== currentUser && (c.mentions || []).includes(currentUser)).length, 0)}
             />
 
             {/* ── DB OFFLINE BANNER ── */}
@@ -1466,96 +1474,6 @@ dbFetch('/.netlify/functions/users?me=true')
                     <button onClick={() => setDbOffline(false)} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:'#fff', borderRadius:'4px', padding:'2px 8px', cursor:'pointer', fontSize:'0.75rem', fontWeight:'700', fontFamily:'inherit' }}>✕</button>
                 </div>
             )}
-
-            <nav className="nav-tabs">
-                <button 
-                    className={`nav-tab ${activeTab === 'home' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('home')}
-                >
-                    HOME
-                </button>
-                <button 
-                    className={`nav-tab ${activeTab === 'pipeline' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('pipeline')}
-                >
-                    PIPELINE
-                </button>
-                <button 
-                    className={`nav-tab ${activeTab === 'tasks' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('tasks')}
-                    style={{ position: 'relative' }}
-                >
-                    TASKS
-                    {(() => {
-                        const now = new Date(); now.setHours(0,0,0,0);
-                        const overdueCount = visibleTasks.filter(t => {
-                            const s = t.status || (t.completed ? 'Completed' : 'Open');
-                            return (s === 'Open' || s === 'In-Process') && t.dueDate && new Date(t.dueDate + 'T12:00:00') < now;
-                        }).length;
-                        return overdueCount > 0 ? (
-                            <span style={{ position: 'absolute', top: '3px', right: '3px', background: '#ef4444', color: '#fff', borderRadius: '999px', fontSize: '0.5rem', fontWeight: '800', minWidth: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 }}>
-                                {overdueCount > 99 ? '99+' : overdueCount}
-                            </span>
-                        ) : null;
-                    })()}
-                    {(opportunities || []).reduce((acc, opp) => acc + (opp.comments || []).filter(c => c.timestamp > feedLastRead && c.author !== currentUser && (c.mentions || []).includes(currentUser)).length, 0) > 0 && (
-                        <span style={{ position: 'absolute', top: '4px', right: '4px', background: '#ef4444', color: '#fff', borderRadius: '999px', fontSize: '0.5rem', fontWeight: '800', minWidth: '13px', height: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 2px', lineHeight: 1 }}>!</span>
-                    )}
-                </button>
-                <button 
-                    className={`nav-tab ${activeTab === 'accounts' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('accounts')}
-                >
-                    ACCOUNTS
-                </button>
-                <button 
-                    className={`nav-tab ${activeTab === 'contacts' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('contacts')}
-                >
-                    CONTACTS
-                </button>
-                <button 
-                    className={`nav-tab ${activeTab === 'leads' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('leads')}
-                    style={{ display: settings.leadsEnabled === false ? 'none' : '' }}
-                >
-                    LEADS
-                </button>
-                <button
-                    className={`nav-tab ${activeTab === 'quotes' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('quotes')}
-                    style={{ display: settings.quotesEnabled === false ? 'none' : '' }}
-                >
-                    QUOTES
-                </button>
-                <button 
-                    className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('reports')}
-                >
-                    REPORTS
-                </button>
-                {(isAdmin || isManager) && (
-                    <button
-                        className={`nav-tab ${activeTab === 'salesManager' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('salesManager')}
-                    >
-                        SALES MANAGER
-                    </button>
-                )}
-                {isAdmin && (
-                    <button 
-                        className={`nav-tab ${activeTab === 'settings' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('settings')}
-                    >
-                        SETTINGS
-                    </button>
-                )}
-                {isReadOnly && (
-                    <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', padding: '0 0.75rem', fontSize: '0.6875rem', color: 'rgba(255,255,255,0.6)', fontWeight: '600', fontStyle: 'italic' }}>
-                        👁 View Only Mode
-                    </div>
-                )}
-            </nav>
 
             {activeTab === 'home' && (
                 <ErrorBoundary tabName="Home">
