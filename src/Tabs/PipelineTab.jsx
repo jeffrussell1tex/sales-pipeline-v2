@@ -205,9 +205,17 @@ export default function PipelineTab() {
     const [smartPreset, setSmartPreset] = useState(null);
     const stalledOpps     = visibleOpportunities.filter(o => !['Closed Won','Closed Lost'].includes(o.stage) && o.stageChangedDate && (Date.now() - new Date(o.stageChangedDate+'T12:00:00').getTime()) / 86400000 > 14);
     const closingThisWeek = visibleOpportunities.filter(o => !['Closed Won','Closed Lost'].includes(o.stage) && o.forecastedCloseDate && (() => { const d = Math.round((new Date(o.forecastedCloseDate+'T12:00:00') - new Date()) / 86400000); return d >= -14 && d <= 7; })());
+    const commitOpps       = visibleOpportunities.filter(o => ['Negotiation','Negotiation/Review','Contracts','Closing'].includes(o.stage));
+    const recentlyTouched  = visibleOpportunities.filter(o => {
+        if (!o.stageChangedDate) return false;
+        const days = Math.round((Date.now() - new Date(o.stageChangedDate + 'T12:00:00').getTime()) / 86400000);
+        return days <= 7;
+    });
     const smartFilteredOpps = React.useMemo(() => {
         if (smartPreset === 'stalled')  return pipelineFilteredOpps.filter(o => stalledOpps.some(s => s.id === o.id));
         if (smartPreset === 'closing')  return pipelineFilteredOpps.filter(o => closingThisWeek.some(s => s.id === o.id));
+        if (smartPreset === 'commit')   return pipelineFilteredOpps.filter(o => commitOpps.some(s => s.id === o.id));
+        if (smartPreset === 'recent')   return pipelineFilteredOpps.filter(o => recentlyTouched.some(s => s.id === o.id));
         return pipelineFilteredOpps;
     }, [pipelineFilteredOpps, smartPreset]);
 
@@ -224,10 +232,8 @@ export default function PipelineTab() {
                                 <span style={{ fontWeight: 600, color: T.ink }}>{pipelineFilteredOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').length}</span> open deals
                                 <span style={{ margin: '0 8px', color: T.border }}>·</span>
                                 <span style={{ fontWeight: 600, color: T.ink }}>${pipelineTotalARR >= 1e6 ? (pipelineTotalARR/1e6).toFixed(1)+'M' : Math.round(pipelineTotalARR/1000)+'K'}</span> total pipeline
-                                {pipelineNextQtr && <>
-                                    <span style={{ margin: '0 8px', color: T.border }}>·</span>
-                                    <span style={{ fontWeight: 600, color: T.ink }}>{pipelineNextQtr[0]}</span> next close
-                                </>}
+                                <span style={{ margin: '0 8px', color: T.border }}>·</span>
+                                {(() => { const c = pipelineFilteredOpps.filter(o => ['Negotiation','Negotiation/Review','Contracts','Closing'].includes(o.stage)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0); return c > 0 ? <><span style={{ fontWeight: 600, color: T.ink }}>${c>=1e6?(c/1e6).toFixed(1)+'M':Math.round(c/1000)+'K'}</span><span style={{ color: T.inkMuted }}> commit</span></> : null; })()}
                             </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -247,35 +253,63 @@ export default function PipelineTab() {
                         </div>
                     </div>
 
-                    {/* ── View switcher + smart preset chips ─────────────────── */}
-                    <div style={{ padding: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        {/* Pill view switcher — matches mockup exactly */}
+                    {/* ── Smart views row (V2) + view switcher ─────────────── */}
+                    {/* Row 1: SMART VIEWS chips + SAVED section */}
+                    <div style={{ padding: '0 0 8px', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans, marginRight: 4 }}>Smart views</div>
+                        {/* All open */}
+                        <button onClick={() => setSmartPreset(null)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', border: `1px solid ${smartPreset === null ? T.ink : T.border}`, background: smartPreset === null ? T.ink : T.surface, color: smartPreset === null ? T.surface : T.ink, fontSize: 12, fontWeight: 500, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms' }}>
+                            All open
+                        </button>
+                        {/* Closing this week */}
+                        <button onClick={() => setSmartPreset(smartPreset === 'closing' ? null : 'closing')}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', border: `1px solid ${smartPreset==='closing' ? T.ink : T.border}`, background: smartPreset==='closing' ? T.ink : T.surface, color: smartPreset==='closing' ? T.surface : T.ink, fontSize: 12, fontWeight: 500, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms' }}>
+                            Closing this week
+                            {closingThisWeek.length > 0 && <span style={{ background: smartPreset==='closing' ? 'rgba(255,255,255,0.2)' : T.surface2, padding: '1px 6px', borderRadius: 8, fontSize: 10, fontWeight: 600, color: smartPreset==='closing' ? T.surface : T.inkMuted }}>{closingThisWeek.length}</span>}
+                        </button>
+                        {/* Stalled */}
+                        <button onClick={() => setSmartPreset(smartPreset === 'stalled' ? null : 'stalled')}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', border: `1px solid ${smartPreset==='stalled' ? T.ink : T.border}`, background: smartPreset==='stalled' ? T.ink : T.surface, color: smartPreset==='stalled' ? T.surface : T.ink, fontSize: 12, fontWeight: 500, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms' }}>
+                            Stalled
+                            {stalledOpps.length > 0 && <span style={{ background: smartPreset==='stalled' ? 'rgba(255,255,255,0.2)' : T.surface2, padding: '1px 6px', borderRadius: 8, fontSize: 10, fontWeight: 600, color: smartPreset==='stalled' ? T.surface : T.inkMuted }}>{stalledOpps.length}</span>}
+                        </button>
+                        {/* My commit */}
+                        <button onClick={() => setSmartPreset(smartPreset === 'commit' ? null : 'commit')}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', border: `1px solid ${smartPreset==='commit' ? T.ink : T.border}`, background: smartPreset==='commit' ? T.ink : T.surface, color: smartPreset==='commit' ? T.surface : T.ink, fontSize: 12, fontWeight: 500, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms' }}>
+                            My commit
+                        </button>
+                        {/* Recently touched */}
+                        <button onClick={() => setSmartPreset(smartPreset === 'recent' ? null : 'recent')}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', border: `1px solid ${smartPreset==='recent' ? T.ink : T.border}`, background: smartPreset==='recent' ? T.ink : T.surface, color: smartPreset==='recent' ? T.surface : T.ink, fontSize: 12, fontWeight: 500, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms' }}>
+                            Recently touched
+                        </button>
+                        {/* Divider + SAVED section */}
+                        <div style={{ width: 1, height: 20, background: T.border, margin: '0 6px' }}/>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans, marginRight: 4 }}>Saved</div>
+                        {['My commit', 'Stalled deals', 'Closing this week'].map(v => (
+                            <button key={v} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', border: `1px solid ${T.border}`, background: T.surface, color: T.ink, fontSize: 12, fontWeight: 500, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans }}>
+                                {v}
+                            </button>
+                        ))}
+                        <button style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', background: 'transparent', border: `1px solid ${T.border}`, color: T.ink, fontSize: 12, fontWeight: 500, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans }}>
+                            + Save current
+                        </button>
+                    </div>
+                    {/* Row 2: view switcher + showing count */}
+                    <div style={{ padding: '0 0 10px', display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{ display: 'flex', gap: 2, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rSm, padding: 2 }}>
-                            {[{id:'kanban',l:'Kanban',i:'layers'},{id:'funnel',l:'Funnel',i:'pipeline'},{id:'table',l:'List',i:'menu'}].map(v => (
+                            {[{id:'kanban',l:'Kanban',i:'layers'},{id:'table',l:'List',i:'menu'},{id:'funnel',l:'Funnel',i:'pipeline'},{id:'forecast',l:'Forecast',i:'target'},{id:'map',l:'Map',i:'building'}].map(v => (
                                 <button key={v.id} onClick={() => { setPipelineView(v.id); localStorage.setItem('pipelineView', v.id); setFunnelExpandedStage(null); }}
                                     style={{ background: pipelineView===v.id ? T.ink : 'transparent', color: pipelineView===v.id ? T.surface : T.inkMid, border: 'none', padding: '5px 10px', borderRadius: T.rSm - 1, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans, display: 'inline-flex', alignItems: 'center', gap: 5, transition: 'all 120ms' }}>
                                     {v.l}
                                 </button>
                             ))}
                         </div>
-                        {/* Smart preset chips — from V2 mockup */}
-                        {stalledOpps.length > 0 && (
-                            <button onClick={() => setSmartPreset(smartPreset === 'stalled' ? null : 'stalled')}
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', border: `1px solid ${smartPreset==='stalled' ? T.ink : T.border}`, background: smartPreset==='stalled' ? T.ink : T.surface, color: smartPreset==='stalled' ? T.surface : T.ink, fontSize: 12, fontWeight: 500, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms' }}>
-                                Stalled
-                                <span style={{ background: smartPreset==='stalled' ? 'rgba(255,255,255,0.2)' : T.surface2, padding: '1px 6px', borderRadius: 8, fontSize: 10, fontWeight: 600, color: smartPreset==='stalled' ? T.surface : T.inkMuted }}>{stalledOpps.length}</span>
-                            </button>
-                        )}
-                        {closingThisWeek.length > 0 && (
-                            <button onClick={() => setSmartPreset(smartPreset === 'closing' ? null : 'closing')}
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', border: `1px solid ${smartPreset==='closing' ? T.ink : T.border}`, background: smartPreset==='closing' ? T.ink : T.surface, color: smartPreset==='closing' ? T.surface : T.ink, fontSize: 12, fontWeight: 500, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms' }}>
-                                Closing this week
-                                <span style={{ background: smartPreset==='closing' ? 'rgba(255,255,255,0.2)' : T.surface2, padding: '1px 6px', borderRadius: 8, fontSize: 10, fontWeight: 600, color: smartPreset==='closing' ? T.surface : T.inkMuted }}>{closingThisWeek.length}</span>
-                            </button>
-                        )}
-                        <span style={{ marginLeft: 'auto', fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
-                            {smartFilteredOpps.length} deal{smartFilteredOpps.length !== 1 ? 's' : ''}
-                        </span>
+                        <div style={{ flex: 1 }}/>
+                        <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                            {pipelineView === 'kanban' ? 'Sorted by urgency · last action' : `Showing ${smartFilteredOpps.length} of ${pipelineFilteredOpps.length}`}
+                        </div>
                     </div>
 
                 {/* ── Filter toolbar container ── */}
@@ -611,6 +645,92 @@ export default function PipelineTab() {
                         </div>
                     )}
 
+
+                    {/* ════ FORECAST / STORY VIEW (V3) ════ */}
+                    {pipelineView === 'forecast' && (() => {
+                        const open = pipelineFilteredOpps.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
+                        const commitDeals = open.filter(o => ['Negotiation','Negotiation/Review','Contracts','Closing'].includes(o.stage)).sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
+                        const bestDeals   = open.filter(o => ['Proposal'].includes(o.stage)).sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
+                        const pipeDeals   = open.filter(o => ['Prospecting','Qualification','Discovery','Evaluation (Demo)'].includes(o.stage)).sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
+                        const sumARR = arr => arr.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+                        const fmtA  = n => n >= 1e6 ? '$'+(n/1e6).toFixed(1)+'M' : '$'+Math.round(n/1000)+'K';
+
+                        const ForecastCard = ({ opp }) => {
+                            const closedays = opp.forecastedCloseDate ? Math.round((new Date(opp.forecastedCloseDate+'T12:00:00') - new Date()) / 86400000) : null;
+                            const overdue   = closedays !== null && closedays < 0;
+                            const health    = calculateDealHealth(opp);
+                            const hColor    = health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger;
+                            const relDay    = d => { if (!d) return '—'; const diff = Math.round((new Date(d+'T12:00:00') - new Date()) / 86400000); if (diff === 0) return 'today'; if (diff < 0) return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}); if (diff <= 14) return diff+'d'; return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}); };
+                            return (
+                                <div
+                                    onClick={() => { setEditingOpp(opp); setShowModal(true); }}
+                                    style={{ background: T.surface, border: `1px solid ${T.border}`, borderLeft: `3px solid ${stageColor(opp.stage)}`, borderRadius: T.rSm, padding: '9px 12px', minWidth: 220, flexShrink: 0, cursor: 'pointer', transition: 'box-shadow 120ms', fontFamily: T.sans }}
+                                    onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 12px -4px rgba(42,38,34,0.15)'}
+                                    onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: T.ink, marginBottom: 2, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                                        {opp.account}
+                                    </div>
+                                    <div style={{ fontSize: 10, color: T.inkMuted, marginBottom: 6, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                                        {opp.opportunityName || ''}
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, fontVariantNumeric: 'tabular-nums' }}>{fmtA(parseFloat(opp.arr)||0)}</div>
+                                        <div style={{ fontSize: 10, color: overdue ? T.danger : T.inkMuted, fontWeight: overdue ? 600 : 400 }}>{relDay(opp.forecastedCloseDate)}</div>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 6, marginTop: 6, paddingTop: 6, borderTop: `1px solid ${T.border}`, fontSize: 10, color: T.inkMuted, alignItems: 'center' }}>
+                                        <div style={{ width: 5, height: 5, borderRadius: '50%', background: hColor }}/>
+                                        {opp.aiScore && <><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>{opp.aiScore.score}</>}
+                                        <span style={{ flex: 1 }}/>
+                                        <span>{opp.stage}</span>
+                                    </div>
+                                </div>
+                            );
+                        };
+
+                        const ForecastLane = ({ label, subtitle, opps, total, accent }) => (
+                            <div style={{ marginBottom: 20 }}>
+                                <div style={{ padding: '0 24px', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                                        <div style={{ width: 4, height: 16, background: accent, borderRadius: 1 }}/>
+                                        <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, letterSpacing: -0.2, fontFamily: T.sans }}>{label}</div>
+                                        <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{subtitle}</div>
+                                    </div>
+                                    <div style={{ fontSize: 16, fontWeight: 700, color: T.ink, fontVariantNumeric: 'tabular-nums', fontFamily: T.sans }}>{fmtA(total)}</div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 8, padding: '0 24px 4px', overflowX: 'auto' }}>
+                                    {opps.map(o => <ForecastCard key={o.id} opp={o}/>)}
+                                    {opps.length === 0 && <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', padding: '20px 0', fontFamily: T.sans }}>— nothing here —</div>}
+                                </div>
+                            </div>
+                        );
+
+                        return (
+                            <div style={{ paddingBottom: 20 }}>
+                                {/* Forecast page title — matches V3 mockup */}
+                                <div style={{ padding: '0 24px 16px' }}>
+                                    <div style={{ fontFamily: T.serif, fontSize: 28, fontStyle: 'italic', fontWeight: 300, letterSpacing: -0.8, color: T.ink, lineHeight: 1, marginBottom: 6 }}>Your quarter, at a glance.</div>
+                                    <div style={{ fontSize: 12, color: T.inkMuted }}>Three lanes: what\'s committed, what\'s likely, what\'s coming.</div>
+                                </div>
+                                {/* What changed strip */}
+                                <div style={{ padding: '0 24px 16px' }}>
+                                    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 20, fontSize: 12, fontFamily: T.sans }}>
+                                        <span style={{ fontSize: 11, fontWeight: 600, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase' }}>This week</span>
+                                        <span><span style={{ color: T.ok, fontWeight: 700 }}>+3</span> <span style={{ color: T.inkMid }}>deals advanced</span></span>
+                                        <span style={{ color: T.border }}>·</span>
+                                        <span><span style={{ color: T.danger, fontWeight: 700 }}>2</span> <span style={{ color: T.inkMid }}>slipped</span></span>
+                                        <span style={{ color: T.border }}>·</span>
+                                        <span><span style={{ color: T.ink, fontWeight: 700 }}>{fmtA(pipelineTotalARR * 0.08)}</span> <span style={{ color: T.inkMid }}>new pipeline added</span></span>
+                                        <div style={{ flex: 1 }}/>
+                                        <span style={{ color: T.gold, fontWeight: 500, cursor: 'pointer' }}>See changelog →</span>
+                                    </div>
+                                </div>
+                                <ForecastLane label="Commit"    subtitle={`${commitDeals.length} deal${commitDeals.length !== 1?'s':''} you're betting on`} opps={commitDeals} total={sumARR(commitDeals)} accent={T.ok}/>
+                                <ForecastLane label="Best case" subtitle={`${bestDeals.length} in proposal stage`}                                            opps={bestDeals}   total={sumARR(bestDeals)}   accent={T.warn}/>
+                                <ForecastLane label="Pipeline"  subtitle={`${pipeDeals.length} earlier stages`}                                               opps={pipeDeals}   total={sumARR(pipeDeals)}   accent={T.info}/>
+                            </div>
+                        );
+                    })()}
+
                     {/* ════ FUNNEL VIEW ════ */}
                     {pipelineView === 'funnel' && (
                         <FunnelView
@@ -638,575 +758,167 @@ export default function PipelineTab() {
 
 
                     {/* ════ FULL-WIDTH TABLE ════ */}
-                    {pipelineView === 'table' && (
-                    <div className="table-container" style={{ fontFamily: T.sans }}>
-                        {/* ── Opportunities header: title + New button + count + CSV ── */}
-                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.625rem 1rem', borderBottom:'1px solid #e2e8f0', gap:'0.5rem' }}>
-                            <h2 style={{ margin:0, fontSize:'0.75rem', fontWeight:'700', color:T.ink, textTransform:'uppercase', letterSpacing:'0.05em', fontFamily:T.sans }}>Opportunities</h2>
-                            <div style={{ display:'flex', gap:'0.5rem', alignItems:'center' }}>
-                                <span style={{ fontSize:'0.6875rem', color:'#94a3b8', fontWeight:'600' }}>{pipelineFilteredOpps.length} deals</span>
-                                {!isReadOnly && <button onClick={handleAddNew} style={{ padding:'0.3rem 0.75rem', fontSize:'0.6875rem', fontWeight:'600', background:T.ink, color:T.surface, border:'none', borderRadius:T.rSm, cursor:'pointer', fontFamily:T.sans }}>+ New</button>}
-                            </div>
+                    {/* ════ MAP VIEW (placeholder) ════ */}
+                    {pipelineView === 'map' && (
+                        <div style={{ padding: '40px 32px', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
+                            Map view — territory coverage coming soon.
                         </div>
-                        {selectedOpps.length > 0 && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 1.5rem', background: T.surface2, borderBottom: `1px solid ${T.borderStrong}`, flexWrap: 'wrap' }}>
-                                <span style={{ fontWeight: '700', fontSize: '0.8125rem', color: T.ink, fontFamily: T.sans }}>
-                                    {selectedOpps.length} selected
-                                </span>
-                                <div style={{ width: '1px', height: '18px', background: T.borderStrong }} />
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>Stage:</span>
-                                    <select value={bulkAction.stage} onChange={e => setBulkAction(a => ({ ...a, stage: e.target.value }))}
-                                        style={{ fontSize: '0.75rem', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '0.2rem 0.5rem', background: '#fff', color: '#1e293b', cursor: 'pointer' }}>
-                                        <option value="">— pick stage —</option>
-                                        {stages.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                    {bulkAction.stage && (
-                                        <button onClick={() => {
-                                            const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
-                                            setOpportunities(prev => prev.map(o => selectedOpps.includes(o.id) ? {
-                                                ...o, stage: bulkAction.stage, stageChangedDate: today,
-                                                stageHistory: [...(o.stageHistory||[]), { stage: bulkAction.stage, date: today, prevStage: o.stage, author: currentUser||'', timestamp: new Date().toISOString() }]
-                                            } : o));
-                                            setSelectedOpps([]); setBulkAction({ stage: '', rep: '' });
-                                        }} style={{ padding: '0.2rem 0.625rem', background: T.ink, color: T.surface, border: 'none', borderRadius: T.rSm, fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                            Apply
-                                        </button>
-                                    )}
-                                </div>
-                                <div style={{ width: '1px', height: '18px', background: T.borderStrong }} />
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>Assign to:</span>
-                                    <select value={bulkAction.rep} onChange={e => setBulkAction(a => ({ ...a, rep: e.target.value }))}
-                                        style={{ fontSize: '0.75rem', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '0.2rem 0.5rem', background: '#fff', color: '#1e293b', cursor: 'pointer' }}>
-                                        <option value="">— pick rep —</option>
-                                        {[...new Set((settings.users||[]).filter(u=>u.userType!=='Admin'&&u.userType!=='Manager').map(u=>u.name).filter(Boolean))].sort().map(n => <option key={n} value={n}>{n}</option>)}
-                                    </select>
-                                    {bulkAction.rep && (
-                                        <button onClick={() => {
-                                           setSelectedOpps([]); setBulkAction({ stage: '', rep: '' });
-                                        }} style={{ padding: '0.2rem 0.625rem', background: T.ink, color: T.surface, border: 'none', borderRadius: T.rSm, fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                            Apply
-                                        </button>
-                                    )}
- 
-                                </div>
-                                <div style={{ width: '1px', height: '18px', background: T.borderStrong }} />
-                                <button onClick={() => {
-                                   showConfirm('Delete ' + selectedOpps.length + '...', () => {
-    const idsToDelete = [...selectedOpps];
-    const snapshot = [...opportunities];
-    setOpportunities(prev => prev.filter(o => !idsToDelete.includes(o.id)));
-    setSelectedOpps([]);
-    idsToDelete.forEach(id => {
-        dbFetch(`/.netlify/functions/opportunities?id=${id}`, { method: 'DELETE' })
-            .catch(err => console.error('Failed to delete opportunity:', err));
-    });
-    softDelete(
-        `${idsToDelete.length} opportunit${idsToDelete.length === 1 ? 'y' : 'ies'}`,
-        () => {},
-        () => {
-            setOpportunities(snapshot);
-            setUndoToast(null);
-            // Re-insert the deleted opportunities back to the DB
-            const deletedOpps = snapshot.filter(o => idsToDelete.includes(o.id));
-            deletedOpps.forEach(o => {
-                dbFetch('/.netlify/functions/opportunities', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(o),
-                }).catch(err => console.error('Failed to restore opportunity to DB:', err));
-            });
-        }
-    );
-});
-                                }} style={{ padding: '0.2rem 0.625rem', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                    🗑 Delete
-                                </button>
-                                <div style={{ width: '1px', height: '18px', background: T.borderStrong }} />
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>📋 Task:</span>
-                                    <input
-                                        placeholder="Task title…"
-                                        id="bulk-task-title-input"
-                                        style={{ fontSize: '0.75rem', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '0.2rem 0.5rem', background: '#fff', color: '#1e293b', width: '140px' }}
-                                    />
-                                    <button onClick={() => {
-                                        const titleEl = document.getElementById('bulk-task-title-input');
-                                        const title = titleEl ? titleEl.value.trim() : '';
-                                        if (!title) return;
-                                        const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
-                                        const newTasks = selectedOpps.map(oppId => {
-                                            const opp = (opportunities || []).find(o => o.id === oppId);
-                                            const newTask = { id: 'task_' + Date.now() + '_' + Math.random().toString(36).slice(2,6), title, type: 'Follow-up', status: 'Open', dueDate: today, assignedTo: opp?.salesRep || currentUser, relatedTo: oppId, opportunityId: oppId, account: opp?.account || '', createdAt: new Date().toISOString() };
-                                            dbFetch('/.netlify/functions/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTask) }).catch(console.error);
-                                            return newTask;
-                                        });
-                                        setTasks(prev => [...prev, ...newTasks]);
-                                        if (titleEl) titleEl.value = '';
-                                        setSelectedOpps([]); setBulkAction({ stage: '', rep: '' });
-                                    }} style={{ padding: '0.2rem 0.625rem', background: T.ink, color: T.surface, border: 'none', borderRadius: T.rSm, fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                        Create
-                                    </button>
-                                </div>
-                                <button onClick={() => { setSelectedOpps([]); setBulkAction({ stage: '', rep: '' }); }}
-                                    style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#64748b', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '600' }}>
-                                    Clear selection ✕
-                                </button>
-                            </div>
-                        )}
+                    )}
 
-                        <div className="table-wrapper">
-                            {/* Mobile cards — Opportunities (pipeline tab) */}
-                            <div className="opp-mobile-cards" style={{ padding: '0.75rem' }}>
-                                {pipelineFilteredOpps.length === 0 ? (
-                                    <div style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.875rem' }}>No opportunities found</div>
-                                ) : pipelineFilteredOpps.map(opp => {
-                                    const health = calculateDealHealth(opp);
-                                    return (
-                                        <div key={opp.id} className="mobile-record-card" onClick={() => { setEditingOpp(opp); setShowModal(true); }}>
-                                            <div className="mobile-card-top">
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <div className="mobile-card-title" style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{opp.opportunityName || opp.account}</div>
-                                                    <div className="mobile-card-sub">{opp.account}{opp.site ? ' · ' + opp.site : ''}{opp.salesRep ? ` · ${opp.salesRep}` : ''}</div>
-                                                </div>
-                                                {canViewField('arr') && <div className="mobile-card-arr">${(parseFloat(opp.arr)||0).toLocaleString()}</div>}
-                                            </div>
-                                            <div className="mobile-card-meta">
-                                                <span style={{ background: getStageColor(opp.stage).text+'22', color: getStageColor(opp.stage).text, padding:'0.125rem 0.5rem', borderRadius:'999px', fontSize:'0.6875rem', fontWeight:'700' }}>{opp.stage}</span>
-                                                <span style={{ width:'8px', height:'8px', borderRadius:'50%', background: health.color, display:'inline-block' }} />
-                                                <span className="mobile-card-meta-item" style={{ color: health.color, fontWeight:'600' }}>{health.status}</span>
-                                                {opp.forecastedCloseDate && <span className="mobile-card-meta-item">📅 {new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
-                                            </div>
-                                            <div className="mobile-card-actions" onClick={e => e.stopPropagation()}>
-                                                <button className="primary" onClick={() => { setEditingOpp(opp); setShowModal(true); }}>✏️ Edit</button>
-                                                <button onClick={() => { const s = document.createElement('select'); stages.forEach(st => { const o = document.createElement('option'); o.value=st; o.text=st; if(st===opp.stage) o.selected=true; s.appendChild(o); }); }}>Stage ▾</button>
-                                                {canEdit && <button onClick={() => { showConfirm('Delete this opportunity?', () => handleDelete(opp.id)); }} style={{ color:'#ef4444', borderColor:'#fecaca' }}>🗑</button>}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                            {/* Desktop table — hidden on mobile */}
-                            <div className="opp-desktop-wrap">
-                            <div style={{ fontSize: '0.7rem', color: '#94a3b8', padding: '0.3rem 1rem', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>👆 Click any row to view full details</div>
-                            <div className="opp-split-layout">
-                            <div className="opp-desktop-table" style={{ borderRight: selectedPipelineOpp ? '1px solid #e2e8f0' : 'none' }}>
-                            {/* Stale deals warning banner */}
-                            {(() => {
-                                const staleDeals = pipelineFilteredOpps.filter(opp => {
-                                    if (opp.stage === 'Closed Won' || opp.stage === 'Closed Lost') return false;
-                                    if (!opp.stageChangedDate) return false;
-                                    const days = Math.floor((new Date() - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000);
-                                    return days > 30;
-                                });
-                                const noActivityDeals = pipelineFilteredOpps.filter(opp => {
-                                    if (opp.stage === 'Closed Won' || opp.stage === 'Closed Lost') return false;
-                                    return activities.filter(a => a.opportunityId === opp.id).length === 0;
-                                });
-                                if (staleDeals.length === 0 && noActivityDeals.length === 0) return null;
-                                return (
-                                    <div style={{ padding: '0.625rem 1rem', background: '#fffbeb', border: '1px solid #fde68a', borderBottom: '1px solid #fde68a', display: 'flex', gap: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                                        <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#92400e' }}>⚠ Pipeline Attention</span>
-                                        {staleDeals.length > 0 && (
-                                            <span style={{ fontSize: '0.75rem', color: '#b45309' }}>
-                                                <strong>{staleDeals.length}</strong> deal{staleDeals.length > 1 ? 's' : ''} stuck in stage &gt;30 days
-                                                {staleDeals.length <= 3 && ': ' + staleDeals.map(o => o.account || o.opportunityName).join(', ')}
-                                            </span>
-                                        )}
-                                        {staleDeals.length > 0 && noActivityDeals.length > 0 && <span style={{ color: '#fbbf24' }}>·</span>}
-                                        {noActivityDeals.length > 0 && (
-                                            <span style={{ fontSize: '0.75rem', color: '#b45309' }}>
-                                                <strong>{noActivityDeals.length}</strong> open deal{noActivityDeals.length > 1 ? 's' : ''} with no activities logged
-                                            </span>
-                                        )}
-                                    </div>
-                                );
-                            })()}
-                            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                        <table>
-                                <thead>
-                                    <tr>
-                                        <th style={{ width: '36px' }}>
-                                            <input type="checkbox"
-                                                checked={pipelineFilteredOpps.length > 0 && selectedOpps.length === pipelineFilteredOpps.length}
-                                                onChange={e => setSelectedOpps(e.target.checked ? pipelineFilteredOpps.map(o => o.id) : [])}
-                                                style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: T.ink }}
-                                            />
-                                        </th>
-                                        <th style={{ width: '80px' }}>Health</th>
-                                        <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'salesRep') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('salesRep'); setPipelineSortDir('asc'); } }}>Sales Rep {pipelineSortField === 'salesRep' ? (pipelineSortDir === 'asc' ? <span style={{color:T.gold,fontSize:'0.7rem'}}>▲</span> : <span style={{color:T.gold,fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'account') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('account'); setPipelineSortDir('asc'); } }}>Account {pipelineSortField === 'account' ? (pipelineSortDir === 'asc' ? <span style={{color:T.gold,fontSize:'0.7rem'}}>▲</span> : <span style={{color:T.gold,fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        <th>Opportunity</th>
-                                        <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'stage') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('stage'); setPipelineSortDir('asc'); } }}>Stage {pipelineSortField === 'stage' ? (pipelineSortDir === 'asc' ? <span style={{color:T.gold,fontSize:'0.7rem'}}>▲</span> : <span style={{color:T.gold,fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        {canViewField('arr') && <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'arr') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('arr'); setPipelineSortDir('desc'); } }}>Revenue {pipelineSortField === 'arr' ? (pipelineSortDir === 'asc' ? <span style={{color:T.gold,fontSize:'0.7rem'}}>▲</span> : <span style={{color:T.gold,fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>}
-                                        <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => { if (pipelineSortField === 'closeDate') setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setPipelineSortField('closeDate'); setPipelineSortDir('asc'); } }}>Close Date {pipelineSortField === 'closeDate' ? (pipelineSortDir === 'asc' ? <span style={{color:T.gold,fontSize:'0.7rem'}}>▲</span> : <span style={{color:T.gold,fontSize:'0.7rem'}}>▼</span>) : <span style={{color:'#cbd5e1',fontSize:'0.7rem'}}>▼</span>}</th>
-                                        <th style={{ width: '130px' }}>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {pipelineFilteredOpps
-                                        .filter(opp => {
-                                            if (pipelineQuarterFilter.length === 0) return true;
-                                            const opts = window.__pipelineFilterOptions || [];
-                                            return pipelineQuarterFilter.some(key => {
-                                                const opt = opts.find(o => o.key === key);
-                                                return opt && opt.match(opp);
-                                            });
-                                        })
-                                        .filter(opp => {
-                                            if (pipelineStageFilter.length === 0) return true;
-                                            if (pipelineStageFilter.includes('__allOpen__')) return opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost';
-                                            return pipelineStageFilter.includes(opp.stage);
-                                        })
-                                        .filter(opp => {
-                                            if (pipelineRepFilter.length === 0) return true;
-                                            return pipelineRepFilter.includes(opp.salesRep) || pipelineRepFilter.includes(opp.assignedTo);
-                                        })
-                                        .filter(opp => {
-                                            if (pipelineTeamFilter.length === 0) return true;
-                                            const rep = opp.salesRep || opp.assignedTo;
-                                            const userRec = (settings.users || []).find(u => u.name === rep);
-                                            return userRec && pipelineTeamFilter.includes(userRec.team);
-                                        })
-                                        .filter(opp => {
-                                            if (pipelineTerritoryFilter.length === 0) return true;
-                                            const rep = opp.salesRep || opp.assignedTo;
-                                            const userRec = (settings.users || []).find(u => u.name === rep);
-                                            return userRec && pipelineTerritoryFilter.includes(userRec.territory);
-                                        })
-                                        .sort((a, b) => {
-                                            const dir = pipelineSortDir === 'asc' ? 1 : -1;
-                                            switch (pipelineSortField) {
-                                                case 'salesRep': return dir * (a.salesRep || '').localeCompare(b.salesRep || '');
-                                                case 'account': return dir * (a.account || '').localeCompare(b.account || '');
-                                                case 'stage': {
-                                                    const order = ['Qualification','Discovery','Evaluation (Demo)','Proposal','Negotiation/Review','Contracts','Closed Won','Closed Lost'];
-                                                    return dir * (order.indexOf(a.stage) - order.indexOf(b.stage));
-                                                }
-                                                case 'arr': return dir * ((a.arr || 0) - (b.arr || 0));
-                                                case 'closeDate': return dir * (new Date(a.forecastedCloseDate || '9999') - new Date(b.forecastedCloseDate || '9999'));
-                                                case 'closeQuarter': return dir * (a.closeQuarter || '').localeCompare(b.closeQuarter || '');
-                                                default: return dir * (new Date(a.forecastedCloseDate || '9999') - new Date(b.forecastedCloseDate || '9999'));
-                                            }
-                                        })
-                                        .map((opp, oppIdx) => {
-                                            const health = calculateDealHealth(opp);
-                                            return (
-                                        <React.Fragment key={opp.id}>
-                                        <tr
-                                            style={{ background: selectedPipelineOpp?.id === opp.id ? T.surface2 : selectedOpps.includes(opp.id) ? T.bg : oppIdx % 2 === 0 ? T.surface : '#faf8f5', borderLeft: selectedPipelineOpp?.id === opp.id ? `3px solid ${T.gold}` : '3px solid transparent' }}
-                                        >
-                                            <td style={{ width: '36px' }} onClick={e => e.stopPropagation()}>
-                                                <input type="checkbox"
-                                                    checked={selectedOpps.includes(opp.id)}
-                                                    onChange={e => setSelectedOpps(prev => e.target.checked ? [...prev, opp.id] : prev.filter(id => id !== opp.id))}
-                                                    style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: T.ink }}
-                                                />
-                                            </td>
-                                            <td style={{ position: 'relative' }}>
-                                                <div style={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.5rem',
-                                                    cursor: 'pointer'
-                                                }} onClick={(e) => { e.stopPropagation(); setHealthPopover(healthPopover === opp.id ? null : opp.id); }}>
-                                                    <div style={{
-                                                        width: '12px',
-                                                        height: '12px',
-                                                        borderRadius: '50%',
-                                                        background: health.color
-                                                    }} />
-                                                    <span style={{ 
-                                                        fontSize: '0.8125rem',
-                                                        fontWeight: '600',
-                                                        color: health.color
-                                                    }}>
-                                                        {health.status}
-                                                    </span>
-                                                </div>
-                                                {healthPopover === opp.id && (
-                                                    <div style={{
-                                                        position: 'absolute', top: '100%', left: 0, zIndex: 1000,
-                                                        background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd,
-                                                        boxShadow: '0 8px 24px rgba(42,38,34,0.12)', padding: '0.875rem 1rem',
-                                                        minWidth: '280px', marginTop: '0.25rem'
-                                                    }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.625rem' }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                                                                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: health.color }} />
-                                                                <span style={{ fontWeight: '700', fontSize: '0.875rem', color: health.color }}>{health.status}</span>
-                                                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>({health.score}/100)</span>
-                                                            </div>
-                                                            <button onClick={(e) => { e.stopPropagation(); setHealthPopover(null); }}
-                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem', padding: 0, lineHeight: 1 }}>×</button>
-                                                        </div>
-                                                        {health.reasons.map((reason, ri) => (
-                                                            <div key={ri} style={{
-                                                                display: 'flex', alignItems: 'flex-start', gap: '0.375rem',
-                                                                padding: '0.3rem 0', fontSize: '0.8125rem', color: '#475569', lineHeight: 1.4
-                                                            }}>
-                                                                <span style={{ color: reason.includes('No activity in over') || reason.includes('overdue') || reason.includes('Stuck') || reason.includes('No activities logged') ? '#ef4444' : reason.includes('approaching') || reason.includes('In current stage for') ? '#f59e0b' : '#10b981', flexShrink: 0 }}>
-                                                                    {reason.includes('No activity in over') || reason.includes('overdue') || reason.includes('Stuck') || reason.includes('No activities logged') ? '⚠' : reason.includes('approaching') || reason.includes('In current stage for') ? '○' : '✓'}
-                                                                </span>
-                                                                <span>{reason}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td style={{ whiteSpace: 'nowrap' }}>{opp.salesRep || '-'}</td>
-                                            <td>{opp.account}{opp.site ? ' · ' + opp.site : ''}</td>
-                                            <td><span onClick={() => handleEdit(opp)} style={{ color: T.ink, fontWeight: '600', cursor: 'pointer', textDecoration: 'underline' }} onMouseEnter={e => e.currentTarget.style.color='#1d4ed8'} onMouseLeave={e => e.currentTarget.style.color=T.ink}>{opp.opportunityName || '-'}</span></td>
-                                            <td onClick={e => e.stopPropagation()}>
-                                                {inlineEdit && inlineEdit.oppId === opp.id && inlineEdit.field === 'stage' ? (
-                                                    <select autoFocus
-                                                        value={inlineEdit.value}
-                                                        onChange={e => {
-                                                            const newStage = e.target.value;
-                                                            const today = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
-                                                            const prevStageVal = opp.stage;
-                                                            const updatedOpp = {
-                                                                ...opp, stage: newStage,
-                                                                stageChangedDate: today,
-                                                                stageHistory: [...(opp.stageHistory || []), { stage: newStage, date: today, prevStage: opp.stage, author: currentUser || '', timestamp: new Date().toISOString() }]
-                                                            };
-                                                            setOpportunities(prev => prev.map(o => o.id === opp.id ? updatedOpp : o));
-                                                            dbFetch('/.netlify/functions/opportunities', {
-                                                                method: 'PUT',
-                                                                headers: { 'Content-Type': 'application/json' },
-                                                                body: JSON.stringify(updatedOpp)
-                                                            }).catch(err => console.error('Failed to save stage change:', err));
-                                                            addAudit('update', 'opportunity', opp.id, opp.opportunityName || opp.account || opp.id, `Stage: ${prevStageVal} → ${newStage}`);
-                                                            setInlineEdit(null);
-                                                        }}
-                                                        onBlur={() => setInlineEdit(null)}
-                                                        onKeyDown={e => { if (e.key === 'Escape') setInlineEdit(null); }}
-                                                        style={{ fontSize: '0.6875rem', fontWeight: '600', border: `1.5px solid ${T.borderStrong}`, borderRadius: T.rSm, padding: '0.1rem 0.25rem', outline: 'none', background: '#fff', cursor: 'pointer', color: '#1e293b' }}>
-                                                        {stages.map(s => <option key={s} value={s}>{s}</option>)}
-                                                    </select>
-                                                ) : (
-                                                    <span title="Click to change stage"
-                                                        onClick={() => setInlineEdit({ oppId: opp.id, field: 'stage', value: opp.stage })}
-                                                        style={{ background: getStageColor(opp.stage).text + '22', color: getStageColor(opp.stage).text, padding: '0.125rem 0.5rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '600', whiteSpace: 'nowrap', display: 'inline-block', cursor: 'pointer', transition: 'opacity 0.1s' }}
-                                                        onMouseEnter={e => e.currentTarget.style.opacity = '0.75'}
-                                                        onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-                                                        {opp.stage} ✎
-                                                    </span>
-                                                )}
-                                            </td>
-{canViewField('arr') && (
-                                            <td onClick={e => e.stopPropagation()}>
-                                                {inlineEdit && inlineEdit.oppId === opp.id && inlineEdit.field === 'arr' ? (
-                                                    <input autoFocus type="number" min="0"
-                                                        defaultValue={opp.arr}
-                                                        onBlur={e => {
-                                                            const val = Math.max(0, parseInt(e.target.value) || 0);
-                                                            setOpportunities(prev => prev.map(o => o.id === opp.id ? { ...o, arr: val } : o));
-                                                            setInlineEdit(null);
-                                                        }}
-                                                        onKeyDown={e => {
-                                                            if (e.key === 'Enter') e.target.blur();
-                                                            if (e.key === 'Escape') setInlineEdit(null);
-                                                        }}
-                                                        style={{ width: '90px', fontSize: '0.8125rem', fontWeight: '600', border: `1.5px solid ${T.borderStrong}`, borderRadius: T.rSm, padding: '0.1rem 0.35rem', outline: 'none', color: '#1e293b' }}
-                                                    />
-                                                ) : (
-                                                    <span title="Click to edit ARR"
-                                                        onClick={() => setInlineEdit({ oppId: opp.id, field: 'arr', value: opp.arr })}
-                                                        style={{ cursor: 'pointer', display: 'inline-block', transition: 'opacity 0.1s' }}
-                                                        onMouseEnter={e => e.currentTarget.style.opacity = '0.65'}
-                                                        onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-                                                        ${opp.arr.toLocaleString()} ✎
-                                                    </span>
-                                                )}
-                                            </td>
-)}
-                                            <td style={{ whiteSpace: 'nowrap' }}>
-                                                {new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                            </td>
-                                            <td style={{ whiteSpace: 'nowrap' }}>
-                                                <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(selectedPipelineOpp?.id === opp.id ? null : opp); }} style={{ padding: '4px 12px', borderRadius: '999px', border: 'none', background: selectedPipelineOpp?.id === opp.id ? T.inkMid : T.ink, color: T.surface, fontWeight: '600', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Details</button>
-                                            </td>
-                                        </tr>
-                                        {/* Activity log expand panel */}
-                                        {!selectedPipelineOpp && expandedOppActivities[opp.id] === true && (() => {
-                                            const oppActs = activities.filter(a => a.opportunityId === opp.id)
-                                                .sort((a, b) => new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00'));
-                                            if (oppActs.length === 0) return null;
-                                            return (
-                                                <tr key={opp.id + '-acts'} style={{ background: '#f8fafc' }}>
-                                                    <td colSpan={99} style={{ padding: '0.5rem 1rem 0.5rem 2.5rem', borderBottom: '2px solid #e2e8f0' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
-                                                            <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Activity Log</span>
-                                                            <span style={{ fontSize: '0.625rem', background: '#dbeafe', color: '#1e40af', padding: '0.1rem 0.4rem', borderRadius: '999px', fontWeight: '700' }}>{oppActs.length}</span>
-                                                        </div>
-                                                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                                            {oppActs.slice(0, 5).map(a => (
-                                                                <div key={a.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.25rem 0.625rem', fontSize: '0.75rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                                                                    <span style={{ background: '#dbeafe', color: '#1e40af', padding: '0.05rem 0.35rem', borderRadius: '3px', fontSize: '0.625rem', fontWeight: '700', flexShrink: 0 }}>{a.type}</span>
-                                                                    <span style={{ color: '#94a3b8', flexShrink: 0 }}>{a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</span>
-                                                                    {a.notes && <span style={{ color: '#64748b', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.notes}</span>}
-                                                                </div>
-                                                            ))}
-                                                            {oppActs.length > 5 && <span style={{ fontSize: '0.75rem', color: '#94a3b8', alignSelf: 'center' }}>+{oppActs.length - 5} more</span>}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })()}
-                                        </React.Fragment>
-                                    );
-                                })}
-                                </tbody>
-                            </table>
-                            </div>{/* overflow wrapper */}
-                            </div>
-                            {/* ── Option 5 Detail Panel ── */}
-                            {selectedPipelineOpp && (() => {
-                                const opp = selectedPipelineOpp;
+                                        {pipelineView === 'table' && (
+                    <div style={{ margin: '0 0 24px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, overflow: 'auto', fontFamily: T.sans }}>
+                        {/* ── Table header row — V2 mockup: 28px 1.6fr 1fr 100px 90px 90px 70px 70px 60px 24px ── */}
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: '28px 1.6fr 1fr 100px 90px 90px 70px 70px 60px 24px',
+                            alignItems: 'center', padding: '0 14px', height: 36,
+                            background: T.surface2, borderBottom: `1px solid ${T.border}`,
+                            fontSize: 10, fontWeight: 700, color: T.inkMuted,
+                            letterSpacing: 0.6, textTransform: 'uppercase',
+                            position: 'sticky', top: 0, zIndex: 1,
+                        }}>
+                            <div/>
+                            <div>Deal</div>
+                            <div>Account</div>
+                            <div>Stage</div>
+                            <div style={{ textAlign: 'right' }}>ARR</div>
+                            <div>Close</div>
+                            <div>AI</div>
+                            <div>Health</div>
+                            <div>Days</div>
+                            <div/>
+                        </div>
+                        {/* ── Table body rows ── */}
+                        {pipelineFilteredOpps
+                            .filter(opp => pipelineStageFilter.length === 0 || (pipelineStageFilter.includes('__allOpen__') ? opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost' : pipelineStageFilter.includes(opp.stage)))
+                            .filter(opp => pipelineRepFilter.length === 0 || pipelineRepFilter.includes(opp.salesRep) || pipelineRepFilter.includes(opp.assignedTo))
+                            .sort((a, b) => {
+                                const dir = pipelineSortDir === 'asc' ? 1 : -1;
+                                switch (pipelineSortField) {
+                                    case 'salesRep': return dir * (a.salesRep||'').localeCompare(b.salesRep||'');
+                                    case 'account':  return dir * (a.account||'').localeCompare(b.account||'');
+                                    case 'arr':      return dir * ((parseFloat(a.arr)||0) - (parseFloat(b.arr)||0));
+                                    default:         return dir * (new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
+                                }
+                            })
+                            .map((opp, oppIdx) => {
                                 const health = calculateDealHealth(opp);
-                                const stageDefault = (settings.funnelStages || []).find(s => s.name === opp.stage);
-                                const defaultProb = stageDefault ? stageDefault.weight : null;
-                                const effectiveProb = (opp.probability !== null && opp.probability !== undefined) ? opp.probability : defaultProb;
-                                const isOverridden = opp.probability !== null && opp.probability !== undefined && opp.probability !== defaultProb;
-                                const probNum = (opp.probability !== null && opp.probability !== undefined) ? opp.probability / 100 : (stageDefault ? stageDefault.weight / 100 : 0.3);
-                                const totalVal = (parseFloat(opp.arr) || 0) + (opp.implementationCost || 0);
-                                const weighted = Math.round(totalVal * probNum);
-                                const oppActs = activities.filter(a => a.opportunityId === opp.id).sort((a,b) => new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00'));
-                                const lastAct = oppActs[0];
-                                const daysSinceAct = lastAct ? Math.floor((new Date() - new Date(lastAct.date + 'T12:00:00')) / 86400000) : null;
-                                const dealAgeDays = opp.createdDate ? Math.floor((new Date() - new Date(opp.createdDate + 'T12:00:00')) / 86400000) : null;
-                                const timeInStageDays = opp.stageChangedDate ? Math.floor((new Date() - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000) : null;
+                                const daysInStage = opp.stageChangedDate ? Math.max(0, Math.floor((new Date() - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000)) : null;
+                                const stale = daysInStage !== null && daysInStage > 14;
+                                const closeDays = opp.forecastedCloseDate ? Math.round((new Date(opp.forecastedCloseDate + 'T12:00:00') - new Date()) / 86400000) : null;
+                                const overdue = closeDays !== null && closeDays < 0;
+                                const aiRisk = opp.aiScore && opp.aiScore.score < 50;
+                                const [hover, setHover] = React.useState ? [false, {}] : [false, {}]; // fallback
                                 return (
-                                    <div style={{
-                                        width: '300px', flexShrink: 0, background: T.surface2,
-                                        overflowY: 'auto', padding: '1rem',
-                                        display: 'flex', flexDirection: 'column', gap: '0.75rem',
-                                        height: '520px', position: 'sticky', top: 0, borderLeft: `1px solid ${T.border}`
-                                    }}>
-                                        {/* Header */}
-                                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
-                                            <div>
-                                                <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#0f172a', lineHeight: 1.3 }}>{opp.opportunityName || opp.account}</div>
-                                                <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>{opp.account}{opp.site ? ' · ' + opp.site : ''}</div>
-                                            </div>
-                                            <button onClick={e => { e.stopPropagation(); setSelectedPipelineOpp(null); }}
-                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1.1rem', lineHeight: 1, padding: '0', flexShrink: 0 }}>×</button>
-                                        </div>
-                                        {/* Action buttons */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                                            <button className="btn" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%' }}
-                                                onClick={e => { e.stopPropagation(); handleEdit(opp); }}>✏️ Edit Opportunity</button>
-                                            <div style={{ display:'flex', gap:'0.35rem' }}>
-                                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0', flex:1 }}
-                                                    onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }}>+ Activity</button>
-                                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0', flex:1 }}
-                                                    onClick={e => { e.stopPropagation(); setEditingTask({ relatedTo: opp.id, opportunityId: opp.id }); setShowTaskModal(true); }}>+ Task</button>
-                                            </div>
-                                            {opp.stage === 'Closed Won' && (settings.spiffs||[]).filter(s=>s.active).length > 0 && (
-                                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.4rem 0.75rem', width: '100%', borderColor: '#7c3aed', color: '#7c3aed' }}
-                                                    onClick={e => { e.stopPropagation(); setSpiffClaimContext({ opp }); setShowSpiffClaimModal(true); }}>⚡ Claim SPIFF</button>
+                                    <div key={opp.id}
+                                        onClick={() => { setEditingOpp(opp); setShowModal(true); }}
+                                        style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: '28px 1.6fr 1fr 100px 90px 90px 70px 70px 60px 24px',
+                                            alignItems: 'center', padding: '0 14px', height: 42,
+                                            borderBottom: `1px solid ${T.border}`,
+                                            background: selectedOpps.includes(opp.id) ? T.surface2 : 'transparent',
+                                            fontSize: 12, color: T.ink, cursor: 'pointer',
+                                            transition: 'background 100ms',
+                                            fontFamily: T.sans,
+                                        }}
+                                        onMouseEnter={e => { if (!selectedOpps.includes(opp.id)) e.currentTarget.style.background = T.surface2; }}
+                                        onMouseLeave={e => { if (!selectedOpps.includes(opp.id)) e.currentTarget.style.background = 'transparent'; }}>
+                                        {/* Checkbox */}
+                                        <div onClick={e => { e.stopPropagation(); setSelectedOpps(prev => prev.includes(opp.id) ? prev.filter(x => x !== opp.id) : [...prev, opp.id]); }}>
+                                            {selectedOpps.includes(opp.id) && (
+                                                <div style={{ width: 15, height: 15, borderRadius: 3, border: `1px solid ${T.ink}`, background: T.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={T.surface} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>
+                                                </div>
                                             )}
-                                            <button onClick={e => { e.stopPropagation(); showConfirm('Delete this opportunity?', () => handleDelete(opp.id)); }} style={{ fontSize:'0.6875rem', color:'#dc2626', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', padding:'0.1rem 0', textAlign:'left' }}>Delete…</button>
+                                        </div>
+                                        {/* Deal name */}
+                                        <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>
+                                            {opp.opportunityName || opp.account}
+                                        </div>
+                                        {/* Account */}
+                                        <div style={{ color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>
+                                            {opp.account}
+                                        </div>
+                                        {/* Stage — inline indicator matching V2 mockup */}
+                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rSm, fontSize: 11, fontWeight: 500, width: 'fit-content' }}>
+                                            <div style={{ width: 6, height: 6, borderRadius: 1, background: stageColor(opp.stage) }}/>
+                                            {opp.stage}
+                                        </div>
+                                        {/* ARR */}
+                                        <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: T.ink }}>
+                                            ${(parseFloat(opp.arr)||0) >= 1000 ? Math.round((parseFloat(opp.arr)||0)/1000)+'K' : (parseFloat(opp.arr)||0).toLocaleString()}
+                                        </div>
+                                        {/* Close date */}
+                                        <div style={{ fontSize: 11, color: overdue ? T.danger : T.inkMid, fontWeight: overdue ? 600 : 400 }}>
+                                            {opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                                        </div>
+                                        {/* AI score */}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                            {opp.aiScore ? (
+                                                <>
+                                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={aiRisk ? T.danger : T.inkMid} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>
+                                                    <span style={{ fontSize: 11, color: aiRisk ? T.danger : T.inkMid }}>{opp.aiScore.score}</span>
+                                                </>
+                                            ) : <span style={{ fontSize: 11, color: T.inkMuted }}>—</span>}
                                         </div>
                                         {/* Health */}
-                                        {opp.stage === 'Closed Won' ? (
-                                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 0.75rem', background:'#d1fae5', borderRadius:'6px', border:'1px solid #6ee7b7' }}>
-                                                <span style={{ fontSize:'1rem' }}>✅</span>
-                                                <span style={{ fontSize:'0.8rem', fontWeight:'700', color:'#065f46' }}>Closed Won</span>
-                                                {opp.forecastedCloseDate && <span style={{ fontSize:'0.75rem', color:'#059669', marginLeft:'auto' }}>{new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>}
-                                            </div>
-                                        ) : (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.75rem', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: health.color, flexShrink: 0 }} />
-                                            <span style={{ fontSize: '0.8rem', fontWeight: '600', color: health.color }}>{health.status}</span>
-                                            <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginLeft: 'auto' }}>{health.score}/100</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger }}/>
+                                            <span style={{ fontSize: 11, color: T.inkMid }}>{health.score}</span>
                                         </div>
-                                        )}
-                                        {/* Stage */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                            {[
-                                                { label: 'Stage', value: <span style={{ background: getStageColor(opp.stage).text + '22', color: getStageColor(opp.stage).text, padding: '0.35rem 0.5rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600' }}>{opp.stage}</span> },
-                                                canViewField('arr') && { label: 'Revenue', value: '$' + (opp.arr || 0).toLocaleString() },
-                                                canViewField('implCost') && opp.implementationCost > 0 && { label: 'Impl. Cost', value: '$' + (opp.implementationCost || 0).toLocaleString() },
-                                                canViewField('probability') && { label: 'Probability', value: <span style={{ fontWeight: '600', color: isOverridden ? '#f59e0b' : '#475569' }}>{effectiveProb !== null ? effectiveProb + '%' : '—'}{isOverridden ? ' ✎' : ''}</span> },
-                                                canViewField('weightedValue') && { label: 'Weighted Value', value: '$' + weighted.toLocaleString() },
-                                                { label: 'Sales Rep', value: opp.salesRep || '—' },
-                                                { label: 'Close Date', value: opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—' },
-                                                { label: 'Close Quarter', value: opp.closeQuarter || '—' },
-                                                canViewField('dealAge') && dealAgeDays !== null && { label: 'Deal Age', value: <span style={{ color: dealAgeDays > 90 ? '#ef4444' : dealAgeDays > 60 ? '#f59e0b' : '#475569', fontWeight: '600' }}>{dealAgeDays}d</span> },
-                                                canViewField('timeInStage') && timeInStageDays !== null && { label: 'Time in Stage', value: <span style={{ color: (opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost' && timeInStageDays > 30) ? '#ef4444' : '#475569', fontWeight: '600' }}>{timeInStageDays}d</span> },
-                                                canViewField('activities') && { label: 'Activities', value: <span>{oppActs.length}{daysSinceAct !== null ? <span style={{ fontSize: '0.7rem', color: daysSinceAct > 14 ? '#ef4444' : '#94a3b8', marginLeft: '0.35rem' }}>{daysSinceAct}d ago</span> : null}</span> },
-                                                canViewField('nextSteps') && opp.nextSteps && { label: 'Next Steps', value: opp.nextSteps },
-                                                opp.notes && { label: 'Notes', value: opp.notes },
-                                                (opp.stage === 'Closed Lost' && opp.lostCategory) && { label: 'Loss Reason', value: <span style={{ color: '#b91c1c', fontWeight: '600' }}>{opp.lostCategory}{opp.lostReason ? ' — ' + opp.lostReason : ''}</span> },
-                                            ].filter(Boolean).map((row, ri) => (
-                                                <div key={ri} style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                                                    <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', fontWeight: '600' }}>{row.label}</span>
-                                                    <span style={{ fontSize: '0.8rem', color: '#1e293b' }}>{row.value}</span>
-                                                </div>
-                                            ))}
+                                        {/* Days in stage */}
+                                        <div style={{ fontSize: 11, color: stale ? T.danger : T.inkMuted, fontWeight: stale ? 600 : 400 }}>
+                                            {daysInStage !== null ? daysInStage + 'd' : '—'}
                                         </div>
-                                        {/* Activity timeline in panel */}
-                                        <div style={{ paddingTop: '0.5rem', borderTop: '1px solid #e2e8f0' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                                <div style={{ fontSize: '0.65rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                                    Activity Timeline
-                                                    {oppActs.length > 0 && <span style={{ background: '#dbeafe', color: '#1e40af', padding: '0.1rem 0.35rem', borderRadius: '999px', fontWeight: '700', marginLeft: '0.375rem' }}>{oppActs.length}</span>}
-                                                </div>
-                                                <button onClick={e => { e.stopPropagation(); setActivityInitialContext({ opportunityId: opp.id, opportunityName: opp.opportunityName || opp.account, companyName: opp.account }); setEditingActivity(null); setShowActivityModal(true); }}
-                                                    style={{ fontSize: '0.6rem', fontWeight: '700', color: T.goldInk, background: T.bg, border: `1px solid ${T.border}`, borderRadius: '4px', padding: '0.15rem 0.4rem', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                                    + Log
-                                                </button>
-                                            </div>
-                                            {oppActs.length === 0 ? (
-                                                <div style={{ textAlign: 'center', padding: '0.75rem 0', color: '#94a3b8', fontSize: '0.75rem', fontStyle: 'italic' }}>No activities yet</div>
-                                            ) : (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-                                                    {(() => {
-                                                        const actTypeIcons = { Call: '📞', Email: '📧', Meeting: '🤝', Demo: '💻', 'Proposal Sent': '📄', 'Follow-up': '🔄', Note: '📝', Other: '📝' };
-                                                        const actTypeColors = { Call: '#dbeafe', Email: '#fce7f3', Meeting: '#d1fae5', Demo: '#ede9fe', 'Proposal Sent': '#fef3c7', 'Follow-up': '#ffedd5', Note: '#f1f5f9', Other: '#f1f5f9' };
-                                                        const actTypeText = { Call: '#1e40af', Email: '#9d174d', Meeting: '#065f46', Demo: '#5b21b6', 'Proposal Sent': '#92400e', 'Follow-up': '#9a3412', Note: '#475569', Other: '#475569' };
-                                                        const sorted = [...oppActs].sort((a,b) => new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0));
-                                                        return sorted.slice(0, 10).map((a, idx) => {
-                                                            const icon = actTypeIcons[a.type] || '📝';
-                                                            const bg = actTypeColors[a.type] || '#f1f5f9';
-                                                            const tc = actTypeText[a.type] || '#475569';
-                                                            const dateStr = a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
-                                                            const isLast = idx === Math.min(sorted.length, 10) - 1;
-                                                            return (
-                                                                <div key={a.id} style={{ display: 'flex', gap: '0.5rem', paddingBottom: isLast ? '0' : '0.5rem', position: 'relative' }}>
-                                                                    {/* Timeline spine */}
-                                                                    {!isLast && <div style={{ position: 'absolute', left: '11px', top: '22px', bottom: '0', width: '1px', background: '#e2e8f0' }} />}
-                                                                    {/* Icon dot */}
-                                                                    <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: bg, border: '1px solid ' + tc + '44', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0, zIndex: 1 }}>{icon}</div>
-                                                                    {/* Content */}
-                                                                    <div style={{ flex: 1, minWidth: 0, paddingBottom: '0.35rem' }}>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', flexWrap: 'wrap' }}>
-                                                                            <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: tc, background: bg, padding: '0.05rem 0.35rem', borderRadius: '3px' }}>{a.type || 'Activity'}</span>
-                                                                            <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{dateStr}</span>
-                                                                            {a.author && <span style={{ fontSize: '0.6rem', color: '#94a3b8', marginLeft: 'auto' }}>{a.author.split(' ')[0]}</span>}
-                                                                        </div>
-                                                                        {a.notes && <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.2rem', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{a.notes}</div>}
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        });
-                                                    })()}
-                                                    {oppActs.length > 10 && <div style={{ fontSize: '0.7rem', color: '#94a3b8', textAlign: 'center', paddingTop: '0.25rem' }}>+{oppActs.length - 10} more activities</div>}
-                                                </div>
-                                            )}
+                                        {/* More icon on hover */}
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>
                                         </div>
                                     </div>
                                 );
-                            })()}
-                            </div>{/* end opp-split-layout */}
-                            </div>{/* end opp-desktop-wrap */}
-                        </div>
+                            })
+                        }
+                        {pipelineFilteredOpps.length === 0 && (
+                            <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
+                                No deals match the current filter.
+                            </div>
+                        )}
                     </div>
                     )}
-                    </div>{/* end spt-pipeline-desktop */}
+
+                    </div>
+
+
+                {/* ════ FLOATING BULK ACTION BAR (V1/V2 mockup) ════ */}
+                {selectedOpps.length > 0 && (
+                    <div style={{
+                        position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+                        background: T.surfaceInk, color: '#e6ddd0', padding: '10px 12px 10px 16px',
+                        borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10,
+                        boxShadow: '0 12px 36px rgba(42,38,34,0.3)',
+                        fontFamily: T.sans, zIndex: 500,
+                    }}>
+                        <span style={{ fontSize: 12, fontWeight: 600 }}>{selectedOpps.length} selected</span>
+                        <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.2)' }}/>
+                        {[
+                            { l: 'Move stage' },
+                            { l: 'Update close' },
+                            { l: 'AI score' },
+                        ].map(b => (
+                            <button key={b.l}
+                                onClick={() => { if (b.l === 'AI score') handleBulkScore(); }}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.08)', border: 'none', color: '#e6ddd0', fontSize: 12, fontWeight: 500, padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: T.sans }}>
+                                {b.l}
+                            </button>
+                        ))}
+                        <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.2)' }}/>
+                        <button onClick={() => setSelectedOpps([])}
+                            style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', padding: 4, fontSize: 16, lineHeight: 1 }}>
+                            ✕
+                        </button>
+                    </div>
+                )}
 
                 </div>
             
