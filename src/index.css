@@ -50,30 +50,30 @@
         }
 
         /* ══════════════════════════════════════════
-           HEADER — dark bar, gold-tan accent
+           HEADER — ink-dark bar, gold-tan accent
         ══════════════════════════════════════════ */
         .header {
             text-align: left;
             margin-bottom: 1.5rem;
-            background: #1c1917;
-            border-radius: 12px;
-            padding: 0.875rem 1.25rem;
+            background: #2a2622;
+            border-radius: 6px;
+            padding: 0.75rem 1.25rem;
             position: relative;
             z-index: 150;
             border: none;
+            font-family: "Plus Jakarta Sans", system-ui, sans-serif;
         }
 
         .header h1 {
-            
             font-size: 1.5rem;
             font-weight: 600;
-            color: #f5f1eb;
+            color: #e6ddd0;
             margin-bottom: 0.125rem;
             letter-spacing: -0.01em;
         }
 
         .header p {
-            color: #78716c;
+            color: #8a8378;
             font-size: 0.8125rem;
         }
 
@@ -86,12 +86,13 @@
             margin-bottom: 1.5rem;
             border-bottom: none;
             padding: 0.3rem;
-            background: #1c1917;
-            border-radius: 12px;
+            background: #2a2622;
+            border-radius: 6px;
             position: sticky;
             top: 0.75rem;
             z-index: 100;
-            box-shadow: 0 2px 12px rgba(28,25,23,0.15);
+            box-shadow: 0 2px 12px rgba(42,38,34,0.18);
+            font-family: "Plus Jakarta Sans", system-ui, sans-serif;
         }
 
         .nav-tab {
@@ -114,9 +115,9 @@
         }
 
         .nav-tab.active {
-            color: #1c1917;
-            background: #f5f1eb;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+            color: #2a2622;
+            background: #f0ece4;
+            box-shadow: 0 1px 4px rgba(42,38,34,0.14);
         }
 
         .nav-tab.active::after {
@@ -126,7 +127,7 @@
             left: 0.75rem;
             right: 0.75rem;
             height: 2px;
-            background: var(--accent-gold);
+            background: #c8b99a;
             border-radius: 2px;
         }
 
