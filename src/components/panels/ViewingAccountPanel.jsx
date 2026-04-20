@@ -38,6 +38,35 @@ export default function ViewingAccountPanel({
 
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit = !isReadOnly;
+
+    // V1 stage color map — desaturated warm tones, left-border accent only for badges
+    const STAGE_COLORS = {
+        'Prospecting':        '#b0a088',
+        'Qualification':      '#c8a978',
+        'Discovery':          '#b07a55',
+        'Evaluation (Demo)':  '#b07a55',
+        'Proposal':           '#b87333',
+        'Negotiation':        '#7a5a3c',
+        'Negotiation/Review': '#7a5a3c',
+        'Contracts':          '#4d6b3d',
+        'Closing':            '#4d6b3d',
+        'Closed Won':         '#3a5530',
+        'Closed Lost':        '#9c3a2e',
+    };
+    const getStageBadgeStyle = (stage) => {
+        const c = STAGE_COLORS[stage] || '#8a8378';
+        return {
+            display: 'inline-block',
+            padding: '0.2rem 0.625rem',
+            borderRadius: 3,
+            fontSize: '0.6875rem',
+            fontWeight: 600,
+            fontFamily: 'inherit',
+            background: c + '22',
+            color: c,
+            border: `1px solid ${c}44`,
+        };
+    };
     const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(860, 600, 520, 400);
 
@@ -293,7 +322,6 @@ export default function ViewingAccountPanel({
                                 <span>Opportunity</span>{hasSubs && <span>Account</span>}<span>Stage</span><span style={{ textAlign: 'right' }}>Revenue</span><span style={{ textAlign: 'center' }}>Close</span>
                             </div>
                             {[...allOpenOpps].sort((a, b) => new Date(a.forecastedCloseDate || '9999') - new Date(b.forecastedCloseDate || '9999')).map((opp, idx) => {
-                                const sc = getStageColor(opp.stage);
                                 const isSubOpp = opp.account && opp.account.toLowerCase() !== accName;
                                 return (
                                     <div key={opp.id}
@@ -307,7 +335,7 @@ export default function ViewingAccountPanel({
                                             {opp.salesRep && <div style={{ fontSize: '0.75rem', color: '#8a8378' }}>{opp.salesRep}</div>}
                                         </div>
                                         {hasSubs && <span style={{ fontSize: '0.6875rem', color: isSubOpp ? '#3a5a7a' : '#8a8378', fontWeight: isSubOpp ? '700' : '400' }}>{isSubOpp ? '↳ ' : ''}{opp.account}</span>}
-                                        <span style={{ background: sc.bg, color: sc.text, padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700' }}>{opp.stage}</span>
+                                        <span style={getStageBadgeStyle(opp.stage)}>{opp.stage}</span>
                                         <span style={{ textAlign: 'right', fontWeight: '700', color: '#2a2622' }}>${(parseFloat(opp.arr) || 0).toLocaleString()}</span>
                                         <span style={{ textAlign: 'center', color: '#8a8378', fontSize: '0.8125rem' }}>{opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '—'}</span>
                                     </div>
@@ -343,7 +371,7 @@ export default function ViewingAccountPanel({
                                             <div style={{ fontWeight: '600', color: '#2a2622', fontSize: '0.875rem' }}>{opp.opportunityName || 'Unnamed'}</div>
                                             <div style={{ fontSize: '0.75rem', color: isSubOpp ? '#3a5a7a' : '#8a8378' }}>{isSubOpp ? `↳ ${opp.account}` : (opp.salesRep || '')}</div>
                                         </div>
-                                        <span style={{ background: isWon ? 'rgba(77,107,61,0.1)' : '#fef2f2', color: isWon ? '#2e4a24' : '#991b1b', padding: '0.2rem 0.625rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700', marginRight: '1rem' }}>{opp.stage}</span>
+                                        <span style={{ ...getStageBadgeStyle(opp.stage), marginRight: '1rem' }}>{opp.stage}</span>
                                         <span style={{ fontWeight: '700', color: '#2a2622', fontSize: '0.875rem', minWidth: '80px', textAlign: 'right' }}>${(parseFloat(opp.arr) || 0).toLocaleString()}</span>
                                     </div>
                                 );

@@ -146,7 +146,7 @@ function AccountCard({ account, warmthData, onClick }) {
 }
 
 // ── Shared table row ──────────────────────────────────────────
-function AccountRow({ account, warmthData, contacts, onView, onEdit, isEven }) {
+function AccountRow({ account, warmthData, contacts, onView, onEdit, isEven, selectMode, isSelected, onToggleSelect }) {
     const [hov, setHov] = useState(false);
     const { warmth, pipeline, activeOpps, daysSince, lastAct } = warmthData;
     const dot = warmthColor(warmth);
@@ -158,13 +158,22 @@ function AccountRow({ account, warmthData, contacts, onView, onEdit, isEven }) {
             onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
             style={{
                 display: 'grid',
-                gridTemplateColumns: '3px 1.8fr 1fr 90px 60px 110px 100px 28px',
+                gridTemplateColumns: selectMode ? '36px 3px 1.8fr 1fr 90px 60px 110px 100px 28px' : '3px 1.8fr 1fr 90px 60px 110px 100px 28px',
                 alignItems: 'center', height: 52,
                 borderBottom: `1px solid ${T.border}`,
-                background: hov ? T.surface2 : isEven ? T.surface : T.bg,
+                background: isSelected ? 'rgba(42,38,34,0.04)' : hov ? T.surface2 : isEven ? T.surface : T.bg,
                 cursor: 'pointer', fontFamily: T.sans, transition: 'background 80ms',
             }}
-            onClick={() => onView(account)}>
+            onClick={() => selectMode ? onToggleSelect(account.id) : onView(account)}>
+            {/* Checkbox — only in select mode */}
+            {selectMode && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={e => { e.stopPropagation(); onToggleSelect(account.id); }}>
+                    <div style={{ width: 16, height: 16, borderRadius: 3, border: `1.5px solid ${isSelected ? T.ink : T.borderStrong}`, background: isSelected ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
+                        {isSelected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fbf8f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
+                    </div>
+                </div>
+            )}
             {/* Warmth accent bar */}
             <div style={{ width: 3, height: '100%', background: dot, flexShrink: 0 }} />
 
@@ -245,8 +254,11 @@ export default function AccountsTab() {
 
     // ── View state ────────────────────────────────────────────
     const [view, setView]         = useState(() => localStorage.getItem('accounts:view') || 'signal');
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [selectMode, setSelectMode]   = useState(false);
     const [warmthFilter, setWarmthFilter] = useState('all');
     const [search, setSearch]     = useState('');
+    const [searchInput, setSearchInput] = useState('');
 
     const setViewPersist = v => { setView(v); localStorage.setItem('accounts:view', v); };
 
@@ -282,6 +294,21 @@ export default function AccountsTab() {
     // Handlers
     const handleAddAccount  = () => { setEditingAccount(null); setEditingSubAccount(null); setParentAccountForSub(null); setShowAccountModal(true); };
     const handleEditAccount = (a) => { setEditingAccount(a); setEditingSubAccount(null); setParentAccountForSub(null); setShowAccountModal(true); };
+    const handleDeleteSelected = () => {
+        if (!selectedIds.length) return;
+        showConfirm(`Delete ${selectedIds.length} account${selectedIds.length > 1 ? 's' : ''}? This cannot be undone.`, async () => {
+            const toDelete = [...selectedIds];
+            const snapshot = [...(accounts || [])];
+            setAccounts(prev => prev.filter(a => !toDelete.includes(a.id)));
+            setSelectedIds([]);
+            setSelectMode(false);
+            for (const id of toDelete) {
+                await dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' }).catch(console.error);
+            }
+        });
+    };
+    const toggleSelect = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    const toggleSelectAll = () => setSelectedIds(prev => prev.length === filtered.length ? [] : filtered.map(a => a.id));
 
     // Views config
     const views = [
@@ -334,6 +361,16 @@ export default function AccountsTab() {
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <Icon name="export" size={12} color={T.inkMid} /> Export
                 </button>
+                {canEdit && selectMode && selectedIds.length > 0 && (
+                    <button onClick={handleDeleteSelected} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: T.danger, border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                        Delete ({selectedIds.length})
+                    </button>
+                )}
+                {canEdit && (
+                    <button onClick={() => { setSelectMode(m => !m); setSelectedIds([]); }} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 11px', background: selectMode ? T.surface2 : 'transparent', border: `1px solid ${selectMode ? T.borderStrong : T.border}`, color: T.inkMid, fontSize: 12, fontWeight: selectMode ? 600 : 400, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                        {selectMode ? 'Cancel' : 'Select'}
+                    </button>
+                )}
                 {canEdit && (
                     <button onClick={handleAddAccount} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: T.ink, border: 'none', color: T.surface, fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
                         <Icon name="plus" size={12} color={T.surface} /> New account
@@ -375,14 +412,18 @@ export default function AccountsTab() {
             {/* Search */}
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, minWidth: 180 }}>
                 <Icon name="search" size={13} color={T.inkMuted} />
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search accounts…"
+                <input
+                    value={searchInput}
+                    onChange={e => setSearchInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') setSearch(searchInput); if (e.key === 'Escape') { setSearchInput(''); setSearch(''); } }}
+                    placeholder="Search accounts… (Enter)"
                     style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, color: T.ink, fontFamily: T.sans, width: '100%' }} />
             </div>
         </div>
     );
 
     // ── TABLE COLUMN HEADER ───────────────────────────────────
-    const TableHeader = ({ sortLabel }) => (
+    const TableHeader = ({ sortLabel, selectMode, allSelected, onSelectAll }) => (
         <div style={{
             display: 'grid',
             gridTemplateColumns: '3px 1.8fr 1fr 90px 60px 110px 100px 28px',
@@ -414,12 +455,12 @@ export default function AccountsTab() {
 
         return (
             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
-                <TableHeader sortLabel="warmth · pipeline" />
+                <TableHeader sortLabel="warmth · pipeline" selectMode={selectMode} allSelected={selectedIds.length === filtered.length && filtered.length > 0} onSelectAll={toggleSelectAll} />
                 {sorted.length === 0
                     ? <EmptyState />
                     : sorted.map((acc, i) => (
                         <AccountRow key={acc.id} account={acc} warmthData={warmthMap[acc.id]} contacts={contacts}
-                            onView={setViewingAccount} onEdit={handleEditAccount} isEven={i%2===0} />
+                            onView={setViewingAccount} onEdit={handleEditAccount} isEven={i%2===0} selectMode={selectMode} isSelected={selectedIds.includes(acc.id)} onToggleSelect={toggleSelect} />
                     ))
                 }
             </div>
@@ -489,12 +530,12 @@ export default function AccountsTab() {
         const sorted = [...filtered].sort((a, b) => (a.name||'').localeCompare(b.name||''));
         return (
             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
-                <TableHeader sortLabel="A–Z" />
+                <TableHeader sortLabel="A–Z" selectMode={selectMode} allSelected={selectedIds.length === filtered.length && filtered.length > 0} onSelectAll={toggleSelectAll} />
                 {sorted.length === 0
                     ? <EmptyState />
                     : sorted.map((acc, i) => (
                         <AccountRow key={acc.id} account={acc} warmthData={warmthMap[acc.id]} contacts={contacts}
-                            onView={setViewingAccount} onEdit={handleEditAccount} isEven={i%2===0} />
+                            onView={setViewingAccount} onEdit={handleEditAccount} isEven={i%2===0} selectMode={selectMode} isSelected={selectedIds.includes(acc.id)} onToggleSelect={toggleSelect} />
                     ))
                 }
             </div>
