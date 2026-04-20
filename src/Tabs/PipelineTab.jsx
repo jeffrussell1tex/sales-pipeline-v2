@@ -298,6 +298,7 @@ export default function PipelineTab() {
     const [kanbanDragging, setKanbanDragging]   = useState(null);
     const [kanbanDragOver, setKanbanDragOver]   = useState(null);
     const [selectedOpps, setSelectedOpps]       = useState([]);
+    const [selectMode, setSelectMode]            = useState(false);
     const [pipelineSortField, setPipelineSortField] = useState('forecastedCloseDate');
     const [pipelineSortDir,   setPipelineSortDir]   = useState('asc');
     const [bulkScoring, setBulkScoring]         = useState(false);
@@ -567,6 +568,31 @@ export default function PipelineTab() {
                         </svg>
                         Filter{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
                     </button>
+                    {/* Select mode + delete */}
+                    {canEdit && selectMode && selectedOpps.length > 0 && (
+                        <button
+                            onClick={() => {
+                                showConfirm(`Delete ${selectedOpps.length} deal${selectedOpps.length > 1 ? 's' : ''}? This cannot be undone.`, async () => {
+                                    const toDelete = [...selectedOpps];
+                                    for (const id of toDelete) {
+                                        const opp = opportunities.find(o => o.id === id);
+                                        if (opp) await handleDelete(opp).catch(console.error);
+                                    }
+                                    setSelectedOpps([]);
+                                    setSelectMode(false);
+                                });
+                            }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: T.danger, border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans }}>
+                            Delete ({selectedOpps.length})
+                        </button>
+                    )}
+                    {canEdit && (
+                        <button
+                            onClick={() => { setSelectMode(m => !m); setSelectedOpps([]); }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', background: selectMode ? T.surface2 : 'transparent', border: `1px solid ${selectMode ? T.borderStrong : T.border}`, color: T.inkMid, fontSize: 12, fontWeight: selectMode ? 600 : 400, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans }}>
+                            {selectMode ? 'Cancel' : 'Select'}
+                        </button>
+                    )}
                     {!isReadOnly && (
                         <button onClick={handleAddNew} style={{
                             display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -738,15 +764,23 @@ export default function PipelineTab() {
                 {pipelineView === 'table' && (
                     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, overflow: 'auto', fontFamily: T.sans }}>
                         {/* Header */}
+                        {/* Select-all header row */}
                         <div style={{
-                            display: 'grid', gridTemplateColumns: '28px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px',
+                            display: 'grid',
+                            gridTemplateColumns: selectMode ? '36px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px' : '28px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px',
                             alignItems: 'center', padding: '0 14px', height: 36,
                             background: T.surface2, borderBottom: `1px solid ${T.border}`,
                             fontSize: 10, fontWeight: 700, color: T.inkMuted,
                             letterSpacing: 0.6, textTransform: 'uppercase',
                             position: 'sticky', top: 0, zIndex: 1,
                         }}>
-                            <div/><div>Deal</div><div>Account</div><div>Stage</div>
+                            {selectMode ? (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                    onClick={() => setSelectedOpps(prev => prev.length === smartFilteredOpps.length ? [] : smartFilteredOpps.map(o => o.id))}>
+                                    <div style={{ width: 14, height: 14, borderRadius: 3, border: `1.5px solid ${selectedOpps.length === smartFilteredOpps.length && smartFilteredOpps.length > 0 ? T.ink : T.borderStrong}`, background: selectedOpps.length === smartFilteredOpps.length && smartFilteredOpps.length > 0 ? T.ink : 'transparent', cursor: 'pointer' }} />
+                                </div>
+                            ) : <div/>}
+                            <div>Deal</div><div>Account</div><div>Stage</div>
                             <div style={{ textAlign: 'right' }}>ARR</div>
                             <div>Close</div><div>AI</div><div>Health</div><div>Days</div><div/>
                         </div>
@@ -770,21 +804,23 @@ export default function PipelineTab() {
                                 const aiRisk      = opp.aiScore && opp.aiScore.score < 50;
                                 return (
                                     <div key={opp.id}
-                                        onClick={() => { setEditingOpp(opp); setShowModal(true); }}
+                                        onClick={() => selectMode ? setSelectedOpps(prev => prev.includes(opp.id) ? prev.filter(x => x !== opp.id) : [...prev, opp.id]) : (setEditingOpp(opp), setShowModal(true))}
                                         style={{
-                                            display: 'grid', gridTemplateColumns: '28px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px',
+                                            display: 'grid',
+                                            gridTemplateColumns: selectMode ? '36px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px' : '28px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px',
                                             alignItems: 'center', padding: '0 14px', height: 42,
                                             borderBottom: `1px solid ${T.border}`,
-                                            background: selectedOpps.includes(opp.id) ? T.surface2 : 'transparent',
+                                            background: selectedOpps.includes(opp.id) ? 'rgba(42,38,34,0.04)' : 'transparent',
                                             fontSize: 12, color: T.ink, cursor: 'pointer', transition: 'background 100ms',
                                         }}
                                         onMouseEnter={e => { if (!selectedOpps.includes(opp.id)) e.currentTarget.style.background = T.surface2; }}
-                                        onMouseLeave={e => { if (!selectedOpps.includes(opp.id)) e.currentTarget.style.background = 'transparent'; }}>
-                                        {/* Checkbox */}
-                                        <div onClick={e => { e.stopPropagation(); setSelectedOpps(prev => prev.includes(opp.id) ? prev.filter(x => x !== opp.id) : [...prev, opp.id]); }}>
-                                            {selectedOpps.includes(opp.id) && (
-                                                <div style={{ width: 15, height: 15, borderRadius: 3, border: `1px solid ${T.ink}`, background: T.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={T.surface} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>
+                                        onMouseLeave={e => { if (!selectedOpps.includes(opp.id)) e.currentTarget.style.background = selectedOpps.includes(opp.id) ? 'rgba(42,38,34,0.04)' : 'transparent'; }}>
+                                        {/* Checkbox — only in select mode */}
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            onClick={e => { e.stopPropagation(); setSelectedOpps(prev => prev.includes(opp.id) ? prev.filter(x => x !== opp.id) : [...prev, opp.id]); }}>
+                                            {selectMode && (
+                                                <div style={{ width: 16, height: 16, borderRadius: 3, border: `1.5px solid ${selectedOpps.includes(opp.id) ? T.ink : T.borderStrong}`, background: selectedOpps.includes(opp.id) ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
+                                                    {selectedOpps.includes(opp.id) && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={T.surface} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
                                                 </div>
                                             )}
                                         </div>
@@ -944,26 +980,7 @@ export default function PipelineTab() {
 
             </div>{/* end spt-pipeline-desktop */}
 
-            {/* ── Floating bulk action bar ──────────────────────── */}
-            {selectedOpps.length > 0 && (
-                <div style={{
-                    position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
-                    background: T.surfaceInk, color: '#e6ddd0', padding: '10px 12px 10px 16px',
-                    borderRadius: 6, display: 'flex', alignItems: 'center', gap: 10,
-                    boxShadow: '0 12px 36px rgba(42,38,34,0.3)', fontFamily: T.sans, zIndex: 500,
-                }}>
-                    <span style={{ fontSize: 12, fontWeight: 600 }}>{selectedOpps.length} selected</span>
-                    <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.2)' }}/>
-                    {[{ l: 'Move stage' }, { l: 'Update close' }, { l: 'AI score' }].map(b => (
-                        <button key={b.l} onClick={() => { if (b.l === 'AI score') handleBulkScore(); }}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.08)', border: 'none', color: '#e6ddd0', fontSize: 12, fontWeight: 500, padding: '5px 10px', borderRadius: 3, cursor: 'pointer', fontFamily: T.sans }}>
-                            {b.l}
-                        </button>
-                    ))}
-                    <div style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.2)' }}/>
-                    <button onClick={() => setSelectedOpps([])} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', padding: 4, fontSize: 16, lineHeight: 1 }}>✕</button>
-                </div>
-            )}
+
 
             {/* Save view dialog */}
             <SaveViewDialog
