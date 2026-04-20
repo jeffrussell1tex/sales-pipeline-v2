@@ -1,400 +1,470 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
+
+// ── V1 Design tokens ──────────────────────────────────────────
+const T = {
+    bg:           '#f0ece4',
+    surface:      '#fbf8f3',
+    surface2:     '#f5efe3',
+    border:       '#e6ddd0',
+    borderStrong: '#d4c8b4',
+    ink:          '#2a2622',
+    inkMid:       '#5a544c',
+    inkMuted:     '#8a8378',
+    gold:         '#c8b99a',
+    goldInk:      '#7a6a48',
+    danger:       '#9c3a2e',
+    warn:         '#b87333',
+    ok:           '#4d6b3d',
+    info:         '#3a5a7a',
+    sans:         '"Plus Jakarta Sans", system-ui, sans-serif',
+    serif:        'Georgia, serif',
+    r:            3,
+};
+
+const avatarBg = name => {
+    const p = ['#9c6b4a','#7a5a3c','#5a6e5a','#6b5a7a','#8a5a5a','#5a7a8a','#7a6b5a','#4a6b5a'];
+    let h = 0; for (let i = 0; i < (name||'').length; i++) h = (h*31 + (name||'').charCodeAt(i))|0;
+    return p[Math.abs(h) % p.length];
+};
+
+const Icon = ({ name, size=13, color='currentColor' }) => {
+    const p = { width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:color, strokeWidth:1.75, strokeLinecap:'round', strokeLinejoin:'round' };
+    switch(name) {
+        case 'search':  return <svg {...p}><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>;
+        case 'export':  return <svg {...p}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>;
+        case 'plus':    return <svg {...p}><path d="M12 5v14M5 12h14"/></svg>;
+        case 'dots':    return <svg {...p}><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>;
+        case 'import':  return <svg {...p}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>;
+        default: return null;
+    }
+};
 
 export default function ContactsTab() {
     const {
         contacts, setContacts,
-        opportunities,
-        accounts,
-        activities,
-        tasks,
-        settings,
-        currentUser,
-        userRole,
-        canSeeAll,
-        isRepVisible,
+        opportunities, accounts, activities, tasks, settings,
+        currentUser, userRole, canSeeAll,
         exportToCSV,
-        showConfirm,
-        softDelete,
-        addAudit,
-        getStageColor,
+        showConfirm, softDelete,
         visibleContacts,
-        exportingCSV, setExportingCSV,
         handleDeleteContact,
         setEditingContact, setShowContactModal,
         setCsvImportType, setShowCsvImportModal,
         viewingContact, setViewingContact,
-        contactShowAllDeals, setContactShowAllDeals,
         contactsSortBy, setContactsSortBy,
         selectedContacts, setSelectedContacts,
         isMobile,
     } = useApp();
 
-    const isAdmin = userRole === 'Admin';
-    const isManager = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
-    const canEdit = !isReadOnly;
+    const canEdit    = !isReadOnly;
 
-    // State received via props from App.jsx (also used in contact detail panel)
+    // ── State ─────────────────────────────────────────────────
+    const [search,      setSearch]      = useState('');
+    const [selectMode,  setSelectMode]  = useState(false);
+    const [selectedIds, setSelectedIds] = useState([]);
+    const searchRef = useRef(null);
 
-    // UI handlers (open modals)
-    const handleAddContact = () => { setEditingContact(null); setShowContactModal(true); };
-    const handleEditContact = (contact) => { setEditingContact(contact); setShowContactModal(true); };
+    // ── Handlers ──────────────────────────────────────────────
+    const handleAddContact  = () => { setEditingContact(null); setShowContactModal(true); };
+    const handleEditContact = (c)  => { setEditingContact(c); setShowContactModal(true); };
+
+    const handleDeleteSelected = () => {
+        if (!selectedIds.length) return;
+        showConfirm(`Delete ${selectedIds.length} contact${selectedIds.length > 1 ? 's' : ''}? This cannot be undone.`, async () => {
+            const toDelete = [...selectedIds];
+            const snapshot = [...(contacts || [])];
+            setContacts(prev => prev.filter(c => !toDelete.includes(c.id)));
+            setSelectedIds([]);
+            setSelectMode(false);
+            const deletingAll = toDelete.length === contacts.length;
+            if (deletingAll) {
+                await dbFetch('/.netlify/functions/contacts?clear=true', { method: 'DELETE' }).catch(console.error);
+            } else {
+                for (const id of toDelete) {
+                    await dbFetch(`/.netlify/functions/contacts?id=${id}`, { method: 'DELETE' }).catch(console.error);
+                }
+            }
+            softDelete(
+                `${toDelete.length} contact${toDelete.length === 1 ? '' : 's'}`,
+                () => {},
+                () => {
+                    setContacts(snapshot);
+                    const deleted = snapshot.filter(c => toDelete.includes(c.id));
+                    deleted.forEach(c => dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(c) }).catch(console.error));
+                }
+            );
+        });
+    };
+
+    const toggleSelect    = id  => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    const toggleSelectAll = ()  => setSelectedIds(prev => prev.length === sorted.length ? [] : sorted.map(c => c.id));
+
+    // ── Sort + filter ─────────────────────────────────────────
+    const sortField = contactsSortBy === 'firstName' ? 'firstName' : contactsSortBy === 'company' ? 'company' : 'lastName';
+
+    const sorted = useMemo(() => {
+        let list = visibleContacts;
+        if (search.trim()) {
+            const q = search.toLowerCase();
+            list = list.filter(c =>
+                (c.firstName||'').toLowerCase().includes(q) ||
+                (c.lastName||'').toLowerCase().includes(q) ||
+                (c.company||'').toLowerCase().includes(q) ||
+                (c.email||'').toLowerCase().includes(q) ||
+                (c.title||'').toLowerCase().includes(q)
+            );
+        }
+        return [...list].sort((a, b) => {
+            if (contactsSortBy === 'lastName')   return (a.lastName||'').localeCompare(b.lastName||'');
+            if (contactsSortBy === 'firstName')  return (a.firstName||'').localeCompare(b.firstName||'');
+            const cmp = (a.company||'').localeCompare(b.company||'');
+            return cmp !== 0 ? cmp : (a.lastName||'').localeCompare(b.lastName||'');
+        });
+    }, [visibleContacts, search, contactsSortBy]);
+
+    // Opp count per contact
+    const oppCount = useMemo(() => {
+        const map = {};
+        (visibleContacts || []).forEach(c => {
+            const name = (c.firstName + ' ' + c.lastName).trim().toLowerCase();
+            map[c.id] = (opportunities || []).filter(o =>
+                (o.contactIds && o.contactIds.includes(c.id)) ||
+                (o.contacts && o.contacts.split(',').map(s => s.trim().toLowerCase()).some(n => n === name || n.startsWith(name + ' (')))
+            ).length;
+        });
+        return map;
+    }, [visibleContacts, opportunities]);
+
+    // ── Sort tabs (underline style per style guide) ───────────
+    const SortTabs = () => (
+        <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, marginBottom: 2 }}>
+            {[
+                { key: 'lastName',  label: 'Last Name'  },
+                { key: 'firstName', label: 'First Name' },
+                { key: 'company',   label: 'Company'    },
+            ].map(opt => {
+                const active = contactsSortBy === opt.key;
+                return (
+                    <button key={opt.key} onClick={() => setContactsSortBy(opt.key)} style={{
+                        padding: '8px 16px', border: 'none',
+                        borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent',
+                        background: 'transparent',
+                        color: active ? T.ink : T.inkMuted,
+                        fontSize: 12, fontWeight: active ? 600 : 400,
+                        cursor: 'pointer', fontFamily: T.sans,
+                        transition: 'color 120ms, border-color 120ms',
+                        whiteSpace: 'nowrap', marginBottom: -1,
+                    }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.color = T.inkMid; }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.color = T.inkMuted; }}>
+                        {opt.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
+
+    // ── Letter jump bar ───────────────────────────────────────
+    const LetterBar = () => (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 1, padding: '6px 12px', borderBottom: `1px solid ${T.border}`, background: T.surface2 }}>
+            {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => {
+                const hasMatch = sorted.some(c => ((c[sortField]||'')[0]||'').toUpperCase() === letter);
+                return (
+                    <div key={letter}
+                        onClick={() => {
+                            if (!hasMatch) return;
+                            const el = document.getElementById('contact-letter-' + letter);
+                            if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                        }}
+                        style={{
+                            fontSize: 10, fontWeight: 700, width: 20, height: 18,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: hasMatch ? T.info : T.border,
+                            cursor: hasMatch ? 'pointer' : 'default',
+                            borderRadius: T.r, userSelect: 'none', transition: 'all 80ms',
+                            fontFamily: T.sans,
+                        }}
+                        onMouseEnter={e => { if (hasMatch) { e.currentTarget.style.background = T.surface2; e.currentTarget.style.color = T.ink; } }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = hasMatch ? T.info : T.border; }}>
+                        {letter}
+                    </div>
+                );
+            })}
+        </div>
+    );
+
+    // ── Table header ──────────────────────────────────────────
+    const TableHeader = () => (
+        <div style={{
+            display: 'grid',
+            gridTemplateColumns: selectMode ? '36px 1.8fr 1.4fr 1fr 1fr 1.6fr 28px' : '1.8fr 1.4fr 1fr 1fr 1.6fr 28px',
+            alignItems: 'center', height: 34, padding: '0 14px',
+            background: T.surface2, borderBottom: `1px solid ${T.border}`,
+            fontSize: 10, fontWeight: 700, color: T.inkMuted,
+            letterSpacing: 0.6, textTransform: 'uppercase', fontFamily: T.sans,
+        }}>
+            {selectMode && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={toggleSelectAll}>
+                    <div style={{ width: 14, height: 14, borderRadius: T.r, border: `1.5px solid ${selectedIds.length === sorted.length && sorted.length > 0 ? T.ink : T.borderStrong}`, background: selectedIds.length === sorted.length && sorted.length > 0 ? T.ink : 'transparent', cursor: 'pointer' }} />
+                </div>
+            )}
+            <div style={{ paddingLeft: 2 }}>Name</div>
+            <div>Company</div>
+            <div>Title</div>
+            <div>Phone</div>
+            <div>Email</div>
+            <div />
+        </div>
+    );
+
+    // ── Contact row ───────────────────────────────────────────
+    const ContactRow = ({ contact, isEven, anchorId }) => {
+        const [hov, setHov] = useState(false);
+        const isSelected = selectedIds.includes(contact.id);
+        const initials   = ((contact.firstName||'')[0]||'') + ((contact.lastName||'')[0]||'');
+        const opps       = oppCount[contact.id] || 0;
+
+        return (
+            <div
+                id={anchorId || undefined}
+                onMouseEnter={() => setHov(true)}
+                onMouseLeave={() => setHov(false)}
+                onClick={() => selectMode ? toggleSelect(contact.id) : setViewingContact(contact)}
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: selectMode ? '36px 1.8fr 1.4fr 1fr 1fr 1.6fr 28px' : '1.8fr 1.4fr 1fr 1fr 1.6fr 28px',
+                    alignItems: 'center', height: 48, padding: '0 14px',
+                    borderBottom: `1px solid ${T.border}`,
+                    background: isSelected ? 'rgba(42,38,34,0.04)' : hov ? T.surface2 : isEven ? T.surface : T.bg,
+                    cursor: 'pointer', fontFamily: T.sans, transition: 'background 80ms',
+                }}>
+
+                {/* Checkbox in select mode */}
+                {selectMode && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        onClick={e => { e.stopPropagation(); toggleSelect(contact.id); }}>
+                        <div style={{ width: 16, height: 16, borderRadius: T.r, border: `1.5px solid ${isSelected ? T.ink : T.borderStrong}`, background: isSelected ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
+                            {isSelected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fbf8f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
+                        </div>
+                    </div>
+                )}
+
+                {/* Name + avatar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: avatarBg(contact.firstName + contact.lastName), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, flexShrink: 0, textTransform: 'uppercase' }}>
+                        {initials || '?'}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {contact.firstName} {contact.lastName}
+                            </span>
+                            {opps > 0 && (
+                                <span style={{ fontSize: 9, fontWeight: 700, color: T.info, background: `${T.info}18`, padding: '1px 5px', borderRadius: 999, flexShrink: 0, border: `1px solid ${T.info}30` }}>
+                                    {opps} opp{opps > 1 ? 's' : ''}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Company */}
+                <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                    {contact.company || '—'}
+                </div>
+
+                {/* Title */}
+                <div style={{ fontSize: 12, color: T.inkMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                    {contact.title || '—'}
+                </div>
+
+                {/* Phone */}
+                <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                    {contact.phone || '—'}
+                </div>
+
+                {/* Email */}
+                <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                    {contact.email
+                        ? <a href={`mailto:${contact.email}`} onClick={e => e.stopPropagation()} style={{ color: T.info, textDecoration: 'none', fontFamily: T.sans }}
+                            onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                            onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}>
+                            {contact.email}
+                          </a>
+                        : <span style={{ color: T.inkMuted }}>—</span>
+                    }
+                </div>
+
+                {/* Actions ⋯ */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={e => { e.stopPropagation(); handleEditContact(contact); }}>
+                    <Icon name="dots" size={14} color={hov ? T.inkMid : T.border} />
+                </div>
+            </div>
+        );
+    };
+
+    // ── Company group header (Company sort) ───────────────────
+    const CompanyHeader = ({ company, count }) => (
+        <div style={{
+            padding: '5px 14px', background: T.surface2, borderBottom: `1px solid ${T.border}`,
+            fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase',
+            letterSpacing: 0.6, fontFamily: T.sans, display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+            <span style={{ color: T.ink }}>{company}</span>
+            <span style={{ color: T.border }}>({count})</span>
+        </div>
+    );
+
+    // ── Build rows with letter anchors / company headers ──────
+    const rows = useMemo(() => {
+        const result = [];
+        let lastLetter  = '';
+        let lastCompany = null;
+
+        sorted.forEach((contact, i) => {
+            const firstChar = ((contact[sortField]||'')[0]||'').toUpperCase();
+            let anchorId = null;
+
+            if (contactsSortBy === 'company') {
+                const co = (contact.company||'').trim() || '(No Company)';
+                if (co !== lastCompany) {
+                    lastCompany = co;
+                    const count = sorted.filter(c => ((c.company||'').trim()||'(No Company)') === co).length;
+                    // Anchor on first char of company name
+                    if (firstChar !== lastLetter) { lastLetter = firstChar; anchorId = 'contact-letter-' + firstChar; }
+                    result.push({ type: 'company-header', key: 'co-' + co, company: co, count, anchorId });
+                    anchorId = null;
+                }
+            } else {
+                if (firstChar !== lastLetter) { lastLetter = firstChar; anchorId = 'contact-letter-' + firstChar; }
+            }
+
+            result.push({ type: 'row', key: contact.id, contact, isEven: i % 2 === 0, anchorId });
+        });
+        return result;
+    }, [sorted, contactsSortBy, sortField]);
+
+    // ── Empty state ───────────────────────────────────────────
+    const EmptyState = () => (
+        <div style={{ padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
+            {search ? `No contacts matching "${search}".` : 'No contacts yet.'}
+            {canEdit && !search && (
+                <div style={{ marginTop: 12 }}>
+                    <button onClick={handleAddContact} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', background: T.ink, border: 'none', color: T.surface, fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                        <Icon name="plus" size={12} color={T.surface} /> New contact
+                    </button>
+                </div>
+            )}
+        </div>
+    );
 
     return (
+        <div className="tab-page" style={{ fontFamily: T.sans }}>
 
-                <div className="tab-page">
-                    <div className="tab-page-header">
-                        <div className="tab-page-header-bar"></div>
-                        <div>
-                            <h2>Contacts</h2>
-                            
-                        </div>
+            {/* ── Page header ── */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, paddingBottom: 12 }}>
+                <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 28, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300, letterSpacing: -0.8, color: T.ink, lineHeight: 1, marginBottom: 5 }}>
+                        Contacts
                     </div>
-                {/* ── Sub-tabs (Sales Manager style) + Add Contact ── */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', marginBottom: '0.25rem' }}>
-                    <div style={{ display: 'flex' }}>
-                        {[
-                            { key: 'lastName',  label: 'Last Name' },
-                            { key: 'firstName', label: 'First Name' },
-                            { key: 'company',   label: 'Company' },
-                        ].map(opt => (
-                            <button key={opt.key} onClick={() => setContactsSortBy(opt.key)} style={{
-                                padding: '0.5rem 1.25rem',
-                                border: 'none',
-                                borderBottom: contactsSortBy === opt.key ? '2px solid #2563eb' : '2px solid transparent',
-                                background: 'transparent',
-                                color: contactsSortBy === opt.key ? '#2563eb' : '#64748b',
-                                fontWeight: contactsSortBy === opt.key ? '700' : '500',
-                                fontSize: '0.875rem',
-                                cursor: 'pointer',
-                                fontFamily: 'inherit',
-                                transition: 'all 0.15s',
-                                whiteSpace: 'nowrap',
-                            }}>{opt.label}</button>
-                        ))}
+                    <div style={{ fontSize: 12, color: T.inkMuted }}>
+                        <span style={{ fontWeight: 600, color: T.ink }}>{sorted.length}</span> contacts
+                        {search && <span> matching <em>"{search}"</em></span>}
+                        <span style={{ margin: '0 6px', color: T.border }}>·</span>
+                        sorted by {contactsSortBy === 'lastName' ? 'last name' : contactsSortBy === 'firstName' ? 'first name' : 'company'}
                     </div>
-                    {canEdit && (
-                        <div style={{ paddingRight: '0.75rem', flexShrink: 0 }}>
-                            <button className="btn" onClick={handleAddContact}>+ Add Contact</button>
-                        </div>
-                    )}
                 </div>
 
-                {/* ── Contacts list ── */}
-                <div className="table-container">
-                    {/* Bulk action bar */}
-                    {selectedContacts.length > 0 && (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1.5rem', background: '#eff6ff', borderBottom: '1px solid #bfdbfe' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#2563eb' }}>
-                                    {selectedContacts.length} contact{selectedContacts.length > 1 ? 's' : ''} selected
-                                </span>
-                                <button onClick={() => setSelectedContacts([])}
-                                    style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit' }}
-                                >Clear selection</button>
-                            </div>
-                            <button onClick={() => {
-                                showConfirm('Delete ' + selectedContacts.length + ' selected contact(s)? This cannot be undone.', async () => {
-    const contactIdsToDelete = [...selectedContacts];
-    const snapshot = [...contacts];
-    setContacts(contacts.filter(c => !contactIdsToDelete.includes(c.id)));
-    setSelectedContacts([]);
-    // If all contacts selected, use clear=true for a single DB call instead of N deletes
-    const deletingAll = contactIdsToDelete.length === contacts.length;
-    if (deletingAll) {
-        await dbFetch('/.netlify/functions/contacts?clear=true', { method: 'DELETE' })
-            .catch(err => console.error('Failed to clear contacts:', err));
-    } else {
-        const CONCURRENCY = 3;
-        const queue = [...contactIdsToDelete];
-        const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-            while (queue.length > 0) {
-                const id = queue.shift();
-                await dbFetch(`/.netlify/functions/contacts?id=${id}`, { method: 'DELETE' })
-                    .catch(err => console.error('Failed to delete contact:', err));
-            }
-        });
-        await Promise.all(workers);
-    }
-    softDelete(
-        `${contactIdsToDelete.length} contact${contactIdsToDelete.length === 1 ? '' : 's'}`,
-        () => {},
-        () => {
-            setContacts(snapshot);
-            setUndoToast(null);
-            // Re-insert deleted contacts back to DB
-            const deletedContacts = snapshot.filter(c => contactIdsToDelete.includes(c.id));
-            deletedContacts.forEach(c => {
-                dbFetch('/.netlify/functions/contacts', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(c),
-                }).catch(err => console.error('Failed to restore contact to DB:', err));
-            });
-        }
-    );
-});
+                {/* Right buttons */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                    {/* Search */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, minWidth: 180 }}>
+                        <Icon name="search" size={13} color={T.inkMuted} />
+                        <input
+                            ref={searchRef}
+                            defaultValue=""
+                            onKeyDown={e => {
+                                if (e.key === 'Enter')  setSearch(e.currentTarget.value);
+                                if (e.key === 'Escape') { e.currentTarget.value = ''; setSearch(''); }
                             }}
-                                style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', padding: '0.5rem 1rem', cursor: 'pointer', fontWeight: '600', fontSize: '0.8125rem', fontFamily: 'inherit', transition: 'background 0.2s' }}
-                                onMouseEnter={e => e.target.style.background = '#dc2626'}
-                                onMouseLeave={e => e.target.style.background = '#ef4444'}
-                            >Delete Selected</button>
-                        </div>
-                    )}
-                    <div style={{ padding: '1.5rem' }}>
-                        {visibleContacts.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: '4rem 2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-                                <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <circle cx="36" cy="24" r="12" fill="#fff7ed" stroke="#fed7aa" strokeWidth="2"/>
-                                    <circle cx="36" cy="24" r="7" fill="#fb923c"/>
-                                    <path d="M12 58c0-13.255 10.745-24 24-24s24 10.745 24 24" stroke="#fed7aa" strokeWidth="2" strokeLinecap="round" fill="#fff7ed"/>
-                                    <circle cx="54" cy="18" r="8" fill="#22c55e"/>
-                                    <path d="M50 18l3 3 5-5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                                <div>
-                                    <div style={{ width:'72px', height:'72px', borderRadius:'20px', background:'linear-gradient(135deg,#fff7ed,#ffedd5)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'2rem', margin:'0 auto 0.75rem' }}>👤</div>
-                                    <div style={{ fontWeight: '700', fontSize: '1.0625rem', color: '#1e293b', marginBottom: '0.375rem' }}>No contacts yet</div>
-                                    <div style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1.25rem', maxWidth:'280px' }}>Add contacts to track people across your accounts and deals.</div>
-                                    {canEdit && <button className="btn" onClick={handleAddContact}>+ Add Contact</button>}
-                                </div>
-                            </div>
-                        ) : (
-                            <>
-                            {/* Select all */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', paddingLeft: '0.25rem' }}>
-                                <input type="checkbox"
-                                    checked={visibleContacts.length > 0 && selectedContacts.length === visibleContacts.length}
-                                    onChange={e => setSelectedContacts(e.target.checked ? visibleContacts.map(c => c.id) : [])}
-                                    style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#2563eb' }}
-                                />
-                                <span style={{ fontSize: '0.8125rem', color: '#64748b', fontWeight: '600' }}>Select all ({visibleContacts.length})</span>
-                            </div>
-                            <div style={{ position: 'relative' }}>
-                            {/* Letter jump bar */}
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px', padding: '0.375rem 0.5rem', background: '#f8fafc', borderRadius: '6px', marginBottom: '0.375rem', border: '1px solid #e9ecef' }}>
-                                {(() => {
-                                    const sortField = contactsSortBy === 'firstName' ? 'firstName' : contactsSortBy === 'company' ? 'company' : 'lastName';
-                                    return 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => {
-                                        const hasMatch = visibleContacts.some(c => ((c[sortField] || '')[0] || '').toUpperCase() === letter);
-                                        return (
-                                            <div key={letter}
-                                                onClick={() => {
-                                                    if (!hasMatch) return;
-                                                    const el = document.getElementById('contact-letter-' + letter);
-                                                    if (el) el.scrollIntoView({ block: 'start' });
-                                                }}
-                                                style={{
-                                                    fontSize: '0.6875rem', fontWeight: '700', width: '22px', height: '20px',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                    color: hasMatch ? '#2563eb' : '#cbd5e1',
-                                                    cursor: hasMatch ? 'pointer' : 'default',
-                                                    borderRadius: '3px', transition: 'all 0.1s', userSelect: 'none'
-                                                }}
-                                                onMouseEnter={e => { if (hasMatch) { e.target.style.background = '#dbeafe'; e.target.style.color = '#1e40af'; } }}
-                                                onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = hasMatch ? '#2563eb' : '#cbd5e1'; }}
-                                            >{letter}</div>
-                                        );
-                                    });
-                                })()}
-                            </div>
-                            <div style={{ display: 'grid', gap: '1px' }}>
-                                {(() => {
-                                    const sortField = contactsSortBy === 'firstName' ? 'firstName' : contactsSortBy === 'company' ? 'company' : 'lastName';
-                                    const sorted = [...visibleContacts].sort((a, b) => {
-                                        if (contactsSortBy === 'lastName') return (a.lastName || '').localeCompare(b.lastName || '');
-                                        else if (contactsSortBy === 'firstName') return (a.firstName || '').localeCompare(b.firstName || '');
-                                        else {
-                                            const cmp = (a.company || '').localeCompare(b.company || '');
-                                            return cmp !== 0 ? cmp : (a.lastName || '').localeCompare(b.lastName || '');
-                                        }
-                                    });
-                                    let lastLetter = '';
-                                    let lastCompany = null;
-                                    const results = [];
-                                    sorted.forEach((contact, cIdx) => {
-                                        const firstChar = ((contact[sortField] || '')[0] || '').toUpperCase();
-                                        let anchorId = null;
-                                        if (firstChar !== lastLetter) {
-                                            lastLetter = firstChar;
-                                            anchorId = 'contact-letter-' + firstChar;
-                                        }
-                                        // Company group header
-                                        if (contactsSortBy === 'company') {
-                                            const co = (contact.company || '').trim() || '(No Company)';
-                                            if (co !== lastCompany) {
-                                                lastCompany = co;
-                                                results.push(
-                                                    <div key={'company-hdr-' + co} id={anchorId} style={{
-                                                        padding: '0.375rem 0.625rem', background: '#f1f5f9', borderBottom: '1px solid #e2e8f0',
-                                                        fontSize: '0.6875rem', fontWeight: '800', color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em',
-                                                        display: 'flex', alignItems: 'center', gap: '0.5rem'
-                                                    }}>
-                                                        <span style={{ color: '#475569' }}>{co}</span>
-                                                        <span style={{ color: '#94a3b8', fontWeight: '600', fontSize: '0.625rem' }}>({sorted.filter(c => ((c.company || '').trim() || '(No Company)') === co).length})</span>
-                                                    </div>
-                                                );
-                                                anchorId = null;
-                                            }
-                                        }
-                                        results.push(
-                                    <div key={contact.id} id={contactsSortBy !== 'company' ? anchorId : null} style={{
-                                        border: selectedContacts.includes(contact.id) ? '1px solid #93c5fd' : '1px solid #edf0f3',
-                                        borderRadius: '2px',
-                                        background: selectedContacts.includes(contact.id) ? '#eff6ff' : (cIdx % 2 === 0 ? '#ffffff' : '#f8fafc'),
-                                        transition: 'all 0.15s ease',
-                                        overflow: 'hidden',
-                                        marginLeft: contactsSortBy === 'company' ? '1rem' : 0
-                                    }}
-                                    onMouseEnter={e => { if (!selectedContacts.includes(contact.id)) e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)'; }}
-                                    onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
-                                    >
-                                    <>
-                                    {/* Mobile card - hidden on desktop */}
-                                    <div className="mobile-record-card" onClick={() => setViewingContact(contact)}>
-                                        <div className="mobile-card-top">
-                                            <div>
-                                                <div className="mobile-card-title">{contact.firstName} {contact.lastName}</div>
-                                                {contact.title && <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.1rem' }}>{contact.title}</div>}
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
-                                                <button onClick={e => { e.stopPropagation(); handleEditContact(contact); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                                <button onClick={e => { e.stopPropagation(); handleDeleteContact(contact.id); }} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
-                                            </div>
-                                        </div>
-                                        <div className="mobile-card-meta">
-                                            {contact.company && <span className="mobile-card-meta-item">🏢 {contact.company}</span>}
-                                            {contact.phone && <span className="mobile-card-meta-item">📞 {contact.phone}</span>}
-                                            {contact.email && <span className="mobile-card-meta-item">✉️ {contact.email}</span>}
-                                        </div>
-                                    </div>
-                                    {/* Desktop row - hidden on mobile */}
-                                    <div className="contacts-desktop-row" style={{ display: 'flex', alignItems: 'center', padding: '0.25rem 0.625rem', gap: '0.375rem' }}>
-                                        <input type="checkbox"
-                                            checked={selectedContacts.includes(contact.id)}
-                                            onChange={e => {
-                                                if (e.target.checked) setSelectedContacts([...selectedContacts, contact.id]);
-                                                else setSelectedContacts(selectedContacts.filter(id => id !== contact.id));
-                                            }}
-                                            style={{ width: '13px', height: '13px', cursor: 'pointer', accentColor: '#2563eb', flexShrink: 0 }}
-                                        />
-                                        <div style={{ 
-                                            flex: 1,
-                                            display: 'grid',
-                                            gridTemplateColumns: 'minmax(120px,2fr) minmax(100px,2fr) minmax(80px,2fr) minmax(80px,2fr) minmax(100px,3fr)',
-                                            gap: '0.375rem',
-                                            alignItems: 'center',
-                                            minWidth: '0'
-                                        }}>
-                                            <div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                                                    <div 
-                                                        style={{ fontSize: '0.75rem', fontWeight: '700', color: '#2563eb', cursor: 'pointer', lineHeight: '1.2' }}
-                                                        onClick={() => setViewingContact(contact)}
-                                                        onMouseEnter={e => e.target.style.textDecoration = 'underline'}
-                                                        onMouseLeave={e => e.target.style.textDecoration = 'none'}
-                                                    >
-                                                        {contact.firstName} {contact.lastName}
-                                                    </div>
-                                                    {(() => {
-                                                        const linkedOppCount = opportunities.filter(o =>
-                                                            (o.contactIds && o.contactIds.includes(contact.id)) ||
-                                                            (o.contacts && o.contacts.split(',').map(s => s.trim().toLowerCase()).some(n => n.startsWith((contact.firstName + ' ' + contact.lastName).toLowerCase())))
-                                                        ).length;
-                                                        if (!linkedOppCount) return null;
-                                                        return (
-                                                            <span title={`${linkedOppCount} linked opportunity${linkedOppCount > 1 ? 's' : ''}`}
-                                                                style={{ fontSize: '0.5625rem', fontWeight: '700', background: '#dbeafe', color: '#1e40af', border: '1px solid #bfdbfe', padding: '0.05rem 0.35rem', borderRadius: '999px', lineHeight: '1.4', flexShrink: 0 }}>
-                                                                {linkedOppCount} opp{linkedOppCount > 1 ? 's' : ''}
-                                                            </span>
-                                                        );
-                                                    })()}
-                                                </div>
-                                            </div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                {contact.company || '-'}
-                                            </div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                {contact.title || '-'}
-                                            </div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                                                {contact.phone || '-'}
-                                            </div>
-                                            <div style={{ fontSize: '0.75rem' }}>
-                                                {contact.email ? (
-                                                    <a href={`mailto:${contact.email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>
-                                                        {contact.email}
-                                                    </a>
-                                                ) : '-'}
-                                            </div>
-                                        </div>
-                                        <div style={{ marginLeft: '0.375rem', display: 'flex', gap: '4px' }}>
-                                            <button onClick={() => handleEditContact(contact)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #94a3b8', background: 'transparent', color: '#475569', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Edit</button>
-                                            <button onClick={() => handleDeleteContact(contact.id)} style={{ padding: '4px 10px', borderRadius: '999px', border: '0.5px solid #fca5a5', background: 'transparent', color: '#dc2626', fontWeight: '500', fontSize: '0.6875rem', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Delete</button>
-                                        </div>
-                                    </div>
-                                    {/* end contacts-desktop-row */}
-                                    {selectedContacts.includes(contact.id) && (() => {
-                                        const contactActivities = activities.filter(a => a.contactId === contact.id);
-                                        const contactOpps = opportunities.filter(o => o.account && contact.company && o.account.toLowerCase() === contact.company.toLowerCase());
-                                        const oppIds = contactOpps.map(o => o.id);
-                                        const oppActivities = activities.filter(a => a.opportunityId && oppIds.includes(a.opportunityId) && a.contactId !== contact.id);
-                                        const contactTasks = tasks.filter(t => {
-                                            const titleMatch = t.title && (t.title.toLowerCase().includes((contact.firstName || '').toLowerCase()) || t.title.toLowerCase().includes((contact.lastName || '').toLowerCase()));
-                                            const companyMatch = t.title && contact.company && t.title.toLowerCase().includes(contact.company.toLowerCase());
-                                            return titleMatch || companyMatch;
-                                        });
-                                        const allItems = [
-                                            ...contactActivities.map(a => ({ ...a, itemType: 'activity', sortDate: a.date })),
-                                            ...oppActivities.map(a => ({ ...a, itemType: 'activity-related', sortDate: a.date })),
-                                            ...contactTasks.map(t => ({ ...t, itemType: 'task', sortDate: t.dueDate || t.createdDate || '2000-01-01' }))
-                                        ].sort((a, b) => new Date(b.sortDate) - new Date(a.sortDate));
-
-                                        return (
-                                            <div style={{ borderTop: '1px solid #e2e8f0', padding: '0.75rem 1rem 0.75rem 3rem', background: '#f8f9fa' }}>
-                                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-                                                    Activity & Task History ({allItems.length})
-                                                </div>
-                                                {allItems.length === 0 ? (
-                                                    <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic' }}>No activities or tasks found for this contact.</div>
-                                                ) : (
-                                                    <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
-                                                        {allItems.map((item, idx) => (
-                                                            <div key={idx} style={{ display: 'flex', gap: '0.75rem', padding: '0.5rem 0', borderBottom: idx < allItems.length - 1 ? '1px solid #e2e8f0' : 'none', fontSize: '0.8125rem' }}>
-                                                                <div style={{ width: '70px', flexShrink: 0, color: '#94a3b8', fontSize: '0.75rem' }}>
-                                                                    {item.sortDate ? new Date(item.sortDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '-'}
-                                                                </div>
-                                                                <div style={{
-                                                                    padding: '0.125rem 0.5rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700', flexShrink: 0, textTransform: 'uppercase',
-                                                                    background: item.itemType === 'task' ? '#fef3c7' : '#dbeafe',
-                                                                    color: item.itemType === 'task' ? '#92400e' : '#1e40af'
-                                                                }}>
-                                                                    {item.itemType === 'task' ? 'Task' : item.type || 'Activity'}
-                                                                </div>
-                                                                <div style={{ flex: 1, color: '#475569' }}>
-                                                                    {item.itemType === 'task' ? item.title : (item.notes || item.subject || 'No details')}
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })()}
-                                    </>
-                                    </div>
-                                        );
-                                    });
-                                    return results;
-                                })()}
-                            </div>
-                            </div>
-                            </>
-                        )}
+                            placeholder="Search… (Enter)"
+                            style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, color: T.ink, fontFamily: T.sans, width: '100%' }}
+                        />
                     </div>
+
+                    {/* Export */}
+                    <button onClick={() => exportToCSV?.(`contacts-${new Date().toISOString().slice(0,10)}.csv`, ['First Name','Last Name','Company','Title','Phone','Email'], sorted.map(c => [c.firstName||'',c.lastName||'',c.company||'',c.title||'',c.phone||'',c.email||'']))}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', background: 'transparent', border: `1px solid ${T.border}`, color: T.inkMid, fontSize: 12, fontWeight: 400, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}
+                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <Icon name="export" size={12} color={T.inkMid} /> Export
+                    </button>
+
+                    {/* Delete (in select mode with selection) */}
+                    {canEdit && selectMode && selectedIds.length > 0 && (
+                        <button onClick={handleDeleteSelected} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: T.danger, border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                            Delete ({selectedIds.length})
+                        </button>
+                    )}
+
+                    {/* Select toggle */}
+                    {canEdit && (
+                        <button onClick={() => { setSelectMode(m => !m); setSelectedIds([]); }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', background: selectMode ? T.surface2 : 'transparent', border: `1px solid ${selectMode ? T.borderStrong : T.border}`, color: T.inkMid, fontSize: 12, fontWeight: selectMode ? 600 : 400, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                            {selectMode ? 'Cancel' : 'Select'}
+                        </button>
+                    )}
+
+                    {/* Import */}
+                    {canEdit && (
+                        <button onClick={() => { setCsvImportType?.('contacts'); setShowCsvImportModal?.(true); }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', background: 'transparent', border: `1px solid ${T.border}`, color: T.inkMid, fontSize: 12, fontWeight: 400, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}
+                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            <Icon name="import" size={12} color={T.inkMid} /> Import
+                        </button>
+                    )}
+
+                    {/* New contact */}
+                    {canEdit && (
+                        <button onClick={handleAddContact} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: T.ink, border: 'none', color: T.surface, fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                            <Icon name="plus" size={12} color={T.surface} /> New contact
+                        </button>
+                    )}
                 </div>
-                </div>
-            
+            </div>
+
+            {/* ── Sort tabs ── */}
+            <SortTabs />
+
+            {/* ── Contacts table ── */}
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
+                {sorted.length === 0 ? (
+                    <EmptyState />
+                ) : (
+                    <>
+                        <LetterBar />
+                        <TableHeader />
+                        {rows.map(r => {
+                            if (r.type === 'company-header') {
+                                return <CompanyHeader key={r.key} company={r.company} count={r.count} />;
+                            }
+                            return (
+                                <ContactRow
+                                    key={r.key}
+                                    contact={r.contact}
+                                    isEven={r.isEven}
+                                    anchorId={r.anchorId}
+                                />
+                            );
+                        })}
+                    </>
+                )}
+            </div>
+        </div>
     );
 }
