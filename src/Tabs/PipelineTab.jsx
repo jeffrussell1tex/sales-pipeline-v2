@@ -20,6 +20,8 @@ const T = {
     danger:       '#9c3a2e',
     warn:         '#b87333',
     ok:           '#4d6b3d',
+    info:         '#3a5a7a',
+    surfaceInk:   '#2a2622',
     stages: {
         'Prospecting': '#b0a088', 'Qualification': '#c8a978', 'Discovery': '#b07a55',
         'Evaluation (Demo)': '#b07a55', 'Proposal': '#b87333',
@@ -500,9 +502,9 @@ export default function PipelineTab() {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem', padding: '0.875rem 1rem' }}>
                                 {[
                                     { label: 'Total Pipeline Revenue', value: '$' + (pipelineTotalARR >= 1000000 ? (pipelineTotalARR/1000000).toFixed(1)+'M' : pipelineTotalARR >= 1000 ? Math.round(pipelineTotalARR/1000)+'K' : pipelineTotalARR.toLocaleString()), kpiId: 'totalPipelineRevenue', rawVal: pipelineTotalARR, accent: T.gold },
-                                    { label: 'Active Opportunities', value: String(pipelineActiveOpps), kpiId: 'activeOpps', rawVal: pipelineActiveOpps, accent: '#10b981' },
-                                    { label: 'Avg Deal Value', value: '$' + (pipelineAvgARR >= 1000000 ? (pipelineAvgARR/1000000).toFixed(1)+'M' : Math.round(pipelineAvgARR/1000)+'K'), kpiId: 'avgDealValue', rawVal: pipelineAvgARR, accent: '#f59e0b' },
-                                    { label: (pipelineNextQtr ? pipelineNextQtr[0] : 'Next Qtr') + ' Forecast', value: '$' + ((pipelineNextQtr?pipelineNextQtr[1]:0) >= 1000000 ? ((pipelineNextQtr?pipelineNextQtr[1]:0)/1000000).toFixed(1)+'M' : Math.round((pipelineNextQtr?pipelineNextQtr[1]:0)/1000)+'K'), kpiId: 'nextQForecast', rawVal: pipelineNextQtr ? pipelineNextQtr[1] : 0, accent: '#7c3aed' },
+                                    { label: 'Active Opportunities', value: String(pipelineActiveOpps), kpiId: 'activeOpps', rawVal: pipelineActiveOpps, accent: T.ok },
+                                    { label: 'Avg Deal Value', value: '$' + (pipelineAvgARR >= 1000000 ? (pipelineAvgARR/1000000).toFixed(1)+'M' : Math.round(pipelineAvgARR/1000)+'K'), kpiId: 'avgDealValue', rawVal: pipelineAvgARR, accent: T.warn },
+                                    { label: (pipelineNextQtr ? pipelineNextQtr[0] : 'Next Qtr') + ' Forecast', value: '$' + ((pipelineNextQtr?pipelineNextQtr[1]:0) >= 1000000 ? ((pipelineNextQtr?pipelineNextQtr[1]:0)/1000000).toFixed(1)+'M' : Math.round((pipelineNextQtr?pipelineNextQtr[1]:0)/1000)+'K'), kpiId: 'nextQForecast', rawVal: pipelineNextQtr ? pipelineNextQtr[1] : 0, accent: T.info },
                                 ].map(({ label, value, kpiId, rawVal, accent }) => {
                                     const kc = getKpiColor(kpiId, rawVal);
                                     const borderColor = kc.toleranceColor || accent;
@@ -588,12 +590,12 @@ export default function PipelineTab() {
                             <button onClick={() => { setEditingOpp(null); setShowModal(true); }} style={{ padding: '0.45rem 0.875rem', background: T.ink, color: T.surface, border: 'none', borderRadius: T.rSm, fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: T.sans }}>+ New Deal</button>
                         </div>
                         {pipelineFilteredOpps.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#94a3b8', fontSize: '0.875rem' }}>No deals match the current filter.</div>
+                            <div style={{ textAlign: 'center', padding: '2rem 1rem', color: T.inkMuted, fontSize: '0.875rem' }}>No deals match the current filter.</div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                                 {pipelineFilteredOpps.map(opp => {
                                     const health = calculateDealHealth(opp);
-                                    const healthColor = health.score >= 70 ? '#10b981' : health.score >= 40 ? '#f59e0b' : '#ef4444';
+                                    const healthColor = health.score >= 70 ? T.ok : health.score >= 40 ? T.warn : T.danger;
                                     const sc = getStageColor(opp.stage);
                                     return (
                                         <div key={opp.id} className="mobile-record-card"
@@ -637,7 +639,7 @@ export default function PipelineTab() {
                                 style={{ padding: '0.3rem 0.75rem', border: `1px solid ${T.border}`, borderRadius: T.rSm, background: bulkScoring ? T.surface2 : T.surface, color: T.inkMid, fontSize: '0.75rem', fontWeight: '600', cursor: bulkScoring ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
                                 {bulkScoring ? (
                                     <>
-                                        <span style={{ width: '10px', height: '10px', border: '2px solid #94a3b8', borderTopColor: T.inkMid, borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+                                        <span style={{ width: '10px', height: '10px', border: `2px solid ${T.border}`, borderTopColor: T.inkMid, borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
                                         Scoring {bulkScoreProgress?.done}/{bulkScoreProgress?.total}…
                                     </>
                                 ) : '🤖 Score all deals'}
