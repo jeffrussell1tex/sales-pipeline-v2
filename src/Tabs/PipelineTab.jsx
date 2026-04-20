@@ -877,6 +877,9 @@ export default function PipelineTab() {
                         setFunnelExpandedStage={setFunnelExpandedStage}
                         handleEdit={handleEdit}
                         handleDelete={handleDelete}
+                        selectMode={selectMode}
+                        selectedOpps={selectedOpps}
+                        setSelectedOpps={setSelectedOpps}
                     />
                 )}
 
@@ -891,6 +894,7 @@ export default function PipelineTab() {
                         handleEdit={handleEdit}
                         selectedOpps={selectedOpps}
                         setSelectedOpps={setSelectedOpps}
+                        selectMode={selectMode}
                     />
                 )}
 

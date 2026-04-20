@@ -106,21 +106,33 @@ const Icon = ({ name, size=13, color='currentColor' }) => {
 };
 
 // ── Account card for Business Book lanes ─────────────────────
-function AccountCard({ account, warmthData, onClick }) {
+function AccountCard({ account, warmthData, onClick, selectMode, isSelected, onToggleSelect }) {
     const [hov, setHov] = useState(false);
     const { pipeline, activeOpps, daysSince } = warmthData;
     const initials = (account.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
 
     return (
-        <div onClick={onClick}
+        <div
+            onClick={() => selectMode ? onToggleSelect(account.id) : onClick()}
             onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
             style={{
-                background: T.surface, border: `1px solid ${hov ? T.borderStrong : T.border}`,
+                position: 'relative',
+                background: isSelected ? 'rgba(42,38,34,0.05)' : T.surface,
+                border: `1px solid ${isSelected ? T.ink : hov ? T.borderStrong : T.border}`,
                 borderRadius: T.r+1, padding: '12px 14px', minWidth: 180, maxWidth: 200,
                 flexShrink: 0, cursor: 'pointer',
                 boxShadow: hov ? '0 4px 12px rgba(42,38,34,0.1)' : 'none',
                 transition: 'all 120ms', fontFamily: T.sans,
             }}>
+            {/* Checkbox overlay in select mode */}
+            {selectMode && (
+                <div style={{ position: 'absolute', top: 8, right: 8 }}
+                    onClick={e => { e.stopPropagation(); onToggleSelect(account.id); }}>
+                    <div style={{ width: 16, height: 16, borderRadius: 3, border: `1.5px solid ${isSelected ? T.ink : T.borderStrong}`, background: isSelected ? T.ink : T.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
+                        {isSelected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fbf8f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
+                    </div>
+                </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <div style={{ width: 28, height: 28, borderRadius: '50%', background: avatarBg(account.name), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{initials}</div>
                 <div style={{ minWidth: 0 }}>
@@ -258,7 +270,7 @@ export default function AccountsTab() {
     const [selectMode, setSelectMode]   = useState(false);
     const [warmthFilter, setWarmthFilter] = useState('all');
     const [search, setSearch]     = useState('');
-    const [searchInput, setSearchInput] = useState('');
+    const searchRef = React.useRef(null);
 
     const setViewPersist = v => { setView(v); localStorage.setItem('accounts:view', v); };
 
@@ -413,9 +425,12 @@ export default function AccountsTab() {
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, minWidth: 180 }}>
                 <Icon name="search" size={13} color={T.inkMuted} />
                 <input
-                    value={searchInput}
-                    onChange={e => setSearchInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') setSearch(searchInput); if (e.key === 'Escape') { setSearchInput(''); setSearch(''); } }}
+                    ref={searchRef}
+                    defaultValue=""
+                    onKeyDown={e => {
+                        if (e.key === 'Enter') setSearch(e.currentTarget.value);
+                        if (e.key === 'Escape') { e.currentTarget.value = ''; setSearch(''); }
+                    }}
                     placeholder="Search accounts… (Enter)"
                     style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, color: T.ink, fontFamily: T.sans, width: '100%' }} />
             </div>
@@ -503,7 +518,8 @@ export default function AccountsTab() {
                     <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
                         {laneAccs.map(acc => (
                             <AccountCard key={acc.id} account={acc} warmthData={warmthMap[acc.id]}
-                                onClick={() => setViewingAccount(acc)} />
+                                onClick={() => setViewingAccount(acc)}
+                                selectMode={selectMode} isSelected={selectedIds.includes(acc.id)} onToggleSelect={toggleSelect} />
                         ))}
                     </div>
                 </div>

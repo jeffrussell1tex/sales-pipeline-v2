@@ -71,7 +71,7 @@ const CheckIcon = ({ size = 11 }) => (
 );
 
 // ── KanbanCard — pixel-exact from PV1KanbanCard in mockup ────
-function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities }) {
+function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities, selectMode }) {
     const [hover, setHover] = React.useState(false);
     const { calculateDealHealth } = useApp();
 
@@ -99,7 +99,7 @@ function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities 
         <div
             onMouseEnter={() => setHover(true)}
             onMouseLeave={() => setHover(false)}
-            onClick={() => onOpen(opp)}
+            onClick={() => selectMode ? onSelect(opp.id) : onOpen(opp)}
             style={{
                 background: T.surface,
                 border: `1px solid ${isSelected ? T.ink : T.border}`,
@@ -118,7 +118,7 @@ function KanbanCard({ opp, isSelected, onSelect, onOpen, isDragging, activities 
             }}>
 
             {/* Checkbox — visible on hover or when selected, matches mockup exactly */}
-            {(hover || isSelected) && (
+            {(hover || isSelected || selectMode) && (
                 <div
                     onClick={e => { e.stopPropagation(); onSelect(opp.id); }}
                     style={{
@@ -215,6 +215,7 @@ export default function KanbanView({
     handleEdit,
     selectedOpps = [],
     setSelectedOpps,
+    selectMode = false,
 }) {
     const { stages, opportunities, setOpportunities, currentUser, activities } = useApp();
 
@@ -327,6 +328,7 @@ export default function KanbanView({
                                         onOpen={handleEdit}
                                         isDragging={kanbanDragging?.oppId === opp.id}
                                         activities={activities}
+                                        selectMode={selectMode}
                                     />
                                 </div>
                             ))}

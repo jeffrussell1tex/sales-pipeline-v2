@@ -84,7 +84,7 @@ const AlertIcon = () => (
 );
 
 // ── FV1StageRow — direct translation of FV1StageRow from mockup ─
-function StageRow({ sd, idx, total, prevCount, widthPct, color, expanded, onToggle, onEditDeal }) {
+function StageRow({ sd, idx, total, prevCount, widthPct, color, expanded, onToggle, onEditDeal, selectMode, selectedOpps, onToggleSelect }) {
     const H = 58;
     const maxW = 560;
     const w = Math.max(80, widthPct * maxW);
@@ -199,15 +199,25 @@ function StageRow({ sd, idx, total, prevCount, widthPct, color, expanded, onTogg
                                 return (
                                     <div key={opp.id} style={{
                                         display: 'grid',
-                                        gridTemplateColumns: '1.6fr 100px 90px 100px 110px',
+                                        gridTemplateColumns: selectMode ? '32px 1.6fr 100px 90px 100px 110px' : '1.6fr 100px 90px 100px 110px',
                                         gap: 12, padding: '8px 10px', alignItems: 'center',
                                         borderBottom: `1px solid ${T.border}`,
                                         fontFamily: T.sans, cursor: 'pointer',
+                                        background: selectedOpps.includes(opp.id) ? 'rgba(42,38,34,0.05)' : 'transparent',
                                         transition: 'background 100ms',
                                     }}
-                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.08)'}
-                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                        onClick={() => onEditDeal(opp)}>
+                                        onMouseEnter={e => { if (!selectedOpps.includes(opp.id)) e.currentTarget.style.background = 'rgba(200,185,154,0.08)'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.background = selectedOpps.includes(opp.id) ? 'rgba(42,38,34,0.05)' : 'transparent'; }}
+                                        onClick={() => selectMode ? (onToggleSelect && onToggleSelect(opp.id)) : onEditDeal(opp)}>
+                                        {/* Checkbox in select mode */}
+                                        {selectMode && (
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                onClick={e => { e.stopPropagation(); onToggleSelect && onToggleSelect(opp.id); }}>
+                                                <div style={{ width: 15, height: 15, borderRadius: 3, border: `1.5px solid ${selectedOpps.includes(opp.id) ? T.ink : T.borderStrong}`, background: selectedOpps.includes(opp.id) ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
+                                                    {selectedOpps.includes(opp.id) && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fbf8f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
+                                                </div>
+                                            </div>
+                                        )}
                                         {/* Deal name + account */}
                                         <div style={{ minWidth: 0 }}>
                                             <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -264,6 +274,9 @@ export default function FunnelView({
     setFunnelExpandedStage,
     handleEdit,
     handleDelete,
+    selectMode = false,
+    selectedOpps = [],
+    setSelectedOpps,
 }) {
     const { stages, settings, activities } = useApp();
 
@@ -367,6 +380,9 @@ export default function FunnelView({
                                 expanded={!!expandedStages[sd.stage]}
                                 onToggle={() => toggleStage(sd.stage)}
                                 onEditDeal={handleEdit}
+                                selectMode={selectMode}
+                                selectedOpps={selectedOpps}
+                                onToggleSelect={id => setSelectedOpps && setSelectedOpps(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
                             />
                         ))}
                     </div>
