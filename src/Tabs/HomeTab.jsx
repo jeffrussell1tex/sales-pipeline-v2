@@ -368,6 +368,11 @@ export default function HomeTab() {
                             </div>
                         ) : (
                             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
+                                {/* Max 5 visible — scroll if more */}
+                                <div style={{
+                                    maxHeight: plate.length > 5 ? '325px' : 'none',
+                                    overflowY: plate.length > 5 ? 'auto' : 'visible',
+                                }}>
                                 {plate.map((item, idx) => {
                                     const sc = item.stage && getStageColor ? getStageColor(item.stage) : { text: T.inkMuted };
                                     return (
@@ -417,6 +422,7 @@ export default function HomeTab() {
                                         </div>
                                     );
                                 })}
+                                </div>{/* end scroll wrapper */}
                             </div>
                         )}
                     </div>

@@ -350,10 +350,10 @@ export default function FunnelView({
             </div>
 
             {/* ── Main body: two-column grid (funnel + right rail) ── */}
-            <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 300px', minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', alignItems: 'start' }}>
 
                 {/* LEFT: funnel rows + conversion strip */}
-                <div style={{ padding: '20px 0 0', minWidth: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+                <div style={{ padding: '20px 0 0', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                     <div style={{ padding: '0 20px' }}>
                         {stageData.map((sd, i) => (
                             <StageRow
@@ -413,12 +413,14 @@ export default function FunnelView({
                     </div>
                 </div>
 
-                {/* RIGHT: stalled deals rail */}
+                {/* RIGHT: stalled deals rail — sticky so it owns its space, never floats over funnel */}
                 <div style={{
                     borderLeft: `1px solid ${T.border}`,
                     background: T.surface,
                     padding: '20px 18px',
-                    overflowY: 'auto',
+                    position: 'sticky',
+                    top: 0,
+                    alignSelf: 'start',
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                         <AlertIcon/>

@@ -478,34 +478,35 @@ export default function PipelineTab() {
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 0 }}>
             <button onClick={onClick} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5,
-                padding: '5px 10px', paddingRight: onDelete ? 6 : 10,
+                padding: '5px 10px', paddingRight: onDelete ? 7 : 10,
                 border: `1px solid ${active ? T.ink : T.border}`,
                 borderRight: onDelete ? 'none' : undefined,
                 borderRadius: onDelete ? `${T.rSm}px 0 0 ${T.rSm}px` : T.rSm,
-                background: active ? T.ink : T.surface, color: active ? T.surface : T.ink,
-                fontSize: 12, fontWeight: active ? 600 : 500,
+                background: active ? T.ink : 'transparent',
+                color: active ? T.surface : T.ink,
+                fontSize: 12, fontWeight: active ? 600 : 400,
                 cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms',
                 whiteSpace: 'nowrap',
             }}>
                 {label}
                 {count != null && count > 0 && (
                     <span style={{
-                        background: active ? 'rgba(255,255,255,0.22)' : T.surface2,
-                        padding: '1px 6px', borderRadius: 8, fontSize: 10,
-                        fontWeight: 600, color: active ? T.surface : T.inkMuted,
+                        fontSize: 11, fontWeight: 500,
+                        color: active ? 'rgba(255,255,255,0.75)' : T.inkMuted,
+                        marginLeft: 1,
                     }}>{count}</span>
                 )}
             </button>
             {onDelete && (
                 <button onClick={onDelete} style={{
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    width: 22, padding: '5px 0',
+                    width: 20, padding: '5px 0',
                     border: `1px solid ${active ? T.ink : T.border}`,
-                    borderLeft: `1px solid ${active ? 'rgba(255,255,255,0.25)' : T.borderStrong}`,
+                    borderLeft: `1px solid ${active ? 'rgba(255,255,255,0.2)' : T.border}`,
                     borderRadius: `0 ${T.rSm}px ${T.rSm}px 0`,
-                    background: active ? T.ink : T.surface,
-                    color: active ? 'rgba(255,255,255,0.6)' : T.inkMuted,
-                    fontSize: 10, cursor: 'pointer', fontFamily: T.sans, lineHeight: 1,
+                    background: active ? T.ink : 'transparent',
+                    color: active ? 'rgba(255,255,255,0.55)' : T.inkMuted,
+                    fontSize: 9, cursor: 'pointer', fontFamily: T.sans, lineHeight: 1,
                 }}>✕</button>
             )}
         </div>
