@@ -33,10 +33,8 @@ const Icon = ({ name, size=13, color='currentColor' }) => {
     const p = { width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:color, strokeWidth:1.75, strokeLinecap:'round', strokeLinejoin:'round' };
     switch(name) {
         case 'search':  return <svg {...p}><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>;
-        case 'export':  return <svg {...p}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>;
         case 'plus':    return <svg {...p}><path d="M12 5v14M5 12h14"/></svg>;
         case 'dots':    return <svg {...p}><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>;
-        case 'import':  return <svg {...p}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>;
         default: return null;
     }
 };
@@ -46,12 +44,10 @@ export default function ContactsTab() {
         contacts, setContacts,
         opportunities, accounts, activities, tasks, settings,
         currentUser, userRole, canSeeAll,
-        exportToCSV,
         showConfirm, softDelete,
         visibleContacts,
         handleDeleteContact,
         setEditingContact, setShowContactModal,
-        setCsvImportType, setShowCsvImportModal,
         viewingContact, setViewingContact,
         contactsSortBy, setContactsSortBy,
         selectedContacts, setSelectedContacts,
@@ -396,14 +392,6 @@ export default function ContactsTab() {
                         />
                     </div>
 
-                    {/* Export */}
-                    <button onClick={() => exportToCSV?.(`contacts-${new Date().toISOString().slice(0,10)}.csv`, ['First Name','Last Name','Company','Title','Phone','Email'], sorted.map(c => [c.firstName||'',c.lastName||'',c.company||'',c.title||'',c.phone||'',c.email||'']))}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', background: 'transparent', border: `1px solid ${T.border}`, color: T.inkMid, fontSize: 12, fontWeight: 400, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}
-                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        <Icon name="export" size={12} color={T.inkMid} /> Export
-                    </button>
-
                     {/* Delete (in select mode with selection) */}
                     {canEdit && selectMode && selectedIds.length > 0 && (
                         <button onClick={handleDeleteSelected} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: T.danger, border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
@@ -418,17 +406,6 @@ export default function ContactsTab() {
                             {selectMode ? 'Cancel' : 'Select'}
                         </button>
                     )}
-
-                    {/* Import */}
-                    {canEdit && (
-                        <button onClick={() => { setCsvImportType?.('contacts'); setShowCsvImportModal?.(true); }}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', background: 'transparent', border: `1px solid ${T.border}`, color: T.inkMid, fontSize: 12, fontWeight: 400, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}
-                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                            <Icon name="import" size={12} color={T.inkMid} /> Import
-                        </button>
-                    )}
-
                     {/* New contact */}
                     {canEdit && (
                         <button onClick={handleAddContact} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', background: T.ink, border: 'none', color: T.surface, fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>

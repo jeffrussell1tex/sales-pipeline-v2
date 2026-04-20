@@ -1,1243 +1,1012 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
-// ─────────────────────────────────────────────────────────────
-//  Team Health Panel (inline copy — shared logic with HomeTab)
-// ─────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────
-//  TeamHealthPanel — shared between HomeTab and SalesManagerTab
-//  Props: opportunities, activities, tasks, settings,
-//         currentUser, userRole, compact (bool)
-// ─────────────────────────────────────────────────────────────
-function TeamHealthPanel({ opportunities, activities, tasks, settings, currentUser, userRole, compact = false, setActiveTab }) {
-    const [sortBy, setSortBy] = React.useState('health');
-    const [selectedTeam, setSelectedTeam] = React.useState('all');
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+// ── V1 Design tokens ──────────────────────────────────────────
+const T = {
+    bg:           '#f0ece4',
+    surface:      '#fbf8f3',
+    surface2:     '#f5efe3',
+    border:       '#e6ddd0',
+    borderStrong: '#d4c8b4',
+    ink:          '#2a2622',
+    inkMid:       '#5a544c',
+    inkMuted:     '#8a8378',
+    gold:         '#c8b99a',
+    goldInk:      '#7a6a48',
+    danger:       '#9c3a2e',
+    warn:         '#b87333',
+    ok:           '#4d6b3d',
+    info:         '#3a5a7a',
+    sans:         '"Plus Jakarta Sans", system-ui, sans-serif',
+    serif:        'Georgia, serif',
+    r:            3,
+};
 
-    const isAdmin   = userRole === 'Admin';
-    const isManager = userRole === 'Manager';
-    if (!isAdmin && !isManager) return null;
+const fmtV = v => { const n = parseFloat(v)||0; return n >= 1e6 ? '$'+(n/1e6).toFixed(1)+'M' : n >= 1e3 ? '$'+Math.round(n/1e3)+'K' : '$'+n.toLocaleString(); };
 
-    const fmtArr = (v) => v >= 1000000 ? '$' + (v/1000000).toFixed(1)+'M' : v >= 1000 ? '$'+Math.round(v/1000)+'K' : '$'+(v||0).toLocaleString();
-    const daysSince = (d) => d ? Math.floor((today - new Date(d+'T12:00:00'))/86400000) : null;
+const avatarBg = name => {
+    const p = ['#9c6b4a','#7a5a3c','#5a6e5a','#6b5a7a','#8a5a5a','#5a7a8a','#7a6b5a','#4a6b5a'];
+    let h = 0; for (let i = 0; i < (name||'').length; i++) h = (h*31 + (name||'').charCodeAt(i))|0;
+    return p[Math.abs(h) % p.length];
+};
 
-    // Scope visible reps
-    const allUsers = (settings.users||[]).filter(u => u.name && u.userType !== 'ReadOnly');
-    const currentUserObj = allUsers.find(u => u.name === currentUser);
-    const allReps = allUsers.filter(u => u.userType === 'User');
-    const visibleReps = isAdmin ? allReps : allReps.filter(u =>
-        (currentUserObj?.teamId && u.teamId === currentUserObj.teamId) ||
-        (currentUserObj?.team   && u.team   === currentUserObj.team)
-    );
-
-    // Build per-rep stats
-    const repStats = visibleReps.map(rep => {
-        const repOpps  = (opportunities||[]).filter(o => o.salesRep === rep.name && !['Closed Won','Closed Lost'].includes(o.stage));
-        const allRepOpps = (opportunities||[]).filter(o => o.salesRep === rep.name);
-        const wonOpps  = allRepOpps.filter(o => o.stage === 'Closed Won');
-        const lostOpps = allRepOpps.filter(o => o.stage === 'Closed Lost');
-        const closedTotal = wonOpps.length + lostOpps.length;
-        const winRate  = closedTotal > 0 ? Math.round((wonOpps.length / closedTotal) * 100) : null;
-
-        const repActs  = (activities||[]).filter(a => a.salesRep === rep.name || a.author === rep.name);
-        const lastActDate = repActs.sort((a,b) => b.date?.localeCompare(a.date))[0]?.date || null;
-        const daysSinceAct = daysSince(lastActDate);
-
-        const repTasks = (tasks||[]).filter(t => t.assignedTo === rep.name);
-        const overdueCount = repTasks.filter(t => {
-            const due = t.dueDate || t.due;
-            return !t.completed && t.status !== 'Completed' && due && new Date(due+'T12:00:00') < today;
-        }).length;
-
-        const pipelineArr = repOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
-        const dealCount   = repOpps.length;
-
-        // Quota attainment
-        const quotaMode   = rep.quotaType || 'annual';
-        const quota       = quotaMode === 'annual'
-            ? (rep.annualQuota||0)/4
-            : (['q1','q2','q3','q4'].reduce((s,q) => s+(rep[q+'Quota']||0), 0)/4);
-        const wonArr      = wonOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
-        const attainPct   = quota > 0 ? Math.round((wonArr/quota)*100) : null;
-
-        // Stale deal count
-        const staleDeals  = repOpps.filter(o => {
-            const lastOppAct = (activities||[]).filter(a => a.opportunityId === o.id).sort((a,b) => b.date?.localeCompare(a.date))[0];
-            const ds = daysSince(lastOppAct?.date || o.createdDate);
-            return ds !== null && ds >= 14;
-        }).length;
-
-        // ── Health score (0–100) ─────────────────────────────
-        // Weighted composite of 4 signals
-        let score = 100;
-        // Activity recency (–30 max)
-        if      (daysSinceAct === null)  score -= 30;
-        else if (daysSinceAct >= 21)     score -= 30;
-        else if (daysSinceAct >= 14)     score -= 20;
-        else if (daysSinceAct >= 7)      score -= 10;
-        // Stale deals (–25 max)
-        score -= Math.min(25, staleDeals * 8);
-        // Overdue tasks (–20 max)
-        score -= Math.min(20, overdueCount * 5);
-        // Quota attainment (–25 max)
-        if      (attainPct === null)     score -= 10;
-        else if (attainPct < 25)         score -= 25;
-        else if (attainPct < 50)         score -= 15;
-        else if (attainPct < 75)         score -= 5;
-        score = Math.max(0, Math.round(score));
-
-        const status = score >= 65 ? 'healthy' : score >= 40 ? 'warning' : 'at-risk';
-        const statusColor = score >= 65 ? '#639922' : score >= 40 ? '#BA7517' : '#E24B4A';
-        const statusBg    = score >= 65 ? '#EAF3DE' : score >= 40 ? '#FAEEDA' : '#FCEBEB';
-        const statusText  = score >= 65 ? '#27500A' : score >= 40 ? '#854F0B' : '#A32D2D';
-        const statusLabel = score >= 65
-            ? (score >= 80 ? 'Top performer' : 'On track')
-            : (score >= 40 ? (staleDeals > 0 ? `${staleDeals} stale deal${staleDeals>1?'s':''}` : 'Needs attention') : 'Needs coaching');
-        const statusSub   = score >= 65
-            ? (winRate !== null ? `${winRate}% win rate` : `${dealCount} active deals`)
-            : (overdueCount > 0 ? `${overdueCount} overdue task${overdueCount>1?'s':''}` : daysSinceAct !== null ? `${daysSinceAct}d since last activity` : 'No activities logged');
-
-        // Avatar color
-        const avatarColors = ['#2563eb','#7c3aed','#059669','#d97706','#dc2626','#0891b2','#be185d'];
-        const avatarBg = avatarColors[(rep.name||'').charCodeAt(0) % avatarColors.length];
-        const initials = (rep.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-
-        return { rep, score, status, statusColor, statusBg, statusText, statusLabel, statusSub, pipelineArr, dealCount, daysSinceAct, overdueCount, attainPct, winRate, staleDeals, avatarBg, initials };
-    });
-
-    // Group by team
-    const teams = {};
-    repStats.forEach(rs => {
-        const teamName = rs.rep.team || 'Unassigned';
-        if (!teams[teamName]) teams[teamName] = [];
-        teams[teamName].push(rs);
-    });
-
-    // Sort within each team
-    const sortFn = (a, b) => {
-        if (sortBy === 'health')   return a.score - b.score;
-        if (sortBy === 'arr')      return b.pipelineArr - a.pipelineArr;
-        if (sortBy === 'quota')    return (b.attainPct||0) - (a.attainPct||0);
-        return 0;
-    };
-    Object.values(teams).forEach(arr => arr.sort(sortFn));
-
-    const teamColors = ['#2563eb','#7c3aed','#059669','#d97706','#0891b2','#be185d'];
-    const teamList   = Object.entries(teams);
-    const teamNames  = teamList.map(([name]) => name);
-    const filteredTeamList = selectedTeam === 'all' ? teamList : teamList.filter(([name]) => name === selectedTeam);
-
-    // SVG ring helper
-    const Ring = ({ score, size = 48, stroke = 4, color }) => {
-        const r = (size/2) - stroke;
-        const circ = 2 * Math.PI * r;
-        const dash = (score/100) * circ;
-        return (
-            <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink:0 }}>
-                <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={stroke}/>
-                <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
-                    strokeDasharray={`${dash} ${circ}`} strokeDashoffset={circ*0.25} strokeLinecap="round"/>
-                <text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="central"
-                    style={{ fontSize: size < 40 ? '10px' : '12px', fontWeight:'700', fill:color, fontFamily:'inherit' }}>
-                    {score}
-                </text>
-            </svg>
-        );
-    };
-
-    // ── COMPACT (home screen strip) ────────────────────────────
-    if (compact) {
-        const allSorted = [...repStats].sort(sortFn);
-        const totalArr  = repStats.reduce((s,r) => s+r.pipelineArr, 0);
-        const atRisk    = repStats.filter(r => r.status === 'at-risk').length;
-        return (
-            <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', marginBottom:'1.5rem', overflow:'hidden' }}>
-                <div style={{ padding:'0.875rem 1.25rem', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <div>
-                        <div style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.08em' }}>Team pipeline health</div>
-                        <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'2px' }}>
-                            {repStats.length} rep{repStats.length!==1?'s':''} · {fmtArr(totalArr)} pipeline
-                            {atRisk > 0 && <span style={{ marginLeft:'0.5rem', color:'#E24B4A', fontWeight:'600' }}>· {atRisk} need{atRisk===1?'s':''} attention</span>}
-                        </div>
-                    </div>
-                    {setActiveTab && (
-                        <button onClick={() => setActiveTab('salesmanager')}
-                            style={{ fontSize:'0.75rem', padding:'4px 12px', border:'0.5px solid #e2e8f0', borderRadius:'6px', background:'transparent', color:'#64748b', cursor:'pointer', fontFamily:'inherit' }}>
-                            View detail →
-                        </button>
-                    )}
-                </div>
-                <div style={{ padding:'0.875rem 1.25rem', display:'flex', gap:'8px', overflowX:'auto' }}>
-                    {allSorted.map(rs => (
-                        <div key={rs.rep.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'8px 12px', border:`0.5px solid ${rs.statusColor}30`, borderLeft:`3px solid ${rs.statusColor}`, borderRadius:'0 8px 8px 0', background:'#fafafa', flexShrink:0, minWidth:'140px' }}>
-                            <Ring score={rs.score} size={36} stroke={3} color={rs.statusColor} />
-                            <div style={{ minWidth:0 }}>
-                                <div style={{ fontSize:'12px', fontWeight:'600', color:'#1e293b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'90px' }}>{rs.rep.name}</div>
-                                <div style={{ fontSize:'11px', color:'#64748b' }}>{fmtArr(rs.pipelineArr)}</div>
-                                <div style={{ fontSize:'10px', color:rs.statusColor, fontWeight:'600', marginTop:'1px' }}>{rs.statusLabel}</div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        );
-    }
-
-    // ── FULL DETAIL (Sales Manager tab) ───────────────────────
+const Avatar = ({ name, size=28 }) => {
+    const initials = (name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
     return (
-        <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', marginBottom:'1.5rem', overflow:'hidden' }}>
-            <div style={{ padding:'0.875rem 1.25rem', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'0.5rem' }}>
-                <div>
-                    <div style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.08em' }}>Team pipeline health</div>
-                    <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'2px' }}>
-                        {selectedTeam === 'all' ? 'All teams · ' : `${selectedTeam} · `}
-                        Sorted by {sortBy === 'health' ? 'health score · worst first' : sortBy === 'arr' ? 'pipeline revenue · highest first' : 'quota attainment · highest first'}
-                    </div>
-                </div>
-                <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-                    {teamNames.length > 1 && (
-                        <select value={selectedTeam} onChange={e => setSelectedTeam(e.target.value)}
-                            style={{ fontSize:'0.75rem', padding:'0.3rem 1.5rem 0.3rem 0.625rem', border:'0.5px solid #e2e8f0', borderRadius:'6px', background:'#f8fafc', color:'#475569', cursor:'pointer', fontFamily:'inherit', appearance:'none', backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")", backgroundRepeat:'no-repeat', backgroundPosition:'right 6px center' }}>
-                            <option value="all">All teams</option>
-                            {teamNames.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-                    )}
-                    <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-                        style={{ fontSize:'0.75rem', padding:'0.3rem 1.5rem 0.3rem 0.625rem', border:'0.5px solid #e2e8f0', borderRadius:'6px', background:'#f8fafc', color:'#475569', cursor:'pointer', fontFamily:'inherit', appearance:'none', backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")", backgroundRepeat:'no-repeat', backgroundPosition:'right 6px center' }}>
-                        <option value="health">Sort: Health score</option>
-                        <option value="arr">Sort: Pipeline Revenue</option>
-                        <option value="quota">Sort: Quota attainment</option>
-                    </select>
-                </div>
-            </div>
-
-            <div style={{ padding:'1.25rem' }}>
-                {filteredTeamList.map(([teamName, reps], ti) => {
-                    const teamColor = teamColors[ti % teamColors.length];
-                    const teamArr   = reps.reduce((s,r) => s+r.pipelineArr, 0);
-                    const avgHealth = reps.length ? Math.round(reps.reduce((s,r) => s+r.score, 0)/reps.length) : 0;
-                    return (
-                        <div key={teamName} style={{ marginBottom: ti < filteredTeamList.length-1 ? '1.5rem' : 0 }}>
-                            {/* Team header */}
-                            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'10px' }}>
-                                <div style={{ width:'10px', height:'10px', borderRadius:'50%', background:teamColor, flexShrink:0 }}/>
-                                <div style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1e293b' }}>{teamName}</div>
-                                <div style={{ fontSize:'0.75rem', color:'#94a3b8' }}>
-                                    {reps.length} rep{reps.length!==1?'s':''} · {fmtArr(teamArr)} pipeline · avg health {avgHealth}
-                                </div>
-                            </div>
-                            {/* Rep cards */}
-                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'10px' }}>
-                                {reps.map(rs => (
-                                    <div key={rs.rep.id} style={{ background:'#fff', border:`0.5px solid #e2e8f0`, borderLeft:`3px solid ${rs.statusColor}`, borderRadius:'0 10px 10px 0', padding:'14px' }}>
-                                        {/* Card top */}
-                                        <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px' }}>
-                                            <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:rs.avatarBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', fontWeight:'700', color:'#fff', flexShrink:0 }}>{rs.initials}</div>
-                                            <div style={{ flex:1, minWidth:0 }}>
-                                                <div style={{ fontSize:'13px', fontWeight:'600', color:'#1e293b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{rs.rep.name}</div>
-                                                <div style={{ fontSize:'11px', color:'#64748b' }}>{rs.rep.territory || rs.rep.team || 'Sales Rep'}</div>
-                                            </div>
-                                            <Ring score={rs.score} size={48} stroke={4} color={rs.statusColor} />
-                                        </div>
-                                        {/* Stats 2-col grid */}
-                                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-                                            {[
-                                                { val: fmtArr(rs.pipelineArr), lbl: 'Pipeline Revenue', danger: rs.pipelineArr === 0 },
-                                                { val: rs.dealCount, lbl: 'Active deals', danger: rs.dealCount === 0 },
-                                                { val: rs.daysSinceAct !== null ? rs.daysSinceAct+'d' : '—', lbl: 'Last activity', danger: rs.daysSinceAct === null || rs.daysSinceAct >= 14, warn: rs.daysSinceAct >= 7 && rs.daysSinceAct < 14 },
-                                                { val: rs.overdueCount, lbl: 'Overdue tasks', danger: rs.overdueCount >= 3, warn: rs.overdueCount >= 1 && rs.overdueCount < 3 },
-                                            ].map(({ val, lbl, danger, warn }) => (
-                                                <div key={lbl} style={{ background:'#f8fafc', borderRadius:'6px', padding:'6px 8px' }}>
-                                                    <div style={{ fontSize:'13px', fontWeight:'600', color: danger ? '#A32D2D' : warn ? '#854F0B' : '#1e293b' }}>{val}</div>
-                                                    <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'1px' }}>{lbl}</div>
-                                                </div>
-                                            ))}
-                                            {/* Quota bar — spans both cols */}
-                                            <div style={{ gridColumn:'span 2', background:'#f8fafc', borderRadius:'6px', padding:'6px 8px' }}>
-                                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
-                                                    <div style={{ fontSize:'10px', color:'#94a3b8' }}>Quota attainment</div>
-                                                    <div style={{ fontSize:'12px', fontWeight:'600', color: rs.attainPct === null ? '#94a3b8' : rs.attainPct >= 75 ? '#27500A' : rs.attainPct >= 40 ? '#854F0B' : '#A32D2D' }}>
-                                                        {rs.attainPct !== null ? rs.attainPct+'%' : '—'}
-                                                    </div>
-                                                </div>
-                                                <div style={{ height:'3px', background:'#e2e8f0', borderRadius:'2px' }}>
-                                                    <div style={{ height:'100%', width: (rs.attainPct||0)+'%', maxWidth:'100%', background: rs.attainPct >= 75 ? '#639922' : rs.attainPct >= 40 ? '#BA7517' : '#E24B4A', borderRadius:'2px', transition:'width .4s' }}/>
-                                                </div>
-                                            </div>
-                                            {/* Win rate */}
-                                            <div style={{ background:'#f8fafc', borderRadius:'6px', padding:'6px 8px' }}>
-                                                <div style={{ fontSize:'13px', fontWeight:'600', color: rs.winRate === null ? '#94a3b8' : rs.winRate >= 50 ? '#27500A' : '#1e293b' }}>{rs.winRate !== null ? rs.winRate+'%' : '—'}</div>
-                                                <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'1px' }}>Win rate</div>
-                                            </div>
-                                            {/* Status pill */}
-                                            <div style={{ background:rs.statusBg, borderRadius:'6px', padding:'6px 8px' }}>
-                                                <div style={{ fontSize:'11px', fontWeight:'600', color:rs.statusText }}>{rs.statusLabel}</div>
-                                                <div style={{ fontSize:'10px', color:rs.statusText, opacity:0.75, marginTop:'1px' }}>{rs.statusSub}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
+        <div style={{ width:size, height:size, borderRadius:'50%', background:avatarBg(name), color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:size*0.33, fontWeight:700, flexShrink:0 }}>
+            {initials}
         </div>
     );
+};
+
+// ── Per-rep stats computation ─────────────────────────────────
+function buildRepStats(rep, opportunities, activities, tasks) {
+    const today    = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    const allRepOpps  = (opportunities||[]).filter(o => o.salesRep === rep.name || o.assignedTo === rep.name);
+    const activeOpps  = allRepOpps.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
+    const wonOpps     = allRepOpps.filter(o => o.stage === 'Closed Won');
+
+    const closedArr   = wonOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+    const pipelineArr = activeOpps.reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+
+    // Quota
+    const quotaMode = rep.quotaType || 'annual';
+    const quota     = quotaMode === 'annual'
+        ? (rep.annualQuota || 0)
+        : (rep.q1Quota||0)+(rep.q2Quota||0)+(rep.q3Quota||0)+(rep.q4Quota||0);
+    const attainPct = quota > 0 ? Math.round((closedArr / quota) * 100) : null;
+
+    // Commit — use rep.commit field (editable in Forecast tab)
+    const commit   = parseFloat(rep.commit) || 0;
+    const bestCase = parseFloat(rep.bestCase) || pipelineArr * 0.6;
+
+    // Activity recency
+    const repActs     = (activities||[]).filter(a => a.salesRep === rep.name || a.author === rep.name);
+    const lastActDate = [...repActs].sort((a,b) => (b.date||'').localeCompare(a.date||''))[0]?.date || null;
+    const daysSinceAct = lastActDate ? Math.floor((today - new Date(lastActDate+'T12:00:00'))/86400000) : null;
+
+    // Activity last 7d
+    const act7d = repActs.filter(a => a.date && Math.floor((today - new Date(a.date+'T12:00:00'))/86400000) <= 7).length;
+
+    // Stuck deals (no stage change in 14+ days)
+    const stuck = activeOpps.filter(o => {
+        if (!o.stageChangedDate) return false;
+        return Math.floor((today - new Date(o.stageChangedDate+'T12:00:00'))/86400000) >= 14;
+    }).length;
+
+    // Overdue tasks
+    const repTasks   = (tasks||[]).filter(t => t.assignedTo === rep.name);
+    const overdueCnt = repTasks.filter(t => !t.completed && t.status !== 'Completed' && t.dueDate && new Date(t.dueDate+'T12:00:00') < today).length;
+
+    // Health score
+    let score = 100;
+    if (daysSinceAct === null) score -= 30; else if (daysSinceAct >= 21) score -= 30; else if (daysSinceAct >= 14) score -= 20; else if (daysSinceAct >= 7) score -= 10;
+    score -= Math.min(25, stuck * 8);
+    score -= Math.min(20, overdueCnt * 5);
+    if (attainPct === null) score -= 10; else if (attainPct < 25) score -= 25; else if (attainPct < 50) score -= 15; else if (attainPct < 75) score -= 5;
+    score = Math.max(0, Math.round(score));
+
+    const healthColor = score >= 65 ? T.ok : score >= 40 ? T.warn : T.danger;
+    const healthLabel = score >= 65 ? (attainPct >= 100 ? 'STRONG +' : 'ON TRACK →') : score >= 40 ? 'WOBBLY ~' : 'AT RISK ↓';
+
+    // Trend (positive = improving)
+    const trend = attainPct !== null && attainPct >= 80 ? 'up' : attainPct !== null && attainPct < 40 ? 'down' : 'flat';
+
+    return { rep, quota, closedArr, commit, bestCase, pipelineArr, attainPct, score, healthColor, healthLabel, trend, daysSinceAct, act7d, stuck, overdueCnt, wonOpps, activeOpps };
 }
 
-
-
-function QuotaRepCard({ u, quotaMode, quarters, dotBg, dotTxt, inputSt, updateRepField, compactInput }) {
-    const initials = (name) => (name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-    const cardStyle = { background:'#fff', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' };
-    const topStyle  = { display:'flex', alignItems:'center', gap:'10px', padding:'0.75rem 1rem', borderBottom:'1px solid #f1f5f9' };
-    const bodyStyle = { padding:'0.875rem 1rem', display:'flex', flexDirection:'column', gap:'8px' };
-    const lblStyle  = { fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'3px' };
-    const qGridStyle = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' };
-
-    // Use local state for the input values so typing feels instant.
-    // Only persist to DB on blur (when user leaves the field) to avoid
-    // writing partial/zero values on every keystroke.
+// ── QuotaRepCard (unchanged from original) ────────────────────
+function QuotaRepCard({ u, quotaMode, quarters, inputSt, updateRepField, compactInput }) {
     const [localAnnual, setLocalAnnual] = React.useState(u.annualQuota != null ? String(u.annualQuota) : '');
     const [localQ, setLocalQ] = React.useState(() => {
         const out = {};
         ['q1','q2','q3','q4'].forEach(q => { out[q] = u[q+'Quota'] != null ? String(u[q+'Quota']) : ''; });
         return out;
     });
-
-    // Sync local state when the user record updates from outside (e.g. initial DB load)
     React.useEffect(() => { setLocalAnnual(u.annualQuota != null ? String(u.annualQuota) : ''); }, [u.annualQuota]);
-    React.useEffect(() => {
-        setLocalQ(prev => {
-            const out = { ...prev };
-            ['q1','q2','q3','q4'].forEach(q => { out[q] = u[q+'Quota'] != null ? String(u[q+'Quota']) : ''; });
-            return out;
-        });
-    }, [u.q1Quota, u.q2Quota, u.q3Quota, u.q4Quota]);
-
-    const commitAnnual = (rawVal) => {
-        const val = parseFloat(rawVal);
-        if (!isNaN(val) && val >= 0) updateRepField(u.id, 'annualQuota', val);
-    };
-    const commitQ = (qKey, rawVal) => {
-        const val = parseFloat(rawVal);
-        if (!isNaN(val) && val >= 0) updateRepField(u.id, qKey + 'Quota', val);
-    };
-
-    // compactInput mode — renders only the input(s), no card wrapper
-    // Used by the Option C list layout where the card chrome is handled by the row
+    React.useEffect(() => { setLocalQ(prev => { const out={...prev}; ['q1','q2','q3','q4'].forEach(q => { out[q]=u[q+'Quota'] != null ? String(u[q+'Quota']) : ''; }); return out; }); }, [u.q1Quota,u.q2Quota,u.q3Quota,u.q4Quota]);
+    const commitAnnual = v => { const n=parseFloat(v); if(!isNaN(n)&&n>=0) updateRepField(u.id,'annualQuota',n); };
+    const commitQ = (qKey,v) => { const n=parseFloat(v); if(!isNaN(n)&&n>=0) updateRepField(u.id,qKey+'Quota',n); };
     if (compactInput) {
-        if (quotaMode === 'annual') {
-            return (
-                <input type="number" value={localAnnual} placeholder="0"
-                    onChange={e => setLocalAnnual(e.target.value)}
-                    onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitAnnual(e.target.value); }}
-                    onFocus={e => e.target.style.borderColor='#2563eb'}
-                    style={inputSt} />
-            );
-        }
+        if (quotaMode === 'annual') return (
+            <input type="number" value={localAnnual} placeholder="0" onChange={e=>setLocalAnnual(e.target.value)} onBlur={e=>commitAnnual(e.target.value)} onFocus={e=>e.target.style.borderColor=T.info} style={inputSt} />
+        );
         return (
-            <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
-                {[['Q1','Q2'],['Q3','Q4']].map((pair, pi) => (
-                    <div key={pi} style={{ display:'flex', gap:'4px' }}>
-                        {pair.map(q => {
-                            const qKey = q.toLowerCase();
-                            return (
-                                <div key={q} style={{ display:'flex', flexDirection:'column', gap:'1px' }}>
-                                    <div style={{ fontSize:'0.5rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>{q}</div>
-                                    <input type="number" value={localQ[qKey]||''} placeholder="0"
-                                        onChange={e => setLocalQ(prev => ({ ...prev, [qKey]: e.target.value }))}
-                                        onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitQ(qKey, e.target.value); }}
-                                        onFocus={e => e.target.style.borderColor='#2563eb'}
-                                        style={inputSt} />
-                                </div>
-                            );
-                        })}
+            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                {[['Q1','Q2'],['Q3','Q4']].map((pair,pi) => (
+                    <div key={pi} style={{display:'flex',gap:4}}>
+                        {pair.map(q => { const qk=q.toLowerCase(); return (
+                            <div key={q} style={{display:'flex',flexDirection:'column',gap:1}}>
+                                <div style={{fontSize:8,fontWeight:700,color:T.inkMuted,textTransform:'uppercase'}}>{q}</div>
+                                <input type="number" value={localQ[qk]||''} placeholder="0" onChange={e=>setLocalQ(p=>({...p,[qk]:e.target.value}))} onBlur={e=>commitQ(qk,e.target.value)} onFocus={e=>e.target.style.borderColor=T.info} style={inputSt} />
+                            </div>
+                        );})}
                     </div>
                 ))}
             </div>
         );
     }
-
-    return (
-        <div style={cardStyle}>
-            <div style={topStyle}>
-                <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:dotBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'700', color:dotTxt, flexShrink:0 }}>
-                    {initials(u.name)}
-                </div>
-                <div style={{ minWidth:0 }}>
-                    <div style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1e293b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{u.name}</div>
-                    <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'1px' }}>{u.team || u.territory || 'No team'}</div>
-                </div>
-            </div>
-            <div style={bodyStyle}>
-                {quotaMode === 'annual' ? (
-                    <div>
-                        <div style={lblStyle}>Annual quota</div>
-                        <input type="number" value={localAnnual} placeholder="0"
-                            onChange={e => setLocalAnnual(e.target.value)}
-                            onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitAnnual(e.target.value); }}
-                            onFocus={e => e.target.style.borderColor='#2563eb'}
-                            style={inputSt} />
-                    </div>
-                ) : (
-                    <div style={qGridStyle}>
-                        {quarters.map(q => {
-                            const qKey = q.toLowerCase();
-                            return (
-                                <div key={q}>
-                                    <div style={lblStyle}>{q}</div>
-                                    <input type="number" value={localQ[qKey]||''} placeholder="0"
-                                        onChange={e => setLocalQ(prev => ({ ...prev, [qKey]: e.target.value }))}
-                                        onBlur={e => { e.target.style.borderColor='#e2e8f0'; commitQ(qKey, e.target.value); }}
-                                        onFocus={e => e.target.style.borderColor='#2563eb'}
-                                        style={{ ...inputSt, fontSize:'0.8125rem' }} />
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
+    return null;
 }
 
+// ════════════════════════════════════════════════════════════
 export default function SalesManagerTab() {
     const {
         settings, setSettings,
-        opportunities,
-        activities,
-        tasks,
+        opportunities, activities, tasks,
         currentUser, userRole,
         getQuarter, getQuarterLabel,
-        exportToCSV,
-        showConfirm,
-        softDelete,
-        setUndoToast,
+        exportToCSV, showConfirm, softDelete, setUndoToast,
         activeTab, setActiveTab,
         spiffClaims, setSpiffClaims,
         isMobile,
     } = useApp();
 
-    const isAdmin = userRole === 'Admin';
+    const isAdmin   = userRole === 'Admin';
     const isManager = userRole === 'Manager';
-    const [smSubTab, setSmSubTab] = React.useState('performance');
+    const [subTab, setSubTab] = useState(() => localStorage.getItem('tab:salesmgr:subTab') || 'forecast');
 
     if (!isAdmin && !isManager) return null;
 
-    const subTabStyle = (tab) => ({
-        padding: '0.5rem 1.25rem',
-        border: 'none',
-        borderBottom: smSubTab === tab ? '2px solid #2563eb' : '2px solid transparent',
-        background: 'transparent',
-        color: smSubTab === tab ? '#2563eb' : '#64748b',
-        fontWeight: smSubTab === tab ? '700' : '500',
-        fontSize: '0.875rem',
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-        transition: 'all 0.15s',
-        whiteSpace: 'nowrap',
-    });
+    const setSubTabPersist = t => { setSubTab(t); localStorage.setItem('tab:salesmgr:subTab', t); };
 
-    return (
+    // ── Common data ───────────────────────────────────────────
+    const allUsers      = (settings.users||[]).filter(u => u.name && u.userType !== 'ReadOnly');
+    const currentUserObj = allUsers.find(u => u.name === currentUser);
+    const allReps       = allUsers.filter(u => u.userType === 'User');
+    const visibleReps   = isAdmin ? allReps : allReps.filter(u =>
+        (currentUserObj?.teamId && u.teamId === currentUserObj?.teamId) ||
+        (currentUserObj?.team   && u.team   === currentUserObj?.team)
+    );
 
-                <div className="tab-page">
-                    <div className="tab-page-header">
-                        <div className="tab-page-header-bar"></div>
+    const repStats = useMemo(() =>
+        visibleReps.map(rep => buildRepStats(rep, opportunities, activities, tasks)),
+        [visibleReps, opportunities, activities, tasks]
+    );
+
+    const quarters    = ['Q1','Q2','Q3','Q4'];
+    const quotaMode   = allUsers.find(u => u.quotaType)?.quotaType || 'annual';
+    const getRepTotal = u => quotaMode === 'annual' ? (u.annualQuota||0) : (u.q1Quota||0)+(u.q2Quota||0)+(u.q3Quota||0)+(u.q4Quota||0);
+    const updateRepField = (userId, field, value) => {
+        setSettings(prev => {
+            const updatedUsers = (prev.users||[]).map(u => u.id === userId ? {...u,[field]:value} : u);
+            const updatedUser  = updatedUsers.find(u => u.id === userId);
+            if (updatedUser) dbFetch('/.netlify/functions/users',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(updatedUser)}).catch(console.error);
+            return {...prev, users:updatedUsers};
+        });
+    };
+    const setAllQuotaMode = mode => {
+        setSettings(prev => {
+            const updatedUsers = (prev.users||[]).map(u => u.userType !== 'ReadOnly' ? {...u, quotaType:mode} : u);
+            updatedUsers.filter(u=>u.userType!=='ReadOnly').forEach(u => dbFetch('/.netlify/functions/users',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)}).catch(console.error));
+            return {...prev, users:updatedUsers};
+        });
+    };
+
+    // Team totals
+    const teamQuota   = repStats.reduce((s,r) => s+r.quota, 0);
+    const teamClosed  = repStats.reduce((s,r) => s+r.closedArr, 0);
+    const teamCommit  = repStats.reduce((s,r) => s+r.commit, 0);
+    const teamBest    = repStats.reduce((s,r) => s+r.bestCase, 0);
+    const teamPipe    = repStats.reduce((s,r) => s+r.pipelineArr, 0);
+    const teamAttain  = teamQuota > 0 ? Math.round((teamClosed/teamQuota)*100) : null;
+
+    // Quarter info
+    const now  = new Date();
+    const qNum = Math.floor(now.getMonth()/3) + 1;
+    const qEnd = new Date(now.getFullYear(), qNum*3, 0);
+    const weeksLeft = Math.max(0, Math.ceil((qEnd - now)/(7*86400000)));
+    const qLabel = `Q${qNum} ${now.getFullYear()}`;
+
+    // Card style
+    const card = { background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, overflow:'hidden', marginBottom:16 };
+    const cardHdr = { padding:'12px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' };
+    const eyebrow = { fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, fontFamily:T.sans };
+    const inputSt = { padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:'0.8125rem', fontFamily:T.sans, background:T.surface2, color:T.ink, width:100, outline:'none' };
+
+    // ── SUB-TAB HEADER ────────────────────────────────────────
+    const SubTabs = () => (
+        <div style={{ display:'flex', alignItems:'center', borderBottom:`1px solid ${T.border}`, marginBottom:16 }}>
+            {[
+                { id:'forecast',   label:'Forecast'       },
+                { id:'team',       label:'Team'           },
+                { id:'audit',      label:'Pipeline Audit' },
+                { id:'admin',      label:'Administration' },
+            ].map(t => {
+                const active = subTab === t.id;
+                return (
+                    <button key={t.id} onClick={() => setSubTabPersist(t.id)} style={{
+                        padding:'8px 16px', border:'none',
+                        borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent',
+                        background:'transparent', color: active ? T.ink : T.inkMuted,
+                        fontSize:12, fontWeight: active ? 600 : 400,
+                        cursor:'pointer', fontFamily:T.sans, transition:'all 120ms',
+                        whiteSpace:'nowrap', marginBottom:-1,
+                    }}>
+                        {t.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
+
+    // ════════════════════════════════════════════════════════
+    // FORECAST TAB
+    // ════════════════════════════════════════════════════════
+    const ForecastTab = () => {
+        const [editingCommit, setEditingCommit] = useState(null);
+
+        // Stacked bar widths
+        const barTotal = Math.max(teamQuota, teamPipe);
+        const closedW  = barTotal > 0 ? (teamClosed/barTotal)*100 : 0;
+        const commitW  = barTotal > 0 ? (teamCommit/barTotal)*100 : 0;
+        const bestW    = barTotal > 0 ? (teamBest/barTotal)*100 : 0;
+        const pipeW    = barTotal > 0 ? (teamPipe/barTotal)*100 : 0;
+        const quotaW   = barTotal > 0 ? (teamQuota/barTotal)*100 : 0;
+
+        return (
+            <>
+            {/* ── Team progress bar ── */}
+            <div style={{ ...card, marginBottom:16 }}>
+                <div style={{ padding:'16px 20px' }}>
+                    <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginBottom:12 }}>
                         <div>
-                            <h2>Sales Manager</h2>
+                            <div style={eyebrow}>Team to quota</div>
+                            <div style={{ display:'flex', alignItems:'baseline', gap:8, marginTop:4 }}>
+                                <span style={{ fontSize:28, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{fmtV(teamClosed)}</span>
+                                <span style={{ fontSize:13, color:T.inkMuted }}>of {fmtV(teamQuota)}</span>
+                                <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>{teamAttain !== null ? teamAttain+'%' : '—'}</span>
+                            </div>
+                        </div>
+                        <div style={{ textAlign:'right' }}>
+                            <div style={eyebrow}>Commit call</div>
+                            <div style={{ fontSize:22, fontWeight:700, color:T.ink, marginTop:4 }}>{fmtV(teamCommit)}</div>
+                            {teamQuota > 0 && teamCommit < teamQuota && (
+                                <div style={{ fontSize:11, color:T.danger, fontWeight:600 }}>Under quota by {fmtV(teamQuota - teamCommit)}</div>
+                            )}
                         </div>
                     </div>
 
-                    {/* ── SUB-TAB NAV ── */}
-                    <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', marginBottom:'1.5rem', gap:'0' }}>
-                        <button style={subTabStyle('performance')} onClick={() => setSmSubTab('performance')}>Performance</button>
-                        <button style={subTabStyle('administration')} onClick={() => setSmSubTab('administration')}>Administration</button>
+                    {/* Stacked bar */}
+                    <div style={{ position:'relative', height:10, borderRadius:T.r, background:T.surface2, overflow:'visible', marginBottom:6 }}>
+                        {/* Quota marker */}
+                        <div style={{ position:'absolute', left:quotaW+'%', top:-3, bottom:-3, width:2, background:T.ink, zIndex:3, borderRadius:1 }} />
+                        {/* Pipeline (lightest) */}
+                        <div style={{ position:'absolute', inset:0, width:Math.min(pipeW,100)+'%', background:T.border, borderRadius:T.r }} />
+                        {/* Best case */}
+                        <div style={{ position:'absolute', inset:0, width:Math.min(bestW,100)+'%', background:T.gold+'88', borderRadius:T.r }} />
+                        {/* Commit */}
+                        <div style={{ position:'absolute', inset:0, width:Math.min(commitW,100)+'%', background:T.gold, borderRadius:T.r }} />
+                        {/* Closed */}
+                        <div style={{ position:'absolute', inset:0, width:Math.min(closedW,100)+'%', background:T.ok, borderRadius:T.r }} />
                     </div>
 
-                    {/* ══ PERFORMANCE & ADMINISTRATION TABS ══ */}
-                    {(() => {
-                        const allUsers = (settings.users || []).filter(u => u.name && u.userType !== 'ReadOnly');
-                        const quarters = ['Q1','Q2','Q3','Q4'];
-                        const quotaMode = allUsers.find(u => u.quotaType)?.quotaType || 'annual';
-
-                        // ── helpers ──────────────────────────────────────────
-                        const getRepTotal = (u) => {
-                            if ((u.quotaType || quotaMode) === 'annual') return u.annualQuota || 0;
-                            return (u.q1Quota||0)+(u.q2Quota||0)+(u.q3Quota||0)+(u.q4Quota||0);
-                        };
-
-                        const updateRepField = (userId, field, value) => {
-                            setSettings(prev => {
-                                const updatedUsers = (prev.users||[]).map(u =>
-                                    u.id === userId ? { ...u, [field]: value } : u
-                                );
-                                // Persist quota field change to /users DB endpoint immediately.
-                                // Without this, quota values only live in React state and are
-                                // lost on logout because the settings save effect strips users.
-                                const updatedUser = updatedUsers.find(u => u.id === userId);
-                                if (updatedUser) {
-                                    dbFetch('/.netlify/functions/users', {
-                                        method: 'PUT',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify(updatedUser),
-                                    }).catch(err => console.error('Failed to persist quota for user', userId, err));
-                                }
-                                return { ...prev, users: updatedUsers };
-                            });
-                        };
-
-                        const setAllQuotaMode = (mode) => {
-                            setSettings(prev => {
-                                const updatedUsers = (prev.users||[]).map(u =>
-                                    u.userType !== 'ReadOnly' ? { ...u, quotaType: mode } : u
-                                );
-                                // Persist quotaType change to DB for all affected users
-                                updatedUsers.filter(u => u.userType !== 'ReadOnly').forEach(u => {
-                                    dbFetch('/.netlify/functions/users', {
-                                        method: 'PUT',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify(u),
-                                    }).catch(err => console.error('Failed to persist quotaType for user', u.id, err));
-                                });
-                                return { ...prev, users: updatedUsers };
-                            });
-                        };
-
-                        // Won revenue per rep name (kept for commission plan below)
-                        const repWon = {};
-                        opportunities.filter(o => o.stage === 'Closed Won').forEach(o => {
-                            const rep = o.salesRep || o.assignedTo;
-                            if (rep) repWon[rep] = (repWon[rep] || 0) + (o.arr||0) + (o.implementationCost||0);
-                        });
-
-                        const calcCommission = (revenue, quota) => {
-                            if (quota <= 0 || revenue <= 0) return 0;
-                            let commission = 0;
-                            [...((settings.quotaData||{}).commissionTiers||[])].sort((a,b)=>a.minPercent-b.minPercent).forEach(tier => {
-                                const mn = (tier.minPercent/100)*quota;
-                                const mx = tier.maxPercent >= 999 ? Infinity : (tier.maxPercent/100)*quota;
-                                if (revenue > mn) commission += (Math.min(revenue,mx)-mn)*(tier.rate/100);
-                            });
-                            return commission;
-                        };
-
-                        // ── role-based rep scoping ────────────────────────────
-                        // currentUser is the logged-in user object from settings
-                        const currentUserObj = (settings.users||[]).find(u => u.name === currentUser);
-                        const viewerIsAdmin  = isAdmin;
-
-                        // Reps visible to this viewer:
-                        // Admin → all reps (userType === 'User')
-                        // Manager → only reps on their team(s) (matched by teamId or team name)
-                        const allReps = allUsers.filter(u => u.userType === 'User');
-                        const visibleReps = viewerIsAdmin
-                            ? allReps
-                            : allReps.filter(u => {
-                                if (!currentUserObj) return false;
-                                // match by teamId first, fall back to team name
-                                return (currentUserObj.teamId && u.teamId === currentUserObj.teamId) ||
-                                       (currentUserObj.team && u.team === currentUserObj.team);
-                              });
-
-                        // Unassigned reps (no territory) — warn admin only
-                        const unassignedReps = viewerIsAdmin
-                            ? visibleReps.filter(u => !u.territory || !u.territory.trim())
-                            : [];
-
-                        // All territories present in visible reps
-                        const visibleTerritories = [...new Set(
-                            visibleReps.filter(u => u.territory && u.territory.trim()).map(u => u.territory.trim())
-                        )].sort();
-
-                        // Admin territory filter state (stored in component-level state via a ref trick —
-                        // we use a module-level variable keyed to this render since this is an IIFE)
-                        // We piggyback on a settings key that won't affect data: __qbTerrFilter
-                        const terrFilter = (settings.__qbTerrFilter) || 'all';
-                        const setTerrFilter = (val) => setSettings(prev => ({ ...prev, __qbTerrFilter: val }));
-
-                        // Reps to actually show after filter
-                        const filteredReps = (viewerIsAdmin && terrFilter !== 'all')
-                            ? visibleReps.filter(u => u.territory && u.territory.trim() === terrFilter)
-                            : visibleReps;
-
-                        // Territories to render (for divider labels in all-view)
-                        const renderTerritories = (viewerIsAdmin && terrFilter === 'all')
-                            ? visibleTerritories
-                            : (terrFilter !== 'all' ? [terrFilter] : [...new Set(visibleReps.filter(u=>u.territory).map(u=>u.territory.trim()))].sort());
-
-                        // Running total of assigned quota across filtered reps
-                        const filteredTotal = filteredReps.reduce((s,u) => s + getRepTotal(u), 0);
-
-                        // ── avatar color by territory ─────────────────────────
-                        const terrColors = ['#B5D4F4:#185FA5','#9FE1CB:#0F6E56','#CECBF6:#534AB7','#FAC775:#854F0B','#F4C0D1:#993556'];
-                        const terrColorMap = {};
-                        visibleTerritories.forEach((t, i) => { terrColorMap[t] = terrColors[i % terrColors.length].split(':'); });
-
-                        const smCard  = { background:'#fff', borderRadius:'12px', boxShadow:'0 1px 3px rgba(0,0,0,0.08)', border:'1px solid #e2e8f0', marginBottom:'1.5rem', overflow:'hidden' };
-                        const smHdr   = { padding:'1rem 1.5rem', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' };
-                        const smTitle = { fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.08em' };
-                        const inputSt = { width:'100%', padding:'0.5rem 0.625rem', border:'1.5px solid #e2e8f0', borderRadius:'8px', fontSize:'0.9375rem', fontWeight:'600', fontFamily:'inherit', background:'#f8fafc', outline:'none', textAlign:'right', boxSizing:'border-box' };
-
-                        return (
-                            <>
-                            {smSubTab === 'administration' && (<>
-                            {/* ── UNASSIGNED WARNING (admin only) ─────────── */}
-                            {unassignedReps.length > 0 && (
-                                <div style={{ background:'#fffbeb', border:'1.5px solid #fbbf24', borderRadius:'10px', padding:'0.875rem 1.25rem', marginBottom:'1.25rem', display:'flex', alignItems:'center', gap:'0.875rem' }}>
-                                    <span style={{ fontSize:'1.25rem' }}>⚠️</span>
-                                    <div style={{ flex:1 }}>
-                                        <div style={{ fontWeight:'700', color:'#92400e', fontSize:'0.8125rem' }}>
-                                            {unassignedReps.length} rep{unassignedReps.length > 1 ? 's have' : ' has'} no territory assigned:
-                                            {' '}<strong>{unassignedReps.map(u=>u.name).join(', ')}</strong>
-                                        </div>
-                                        <div style={{ fontSize:'0.75rem', color:'#b45309', marginTop:'0.25rem' }}>
-                                            Assign a territory via <strong>Settings → Team Builder</strong> to include them below.
-                                        </div>
-                                    </div>
-                                    <button onClick={() => setActiveTab('settings')}
-                                        style={{ padding:'0.4rem 0.875rem', background:'#f59e0b', color:'#fff', border:'none', borderRadius:'6px', fontWeight:'700', fontSize:'0.75rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
-                                        Go to Settings
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* ── QUOTA BOARD ─────────────────────────────── */}
-                            <div style={smCard}>
-                                {/* ── Header ── */}
-                                <div style={{ ...smHdr, flexWrap:'wrap', gap:'0.5rem' }}>
-                                    <div>
-                                        <div style={smTitle}>Assign Quotas</div>
-                                        <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'0.125rem' }}>
-                                            ${filteredTotal.toLocaleString()} assigned
-                                            {viewerIsAdmin ? '' : ` · your team · ${visibleReps.length} rep${visibleReps.length !== 1 ? 's' : ''}`}
-                                        </div>
-                                    </div>
-                                    <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', flexWrap:'wrap' }}>
-                                        {/* Territory filter pills */}
-                                        {viewerIsAdmin && visibleTerritories.length > 1 && (
-                                            <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-                                                {['all', ...visibleTerritories].map(t => (
-                                                    <button key={t} onClick={() => setTerrFilter(t)} style={{
-                                                        padding:'3px 10px', borderRadius:'999px', border:'1px solid', cursor:'pointer',
-                                                        fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'600', transition:'all 0.15s',
-                                                        background: terrFilter === t ? '#185FA5' : 'transparent',
-                                                        color:      terrFilter === t ? '#fff' : '#475569',
-                                                        borderColor: terrFilter === t ? '#185FA5' : '#d1d5db',
-                                                    }}>{t === 'all' ? 'All' : t}</button>
-                                                ))}
-                                            </div>
-                                        )}
-                                        <div style={{ width:'1px', height:'16px', background:'#e2e8f0' }} />
-                                        {/* Annual / Quarterly toggle */}
-                                        <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'6px', padding:'2px', gap:'2px' }}>
-                                            {['annual','quarterly'].map(t => (
-                                                <button key={t} onClick={() => setAllQuotaMode(t)} style={{
-                                                    padding:'3px 10px', borderRadius:'4px', border:'none', cursor:'pointer',
-                                                    fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
-                                                    background: quotaMode === t ? '#fff' : 'transparent',
-                                                    color:      quotaMode === t ? '#1e293b' : '#64748b',
-                                                    boxShadow:  quotaMode === t ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                                                }}>{t === 'annual' ? 'Annual' : 'Quarterly'}</button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* ── Column headers ── */}
-                                {visibleReps.length > 0 && (
-                                    <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:'0', padding:'6px 1.5rem', background:'#f8fafc', borderBottom:'1px solid #f1f5f9' }}>
-                                        <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em' }}>Rep</div>
-                                        <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em' }}>
-                                            {quotaMode === 'annual' ? 'Annual quota' : 'Total quota'}
-                                        </div>
-                                        <div style={{ fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em' }}>Attainment</div>
-
-                                    </div>
-                                )}
-
-                                {/* ── Empty states ── */}
-                                {allReps.length === 0 ? (
-                                    <div style={{ padding:'2.5rem', textAlign:'center', color:'#94a3b8' }}>
-                                        No sales reps configured yet. Add users in <strong>Settings → Manage Users</strong>.
-                                    </div>
-                                ) : visibleReps.length === 0 ? (
-                                    <div style={{ padding:'2.5rem', textAlign:'center', color:'#94a3b8' }}>
-                                        No reps assigned to your team yet. Go to <strong>Settings → Team Builder</strong> to assign reps.
-                                    </div>
-                                ) : (
-                                    <>
-                                        {/* ── Rep rows grouped by territory ── */}
-                                        {renderTerritories.map(terr => {
-                                            const terrReps = filteredReps.filter(u => u.territory && u.territory.trim() === terr);
-                                            if (terrReps.length === 0) return null;
-                                            const [dotBg, dotTxt] = terrColorMap[terr] || ['#e2e8f0','#475569'];
-                                            const terrTotal = terrReps.reduce((s,u) => s + getRepTotal(u), 0);
-                                            return (
-                                                <div key={terr}>
-                                                    {/* Territory section header — only shown in all-view */}
-                                                    {viewerIsAdmin && terrFilter === 'all' && (
-                                                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'7px 1.5rem', background:dotBg, borderBottom:'1px solid '+dotBg, borderTop:'1px solid '+dotBg }}>
-                                                            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                                                                <div style={{ width:'4px', height:'16px', borderRadius:'2px', background:dotTxt }} />
-                                                                <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:dotTxt, textTransform:'uppercase', letterSpacing:'0.08em' }}>{terr}</span>
-                                                            </div>
-                                                            <span style={{ fontSize:'0.6875rem', color:dotTxt, opacity:0.8 }}>
-                                                                {terrReps.length} rep{terrReps.length !== 1 ? 's' : ''} · <strong>${terrTotal.toLocaleString()}</strong>
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                    {/* Rep rows */}
-                                                    {terrReps.map((u, ui) => {
-                                                        const repWon = (opportunities||[]).filter(o => o.stage === 'Closed Won' && (o.salesRep === u.name || o.assignedTo === u.name))
-                                                            .reduce((s,o) => s+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0), 0);
-                                                        const quota = getRepTotal(u);
-                                                        const attainPct = quota > 0 ? Math.min((repWon / quota) * 100, 100) : 0;
-                                                        const attainColor = attainPct >= 100 ? '#10b981' : attainPct >= 75 ? '#f59e0b' : attainPct >= 40 ? '#185FA5' : '#94a3b8';
-                                                        const initials = (u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-                                                        const isLast = ui === terrReps.length - 1;
-                                                        return (
-                                                            <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:'0', padding:'10px 1.5rem', borderBottom: isLast && terrFilter !== 'all' ? 'none' : '1px solid #f1f5f9', alignItems:'center', transition:'background 0.1s' }}
-                                                                onMouseEnter={e => e.currentTarget.style.background='#fafafa'}
-                                                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                                                                {/* Rep name + avatar */}
-                                                                <div style={{ display:'flex', alignItems:'center', gap:'10px', minWidth:0 }}>
-                                                                    <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:dotBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'700', color:dotTxt, flexShrink:0 }}>
-                                                                        {initials}
-                                                                    </div>
-                                                                    <div style={{ minWidth:0 }}>
-                                                                        <div style={{ fontSize:'0.875rem', fontWeight:'600', color:'#1e293b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.name}</div>
-                                                                        <div style={{ fontSize:'0.6875rem', color:'#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.team || u.territory || '—'}</div>
-                                                                    </div>
-                                                                </div>
-                                                                {/* Quota input */}
-                                                                <div>
-                                                                    {quotaMode === 'annual' ? (
-                                                                        <QuotaRepCard u={u} quotaMode="annual" quarters={quarters} dotBg={dotBg} dotTxt={dotTxt} inputSt={{ padding:'4px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', background:'#f8fafc', color:'#1e293b', width:'110px' }} updateRepField={updateRepField} compactInput />
-                                                                    ) : (
-                                                                        <QuotaRepCard u={u} quotaMode="quarterly" quarters={quarters} dotBg={dotBg} dotTxt={dotTxt} inputSt={{ padding:'4px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.75rem', fontFamily:'inherit', background:'#f8fafc', color:'#1e293b', width:'80px' }} updateRepField={updateRepField} compactInput />
-                                                                    )}
-                                                                </div>
-                                                                {/* Attainment bar */}
-                                                                <div style={{ display:'flex', alignItems:'center', gap:'8px', paddingRight:'0.5rem' }}>
-                                                                    <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
-                                                                        <div style={{ height:'100%', width:attainPct+'%', background:attainColor, borderRadius:'3px', transition:'width 0.4s ease' }} />
-                                                                    </div>
-                                                                    <span style={{ fontSize:'0.75rem', fontWeight:'700', color:attainColor, minWidth:'36px', textAlign:'right' }}>
-                                                                        {quota > 0 ? attainPct.toFixed(1)+'%' : '—'}
-                                                                    </span>
-                                                                </div>
-
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            );
-                                        })}
-
-                                        {/* Unassigned reps */}
-                                        {viewerIsAdmin && filteredReps.filter(u => !u.territory || !u.territory.trim()).length > 0 && (
-                                            <div>
-                                                <div style={{ display:'flex', alignItems:'center', padding:'6px 1.5rem', background:'#fffbeb', borderBottom:'1px solid #fef3c7' }}>
-                                                    <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#b45309', textTransform:'uppercase', letterSpacing:'0.06em' }}>No territory assigned</span>
-                                                </div>
-                                                {filteredReps.filter(u => !u.territory || !u.territory.trim()).map((u, ui, arr) => {
-                                                    const repWon = (opportunities||[]).filter(o => o.stage === 'Closed Won' && (o.salesRep === u.name || o.assignedTo === u.name))
-                                                        .reduce((s,o) => s+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0), 0);
-                                                    const quota = getRepTotal(u);
-                                                    const attainPct = quota > 0 ? Math.min((repWon/quota)*100,100) : 0;
-                                                    const attainColor = attainPct >= 100 ? '#10b981' : attainPct >= 75 ? '#f59e0b' : attainPct >= 40 ? '#185FA5' : '#94a3b8';
-                                                    const initials = (u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-                                                    return (
-                                                        <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:'0', padding:'10px 1.5rem', borderBottom: ui < arr.length-1 ? '1px solid #f1f5f9' : 'none', alignItems:'center' }}
-                                                            onMouseEnter={e => e.currentTarget.style.background='#fafafa'}
-                                                            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                                                            <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                                                                <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:'#e2e8f0', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'700', color:'#64748b', flexShrink:0 }}>{initials}</div>
-                                                                <div><div style={{ fontSize:'0.875rem', fontWeight:'600', color:'#1e293b' }}>{u.name}</div><div style={{ fontSize:'0.6875rem', color:'#94a3b8' }}>No territory</div></div>
-                                                            </div>
-                                                            <div><QuotaRepCard u={u} quotaMode={quotaMode} quarters={quarters} dotBg="#e2e8f0" dotTxt="#64748b" inputSt={{ padding:'4px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', background:'#f8fafc', color:'#1e293b', width:'110px' }} updateRepField={updateRepField} compactInput /></div>
-                                                            <div style={{ display:'flex', alignItems:'center', gap:'8px', paddingRight:'0.5rem' }}>
-                                                                <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}><div style={{ height:'100%', width:attainPct+'%', background:attainColor, borderRadius:'3px' }} /></div>
-                                                                <span style={{ fontSize:'0.75rem', fontWeight:'700', color:attainColor, minWidth:'36px', textAlign:'right' }}>{quota > 0 ? attainPct.toFixed(1)+'%' : '—'}</span>
-                                                            </div>
-
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-                                    </>
-                                )}
-
-                                {/* ── Footer total ── */}
-                                {filteredReps.length > 0 && (
-                                    <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 1.5rem', background:'#f8fafc', borderTop:'1px solid #e2e8f0', alignItems:'center' }}>
-                                        <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em' }}>
-                                            {viewerIsAdmin && terrFilter !== 'all' ? `${terrFilter} total` : 'Total assigned'}
-                                        </div>
-                                        <div style={{ fontSize:'1rem', fontWeight:'700', color:'#1e293b' }}>${filteredTotal.toLocaleString()}</div>
-                                        <div />
-
-                                    </div>
-                                )}
+                    {/* Legend */}
+                    <div style={{ display:'flex', gap:16, fontSize:10, color:T.inkMuted, fontFamily:T.sans }}>
+                        {[
+                            { color:T.ok,         label:`Closed ${fmtV(teamClosed)}` },
+                            { color:T.gold,        label:`Commit ${fmtV(teamCommit)}` },
+                            { color:T.gold+'88',   label:`Best-case ${fmtV(teamBest)}` },
+                            { color:T.border,      label:`Open pipeline ${fmtV(teamPipe)}` },
+                        ].map(({ color, label }) => (
+                            <div key={label} style={{ display:'flex', alignItems:'center', gap:4 }}>
+                                <div style={{ width:8, height:8, borderRadius:2, background:color, flexShrink:0 }} />
+                                {label}
                             </div>
-
-                            {/* ── COMMISSION PLAN + PREVIEW ─────────────── */}
-                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.5rem' }}>
-                                <div style={smCard}>
-                                    <div style={smHdr}>
-                                        <div>
-                                            <div style={smTitle}>Commission Plan</div>
-                                            <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'0.125rem' }}>Tiered rates applied to all reps based on quota attainment %</div>
-                                        </div>
-                                    </div>
-                                    <div style={{ padding:'1.25rem 1.5rem' }}>
-                                        {((settings.quotaData||{}).commissionTiers||[]).map((tier, idx) => (
-                                            <div key={idx} style={{ display:'flex', gap:'0.5rem', marginBottom:'0.625rem', alignItems:'center', padding:'0.5rem 0.75rem', background:'#f8fafc', borderRadius:'10px', border:'1px solid #f1f3f5' }}>
-                                                <input type="number" value={tier.minPercent}
-                                                    onChange={e => { const t=[...(settings.quotaData||{}).commissionTiers||[]]; t[idx]={...t[idx],minPercent:parseFloat(e.target.value)||0}; setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:t}})); }}
-                                                    style={{ width:'60px', padding:'0.4rem', border:'1.5px solid #e2e8f0', borderRadius:'8px', fontSize:'0.8125rem', textAlign:'center', fontFamily:'inherit', background:'#fff', outline:'none' }}
-                                                    onFocus={e=>e.target.style.borderColor='#2563eb'} onBlur={e=>e.target.style.borderColor='#e2e8f0'} />
-                                                <span style={{ color:'#94a3b8', fontSize:'0.6875rem', fontWeight:'600', flexShrink:0 }}>% to</span>
-                                                <input type="number" value={tier.maxPercent >= 999 ? '' : tier.maxPercent} placeholder="∞"
-                                                    onChange={e => { const t=[...(settings.quotaData||{}).commissionTiers||[]]; t[idx]={...t[idx],maxPercent:parseFloat(e.target.value)||999}; setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:t}})); }}
-                                                    style={{ width:'60px', padding:'0.4rem', border:'1.5px solid #e2e8f0', borderRadius:'8px', fontSize:'0.8125rem', textAlign:'center', fontFamily:'inherit', background:'#fff', outline:'none' }}
-                                                    onFocus={e=>e.target.style.borderColor='#2563eb'} onBlur={e=>e.target.style.borderColor='#e2e8f0'} />
-                                                <span style={{ color:'#94a3b8', fontSize:'0.6875rem', fontWeight:'600', flexShrink:0 }}>% →</span>
-                                                <input type="number" value={tier.rate}
-                                                    onChange={e => { const t=[...(settings.quotaData||{}).commissionTiers||[]]; t[idx]={...t[idx],rate:parseFloat(e.target.value)||0}; setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:t}})); }}
-                                                    style={{ width:'60px', padding:'0.4rem', border:'1.5px solid #e2e8f0', borderRadius:'8px', fontSize:'0.8125rem', textAlign:'center', fontFamily:'inherit', background:'#fff', outline:'none' }}
-                                                    onFocus={e=>e.target.style.borderColor='#2563eb'} onBlur={e=>e.target.style.borderColor='#e2e8f0'} />
-                                                <span style={{ color:'#94a3b8', fontSize:'0.6875rem', fontWeight:'600', flexShrink:0 }}>% rate</span>
-                                                {((settings.quotaData||{}).commissionTiers||[]).length > 1 && (
-                                                    <button onClick={() => setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:(prev.quotaData||{}).commissionTiers.filter((_,i)=>i!==idx)}}))}
-                                                        style={{ background:'none', border:'none', color:'#ef4444', cursor:'pointer', fontSize:'1.125rem', padding:'0 0.25rem', opacity:0.6, marginLeft:'auto' }}
-                                                        onMouseEnter={e=>e.target.style.opacity='1'} onMouseLeave={e=>e.target.style.opacity='0.6'}>×</button>
-                                                )}
-                                            </div>
-                                        ))}
-                                        <button onClick={() => setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:[...((prev.quotaData||{}).commissionTiers||[]),{minPercent:0,maxPercent:999,rate:0}]}}))}
-                                            style={{ marginTop:'0.375rem', background:'#f8fafc', border:'1.5px dashed #cbd5e1', borderRadius:'10px', padding:'0.5rem 1rem', cursor:'pointer', fontSize:'0.75rem', fontWeight:'700', color:'#475569', fontFamily:'inherit', width:'100%' }}
-                                            onMouseEnter={e=>{e.target.style.background='#f1f5f9';e.target.style.borderColor='#94a3b8';}}
-                                            onMouseLeave={e=>{e.target.style.background='#f8fafc';e.target.style.borderColor='#cbd5e1';}}>
-                                            + Add Tier
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Commission Preview by rep */}
-                                <div style={smCard}>
-                                    <div style={smHdr}>
-                                        <div style={smTitle}>Commission Preview by Rep</div>
-                                        <button onClick={() => {
-                                            const smActiveSpiffs2 = (settings.spiffs||[]).filter(s => s.active);
-                                            const hasSmSpiffs2 = smActiveSpiffs2.length > 0;
-                                            const hdrs = ['Rep','Territory','Quota','50%','75%','100%','125%','150%',...(hasSmSpiffs2?['+SPIFFs (est @100%)']:[])];
-                                            const rows = allReps.filter(u => getRepTotal(u) > 0).map(u => {
-                                                const tq = getRepTotal(u);
-                                                const spiffEst = smActiveSpiffs2.reduce((tot,s) => {
-                                                    const amt = parseFloat(s.amount)||0;
-                                                    if (s.type==='flat') return tot+amt;
-                                                    if (s.type==='pct') return tot+tq*amt/100;
-                                                    if (s.type==='multiplier') return tot+calcCommission(tq,tq)*(amt-1);
-                                                    return tot;
-                                                },0);
-                                                return [u.name, u.territory||'—', tq,
-                                                    ...[50,75,100,125,150].map(p=>Math.round(calcCommission((p/100)*tq,tq))),
-                                                    ...(hasSmSpiffs2?[Math.round(spiffEst)]:[])];
-                                            });
-                                            const esc = v => `"${String(v).replace(/"/g,'""')}"`;
-                                            const csv = [hdrs.map(esc).join(','), ...rows.map(r=>r.map(esc).join(','))].join('\n');
-                                            const blob = new Blob([csv],{type:'text/csv'});
-                                            const url = URL.createObjectURL(blob);
-                                            const a = document.createElement('a');
-                                            a.href=url; a.download='commission-preview.csv'; a.click(); URL.revokeObjectURL(url);
-                                        }} style={{ background:'#1c1917', border:'none', borderRadius:'6px', padding:'0.25rem 0.625rem', fontSize:'0.6875rem', fontWeight:'600', color:'#f5f1eb', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', flexShrink:0 }}>📤 Export CSV</button>
-                                    </div>
-                                    <div style={{ padding:'1.25rem 1.5rem' }}>
-                                        {(() => {
-                                            const smActiveSpiffs = (settings.spiffs||[]).filter(s => s.active);
-                                            const hasSmSpiffs = smActiveSpiffs.length > 0;
-                                            const colSpanTotal = 2 + 5 + (hasSmSpiffs ? 1 : 0);
-                                            return (
-                                        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem' }}>
-                                            <thead>
-                                                <tr style={{ borderBottom:'2px solid #e2e8f0' }}>
-                                                    <th style={{ textAlign:'left', padding:'0.5rem 0', fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em' }}>Rep</th>
-                                                    <th style={{ textAlign:'left', padding:'0.5rem 0.375rem', fontSize:'0.625rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em' }}>Territory</th>
-                                                    {[50,75,100,125,150].map(p => (
-                                                        <th key={p} style={{ textAlign:'right', padding:'0.5rem 0.375rem', fontSize:'0.625rem', fontWeight:'700', color: p===100 ? '#2563eb' : '#94a3b8', textTransform:'uppercase', letterSpacing:'0.04em' }}>{p}%</th>
-                                                    ))}
-                                                    {hasSmSpiffs && <th style={{ textAlign:'right', padding:'0.5rem 0.375rem', fontSize:'0.625rem', fontWeight:'700', color:'#7c3aed', textTransform:'uppercase', letterSpacing:'0.04em' }}>+SPIFFs</th>}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {allReps.filter(u => getRepTotal(u) > 0)
-                                                    .sort((a,b) => (a.territory||'').localeCompare(b.territory||''))
-                                                    .map((u, i, arr) => {
-                                                        const tq = getRepTotal(u);
-                                                        const showTerrHeader = i === 0 || u.territory !== arr[i-1].territory;
-                                                        // Estimate SPIFF at 100% attainment (1 deal avg)
-                                                        const spiffAt100 = smActiveSpiffs.reduce((tot, s) => {
-                                                            const amt = parseFloat(s.amount)||0;
-                                                            if (s.type === 'flat') return tot + amt;
-                                                            if (s.type === 'pct') return tot + tq * amt / 100;
-                                                            if (s.type === 'multiplier') return tot + calcCommission(tq, tq) * (amt - 1);
-                                                            return tot;
-                                                        }, 0);
-                                                        return (
-                                                            <React.Fragment key={u.id}>
-                                                                {showTerrHeader && (
-                                                                    <tr>
-                                                                        <td colSpan={colSpanTotal} style={{ padding:'0.5rem 0 0.25rem', fontSize:'0.625rem', fontWeight:'800', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.08em', borderTop: i > 0 ? '1px solid #e2e8f0' : 'none' }}>
-                                                                            📍 {u.territory}
-                                                                        </td>
-                                                                    </tr>
-                                                                )}
-                                                                <tr style={{ borderBottom:'1px solid #f8fafc' }}>
-                                                                    <td style={{ padding:'0.375rem 0 0.375rem 0.75rem', fontWeight:'600', color:'#1e293b' }}>{u.name}</td>
-                                                                    <td style={{ padding:'0.375rem 0.375rem', color:'#94a3b8', fontSize:'0.75rem' }}>{u.territory}</td>
-                                                                    {[50,75,100,125,150].map(p => {
-                                                                        const comm = calcCommission((p/100)*tq, tq);
-                                                                        return (
-                                                                            <td key={p} style={{ textAlign:'right', padding:'0.375rem 0.375rem', fontWeight: p===100 ? '800' : '500', color: p===100 ? '#2563eb' : p>100 ? '#10b981' : '#475569' }}>
-                                                                                ${Math.round(comm).toLocaleString()}
-                                                                            </td>
-                                                                        );
-                                                                    })}
-                                                                    {hasSmSpiffs && (
-                                                                        <td style={{ textAlign:'right', padding:'0.375rem 0.375rem', fontWeight:'600', color:'#7c3aed', fontSize:'0.75rem' }} title="Estimated SPIFF at 100% attainment">
-                                                                            +${Math.round(spiffAt100).toLocaleString()}
-                                                                        </td>
-                                                                    )}
-                                                                </tr>
-                                                            </React.Fragment>
-                                                        );
-                                                    })}
-                                                {allReps.every(u => getRepTotal(u) === 0) && (
-                                                    <tr><td colSpan={colSpanTotal} style={{ padding:'1.5rem 0', color:'#94a3b8', textAlign:'center' }}>Set quotas to see commission projections.</td></tr>
-                                                )}
-                                            </tbody>
-                                        </table>
-                                            );
-                                        })()}
-                                        {(settings.spiffs||[]).filter(s=>s.active).length > 0 && (
-                                            <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.5rem' }}>* SPIFF column shows estimated bonus at 100% attainment</div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* ── SPIFF Claims ── */}
-                            <div style={smCard}>
-                                <div style={smHdr}>
-                                    <div>
-                                        <div style={smTitle}>SPIFF Claims</div>
-                                        <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'0.125rem' }}>Review and approve SPIFF claims submitted by reps</div>
-                                    </div>
-                                    <div style={{ display:'flex', gap:'0.375rem' }}>
-                                        {['all','pending','approved','rejected','paid'].map(s => (
-                                            <button key={s} onClick={() => setSettings(prev => ({ ...prev, _spiffClaimFilter: s }))}
-                                                style={{ padding:'0.2rem 0.5rem', borderRadius:'999px', border:'none', cursor:'pointer', fontSize:'0.625rem', fontWeight:'700', fontFamily:'inherit',
-                                                    background: (settings._spiffClaimFilter||'pending') === s ? '#2563eb' : '#e2e8f0',
-                                                    color: (settings._spiffClaimFilter||'pending') === s ? '#fff' : '#64748b' }}>
-                                                {s.charAt(0).toUpperCase()+s.slice(1)}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div style={{ padding:'1.25rem 1.5rem' }}>
-                                    {(() => {
-                                        const filter = settings._spiffClaimFilter || 'pending';
-                                        const filtered = spiffClaims.filter(c => filter === 'all' || c.status === filter)
-                                            .sort((a,b) => new Date(b.claimedAt) - new Date(a.claimedAt));
-                                        if (filtered.length === 0) return (
-                                            <div style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.8125rem', background:'#f8fafc', borderRadius:'8px', border:'1.5px dashed #e2e8f0' }}>
-                                                No {filter === 'all' ? '' : filter} SPIFF claims yet.
-                                            </div>
-                                        );
-                                        return (
-                                            <div style={{ display:'flex', flexDirection:'column', gap:'0' }}>
-                                                {filtered.map((claim, ci) => (
-                                                    <div key={claim.id} style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.625rem 0', borderBottom: ci < filtered.length-1 ? '1px solid #f1f5f9' : 'none', flexWrap:'wrap' }}>
-                                                        <div style={{ flex:1, minWidth:0 }}>
-                                                            <div style={{ fontWeight:'600', fontSize:'0.8125rem', color:'#1e293b' }}>{claim.spiffName}</div>
-                                                            <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'1px' }}>
-                                                                {claim.repName} · {claim.opportunityName} · {claim.account}
-                                                                <span style={{ marginLeft:'0.5rem' }}>{new Date(claim.claimedAt).toLocaleDateString()}</span>
-                                                            </div>
-                                                        </div>
-                                                        <div style={{ fontWeight:'700', color: claim.spiffType==='multiplier'?'#7c3aed':'#059669', fontSize:'0.875rem', flexShrink:0 }}>
-                                                            {claim.spiffType==='multiplier' ? `${claim.multiplier}×` : `$${claim.amount.toLocaleString()}`}
-                                                        </div>
-                                                        <span style={{ fontSize:'0.625rem', padding:'2px 7px', borderRadius:'999px', fontWeight:'700', flexShrink:0,
-                                                            background: claim.status==='approved'?'#d1fae5':claim.status==='rejected'?'#fee2e2':claim.status==='paid'?'#dbeafe':'#fef3c7',
-                                                            color: claim.status==='approved'?'#065f46':claim.status==='rejected'?'#dc2626':claim.status==='paid'?'#1e40af':'#92400e' }}>
-                                                            {claim.status.toUpperCase()}
-                                                        </span>
-                                                        {claim.status === 'pending' && (
-                                                            <div style={{ display:'flex', gap:'0.25rem', flexShrink:0 }}>
-                                                                <button onClick={async () => {
-                                                                    const updated = {...claim, status:'approved', approvedAt:new Date().toISOString(), approvedBy:currentUser};
-                                                                    try {
-                                                                        await dbFetch('/.netlify/functions/spiff-claims', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updated) });
-                                                                        setSpiffClaims(prev => prev.map(c => c.id===claim.id ? updated : c));
-                                                                    } catch(err) { console.error('approve claim error:', err.message); }
-                                                                }}
-                                                                    style={{ padding:'0.2rem 0.625rem', background:'#10b981', color:'#fff', border:'none', borderRadius:'5px', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>✓ Approve</button>
-                                                                <button onClick={async () => {
-                                                                    const updated = {...claim, status:'rejected', approvedAt:new Date().toISOString(), approvedBy:currentUser};
-                                                                    try {
-                                                                        await dbFetch('/.netlify/functions/spiff-claims', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updated) });
-                                                                        setSpiffClaims(prev => prev.map(c => c.id===claim.id ? updated : c));
-                                                                    } catch(err) { console.error('reject claim error:', err.message); }
-                                                                }}
-                                                                    style={{ padding:'0.2rem 0.625rem', background:'#ef4444', color:'#fff', border:'none', borderRadius:'5px', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>✕ Reject</button>
-                                                            </div>
-                                                        )}
-                                                        {claim.status === 'approved' && (
-                                                            <button onClick={async () => {
-                                                                const updated = {...claim, status:'paid', paidAt:new Date().toISOString()};
-                                                                try {
-                                                                    await dbFetch('/.netlify/functions/spiff-claims', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updated) });
-                                                                    setSpiffClaims(prev => prev.map(c => c.id===claim.id ? updated : c));
-                                                                } catch(err) { console.error('mark paid error:', err.message); }
-                                                            }}
-                                                                style={{ padding:'0.2rem 0.625rem', background:'#2563eb', color:'#fff', border:'none', borderRadius:'5px', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', flexShrink:0 }}>💳 Mark Paid</button>
-                                                        )}
-                                                        {(claim.status === 'rejected' || claim.status === 'paid') && (
-                                                            <button onClick={() => {
-                                                                const claimLabel = `SPIFF claim "${claim.spiffName || 'Unnamed'}"`;
-                                                                showConfirm(`Remove this ${claimLabel}?`, async () => {
-                                                                    const snapshot = spiffClaims.slice();
-                                                                    setSpiffClaims(prev => prev.filter(c => c.id !== claim.id));
-                                                                    try {
-                                                                        await dbFetch(`/.netlify/functions/spiff-claims?id=${claim.id}`, { method:'DELETE' });
-                                                                    } catch(err) {
-                                                                        console.error('delete claim error:', err.message);
-                                                                        setSpiffClaims(snapshot);
-                                                                        return;
-                                                                    }
-                                                                    softDelete(
-                                                                        claimLabel,
-                                                                        () => {},
-                                                                        () => { setSpiffClaims(snapshot); setUndoToast(null); }
-                                                                    );
-                                                                });
-                                                            }}
-                                                                style={{ background:'none', border:'none', color:'#94a3b8', cursor:'pointer', fontSize:'0.875rem', padding:'0', lineHeight:1, flexShrink:0 }}>×</button>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        );
-                                    })()}
-                                </div>
-                            </div>
-
-                            {/* ── SPIFF Board ── */}
-                            <div style={smCard}>
-                                <div style={smHdr}>
-                                    <div>
-                                        <div style={smTitle}>SPIFF Board</div>
-                                        <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'0.125rem' }}>One-time incentive bonuses for specific deals, products, or behaviors</div>
-                                    </div>
-                                    <button onClick={() => setSettings(prev => ({ ...prev, spiffs: [...(prev.spiffs||[]), { id: 'spiff_'+Date.now(), name: '', amount: '', type: 'flat', condition: '', active: true }] }))}
-                                        style={{ padding:'0.3rem 0.75rem', background:'#1c1917', color:'#f5f1eb', border:'none', borderRadius:'6px', fontSize:'0.75rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>+ Add SPIFF</button>
-                                </div>
-                                <div style={{ padding:'1.25rem 1.5rem' }}>
-                                    {(settings.spiffs||[]).length === 0 ? (
-                                        <div style={{ textAlign:'center', padding:'2rem', color:'#94a3b8', fontSize:'0.8125rem', background:'#f8fafc', borderRadius:'8px', border:'1.5px dashed #e2e8f0' }}>
-                                            No SPIFFs defined yet. Click + Add SPIFF to create your first incentive.
-                                        </div>
-                                    ) : (
-                                        <div style={{ display:'flex', flexDirection:'column', gap:'0.625rem' }}>
-                                            {(settings.spiffs||[]).map((spiff, si) => (
-                                                <div key={spiff.id} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'0.75rem 1rem', display:'flex', flexDirection:'column', gap:'0.5rem' }}>
-                                                    <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', flexWrap:'wrap' }}>
-                                                        <input type="text" value={spiff.name} placeholder="SPIFF name (e.g. Q1 New Logo Bonus)"
-                                                            onChange={e => setSettings(prev => ({ ...prev, spiffs: (prev.spiffs||[]).map((s,i) => i===si ? {...s, name: e.target.value} : s) }))}
-                                                            style={{ flex: 2, minWidth:'160px', padding:'0.375rem 0.625rem', border:'1.5px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', background:'#fff', outline:'none' }}
-                                                            onFocus={e=>e.target.style.borderColor='#2563eb'} onBlur={e=>e.target.style.borderColor='#e2e8f0'} />
-                                                        <select value={spiff.type}
-                                                            onChange={e => setSettings(prev => ({ ...prev, spiffs: (prev.spiffs||[]).map((s,i) => i===si ? {...s, type: e.target.value} : s) }))}
-                                                            style={{ padding:'0.375rem 0.5rem', border:'1.5px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', background:'#fff', cursor:'pointer', outline:'none' }}>
-                                                            <option value="flat">Flat $ bonus</option>
-                                                            <option value="pct">% of deal ARR</option>
-                                                            <option value="multiplier">Commission multiplier</option>
-                                                        </select>
-                                                        <input type="number" value={spiff.amount} placeholder={spiff.type==='multiplier'?'e.g. 1.5':spiff.type==='pct'?'e.g. 5':'e.g. 500'}
-                                                            onChange={e => setSettings(prev => ({ ...prev, spiffs: (prev.spiffs||[]).map((s,i) => i===si ? {...s, amount: e.target.value} : s) }))}
-                                                            style={{ width:'90px', padding:'0.375rem 0.5rem', border:'1.5px solid #e2e8f0', borderRadius:'6px', fontSize:'0.8125rem', fontFamily:'inherit', background:'#fff', textAlign:'right', outline:'none' }}
-                                                            onFocus={e=>e.target.style.borderColor='#2563eb'} onBlur={e=>e.target.style.borderColor='#e2e8f0'} />
-                                                        <span style={{ fontSize:'0.75rem', color:'#94a3b8', flexShrink:0 }}>{spiff.type==='flat'?'$':spiff.type==='pct'?'%':'×'}</span>
-                                                        <label style={{ display:'flex', alignItems:'center', gap:'4px', cursor:'pointer', flexShrink:0 }}>
-                                                            <input type="checkbox" checked={!!spiff.active} onChange={e => setSettings(prev => ({ ...prev, spiffs: (prev.spiffs||[]).map((s,i) => i===si ? {...s, active: e.target.checked} : s) }))} style={{ accentColor:'#2563eb' }} />
-                                                            <span style={{ fontSize:'0.75rem', color:'#64748b' }}>Active</span>
-                                                        </label>
-                                                        <button onClick={() => showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`, () => setSettings(prev => ({ ...prev, spiffs: (prev.spiffs||[]).filter((_,i)=>i!==si) })))}
-                                                            style={{ background:'none', border:'none', color:'#ef4444', cursor:'pointer', fontSize:'1rem', padding:'0', lineHeight:1, marginLeft:'auto' }}>×</button>
-                                                    </div>
-                                                    <div style={{ display:'flex', alignItems:'center', gap:'0.375rem' }}>
-                                                        <span style={{ fontSize:'0.6875rem', color:'#94a3b8', flexShrink:0 }}>Condition:</span>
-                                                        <input type="text" value={spiff.condition} placeholder="e.g. New logo deal, Product X included, Deal > $50K..."
-                                                            onChange={e => setSettings(prev => ({ ...prev, spiffs: (prev.spiffs||[]).map((s,i) => i===si ? {...s, condition: e.target.value} : s) }))}
-                                                            style={{ flex:1, padding:'0.3rem 0.625rem', border:'1.5px solid #e2e8f0', borderRadius:'6px', fontSize:'0.75rem', fontFamily:'inherit', background:'#fff', outline:'none' }}
-                                                            onFocus={e=>e.target.style.borderColor='#2563eb'} onBlur={e=>e.target.style.borderColor='#e2e8f0'} />
-                                                    </div>
-                                                    <div style={{ fontSize:'0.6875rem', color:'#2563eb', background:'#eff6ff', padding:'4px 8px', borderRadius:'4px', display:'inline-block' }}>
-                                                        {spiff.type==='flat' ? `Pays $${parseFloat(spiff.amount||0).toLocaleString()} per qualifying deal` : spiff.type==='pct' ? `Pays ${spiff.amount||0}% of deal ARR` : `Multiplies commission by ${spiff.amount||1}×`}
-                                                        {!spiff.active && <span style={{ color:'#94a3b8', marginLeft:'6px' }}>(inactive)</span>}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            </>)} {/* end smSubTab === 'administration' */}
-
-                            {/* ── AI SCORE DASHBOARD ─────────────────────────── */}
-                            {smSubTab === 'performance' && settings?.aiScoringEnabled && (() => {
-                                const activeOpps = opportunities.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
-                                const scoredOpps = activeOpps.filter(o => o.aiScore?.score !== undefined);
-                                if (scoredOpps.length === 0) return null;
-
-                                const fmtMoney = (v) => {
-                                    const n = parseFloat(v) || 0;
-                                    if (n >= 1000000) return '$' + (n/1000000).toFixed(1) + 'M';
-                                    if (n >= 1000)    return '$' + Math.round(n/1000) + 'K';
-                                    return '$' + Math.round(n);
-                                };
-
-                                const scoreByRep = {};
-                                scoredOpps.forEach(o => {
-                                    if (!o.salesRep) return;
-                                    if (!scoreByRep[o.salesRep]) scoreByRep[o.salesRep] = [];
-                                    scoreByRep[o.salesRep].push(o.aiScore.score);
-                                });
-                                const repScores = Object.entries(scoreByRep).map(([rep, scores]) => ({
-                                    rep,
-                                    avg: Math.round(scores.reduce((a,b) => a+b, 0) / scores.length),
-                                    count: scores.length,
-                                    critical: scores.filter(s => s < 25).length,
-                                })).sort((a,b) => a.avg - b.avg);
-
-                                const scoreByStage = {};
-                                scoredOpps.forEach(o => {
-                                    if (!scoreByStage[o.stage]) scoreByStage[o.stage] = [];
-                                    scoreByStage[o.stage].push(o.aiScore.score);
-                                });
-                                const stageScores = Object.entries(scoreByStage).map(([stage, scores]) => ({
-                                    stage,
-                                    avg: Math.round(scores.reduce((a,b) => a+b, 0) / scores.length),
-                                    count: scores.length,
-                                })).sort((a,b) => a.avg - b.avg);
-
-                                const vColor = (s) => s >= 70 ? '#27500A' : s >= 50 ? '#185FA5' : s >= 30 ? '#854F0B' : '#A32D2D';
-                                const vBg    = (s) => s >= 70 ? '#EAF3DE' : s >= 50 ? '#E6F1FB' : s >= 30 ? '#FAEEDA' : '#FCEBEB';
-                                const vBar   = (s) => s >= 70 ? '#639922' : s >= 50 ? '#378ADD' : s >= 30 ? '#BA7517' : '#E24B4A';
-                                const vLabel = (s) => s >= 70 ? 'Strong'  : s >= 50 ? 'On Track': s >= 30 ? 'At Risk' : 'Critical';
-
-                                const overallAvg = Math.round(scoredOpps.reduce((s,o) => s + o.aiScore.score, 0) / scoredOpps.length);
-                                const criticalDeals = scoredOpps.filter(o => o.aiScore.score < 30).sort((a,b) => a.aiScore.score - b.aiScore.score).slice(0, 5);
-
-                                return (
-                                    <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', boxShadow:'0 1px 3px rgba(0,0,0,0.06)', marginBottom:'1.5rem', overflow:'hidden' }}>
-                                        <div style={{ padding:'0.875rem 1.25rem', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                                            <div>
-                                                <div style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#475569', textTransform:'uppercase', letterSpacing:'0.08em' }}>🤖 AI Deal Score Dashboard</div>
-                                                <div style={{ fontSize:'0.75rem', color:'#94a3b8', marginTop:'2px' }}>{scoredOpps.length} of {activeOpps.length} active deals scored</div>
-                                            </div>
-                                            <div style={{ fontSize:'0.75rem', color:'#64748b', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'3px 10px' }}>
-                                                Avg: <strong style={{ color: vColor(overallAvg) }}>{overallAvg}</strong>/100
-                                            </div>
-                                        </div>
-
-                                        <div style={{ padding:'1.25rem', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.25rem' }}>
-                                            {/* By Rep */}
-                                            <div>
-                                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'8px' }}>Avg score by rep</div>
-                                                <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
-                                                    {repScores.map(r => (
-                                                        <div key={r.rep} style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                                                            <div style={{ fontSize:'0.75rem', fontWeight:'600', color:'#1e293b', minWidth:'90px', maxWidth:'90px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.rep}</div>
-                                                            <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
-                                                                <div style={{ height:'100%', width: r.avg + '%', background: vBar(r.avg), borderRadius:'3px', transition:'width 0.4s' }} />
-                                                            </div>
-                                                            <div style={{ fontSize:'0.75rem', fontWeight:'700', color: vColor(r.avg), minWidth:'28px', textAlign:'right' }}>{r.avg}</div>
-                                                            <div style={{ fontSize:'0.6875rem', padding:'1px 6px', borderRadius:'999px', background: vBg(r.avg), color: vColor(r.avg), fontWeight:'600', minWidth:'56px', textAlign:'center' }}>{vLabel(r.avg)}</div>
-                                                            {r.critical > 0 && <div style={{ fontSize:'0.6875rem', color:'#A32D2D', fontWeight:'700' }}>⚠ {r.critical}</div>}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            {/* By Stage */}
-                                            <div>
-                                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'8px' }}>Avg score by stage</div>
-                                                <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
-                                                    {stageScores.map(s => (
-                                                        <div key={s.stage} style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                                                            <div style={{ fontSize:'0.75rem', fontWeight:'600', color:'#1e293b', minWidth:'110px', maxWidth:'110px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.stage}</div>
-                                                            <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
-                                                                <div style={{ height:'100%', width: s.avg + '%', background: vBar(s.avg), borderRadius:'3px', transition:'width 0.4s' }} />
-                                                            </div>
-                                                            <div style={{ fontSize:'0.75rem', fontWeight:'700', color: vColor(s.avg), minWidth:'28px', textAlign:'right' }}>{s.avg}</div>
-                                                            <div style={{ fontSize:'0.6875rem', color:'#94a3b8' }}>{s.count}d</div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Critical deals */}
-                                        {criticalDeals.length > 0 && (
-                                            <div style={{ borderTop:'1px solid #f1f5f9', padding:'0.875rem 1.25rem' }}>
-                                                <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#A32D2D', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'8px' }}>
-                                                    ⚠ Critical deals (score below 30)
-                                                </div>
-                                                <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
-                                                    {criticalDeals.map(o => (
-                                                        <div key={o.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'5px 8px', background:'#FCEBEB', borderRadius:'6px', border:'0.5px solid #F7C1C1' }}>
-                                                            <div style={{ fontSize:'0.8125rem', fontWeight:'800', color:'#A32D2D', minWidth:'24px' }}>{o.aiScore.score}</div>
-                                                            <div style={{ flex:1, minWidth:0 }}>
-                                                                <div style={{ fontSize:'0.8125rem', fontWeight:'600', color:'#1e293b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{o.opportunityName || o.account}</div>
-                                                                <div style={{ fontSize:'0.6875rem', color:'#64748b' }}>{o.salesRep} · {o.stage}</div>
-                                                            </div>
-                                                            <div style={{ fontSize:'0.75rem', fontWeight:'700', color:'#2563eb' }}>{fmtMoney(o.arr)}</div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })()}
-
-                            {/* ── TEAM PIPELINE HEALTH (Performance tab) ── */}
-                            {smSubTab === 'performance' && (
-                                <TeamHealthPanel
-                                    opportunities={opportunities}
-                                    activities={activities}
-                                    tasks={tasks}
-                                    settings={settings}
-                                    currentUser={currentUser}
-                                    userRole={userRole}
-                                    compact={false}
-                                />
-                            )}
-
-                            </>
-                        );
-                    })()}
-
+                        ))}
+                    </div>
                 </div>
-            
+            </div>
+
+            {/* ── Ledger table ── */}
+            <div style={card}>
+                {/* Column headers */}
+                <div style={{ display:'grid', gridTemplateColumns:'180px 80px 80px 100px 90px 90px 70px 80px 70px', alignItems:'center', padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}`, fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
+                    <div>Rep</div><div style={{textAlign:'right'}}>Quota</div><div style={{textAlign:'right'}}>Closed</div>
+                    <div style={{textAlign:'right'}}>Commit</div><div style={{textAlign:'right'}}>Best Case</div>
+                    <div style={{textAlign:'right'}}>Pipeline</div><div style={{textAlign:'center'}}>Attain</div>
+                    <div style={{textAlign:'center'}}>Health</div><div style={{textAlign:'center'}}>Action</div>
+                </div>
+
+                {/* Rep rows */}
+                {repStats.map((rs, i) => {
+                    const isEditing = editingCommit === rs.rep.id;
+                    return (
+                        <div key={rs.rep.id} style={{ display:'grid', gridTemplateColumns:'180px 80px 80px 100px 90px 90px 70px 80px 70px', alignItems:'center', padding:'10px 16px', borderBottom:`1px solid ${T.border}`, background: i%2===0 ? T.surface : T.bg, fontFamily:T.sans, transition:'background 80ms' }}
+                            onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                            onMouseLeave={e => e.currentTarget.style.background=i%2===0 ? T.surface : T.bg}>
+
+                            {/* Rep name */}
+                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                <Avatar name={rs.rep.name} size={26} />
+                                <div>
+                                    <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{rs.rep.name}</div>
+                                    <div style={{ fontSize:10, color:T.inkMuted }}>{rs.rep.territory || rs.rep.team || 'AE'}</div>
+                                </div>
+                            </div>
+
+                            {/* Quota */}
+                            <div style={{ textAlign:'right', fontSize:12, fontWeight:600, color:T.ink }}>{fmtV(rs.quota)}</div>
+
+                            {/* Closed */}
+                            <div style={{ textAlign:'right', fontSize:12, color:T.ok, fontWeight:600 }}>{fmtV(rs.closedArr)}</div>
+
+                            {/* Commit — editable, dashed gold border */}
+                            <div style={{ textAlign:'right' }}>
+                                {isEditing ? (
+                                    <input type="number" defaultValue={rs.commit}
+                                        autoFocus
+                                        onBlur={e => { updateRepField(rs.rep.id,'commit',parseFloat(e.target.value)||0); setEditingCommit(null); }}
+                                        onKeyDown={e => { if (e.key==='Enter'||e.key==='Escape') e.target.blur(); }}
+                                        style={{ width:80, padding:'3px 6px', border:`1.5px dashed ${T.goldInk}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, background:T.surface2, color:T.ink, textAlign:'right', outline:'none' }} />
+                                ) : (
+                                    <span onClick={() => setEditingCommit(rs.rep.id)} style={{ fontSize:12, fontWeight:600, color:T.goldInk, cursor:'text', borderBottom:`1.5px dashed ${T.gold}`, paddingBottom:1 }}>
+                                        {fmtV(rs.commit)}
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Best case */}
+                            <div style={{ textAlign:'right', fontSize:12, color:T.inkMid }}>{fmtV(rs.bestCase)}</div>
+
+                            {/* Pipeline */}
+                            <div style={{ textAlign:'right', fontSize:12, color:T.inkMid }}>{fmtV(rs.pipelineArr)}</div>
+
+                            {/* Attain % + mini bar */}
+                            <div style={{ textAlign:'center' }}>
+                                <div style={{ fontSize:12, fontWeight:700, color:rs.attainPct>=100 ? T.ok : rs.attainPct>=70 ? T.warn : T.danger }}>
+                                    {rs.attainPct !== null ? rs.attainPct+'%' : '—'}
+                                </div>
+                                <div style={{ height:3, background:T.border, borderRadius:2, marginTop:3 }}>
+                                    <div style={{ height:'100%', width:Math.min(rs.attainPct||0,100)+'%', background:rs.attainPct>=100?T.ok:rs.attainPct>=70?T.warn:T.danger, borderRadius:2 }} />
+                                </div>
+                            </div>
+
+                            {/* Health dot + trend */}
+                            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
+                                <div style={{ width:8, height:8, borderRadius:'50%', background:rs.healthColor }} />
+                                <span style={{ fontSize:10, color:rs.trend==='up' ? T.ok : rs.trend==='down' ? T.danger : T.inkMuted }}>
+                                    {rs.trend==='up' ? '↑' : rs.trend==='down' ? '↓' : '–'}
+                                </span>
+                            </div>
+
+                            {/* Coach action */}
+                            <div style={{ textAlign:'center' }}>
+                                <button style={{ fontSize:10, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, fontWeight:600 }}>Coach →</button>
+                            </div>
+                        </div>
+                    );
+                })}
+
+                {/* Team total row */}
+                <div style={{ display:'grid', gridTemplateColumns:'180px 80px 80px 100px 90px 90px 70px 80px 70px', alignItems:'center', padding:'10px 16px', background:T.surface2, borderTop:`2px solid ${T.border}`, fontFamily:T.sans }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:T.ink, textTransform:'uppercase', letterSpacing:0.5 }}>Team Total</div>
+                    <div style={{ textAlign:'right', fontSize:12, fontWeight:700, color:T.ink }}>{fmtV(teamQuota)}</div>
+                    <div style={{ textAlign:'right', fontSize:12, fontWeight:700, color:T.ok }}>{fmtV(teamClosed)}</div>
+                    <div style={{ textAlign:'right', fontSize:12, fontWeight:700, color:T.goldInk }}>{fmtV(teamCommit)}</div>
+                    <div style={{ textAlign:'right', fontSize:12, fontWeight:600, color:T.inkMid }}>{fmtV(teamBest)}</div>
+                    <div style={{ textAlign:'right', fontSize:12, fontWeight:600, color:T.inkMid }}>{fmtV(teamPipe)}</div>
+                    <div style={{ textAlign:'center', fontSize:12, fontWeight:700, color:teamAttain>=100?T.ok:T.inkMid }}>{teamAttain !== null ? teamAttain+'%' : '—'}</div>
+                    <div /><div />
+                </div>
+            </div>
+            </>
+        );
+    };
+
+    // ════════════════════════════════════════════════════════
+    // TEAM TAB
+    // ════════════════════════════════════════════════════════
+    const TeamTab = () => {
+        const onTrack = repStats.filter(r => r.score >= 65).length;
+        const wobbly  = repStats.filter(r => r.score >= 40 && r.score < 65).length;
+        const atRisk  = repStats.filter(r => r.score < 40).length;
+
+        // Recent coaching notes from settings
+        const coachingNotes = (settings.coachingNotes || [])
+            .sort((a,b) => (b.date||'').localeCompare(a.date||''))
+            .slice(0, 5);
+
+        return (
+            <>
+            {/* Summary bar */}
+            <div style={{ display:'flex', alignItems:'center', gap:20, padding:'10px 0', marginBottom:12, fontFamily:T.sans }}>
+                <div style={{ fontSize:13, color:T.inkMid }}>
+                    Commit to date <strong style={{ color:T.ink }}>{fmtV(teamCommit)}</strong> of {fmtV(teamQuota)} · {teamAttain}%
+                </div>
+                <div style={{ display:'flex', gap:12, fontSize:12 }}>
+                    {onTrack>0 && <span style={{ color:T.ok, fontWeight:600 }}>{onTrack} on track</span>}
+                    {wobbly>0  && <span style={{ color:T.warn, fontWeight:600 }}>{wobbly} wobbly</span>}
+                    {atRisk>0  && <span style={{ color:T.danger, fontWeight:600 }}>{atRisk} at risk</span>}
+                </div>
+                <div style={{ marginLeft:'auto' }}>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:11, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}
+                        onClick={() => {
+                            const note = prompt('Add coaching note (rep name: note text):');
+                            if (note) {
+                                const notes = [...(settings.coachingNotes||[]), { id:'cn_'+Date.now(), text:note, date:new Date().toISOString().split('T')[0], author:currentUser }];
+                                setSettings(prev => ({...prev, coachingNotes:notes}));
+                            }
+                        }}>
+                        + Add coaching note
+                    </button>
+                </div>
+            </div>
+
+            {/* Rep cards grid */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:20 }}>
+                {repStats.map(rs => (
+                    <div key={rs.rep.id} style={{ background:T.surface, border:`1px solid ${T.border}`, borderLeft:`3px solid ${rs.healthColor}`, borderRadius:`0 ${T.r+1}px ${T.r+1}px 0`, overflow:'hidden', fontFamily:T.sans }}>
+                        {/* Card header */}
+                        <div style={{ padding:'12px 14px', borderBottom:`1px solid ${T.border}` }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                <Avatar name={rs.rep.name} size={30} />
+                                <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{rs.rep.name}</div>
+                                    <div style={{ fontSize:10, color:T.inkMuted }}>{rs.rep.territory ? 'AE · '+rs.rep.territory : rs.rep.team || 'AE'}</div>
+                                </div>
+                                <span style={{ fontSize:9, fontWeight:700, color:rs.healthColor, letterSpacing:0.5 }}>{rs.healthLabel}</span>
+                            </div>
+
+                            {/* Attainment bar */}
+                            <div style={{ marginTop:10 }}>
+                                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:10, color:T.inkMuted }}>
+                                    <span>Attainment</span>
+                                    <span style={{ fontWeight:700, color:rs.healthColor }}>{rs.attainPct !== null ? rs.attainPct+'%' : '—'}</span>
+                                </div>
+                                <div style={{ height:4, background:T.border, borderRadius:2 }}>
+                                    <div style={{ height:'100%', width:Math.min(rs.attainPct||0,100)+'%', background:rs.healthColor, borderRadius:2, transition:'width 0.4s' }} />
+                                </div>
+                            </div>
+
+                            {/* Closed / Commit / Quota */}
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:4, marginTop:10 }}>
+                                {[
+                                    { v:fmtV(rs.closedArr), l:'closed' },
+                                    { v:fmtV(rs.commit),    l:'commit' },
+                                    { v:fmtV(rs.quota),     l:'quota'  },
+                                ].map(({v,l}) => (
+                                    <div key={l}>
+                                        <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{v}</div>
+                                        <div style={{ fontSize:9, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5 }}>{l}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Stats row */}
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:0 }}>
+                            {[
+                                { v:fmtV(rs.pipelineArr), l:'Pipeline'     },
+                                { v:rs.act7d,              l:'Activity 7D'  },
+                                { v:rs.stuck,              l:'Stuck',
+                                  color:rs.stuck>0?T.danger:undefined       },
+                            ].map(({v,l,color}) => (
+                                <div key={l} style={{ padding:'8px 14px', borderRight:`1px solid ${T.border}` }}>
+                                    <div style={{ fontSize:12, fontWeight:600, color:color||T.ink }}>{v}</div>
+                                    <div style={{ fontSize:9, color:T.inkMuted }}>{l}</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Buttons */}
+                        <div style={{ display:'flex', gap:8, padding:'8px 14px', borderTop:`1px solid ${T.border}` }}>
+                            <button style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:11, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                                Coach
+                            </button>
+                            <button style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:11, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                                Pipeline
+                            </button>
+                            <span style={{ marginLeft:'auto', fontSize:10, color:T.inkMuted, alignSelf:'center' }}>{rs.activeOpps.length} open</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Recent coaching */}
+            {coachingNotes.length > 0 && (
+                <div style={card}>
+                    <div style={{ ...cardHdr }}>
+                        <span style={{ fontSize:14, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, color:T.ink }}>Recent coaching</span>
+                        <button style={{ fontSize:11, color:T.goldInk, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>See all →</button>
+                    </div>
+                    <div style={{ padding:'8px 0' }}>
+                        {coachingNotes.map((n,i) => (
+                            <div key={n.id||i} style={{ display:'flex', gap:12, padding:'10px 16px', borderBottom:i<coachingNotes.length-1?`1px solid ${T.border}`:'none' }}>
+                                <Avatar name={n.rep || n.author || '?'} size={26} />
+                                <div>
+                                    <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{n.rep || n.author}</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:1 }}>{n.date ? new Date(n.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''}</div>
+                                    <div style={{ fontSize:12, color:T.inkMid, marginTop:4, fontStyle:'italic' }}>"{n.text}"</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+            </>
+        );
+    };
+
+    // ════════════════════════════════════════════════════════
+    // PIPELINE AUDIT (Morning Brief)
+    // ════════════════════════════════════════════════════════
+    const AuditTab = () => {
+        const firstName = (currentUser||'').split(' ')[0];
+        const today     = new Date();
+        const dayName   = today.toLocaleDateString('en-US',{weekday:'long'});
+        const dateFmt   = today.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}).toUpperCase();
+
+        // Reps trending down (score < 40)
+        const needsCoaching = repStats.filter(r => r.score < 40);
+
+        // Stuck deals (14+ days no stage change)
+        const stuckDeals = (opportunities||[])
+            .filter(o => !['Closed Won','Closed Lost'].includes(o.stage) && o.stageChangedDate)
+            .map(o => {
+                const days = Math.floor((today - new Date(o.stageChangedDate+'T12:00:00'))/86400000);
+                return { ...o, daysSince:days };
+            })
+            .filter(o => o.daysSince >= 14)
+            .sort((a,b) => b.daysSince - a.daysSince)
+            .slice(0, 8);
+
+        const gapToQuota  = teamQuota - teamCommit;
+        const repsAtRisk  = repStats.filter(r => r.score < 40).length;
+
+        return (
+            <>
+            {/* Morning Brief header */}
+            <div style={{ marginBottom:20 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:1, textTransform:'uppercase', fontFamily:T.sans, marginBottom:4 }}>
+                    {dayName} · {dateFmt} · Morning Brief
+                </div>
+                <div style={{ fontSize:24, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, color:T.ink, lineHeight:1.2, marginBottom:4 }}>
+                    Good morning, {firstName}.{' '}
+                    <span style={{ color:T.inkMid }}>Here's what needs you today.</span>
+                </div>
+            </div>
+
+            {/* 4 KPI tiles */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 }}>
+                {[
+                    { label:'Team Commit',   value:fmtV(teamCommit),  sub:`of ${fmtV(teamQuota)} quota`,    color:T.ink  },
+                    { label:'Gap to Quota',  value:fmtV(gapToQuota),  sub:`${weeksLeft} weeks · ${fmtV(Math.max(gapToQuota/weeksLeft,0))}/wk needed`, color:gapToQuota>0?T.danger:T.ok },
+                    { label:'Reps at Risk',  value:repsAtRisk,         sub:repsAtRisk>0?repStats.filter(r=>r.score<40).map(r=>r.rep.name.split(' ')[0]).join(', '):'All reps on track', color:repsAtRisk>0?T.danger:T.ok },
+                    { label:'Stuck Deals',   value:stuckDeals.length,  sub:stuckDeals.length>0?`${fmtV(stuckDeals.reduce((s,o)=>s+(parseFloat(o.arr)||0),0))} at stake`:'Pipeline flowing well', color:stuckDeals.length>0?T.warn:T.ok },
+                ].map(({label,value,sub,color}) => (
+                    <div key={label} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'12px 14px', fontFamily:T.sans }}>
+                        <div style={{ fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, marginBottom:4 }}>{label}</div>
+                        <div style={{ fontSize:22, fontWeight:700, color }}>{value}</div>
+                        <div style={{ fontSize:10, color:T.inkMuted, marginTop:3 }}>{sub}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Two-column body */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+                {/* LEFT column */}
+                <div>
+                    {/* Needs coaching today */}
+                    <div style={{ ...card }}>
+                        <div style={{ ...cardHdr }}>
+                            <div>
+                                <div style={eyebrow}>Needs Coaching Today</div>
+                                {needsCoaching.length > 0
+                                    ? <div style={{ fontSize:15, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, color:T.ink, marginTop:2 }}>{needsCoaching.length === 1 ? 'One rep trending down' : `${needsCoaching.length} reps trending down`}</div>
+                                    : <div style={{ fontSize:13, color:T.ok, fontWeight:600, marginTop:2 }}>All reps on track ✓</div>
+                                }
+                            </div>
+                        </div>
+                        {needsCoaching.length === 0 ? (
+                            <div style={{ padding:'20px 16px', fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>No reps need attention today.</div>
+                        ) : needsCoaching.map(rs => (
+                            <div key={rs.rep.id} style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}` }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                                    <Avatar name={rs.rep.name} size={26} />
+                                    <div>
+                                        <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{rs.rep.name}</div>
+                                        <div style={{ fontSize:10, color:T.danger }}>
+                                            {rs.attainPct}% to quota · {rs.stuck} stuck deals · {rs.act7d} activities this week
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style={{ display:'flex', gap:6 }}>
+                                    {[{l:'Open coaching'},{l:'Schedule 1:1'},{l:'Their pipeline'}].map(({l}) => (
+                                        <button key={l} style={{ fontSize:10, padding:'3px 8px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>{l}</button>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Stuck deals */}
+                    <div style={card}>
+                        <div style={{ ...cardHdr }}>
+                            <div>
+                                <div style={eyebrow}>Stuck Deals</div>
+                                <div style={{ fontSize:13, color:T.ink, fontWeight:600, marginTop:2 }}>{stuckDeals.length} {stuckDeals.length===1?'opportunity':'opportunities'} aging in stage</div>
+                            </div>
+                        </div>
+                        {stuckDeals.length === 0 ? (
+                            <div style={{ padding:'20px 16px', fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>No stuck deals.</div>
+                        ) : stuckDeals.map((o,i) => (
+                            <div key={o.id} style={{ display:'grid', gridTemplateColumns:'1fr 80px 30px 60px', alignItems:'center', gap:8, padding:'9px 16px', borderBottom:i<stuckDeals.length-1?`1px solid ${T.border}`:'none', fontFamily:T.sans }}>
+                                <div>
+                                    <div style={{ fontSize:12, fontWeight:600, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.opportunityName || o.account}</div>
+                                    <div style={{ fontSize:10, color:T.inkMuted }}>{o.salesRep}</div>
+                                </div>
+                                <div style={{ fontSize:11, color:T.inkMuted }}>{o.stage}</div>
+                                <div style={{ fontSize:11, fontWeight:600, color:T.warn }}>{o.daysSince}d</div>
+                                <div style={{ fontSize:11, fontWeight:600, color:T.ink, textAlign:'right' }}>{fmtV(o.arr)}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* RIGHT column */}
+                <div>
+                    {/* Forecast Rhythm */}
+                    <div style={card}>
+                        <div style={{ ...cardHdr }}>
+                            <div>
+                                <div style={eyebrow}>Forecast Rhythm</div>
+                                <div style={{ fontSize:13, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, color:T.ink, marginTop:2 }}>Team at a glance</div>
+                            </div>
+                        </div>
+                        <div style={{ padding:'8px 0' }}>
+                            {repStats.map((rs,i) => (
+                                <div key={rs.rep.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 16px', borderBottom:i<repStats.length-1?`1px solid ${T.border}`:'none', fontFamily:T.sans }}>
+                                    <div style={{ width:8, height:8, borderRadius:'50%', background:rs.healthColor, flexShrink:0 }} />
+                                    <div style={{ flex:1, fontSize:12, color:T.ink }}>{rs.rep.name}</div>
+                                    <div style={{ flex:2, height:4, background:T.border, borderRadius:2 }}>
+                                        <div style={{ height:'100%', width:Math.min(rs.attainPct||0,100)+'%', background:rs.healthColor, borderRadius:2 }} />
+                                    </div>
+                                    <div style={{ fontSize:11, fontWeight:600, color:rs.healthColor, minWidth:32, textAlign:'right' }}>{rs.attainPct !== null ? rs.attainPct+'%' : '—'}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Wins to celebrate */}
+                    <div style={card}>
+                        <div style={{ ...cardHdr }}>
+                            <div>
+                                <div style={eyebrow}>Wins to Celebrate</div>
+                                <div style={{ fontSize:13, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, color:T.ink, marginTop:2 }}>Team bright spots</div>
+                            </div>
+                        </div>
+                        <div style={{ padding:'8px 0' }}>
+                            {repStats.filter(r => r.score >= 65).slice(0,3).map((rs,i) => (
+                                <div key={rs.rep.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 16px', borderBottom:i<Math.min(repStats.filter(r=>r.score>=65).length,3)-1?`1px solid ${T.border}`:'none', fontFamily:T.sans }}>
+                                    <Avatar name={rs.rep.name} size={28} />
+                                    <div>
+                                        <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{rs.rep.name}</div>
+                                        <div style={{ fontSize:10, color:T.inkMuted }}>
+                                            {fmtV(rs.closedArr)} closed · {rs.act7d} activities · trending up
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            {repStats.filter(r => r.score >= 65).length === 0 && (
+                                <div style={{ padding:'16px', fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>Keep pushing — wins coming soon.</div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </>
+        );
+    };
+
+    // ════════════════════════════════════════════════════════
+    // ADMINISTRATION TAB (unchanged logic, V1 tokens)
+    // ════════════════════════════════════════════════════════
+    const AdminTab = () => {
+        const unassignedReps = isAdmin ? visibleReps.filter(u => !u.territory?.trim()) : [];
+        const visibleTerritories = [...new Set(visibleReps.filter(u=>u.territory?.trim()).map(u=>u.territory.trim()))].sort();
+        const terrFilter = settings.__qbTerrFilter || 'all';
+        const setTerrFilter = v => setSettings(prev => ({...prev, __qbTerrFilter:v}));
+        const filteredReps = isAdmin && terrFilter !== 'all' ? visibleReps.filter(u=>u.territory?.trim()===terrFilter) : visibleReps;
+        const renderTerritories = isAdmin && terrFilter === 'all' ? visibleTerritories : (terrFilter !== 'all' ? [terrFilter] : [...new Set(visibleReps.filter(u=>u.territory).map(u=>u.territory.trim()))].sort());
+        const filteredTotal = filteredReps.reduce((s,u)=>s+getRepTotal(u),0);
+        const terrColors = ['#9c6b4a','#4a6b5a','#3a5a7a','#7a6a48','#9c3a2e'];
+        const terrColorMap = {}; visibleTerritories.forEach((t,i) => { terrColorMap[t] = terrColors[i%terrColors.length]; });
+        const calcCommission = (revenue, quota) => {
+            if (quota<=0||revenue<=0) return 0;
+            let comm = 0;
+            [...((settings.quotaData||{}).commissionTiers||[])].sort((a,b)=>a.minPercent-b.minPercent).forEach(tier => {
+                const mn=(tier.minPercent/100)*quota, mx=tier.maxPercent>=999?Infinity:(tier.maxPercent/100)*quota;
+                if (revenue>mn) comm+=(Math.min(revenue,mx)-mn)*(tier.rate/100);
+            });
+            return comm;
+        };
+        const smCard2 = { ...card };
+        const inputStAdmin = { width:'100%', padding:'0.5rem 0.625rem', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:'0.9375rem', fontWeight:600, fontFamily:T.sans, background:T.surface2, outline:'none', textAlign:'right', boxSizing:'border-box', color:T.ink };
+
+        return (
+            <>
+            {/* Unassigned warning */}
+            {unassignedReps.length > 0 && (
+                <div style={{ background:'rgba(184,115,51,0.1)', border:`1.5px solid ${T.warn}`, borderRadius:T.r+1, padding:'12px 16px', marginBottom:16, display:'flex', alignItems:'center', gap:12, fontFamily:T.sans }}>
+                    <span style={{ fontSize:16 }}>⚠️</span>
+                    <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:700, color:T.warn, fontSize:12 }}>{unassignedReps.length} rep{unassignedReps.length>1?'s have':' has'} no territory: <strong>{unassignedReps.map(u=>u.name).join(', ')}</strong></div>
+                        <div style={{ fontSize:11, color:T.inkMid, marginTop:2 }}>Assign via Settings → Team Builder.</div>
+                    </div>
+                    <button onClick={()=>setActiveTab('settings')} style={{ padding:'4px 10px', background:T.warn, color:'#fff', border:'none', borderRadius:T.r, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>Go to Settings</button>
+                </div>
+            )}
+
+            {/* Quota Board */}
+            <div style={smCard2}>
+                <div style={{ ...cardHdr, flexWrap:'wrap', gap:8 }}>
+                    <div>
+                        <div style={eyebrow}>Assign Quotas</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>${filteredTotal.toLocaleString()} assigned</div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginLeft:'auto' }}>
+                        {isAdmin && visibleTerritories.length > 1 && (
+                            <div style={{ display:'flex', gap:4 }}>
+                                {['all',...visibleTerritories].map(t => (
+                                    <button key={t} onClick={()=>setTerrFilter(t)} style={{ padding:'3px 9px', borderRadius:999, border:`1px solid ${terrFilter===t?T.ink:T.border}`, cursor:'pointer', fontFamily:T.sans, fontSize:10, fontWeight:600, background:terrFilter===t?T.ink:'transparent', color:terrFilter===t?T.surface:T.inkMid, transition:'all 120ms' }}>
+                                        {t==='all'?'All':t}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        <div style={{ display:'flex', background:T.surface2, borderRadius:T.r, padding:2, gap:2 }}>
+                            {['annual','quarterly'].map(t => (
+                                <button key={t} onClick={()=>setAllQuotaMode(t)} style={{ padding:'3px 9px', borderRadius:T.r-1, border:'none', cursor:'pointer', fontFamily:T.sans, fontSize:10, fontWeight:700, background:quotaMode===t?T.surface:'transparent', color:quotaMode===t?T.ink:T.inkMid, boxShadow:quotaMode===t?'0 1px 3px rgba(0,0,0,0.08)':'none' }}>
+                                    {t==='annual'?'Annual':'Quarterly'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Column headers */}
+                <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'6px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}`, fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
+                    <div>Rep</div><div>{quotaMode==='annual'?'Annual Quota':'Total Quota'}</div><div>Attainment</div>
+                </div>
+
+                {visibleReps.length === 0 ? (
+                    <div style={{ padding:'2.5rem', textAlign:'center', color:T.inkMuted, fontSize:12, fontFamily:T.sans }}>No reps configured yet.</div>
+                ) : (
+                    <>
+                    {renderTerritories.map(terr => {
+                        const terrReps = filteredReps.filter(u=>u.territory?.trim()===terr);
+                        if (!terrReps.length) return null;
+                        const dotColor = terrColorMap[terr] || T.inkMuted;
+                        const terrTotal = terrReps.reduce((s,u)=>s+getRepTotal(u),0);
+                        return (
+                            <div key={terr}>
+                                {isAdmin && terrFilter==='all' && (
+                                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'5px 16px', background:dotColor+'18', borderBottom:`1px solid ${dotColor}33`, fontFamily:T.sans }}>
+                                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                            <div style={{ width:3, height:14, borderRadius:1, background:dotColor }} />
+                                            <span style={{ fontSize:9, fontWeight:800, color:dotColor, textTransform:'uppercase', letterSpacing:0.8 }}>{terr}</span>
+                                        </div>
+                                        <span style={{ fontSize:9, color:dotColor }}>{terrReps.length} rep{terrReps.length!==1?'s':''} · ${terrTotal.toLocaleString()}</span>
+                                    </div>
+                                )}
+                                {terrReps.map((u,ui) => {
+                                    const rWon = (opportunities||[]).filter(o=>o.stage==='Closed Won'&&(o.salesRep===u.name||o.assignedTo===u.name)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                                    const quota = getRepTotal(u);
+                                    const attain = quota>0 ? Math.min((rWon/quota)*100,100) : 0;
+                                    const aColor = attain>=100?T.ok:attain>=75?T.warn:attain>=40?T.info:T.inkMuted;
+                                    const initials = (u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+                                    return (
+                                        <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 16px', borderBottom:`1px solid ${T.border}`, alignItems:'center', fontFamily:T.sans }}
+                                            onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                                            onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                                <div style={{ width:28, height:28, borderRadius:'50%', background:dotColor+'44', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:dotColor, flexShrink:0 }}>{initials}</div>
+                                                <div>
+                                                    <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{u.name}</div>
+                                                    <div style={{ fontSize:10, color:T.inkMuted }}>{u.team||u.territory||'—'}</div>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <QuotaRepCard u={u} quotaMode={quotaMode} quarters={quarters} inputSt={{ padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:'0.8125rem', fontFamily:T.sans, background:T.surface2, color:T.ink, width:110, outline:'none' }} updateRepField={updateRepField} compactInput />
+                                            </div>
+                                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                                <div style={{ flex:1, height:5, background:T.surface2, borderRadius:T.r }}>
+                                                    <div style={{ height:'100%', width:attain+'%', background:aColor, borderRadius:T.r }} />
+                                                </div>
+                                                <span style={{ fontSize:11, fontWeight:700, color:aColor, minWidth:36, textAlign:'right' }}>{quota>0?attain.toFixed(1)+'%':'—'}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
+                    {/* Unassigned reps */}
+                    {isAdmin && filteredReps.filter(u=>!u.territory?.trim()).map((u,ui,arr) => {
+                        const rWon=(opportunities||[]).filter(o=>o.stage==='Closed Won'&&(o.salesRep===u.name||o.assignedTo===u.name)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                        const quota=getRepTotal(u), attain=quota>0?Math.min((rWon/quota)*100,100):0;
+                        const aColor=attain>=100?T.ok:attain>=75?T.warn:T.inkMuted;
+                        const initials=(u.name||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+                        return (
+                            <div key={u.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 16px', borderBottom:`1px solid ${T.border}`, alignItems:'center', fontFamily:T.sans }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                    <div style={{ width:28, height:28, borderRadius:'50%', background:T.surface2, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, color:T.inkMuted }}>{initials}</div>
+                                    <div><div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{u.name}</div><div style={{ fontSize:10, color:T.inkMuted }}>No territory</div></div>
+                                </div>
+                                <QuotaRepCard u={u} quotaMode={quotaMode} quarters={quarters} inputSt={{ padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:'0.8125rem', fontFamily:T.sans, background:T.surface2, color:T.ink, width:110, outline:'none' }} updateRepField={updateRepField} compactInput />
+                                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                    <div style={{ flex:1, height:5, background:T.surface2, borderRadius:T.r }}><div style={{ height:'100%', width:attain+'%', background:aColor, borderRadius:T.r }} /></div>
+                                    <span style={{ fontSize:11, fontWeight:700, color:aColor, minWidth:36, textAlign:'right' }}>{quota>0?attain.toFixed(1)+'%':'—'}</span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                    {/* Total */}
+                    {filteredReps.length > 0 && (
+                        <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr', padding:'10px 16px', background:T.surface2, borderTop:`2px solid ${T.border}`, fontFamily:T.sans }}>
+                            <div style={{ fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5 }}>Total Assigned</div>
+                            <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>${filteredTotal.toLocaleString()}</div>
+                            <div />
+                        </div>
+                    )}
+                    </>
+                )}
+            </div>
+
+            {/* Commission Plan + Preview (preserved from original) */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+                <div style={smCard2}>
+                    <div style={cardHdr}>
+                        <div>
+                            <div style={eyebrow}>Commission Plan</div>
+                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>Tiered rates applied to all reps based on quota attainment %</div>
+                        </div>
+                    </div>
+                    <div style={{ padding:'16px 20px' }}>
+                        {((settings.quotaData||{}).commissionTiers||[]).map((tier,idx) => (
+                            <div key={idx} style={{ display:'flex', gap:8, marginBottom:8, alignItems:'center', padding:'8px 10px', background:T.surface2, borderRadius:T.r, border:`1px solid ${T.border}` }}>
+                                {['minPercent','maxPercent','rate'].map((field,fi) => (
+                                    <input key={fi} type="number" value={field==='maxPercent'&&tier.maxPercent>=999?'':tier[field]} placeholder={field==='maxPercent'?'∞':field==='rate'?'%':'%'}
+                                        onChange={e => { const t=[...(settings.quotaData||{}).commissionTiers||[]]; t[idx]={...t[idx],[field]:parseFloat(e.target.value)||(field==='maxPercent'?999:0)}; setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:t}})); }}
+                                        style={{ width:55, padding:'3px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, textAlign:'center', fontFamily:T.sans, background:T.surface, outline:'none', color:T.ink }}
+                                        onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} />
+                                ))}
+                                <span style={{ fontSize:10, color:T.inkMuted, fontWeight:600 }}>% rate</span>
+                                {((settings.quotaData||{}).commissionTiers||[]).length>1 && (
+                                    <button onClick={()=>setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:(prev.quotaData||{}).commissionTiers.filter((_,i)=>i!==idx)}}))} style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, padding:'0', marginLeft:'auto' }}>×</button>
+                                )}
+                            </div>
+                        ))}
+                        <button onClick={()=>setSettings(prev=>({...prev,quotaData:{...prev.quotaData,commissionTiers:[...((prev.quotaData||{}).commissionTiers||[]),{minPercent:0,maxPercent:999,rate:0}]}}))}
+                            style={{ marginTop:4, background:T.surface2, border:`1.5px dashed ${T.border}`, borderRadius:T.r, padding:'6px 12px', cursor:'pointer', fontSize:11, fontWeight:700, color:T.inkMid, fontFamily:T.sans, width:'100%' }}>
+                            + Add Tier
+                        </button>
+                    </div>
+                </div>
+
+                {/* SPIFF Board */}
+                <div style={smCard2}>
+                    <div style={{ ...cardHdr }}>
+                        <div>
+                            <div style={eyebrow}>SPIFF Board</div>
+                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>One-time incentive bonuses</div>
+                        </div>
+                        <button onClick={()=>setSettings(prev=>({...prev,spiffs:[...(prev.spiffs||[]),{id:'spiff_'+Date.now(),name:'',amount:'',type:'flat',condition:'',active:true}]}))}
+                            style={{ padding:'4px 10px', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>+ Add SPIFF</button>
+                    </div>
+                    <div style={{ padding:'12px 16px' }}>
+                        {(settings.spiffs||[]).length === 0
+                            ? <div style={{ textAlign:'center', padding:'1.5rem', color:T.inkMuted, fontSize:11, fontFamily:T.sans }}>No SPIFFs defined yet.</div>
+                            : (settings.spiffs||[]).map((spiff,si) => (
+                                <div key={spiff.id} style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'8px 10px', marginBottom:8 }}>
+                                    <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
+                                        <input type="text" value={spiff.name} placeholder="SPIFF name"
+                                            onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,name:e.target.value}:s)}))}
+                                            style={{ flex:2, minWidth:140, padding:'4px 8px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, outline:'none', color:T.ink }}
+                                            onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} />
+                                        <select value={spiff.type} onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,type:e.target.value}:s)}))}
+                                            style={{ padding:'4px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, cursor:'pointer', outline:'none', color:T.ink }}>
+                                            <option value="flat">Flat $</option><option value="pct">% ARR</option><option value="multiplier">Multiplier</option>
+                                        </select>
+                                        <input type="number" value={spiff.amount} placeholder="0"
+                                            onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,amount:e.target.value}:s)}))}
+                                            style={{ width:70, padding:'4px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, textAlign:'right', outline:'none', color:T.ink }}
+                                            onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} />
+                                        <label style={{ display:'flex', alignItems:'center', gap:3, cursor:'pointer' }}>
+                                            <input type="checkbox" checked={!!spiff.active} onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,active:e.target.checked}:s)}))} />
+                                            <span style={{ fontSize:10, color:T.inkMid, fontFamily:T.sans }}>Active</span>
+                                        </label>
+                                        <button onClick={()=>showConfirm(`Remove SPIFF "${spiff.name||'this SPIFF'}"?`,()=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).filter((_,i)=>i!==si)})))}
+                                            style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:14, marginLeft:'auto' }}>×</button>
+                                    </div>
+                                </div>
+                            ))
+                        }
+                    </div>
+                </div>
+            </div>
+
+            {/* SPIFF Claims */}
+            <div style={smCard2}>
+                <div style={cardHdr}>
+                    <div>
+                        <div style={eyebrow}>SPIFF Claims</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>Review and approve claims submitted by reps</div>
+                    </div>
+                    <div style={{ display:'flex', gap:4 }}>
+                        {['all','pending','approved','rejected','paid'].map(s => (
+                            <button key={s} onClick={()=>setSettings(prev=>({...prev,_spiffClaimFilter:s}))}
+                                style={{ padding:'2px 8px', borderRadius:999, border:'none', cursor:'pointer', fontSize:9, fontWeight:700, fontFamily:T.sans,
+                                    background:(settings._spiffClaimFilter||'pending')===s?T.ink:T.surface2,
+                                    color:(settings._spiffClaimFilter||'pending')===s?T.surface:T.inkMid }}>
+                                {s.charAt(0).toUpperCase()+s.slice(1)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div style={{ padding:'12px 16px' }}>
+                    {(() => {
+                        const filter = settings._spiffClaimFilter||'pending';
+                        const filtered = spiffClaims.filter(c=>filter==='all'||c.status===filter).sort((a,b)=>new Date(b.claimedAt)-new Date(a.claimedAt));
+                        if (!filtered.length) return <div style={{ textAlign:'center', padding:'1.5rem', color:T.inkMuted, fontSize:11, background:T.surface2, borderRadius:T.r, fontFamily:T.sans }}>No {filter==='all'?'':filter} claims.</div>;
+                        return filtered.map((claim,ci) => (
+                            <div key={claim.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:ci<filtered.length-1?`1px solid ${T.border}`:'none', flexWrap:'wrap', fontFamily:T.sans }}>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontWeight:600, fontSize:12, color:T.ink }}>{claim.spiffName}</div>
+                                    <div style={{ fontSize:10, color:T.inkMuted }}>{claim.repName} · {claim.opportunityName} · {new Date(claim.claimedAt).toLocaleDateString()}</div>
+                                </div>
+                                <div style={{ fontWeight:700, color:claim.spiffType==='multiplier'?T.info:T.ok, fontSize:13 }}>
+                                    {claim.spiffType==='multiplier'?`${claim.multiplier}×`:`$${claim.amount.toLocaleString()}`}
+                                </div>
+                                <span style={{ fontSize:9, padding:'2px 7px', borderRadius:999, fontWeight:700,
+                                    background:claim.status==='approved'?T.ok+'22':claim.status==='rejected'?T.danger+'22':claim.status==='paid'?T.info+'22':T.warn+'22',
+                                    color:claim.status==='approved'?T.ok:claim.status==='rejected'?T.danger:claim.status==='paid'?T.info:T.warn }}>
+                                    {claim.status.toUpperCase()}
+                                </span>
+                                {claim.status==='pending' && (
+                                    <div style={{ display:'flex', gap:4 }}>
+                                        <button onClick={async()=>{ const u={...claim,status:'approved',approvedAt:new Date().toISOString(),approvedBy:currentUser}; await dbFetch('/.netlify/functions/spiff-claims',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)}).catch(console.error); setSpiffClaims(prev=>prev.map(c=>c.id===claim.id?u:c)); }}
+                                            style={{ padding:'2px 8px', background:T.ok, color:'#fff', border:'none', borderRadius:T.r, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>✓ Approve</button>
+                                        <button onClick={async()=>{ const u={...claim,status:'rejected',approvedAt:new Date().toISOString(),approvedBy:currentUser}; await dbFetch('/.netlify/functions/spiff-claims',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)}).catch(console.error); setSpiffClaims(prev=>prev.map(c=>c.id===claim.id?u:c)); }}
+                                            style={{ padding:'2px 8px', background:T.danger, color:'#fff', border:'none', borderRadius:T.r, fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>✕ Reject</button>
+                                    </div>
+                                )}
+                            </div>
+                        ));
+                    })()}
+                </div>
+            </div>
+            </>
+        );
+    };
+
+    return (
+        <div className="tab-page" style={{ fontFamily:T.sans }}>
+            {/* Header */}
+            <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:12 }}>
+                <div>
+                    <div style={{ fontSize:28, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, letterSpacing:-0.8, color:T.ink, lineHeight:1, marginBottom:5 }}>Sales Manager</div>
+                    <div style={{ fontSize:12, color:T.inkMuted }}>Team forecast · {qLabel} · {weeksLeft} weeks remaining</div>
+                </div>
+                <div style={{ display:'flex', gap:8 }}>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:12, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>This quarter</button>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:12, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>All reps</button>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.inkMid, fontSize:12, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Export</button>
+                </div>
+            </div>
+
+            <SubTabs />
+
+            {subTab === 'forecast' && <ForecastTab />}
+            {subTab === 'team'     && <TeamTab />}
+            {subTab === 'audit'    && <AuditTab />}
+            {subTab === 'admin'    && <AdminTab />}
+        </div>
     );
 }
