@@ -466,11 +466,23 @@ export default function PipelineTab() {
     };
 
     // ── View definitions: List, Funnel, Kanban, Forecast (no Map) ──
+    // Icons match the screenshots exactly — list/rows, funnel shape, kanban columns, forecast target
+    const ViewIcon = ({ name, active }) => {
+        const c = active ? T.ink : T.inkMuted;
+        const p = { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: c, strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round' };
+        switch (name) {
+            case 'list':     return <svg {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>;
+            case 'funnel':   return <svg {...p}><path d="M4 4h16l-6.5 8v6l-3-1.5V12L4 4z"/></svg>;
+            case 'kanban':   return <svg {...p}><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="4" height="15" rx="1"/></svg>;
+            case 'forecast': return <svg {...p}><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="3" x2="12" y2="1"/></svg>;
+            default: return null;
+        }
+    };
     const views = [
-        { id: 'table',    label: 'List'     },
-        { id: 'funnel',   label: 'Funnel'   },
-        { id: 'kanban',   label: 'Kanban'   },
-        { id: 'forecast', label: 'Forecast' },
+        { id: 'table',    label: 'List',     icon: <ViewIcon name="list"     active={pipelineView === 'table'}    /> },
+        { id: 'funnel',   label: 'Funnel',   icon: <ViewIcon name="funnel"   active={pipelineView === 'funnel'}   /> },
+        { id: 'kanban',   label: 'Kanban',   icon: <ViewIcon name="kanban"   active={pipelineView === 'kanban'}   /> },
+        { id: 'forecast', label: 'Forecast', icon: <ViewIcon name="forecast" active={pipelineView === 'forecast'} /> },
     ];
 
     // ── Chip button helper ────────────────────────────────────
@@ -637,25 +649,34 @@ export default function PipelineTab() {
                 </button>
             </div>
 
-            {/* ── View switcher row ─────────────────────────────── */}
-            <div style={{ padding: '0 0 10px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ display: 'flex', gap: 2, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rSm, padding: 2 }}>
-                    {views.map(v => (
+            {/* ── View switcher row — underline sub-tabs per style guide ── */}
+            <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, marginBottom: 2 }}>
+                {views.map(v => {
+                    const active = pipelineView === v.id;
+                    return (
                         <button key={v.id}
                             onClick={() => { setPipelineView(v.id); setFunnelExpandedStage(null); }}
                             style={{
-                                background: pipelineView === v.id ? T.ink : 'transparent',
-                                color:      pipelineView === v.id ? T.surface : T.inkMid,
-                                border: 'none', padding: '5px 11px',
-                                borderRadius: T.rSm - 1, fontSize: 12, fontWeight: 500,
-                                cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms',
-                            }}>
+                                display: 'inline-flex', alignItems: 'center', gap: 6,
+                                padding: '8px 16px',
+                                border: 'none',
+                                borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent',
+                                background: 'transparent',
+                                color: active ? T.ink : T.inkMuted,
+                                fontSize: 12, fontWeight: active ? 600 : 400,
+                                cursor: 'pointer', fontFamily: T.sans,
+                                transition: 'color 120ms, border-color 120ms',
+                                whiteSpace: 'nowrap', marginBottom: -1,
+                            }}
+                            onMouseEnter={e => { if (!active) e.currentTarget.style.color = T.inkMid; }}
+                            onMouseLeave={e => { if (!active) e.currentTarget.style.color = T.inkMuted; }}>
+                            {v.icon}
                             {v.label}
                         </button>
-                    ))}
-                </div>
+                    );
+                })}
                 <div style={{ flex: 1 }} />
-                <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans, paddingBottom: 4 }}>
                     {pipelineView === 'kanban'
                         ? 'Sorted by urgency · last action'
                         : `Showing ${smartFilteredOpps.length} of ${pipelineFilteredOpps.length}`}

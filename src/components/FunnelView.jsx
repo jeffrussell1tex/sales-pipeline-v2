@@ -98,9 +98,9 @@ function StageRow({ sd, idx, total, prevCount, widthPct, color, expanded, onTogg
             background: expanded ? 'rgba(200,185,154,0.08)' : 'transparent',
             transition: 'background 120ms',
         }}>
-            {/* Main row */}
+            {/* Main row — right value column is fixed 160px so ARR always aligns vertically */}
             <div onClick={onToggle} style={{
-                display: 'grid', gridTemplateColumns: '170px 1fr 260px',
+                display: 'grid', gridTemplateColumns: '170px 1fr 160px',
                 alignItems: 'center', cursor: 'pointer', padding: '4px 0',
             }}>
                 {/* Left: stage label */}
@@ -151,8 +151,8 @@ function StageRow({ sd, idx, total, prevCount, widthPct, color, expanded, onTogg
                     )}
                 </div>
 
-                {/* Right: value + velocity */}
-                <div style={{ paddingRight: 24, textAlign: 'right' }}>
+                {/* Right: value + velocity — fixed column, always right-aligned */}
+                <div style={{ paddingRight: 16, textAlign: 'right' }}>
                     <div style={{ fontSize: 16, fontWeight: 600, color: T.ink, letterSpacing: -0.3, fontFamily: T.sans }}>
                         {fmtARR(sd.value)}
                     </div>
@@ -329,7 +329,7 @@ export default function FunnelView({
     const collapseAll = () => { setExpandedStages({}); setFunnelExpandedStage(null); };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, fontFamily: T.sans, color: T.ink }}>
+        <div style={{ display: 'flex', flexDirection: 'column', fontFamily: T.sans, color: T.ink }}>
 
             {/* ── Page subtitle row (inside funnel view, below view tabs) ── */}
             <div style={{ padding: '0 32px 6px', fontSize: 12, color: T.inkMuted, lineHeight: 1.4 }}>
@@ -349,11 +349,11 @@ export default function FunnelView({
                 </button>
             </div>
 
-            {/* ── Main body: two-column grid (funnel + right rail) ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', alignItems: 'start' }}>
+            {/* ── Main body: flex row — funnel left, stalled panel right, no overlap ── */}
+            <div style={{ display: 'flex', gap: 0, alignItems: 'stretch' }}>
 
-                {/* LEFT: funnel rows + conversion strip */}
-                <div style={{ padding: '20px 0 0', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                {/* LEFT: funnel rows + conversion strip — flex:1 so it takes remaining width */}
+                <div style={{ flex: 1, minWidth: 0, padding: '20px 0 0', display: 'flex', flexDirection: 'column' }}>
                     <div style={{ padding: '0 20px' }}>
                         {stageData.map((sd, i) => (
                             <StageRow
@@ -413,14 +413,13 @@ export default function FunnelView({
                     </div>
                 </div>
 
-                {/* RIGHT: stalled deals rail — sticky so it owns its space, never floats over funnel */}
+                {/* RIGHT: stalled deals rail — fixed width, stretches full height */}
                 <div style={{
+                    width: 260,
+                    flexShrink: 0,
                     borderLeft: `1px solid ${T.border}`,
                     background: T.surface,
                     padding: '20px 18px',
-                    position: 'sticky',
-                    top: 0,
-                    alignSelf: 'start',
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                         <AlertIcon/>
