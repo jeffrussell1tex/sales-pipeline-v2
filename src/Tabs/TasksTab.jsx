@@ -399,10 +399,10 @@ export default function TasksTab() {
         };
 
         return (
-            <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr 180px', gap: 0, background: T.bg, borderRadius: T.r+1, overflow: 'hidden', border: `1px solid ${T.border}` }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr 180px', gap: 12, alignItems: 'start' }}>
 
                 {/* ── LEFT: Unscheduled rail ── */}
-                <div style={{ borderRight: `1px solid ${T.border}`, background: T.surface, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '600px' }}>
                     <div style={{ padding: '12px 14px', borderBottom: `1px solid ${T.border}` }}>
                         <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: T.sans }}>Unscheduled</div>
                         <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2, fontFamily: T.sans }}>Tasks without a specific time. Drag to the timeline to schedule one.</div>
@@ -430,7 +430,7 @@ export default function TasksTab() {
                 </div>
 
                 {/* ── CENTER: Day timeline ── */}
-                <div style={{ display: 'flex', flexDirection: 'column', background: T.surface }}>
+                <div style={{ display: 'flex', flexDirection: 'column', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
                     {/* Day header */}
                     <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 12 }}>
                         <button onClick={() => setCalDayOffset(o => o-1)} style={{ background: 'none', border: `1px solid ${T.border}`, borderRadius: T.r, width: 26, height: 26, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.inkMid }}>
@@ -502,7 +502,7 @@ export default function TasksTab() {
                 </div>
 
                 {/* ── RIGHT: This week rail ── */}
-                <div style={{ borderLeft: `1px solid ${T.border}`, background: T.surface, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                     {/* Sync status */}
                     <div style={{ padding: '12px 14px', borderBottom: `1px solid ${T.border}` }}>
                         {calendarConnected ? (
