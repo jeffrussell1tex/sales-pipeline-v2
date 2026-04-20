@@ -54,7 +54,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
                 const quarterMonths = { Q1: [0,1,2], Q2: [3,4,5], Q3: [6,7,8], Q4: [9,10,11] };
                 const stages = ['Prospecting','Qualified','Demo','Proposal','Negotiation','Closed Won','Closed Lost'];
-                const stageColors = { 'Prospecting':'#6366f1','Qualified':'#8b5cf6','Demo':'#3b82f6','Proposal':'#f59e0b','Negotiation':'#f97316','Closed Won':'#10b981','Closed Lost':'#ef4444' };
+                const stageColors = { 'Prospecting':'#5a4a7a','Qualified':'#5a4a7a','Demo':'#5a7a8a','Proposal':'#b87333','Negotiation':'#b87333','Closed Won':'#4d6b3d','Closed Lost':'#9c3a2e' };
 
                 // Build slice options (only for managers/admins)
                 const excludedRoles = new Set(['Admin', 'Manager']);
@@ -271,10 +271,10 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 });
                 const maxMonthRev = Math.max(...monthlyData.map(m => m.rev), 1);
 
-                const cardStyle = { background: '#fff', borderRadius: '12px', padding: '1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: '1px solid #e2e8f0' };
-                const labelStyle = { fontSize: '0.6875rem', fontWeight: '600', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' };
-                const valueStyle = { fontSize: '1.625rem', fontWeight: '700', color: '#1e293b' };
-                const printBtnStyle = { background: '#1c1917', border: 'none', borderRadius: '6px', padding: '0.25rem 0.625rem', fontSize: '0.6875rem', fontWeight: '600', color: '#f5f1eb', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 };
+                const cardStyle = { background: '#fbf8f3', borderRadius: '4px', padding: '1.25rem', border: '1px solid #e6ddd0' };
+                const labelStyle = { fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', textTransform: 'uppercase', letterSpacing: '0.6', marginBottom: '0.25rem', fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' };
+                const valueStyle = { fontSize: '1.5rem', fontWeight: '700', color: '#2a2622', fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' };
+                const printBtnStyle = { background: '#2a2622', border: 'none', borderRadius: '3px', padding: '0.25rem 0.625rem', fontSize: '0.6875rem', fontWeight: '600', color: '#fbf8f3', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 };
 
                 const printSection = (title, bodyHtml) => {
                     const d = new Date();
@@ -284,15 +284,15 @@ export default function ReportsTab({ leadsEnabled = true }) {
 <style>
   @page { margin: 0.75in; size: letter; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #1e293b; }
-  .hdr { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 12px; border-bottom: 3px solid #2563eb; margin-bottom: 20px; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #2a2622; }
+  .hdr { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 12px; border-bottom: 3px solid #3a5a7a; margin-bottom: 20px; }
   .hdr h1 { font-size: 18px; font-weight: 800; }
-  .hdr .accent { display: inline-block; width: 4px; height: 18px; background: linear-gradient(to bottom,#2563eb,#7c3aed); border-radius: 2px; margin-right: 8px; vertical-align: middle; }
-  .meta { font-size: 9px; color: #94a3b8; text-align: right; line-height: 1.7; }
+  .hdr .accent { display: inline-block; width: 4px; height: 18px; background: linear-gradient(to bottom,#3a5a7a,#5a4a7a); border-radius: 2px; margin-right: 8px; vertical-align: middle; }
+  .meta { font-size: 9px; color: #8a8378; text-align: right; line-height: 1.7; }
   table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  thead th { background: #f8fafc; color: #94a3b8; font-weight: 700; padding: 6px 8px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0; text-align: left; white-space: nowrap; }
-  tbody td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-  .footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 9px; color: #94a3b8; }
+  thead th { background: #fbf8f3; color: #8a8378; font-weight: 700; padding: 6px 8px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e6ddd0; text-align: left; white-space: nowrap; }
+  tbody td { padding: 6px 8px; border-bottom: 1px solid #f5efe3; vertical-align: middle; }
+  .footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #e6ddd0; display: flex; justify-content: space-between; font-size: 9px; color: #8a8378; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
 <div class="hdr"><div><span class="accent"></span><h1>${title}</h1></div><div class="meta">Generated ${meta}<br>Sales Pipeline Tracker &nbsp;·&nbsp; Confidential</div></div>
@@ -313,17 +313,17 @@ ${bodyHtml}
                         return data.map(d => `
                             <div style="margin-bottom:10px;">
                                 <div style="display:flex;justify-content:space-between;margin-bottom:3px;font-size:11px;">
-                                    <span style="color:#475569;font-weight:600;">${d[labelKey]}</span>
-                                    <span style="color:#1e293b;font-weight:700;">$${(d[valueKey]||0).toLocaleString()}</span>
+                                    <span style="color:#5a544c;font-weight:600;">${d[labelKey]}</span>
+                                    <span style="color:#2a2622;font-weight:700;">$${(d[valueKey]||0).toLocaleString()}</span>
                                 </div>
-                                <div style="height:10px;background:#f1f5f9;border-radius:5px;overflow:hidden;">
-                                    <div style="height:100%;width:${Math.round((d[valueKey]||0)/maxVal*100)}%;background:linear-gradient(to right,#2563eb,#7c3aed);border-radius:5px;"></div>
+                                <div style="height:10px;background:#f5efe3;border-radius:5px;overflow:hidden;">
+                                    <div style="height:100%;width:${Math.round((d[valueKey]||0)/maxVal*100)}%;background:linear-gradient(to right,#3a5a7a,#5a4a7a);border-radius:5px;"></div>
                                 </div>
                             </div>`).join('');
                     };
 
                     const stageRows = byStage.map((s, i) => `
-                        <tr style="background:${i%2===0?'#fff':'#f8fafc'}">
+                        <tr style="background:${i%2===0?'#fff':'#fbf8f3'}">
                             <td>${s.stage}</td>
                             <td style="text-align:center;">${s.count}</td>
                             <td style="text-align:right;">$${s.value.toLocaleString()}</td>
@@ -331,14 +331,14 @@ ${bodyHtml}
                         </tr>`).join('');
 
                     const accountRows = topAccounts.map(([name, rev], i) => `
-                        <tr style="background:${i%2===0?'#fff':'#f8fafc'}">
-                            <td style="text-align:center;font-weight:700;color:${i===0?'#f59e0b':i===1?'#94a3b8':i===2?'#d97706':'#475569'}">#${i+1}</td>
+                        <tr style="background:${i%2===0?'#fff':'#fbf8f3'}">
+                            <td style="text-align:center;font-weight:700;color:${i===0?'#b87333':i===1?'#8a8378':i===2?'#b87333':'#5a544c'}">#${i+1}</td>
                             <td>${name}</td>
-                            <td style="text-align:right;font-weight:700;color:#10b981;">$${rev.toLocaleString()}</td>
+                            <td style="text-align:right;font-weight:700;color:#4d6b3d;">$${rev.toLocaleString()}</td>
                         </tr>`).join('');
 
                     const oppRows = reportsOpps.map((o, i) => `
-                        <tr style="background:${i%2===0?'#fff':'#f8fafc'}">
+                        <tr style="background:${i%2===0?'#fff':'#fbf8f3'}">
                             <td>${o.opportunityName || o.account || '—'}</td>
                             <td>${o.account || '—'}</td>
                             <td>${o.stage || '—'}</td>
@@ -353,11 +353,11 @@ ${bodyHtml}
                         const pct = Math.round((m.rev||0)/maxMonthRev*100);
                         return `
                             <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
-                                <div style="font-size:9px;color:#475569;font-weight:700;">${m.rev > 0 ? '$'+Math.round(m.rev/1000)+'K' : ''}</div>
-                                <div style="width:100%;background:#f1f5f9;border-radius:4px;height:80px;display:flex;align-items:flex-end;">
-                                    <div style="width:100%;height:${Math.max(pct,m.rev>0?4:1)}%;background:linear-gradient(to top,#2563eb,#7c3aed);border-radius:4px 4px 0 0;"></div>
+                                <div style="font-size:9px;color:#5a544c;font-weight:700;">${m.rev > 0 ? '$'+Math.round(m.rev/1000)+'K' : ''}</div>
+                                <div style="width:100%;background:#f5efe3;border-radius:4px;height:80px;display:flex;align-items:flex-end;">
+                                    <div style="width:100%;height:${Math.max(pct,m.rev>0?4:1)}%;background:linear-gradient(to top,#3a5a7a,#5a4a7a);border-radius:4px 4px 0 0;"></div>
                                 </div>
-                                <div style="font-size:9px;color:#94a3b8;">${m.label}</div>
+                                <div style="font-size:9px;color:#8a8378;">${m.label}</div>
                             </div>`;
                     }).join('');
 
@@ -369,33 +369,33 @@ ${bodyHtml}
 <style>
   @page { margin: 0.75in; size: letter; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #1e293b; background: #fff; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #2a2622; background: #fff; }
   
-  .report-header { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 14px; border-bottom: 3px solid #2563eb; margin-bottom: 24px; }
-  .report-header h1 { font-size: 22px; font-weight: 800; color: #1e293b; }
-  .report-header .meta { font-size: 10px; color: #94a3b8; text-align: right; line-height: 1.6; }
-  .report-header .accent { display: inline-block; width: 4px; height: 22px; background: linear-gradient(to bottom, #2563eb, #7c3aed); border-radius: 2px; margin-right: 8px; vertical-align: middle; }
+  .report-header { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 14px; border-bottom: 3px solid #3a5a7a; margin-bottom: 24px; }
+  .report-header h1 { font-size: 22px; font-weight: 800; color: #2a2622; }
+  .report-header .meta { font-size: 10px; color: #8a8378; text-align: right; line-height: 1.6; }
+  .report-header .accent { display: inline-block; width: 4px; height: 22px; background: linear-gradient(to bottom, #3a5a7a, #5a4a7a); border-radius: 2px; margin-right: 8px; vertical-align: middle; }
 
   .section { margin-bottom: 28px; page-break-inside: avoid; }
-  .section-title { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; }
+  .section-title { font-size: 9px; font-weight: 700; color: #8a8378; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e6ddd0; }
 
   .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 0; }
-  .kpi-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; }
-  .kpi-label { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
-  .kpi-value { font-size: 20px; font-weight: 800; color: #1e293b; line-height: 1.1; }
-  .kpi-sub { font-size: 9px; color: #64748b; margin-top: 3px; }
+  .kpi-card { background: #fff; border: 1px solid #e6ddd0; border-radius: 8px; padding: 12px 14px; }
+  .kpi-label { font-size: 9px; font-weight: 700; color: #8a8378; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
+  .kpi-value { font-size: 20px; font-weight: 800; color: #2a2622; line-height: 1.1; }
+  .kpi-sub { font-size: 9px; color: #8a8378; margin-top: 3px; }
 
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; }
+  .card { background: #fff; border: 1px solid #e6ddd0; border-radius: 8px; padding: 14px; }
 
   .monthly-chart { display: flex; align-items: flex-end; gap: 6px; height: 90px; margin-top: 8px; }
 
   table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-  thead th { background: #f8fafc; color: #94a3b8; font-weight: 700; text-align: left; padding: 6px 8px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
-  tbody td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  thead th { background: #fbf8f3; color: #8a8378; font-weight: 700; text-align: left; padding: 6px 8px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #e6ddd0; white-space: nowrap; }
+  tbody td { padding: 6px 8px; border-bottom: 1px solid #f5efe3; vertical-align: middle; }
   tbody tr:last-child td { border-bottom: none; }
 
-  .footer { margin-top: 32px; padding-top: 10px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; font-size: 9px; color: #94a3b8; }
+  .footer { margin-top: 32px; padding-top: 10px; border-top: 1px solid #e6ddd0; display: flex; justify-content: space-between; font-size: 9px; color: #8a8378; }
 
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -413,7 +413,7 @@ ${bodyHtml}
 <span class="accent"></span>
 <h1>Sales Pipeline Report</h1>
       </div>
-      <div style="font-size:11px;color:#64748b;margin-top:4px;">Pipeline performance and revenue insights</div>
+      <div style="font-size:11px;color:#8a8378;margin-top:4px;">Pipeline performance and revenue insights</div>
     </div>
     <div class="meta">
       Generated ${printDate} at ${printTime}<br>
@@ -452,7 +452,7 @@ ${bodyHtml}
   <div class="section two-col">
     <div class="card">
       <div class="section-title">Won Revenue by Quarter (${currentYear})</div>
-      ${buildBarChart(revenueByQuarter, 'q', 'rev', () => '#2563eb')}
+      ${buildBarChart(revenueByQuarter, 'q', 'rev', () => '#3a5a7a')}
     </div>
     <div class="card">
       <div class="section-title">Monthly Won Revenue — Last 6 Months</div>
@@ -464,7 +464,7 @@ ${bodyHtml}
   <div class="section two-col">
     <div class="card">
       <div class="section-title">Opportunities by Stage</div>
-      ${byStage.length === 0 ? '<p style="color:#94a3b8;font-size:11px;">No opportunity data.</p>' : `
+      ${byStage.length === 0 ? '<p style="color:#8a8378;font-size:11px;">No opportunity data.</p>' : `
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
 <table>
 <thead><tr><th>Stage</th><th style="text-align:center;">Count</th><th style="text-align:right;">Value</th><th style="text-align:right;">Share</th></tr></thead>
@@ -474,7 +474,7 @@ ${bodyHtml}
     </div>
     <div class="card">
       <div class="section-title">Top Accounts by Won Revenue</div>
-      ${topAccounts.length === 0 ? '<p style="color:#94a3b8;font-size:11px;">No closed won data yet.</p>' : `
+      ${topAccounts.length === 0 ? '<p style="color:#8a8378;font-size:11px;">No closed won data yet.</p>' : `
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
 <table>
 <thead><tr><th style="text-align:center;">#</th><th>Account</th><th style="text-align:right;">Won Revenue</th></tr></thead>
@@ -496,7 +496,7 @@ ${bodyHtml}
   <th style="text-align:right;">Total Value</th><th>Close Date</th><th>Owner</th>
 </tr>
       </thead>
-      <tbody>${oppRows || '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:16px;">No opportunities found.</td></tr>'}</tbody>
+      <tbody>${oppRows || '<tr><td colspan="8" style="text-align:center;color:#8a8378;padding:16px;">No opportunities found.</td></tr>'}</tbody>
     </table>
 </div>
   </div>
@@ -519,29 +519,29 @@ ${bodyHtml}
                     const d = new Date();
                     const meta = d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + ' at ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
                     const win2 = window.open('', '_blank', 'width=820,height=600');
-                    win2.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>body{font-family:system-ui,sans-serif;padding:2rem;color:#1e293b}h1{font-size:1.125rem;font-weight:800;margin-bottom:0.25rem}.meta{font-size:0.75rem;color:#94a3b8;margin-bottom:1.5rem}table{width:100%;border-collapse:collapse;font-size:0.875rem}th{background:#f8fafc;color:#94a3b8;font-weight:700;padding:6px 10px;font-size:0.75rem;text-transform:uppercase;border-bottom:2px solid #e2e8f0;text-align:left}td{padding:6px 10px;border-bottom:1px solid #f1f5f9}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><h1>${title}</h1><div class="meta">Generated ${meta} · Sales Pipeline Tracker</div>${contentFn()}</body></html>`);
+                    win2.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>body{font-family:system-ui,sans-serif;padding:2rem;color:#2a2622}h1{font-size:1.125rem;font-weight:800;margin-bottom:0.25rem}.meta{font-size:0.75rem;color:#8a8378;margin-bottom:1.5rem}table{width:100%;border-collapse:collapse;font-size:0.875rem}th{background:#fbf8f3;color:#8a8378;font-weight:700;padding:6px 10px;font-size:0.75rem;text-transform:uppercase;border-bottom:2px solid #e6ddd0;text-align:left}td{padding:6px 10px;border-bottom:1px solid #f5efe3}@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body><h1>${title}</h1><div class="meta">Generated ${meta} · Sales Pipeline Tracker</div>${contentFn()}</body></html>`);
                     win2.document.close();
                     setTimeout(() => win2.print(), 500);
                 };
 
                 const ReportBtn = ({ title, contentFn }) => (
                     <button onClick={() => generateReport(title, contentFn)}
-                        style={{ display:'flex', alignItems:'center', gap:'0.3rem', padding:'0.25rem 0.625rem', background:'#1c1917', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'0.6875rem', fontWeight:'600', color:'#f5f1eb', fontFamily:'inherit', whiteSpace:'nowrap', flexShrink:0 }}>🖨️ Print</button>
+                        style={{ display:'flex', alignItems:'center', gap:'0.3rem', padding:'0.25rem 0.625rem', background:'#2a2622', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'0.6875rem', fontWeight:'600', color:'#fbf8f3', fontFamily:'inherit', whiteSpace:'nowrap', flexShrink:0 }}>🖨️ Print</button>
                 );
 
                 return (
                     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
-                        {/* ── Row 1: Title — matches Sales Manager tab-page-header style ── */}
-                        <div className="tab-page-header">
-                            <div className="tab-page-header-bar"></div>
+                        {/* ── Page header — V1 serif italic pattern ── */}
+                        <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:12, fontFamily:'"Plus Jakarta Sans", system-ui, sans-serif' }}>
                             <div>
-                                <h2>Reports</h2>
+                                <div style={{ fontSize:28, fontFamily:'Georgia, serif', fontStyle:'italic', fontWeight:300, letterSpacing:-0.8, color:'#2a2622', lineHeight:1, marginBottom:5 }}>Reports</div>
+                                <div style={{ fontSize:12, color:'#8a8378' }}>Pipeline performance and revenue insights</div>
                             </div>
                         </div>
 
                         {/* ── Sub-tab nav — Pipeline / Performance / Revenue / etc. ── */}
-                        <div style={{ display:'flex', borderBottom:'1px solid #e2e8f0', overflowX:'auto', marginBottom:'0' }}>
+                        <div style={{ display:'flex', borderBottom:'1px solid #e6ddd0', overflowX:'auto', marginBottom:'0' }}>
                             {[
                               { key:'pipeline',    label:'Pipeline' },
                               { key:'performance', label:'Performance' },
@@ -554,11 +554,11 @@ ${bodyHtml}
                               <button key={key} onClick={() => setReportSubTab(key)} style={{
                                 padding: '0.5rem 1.25rem',
                                 border: 'none',
-                                borderBottom: reportSubTab === key ? '2px solid #2563eb' : '2px solid transparent',
+                                borderBottom: reportSubTab === key ? '2px solid #2a2622' : '2px solid transparent',
                                 background: 'transparent',
-                                color: reportSubTab === key ? '#2563eb' : '#64748b',
-                                fontWeight: reportSubTab === key ? '700' : '500',
-                                fontSize: '0.875rem',
+                                color: reportSubTab === key ? '#2a2622' : '#8a8378',
+                                fontWeight: reportSubTab === key ? '600' : '400',
+                                fontSize: '0.8125rem',
                                 cursor: 'pointer',
                                 fontFamily: 'inherit',
                                 transition: 'all 0.15s',
@@ -569,44 +569,44 @@ ${bodyHtml}
 
                         {/* ── Row 2: Viewing + Period filters (left) + Export PDF (right) ── */}
                         <div className="table-container" style={{ marginTop: '0.75rem' }}>
-                          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.625rem 1.25rem', borderBottom:'1px solid #e2e8f0', flexWrap:'wrap', gap:'0.5rem' }}>
+                          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.625rem 1.25rem', borderBottom:'1px solid #e6ddd0', flexWrap:'wrap', gap:'0.5rem' }}>
 
                             {/* Left side: Viewing slice + Period filter */}
                             <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', flexWrap:'wrap' }}>
                               {hasReportsSlicing && (
                                 <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap' }}>
-                                  <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em' }}>Viewing:</span>
+                                  <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.05em' }}>Viewing:</span>
                                   {rAllReps.length > 1 && <SliceDropdown label="Rep" icon="👤" options={rAllReps} selected={reportsRep} onSelect={v => { setReportsRep(v); if(v){setReportsTeam(null);setReportsTerritory(null);} }} />}
                                   {rAllTeams.length > 0 && <SliceDropdown label="Team" icon="👥" options={rAllTeams} selected={reportsTeam} onSelect={v => { setReportsTeam(v); if(v){setReportsRep(null);setReportsTerritory(null);} }} />}
                                   {rAllTerritories.length > 0 && <SliceDropdown label="Territory" icon="📍" options={rAllTerritories} selected={reportsTerritory} onSelect={v => { setReportsTerritory(v); if(v){setReportsRep(null);setReportsTeam(null);} }} />}
                                   {(reportsRep || reportsTeam || reportsTerritory) && (
                                     <button onClick={() => { setReportsRep(null); setReportsTeam(null); setReportsTerritory(null); }}
-                                      style={{ padding:'0.2rem 0.5rem', borderRadius:'4px', border:'1px solid #e2e8f0', background:'#fff', color:'#94a3b8', fontSize:'0.625rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>✕ Clear</button>
+                                      style={{ padding:'0.2rem 0.5rem', borderRadius:'4px', border:'1px solid #e6ddd0', background:'#fbf8f3', color:'#8a8378', fontSize:'0.625rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>✕ Clear</button>
                                   )}
-                                  <div style={{ width:'1px', height:'16px', background:'#e2e8f0', flexShrink:0 }} />
+                                  <div style={{ width:'1px', height:'16px', background:'#e6ddd0', flexShrink:0 }} />
                                 </div>
                               )}
                               {/* Period filter */}
                               <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap' }}>
-                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Period:</span>
+                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Period:</span>
                                 {(() => { const now = new Date(); const fy = now.getFullYear(); return (
                                 <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
                                     {['FY','Q1','Q2','Q3','Q4','all','custom'].map(p => (
                                         <button key={p} onClick={() => setReportTimePeriod(p)}
                                             style={{ padding:'3px 12px', borderRadius:'999px', border:'1px solid', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'600', transition:'all 0.15s',
-                                                background: reportTimePeriod === p ? '#2563eb' : '#f8fafc',
-                                                color:      reportTimePeriod === p ? '#fff' : '#475569',
-                                                borderColor: reportTimePeriod === p ? '#2563eb' : '#e2e8f0' }}>
+                                                background: reportTimePeriod === p ? '#3a5a7a' : '#fbf8f3',
+                                                color:      reportTimePeriod === p ? '#fff' : '#5a544c',
+                                                borderColor: reportTimePeriod === p ? '#3a5a7a' : '#e6ddd0' }}>
                                             {p === 'all' ? 'All Time' : p === 'FY' ? `FY ${fy}` : p === 'custom' ? 'Custom' : p}
                                         </button>
                                     ))}
                                     {reportTimePeriod === 'custom' && (
                                         <div style={{ display:'flex', alignItems:'center', gap:'0.375rem' }}>
                                             <input type="date" value={reportDateFrom} onChange={e => setReportDateFrom(e.target.value)}
-                                                style={{ padding:'3px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.6875rem', fontFamily:'inherit', color:'#1e293b' }} />
-                                            <span style={{ fontSize:'0.6875rem', color:'#94a3b8' }}>to</span>
+                                                style={{ padding:'3px 8px', border:'1px solid #e6ddd0', borderRadius:'6px', fontSize:'0.6875rem', fontFamily:'inherit', color:'#2a2622' }} />
+                                            <span style={{ fontSize:'0.6875rem', color:'#8a8378' }}>to</span>
                                             <input type="date" value={reportDateTo} onChange={e => setReportDateTo(e.target.value)}
-                                                style={{ padding:'3px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'0.6875rem', fontFamily:'inherit', color:'#1e293b' }} />
+                                                style={{ padding:'3px 8px', border:'1px solid #e6ddd0', borderRadius:'6px', fontSize:'0.6875rem', fontFamily:'inherit', color:'#2a2622' }} />
                                         </div>
                                     )}
                                 </div>
@@ -619,7 +619,7 @@ ${bodyHtml}
                               {reportSubTab === 'custom' && (
                                 <button
                                   onClick={() => document.dispatchEvent(new CustomEvent('accelerep:openCustomize'))}
-                                  style={{ display:'flex', alignItems:'center', gap:'0.375rem', padding:'0.3rem 0.875rem', border:'none', borderRadius:'6px', background:'#1c1917', color:'#f5f1eb', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}
+                                  style={{ display:'flex', alignItems:'center', gap:'0.375rem', padding:'0.3rem 0.875rem', border:'none', borderRadius:'6px', background:'#2a2622', color:'#fbf8f3', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}
                                 >
                                   ⚙️ Customize
                                 </button>
@@ -631,9 +631,9 @@ ${bodyHtml}
                                 const el=document.querySelector('[data-rpt]');
                                 const body=el?el.innerHTML:'<p>Could not capture report.</p>';
                                 const d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
-                                win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Accelerep — '+lbl+'</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#1e293b}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #2563eb;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#94a3b8}button,select{display:none!important}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#f8fafc;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0}td{padding:6px 10px;border-bottom:1px solid #f1f5f9}</style></head><body><div class="hdr"><h1>Accelerep — '+lbl+'</h1><div class="meta">'+d+'</div></div>'+body+'<scr'+'ipt>window.onload=function(){window.print()}<\/script></body></html>');
+                                win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Accelerep — '+lbl+'</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#2a2622}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #3a5a7a;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#8a8378}button,select{display:none!important}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#fbf8f3;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#8a8378;border-bottom:2px solid #e6ddd0}td{padding:6px 10px;border-bottom:1px solid #f5efe3}</style></head><body><div class="hdr"><h1>Accelerep — '+lbl+'</h1><div class="meta">'+d+'</div></div>'+body+'<scr'+'ipt>window.onload=function(){window.print()}<\/script></body></html>');
                                 win.document.close();
-                              }} style={{fontSize:'0.75rem',padding:'0.3rem 0.875rem',border:'none',borderRadius:'6px',background:'#1c1917',color:'#f5f1eb',cursor:'pointer',fontFamily:'inherit',fontWeight:'600'}}>
+                              }} style={{fontSize:'0.75rem',padding:'0.3rem 0.875rem',border:'none',borderRadius:'6px',background:'#2a2622',color:'#fbf8f3',cursor:'pointer',fontFamily:'inherit',fontWeight:'600'}}>
                                 &#128424; Export PDF
                               </button>
                             </div>
@@ -729,26 +729,26 @@ ${bodyHtml}
                                 <div className="kpi-card accent-green" style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.625rem 1.25rem' }}>
                                     <div style={labelStyle}>Won Revenue</div>
                                     <div style={valueStyle}>{'$'+totalWonRevenue.toLocaleString()}</div>
-                                    <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.125rem' }}>{wonOpps.length} deals</div>
-                                    {sparkSvg(monthBuckets.map(b => b.wonRev), '#16a34a')}
+                                    <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.125rem' }}>{wonOpps.length} deals</div>
+                                    {sparkSvg(monthBuckets.map(b => b.wonRev), '#4d6b3d')}
                                 </div>
                                 <div className="kpi-card accent-blue" style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.625rem 1.25rem' }}>
                                     <div style={labelStyle}>Pipeline Value</div>
                                     <div style={valueStyle}>{'$'+totalPipelineValue.toLocaleString()}</div>
-                                    <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.125rem' }}>{openOpps.length} open</div>
-                                    {sparkSvg(monthBuckets.map(b => b.pipelineVal), '#2563eb')}
+                                    <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.125rem' }}>{openOpps.length} open</div>
+                                    {sparkSvg(monthBuckets.map(b => b.pipelineVal), '#3a5a7a')}
                                 </div>
                                 <div className="kpi-card accent-purple" style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.625rem 1.25rem' }}>
                                     <div style={labelStyle}>Win Rate</div>
                                     <div style={valueStyle}>{winRate.toFixed(1)+'%'}</div>
-                                    <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.125rem' }}>{wonOpps.length} won / {lostOpps.length} lost</div>
-                                    {sparkSvg(monthBuckets.map(b => b.wr), '#9333ea')}
+                                    <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.125rem' }}>{wonOpps.length} won / {lostOpps.length} lost</div>
+                                    {sparkSvg(monthBuckets.map(b => b.wr), '#5a4a7a')}
                                 </div>
                                 <div className="kpi-card accent-amber" style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.625rem 1.25rem' }}>
                                     <div style={labelStyle}>Avg Deal Size</div>
                                     <div style={valueStyle}>{'$'+Math.round(avgDealSize).toLocaleString()}</div>
-                                    <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.125rem' }}>closed won</div>
-                                    {sparkSvg(monthBuckets.map(b => b.avg), '#f59e0b')}
+                                    <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.125rem' }}>closed won</div>
+                                    {sparkSvg(monthBuckets.map(b => b.avg), '#b87333')}
                                 </div>
                             </div>
                             );
@@ -805,19 +805,19 @@ ${bodyHtml}
                             },0);
                             const attainPct = totalQuota > 0 ? (closedWonValue/totalQuota*100) : 0;
                             const estPct    = totalQuota > 0 ? ((closedWonValue+totalWeightedValue)/totalQuota*100) : 0;
-                            const barColor  = attainPct>=100?'#10b981':attainPct>=75?'#f59e0b':'#ef4444';
+                            const barColor  = attainPct>=100?'#4d6b3d':attainPct>=75?'#b87333':'#9c3a2e';
                             return (
                             <div style={cardStyle}>
-                              <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b', marginBottom:'1rem' }}>🎯 Quota Attainment</div>
-                              {totalQuota === 0 ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem' }}>No quota set. Configure your quota in Settings.</div> : (
+                              <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622', marginBottom:'1rem' }}>🎯 Quota Attainment</div>
+                              {totalQuota === 0 ? <div style={{ color:'#8a8378', fontSize:'0.8125rem' }}>No quota set. Configure your quota in Settings.</div> : (
                               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:'1rem' }}>
                                 {[
-                                  { label:'Annual Quota',       value:'$'+totalQuota.toLocaleString(),              color:'#1e293b' },
-                                  { label:'Closed Won',         value:'$'+closedWonValue.toLocaleString(),           color:'#10b981' },
+                                  { label:'Annual Quota',       value:'$'+totalQuota.toLocaleString(),              color:'#2a2622' },
+                                  { label:'Closed Won',         value:'$'+closedWonValue.toLocaleString(),           color:'#4d6b3d' },
                                   { label:'Attainment',         value:attainPct.toFixed(1)+'%',                      color:barColor },
-                                  { label:'Est. w/ Weighted',   value:estPct.toFixed(1)+'%',                         color:'#6366f1' },
+                                  { label:'Est. w/ Weighted',   value:estPct.toFixed(1)+'%',                         color:'#5a4a7a' },
                                 ].map(k=>(
-                                  <div key={k.label} style={{ background:'#f8fafc', borderRadius:'8px', padding:'0.75rem 1rem', border:'1px solid #e2e8f0' }}>
+                                  <div key={k.label} style={{ background:'#fbf8f3', borderRadius:'8px', padding:'0.75rem 1rem', border:'1px solid #e6ddd0' }}>
                                     <div style={labelStyle}>{k.label}</div>
                                     <div style={{ fontSize:'1.5rem', fontWeight:'800', color:k.color }}>{k.value}</div>
                                   </div>
@@ -827,14 +827,14 @@ ${bodyHtml}
                               {totalQuota > 0 && (
                                 <div style={{ marginTop:'1rem' }}>
                                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.375rem' }}>
-                                    <span style={{ fontSize:'0.75rem', color:'#64748b' }}>Attainment Progress</span>
+                                    <span style={{ fontSize:'0.75rem', color:'#8a8378' }}>Attainment Progress</span>
                                     <span style={{ fontSize:'0.75rem', fontWeight:'700', color:barColor }}>{attainPct.toFixed(1)}%</span>
                                   </div>
-                                  <div style={{ height:'12px', background:'#e2e8f0', borderRadius:'6px', overflow:'hidden', position:'relative' }}>
+                                  <div style={{ height:'12px', background:'#e6ddd0', borderRadius:'6px', overflow:'hidden', position:'relative' }}>
                                     <div style={{ height:'100%', width:Math.min(attainPct,100)+'%', background:barColor, borderRadius:'6px', transition:'width 0.5s ease' }}/>
-                                    {estPct > attainPct && <div style={{ position:'absolute', top:0, left:Math.min(attainPct,100)+'%', height:'100%', width:Math.min(estPct-attainPct,100-attainPct)+'%', background:'#6366f120', borderRadius:'0 6px 6px 0' }}/>}
+                                    {estPct > attainPct && <div style={{ position:'absolute', top:0, left:Math.min(attainPct,100)+'%', height:'100%', width:Math.min(estPct-attainPct,100-attainPct)+'%', background:'#5a4a7a20', borderRadius:'0 6px 6px 0' }}/>}
                                   </div>
-                                  <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.375rem' }}>Weighted pipeline adds {(estPct-attainPct).toFixed(1)}% estimated attainment</div>
+                                  <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.375rem' }}>Weighted pipeline adds {(estPct-attainPct).toFixed(1)}% estimated attainment</div>
                                 </div>
                               )}
                             </div>
@@ -862,23 +862,23 @@ ${bodyHtml}
                             const maxRepAvg = Math.max(...repVelocity.map(r=>r.avg),1);
                             return (
                             <div style={cardStyle}>
-                              <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b', marginBottom:'1rem' }}>⚡ Sales Velocity</div>
-                              {avgDays === null ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem' }}>No closed won deals with creation dates yet.</div> : (
+                              <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622', marginBottom:'1rem' }}>⚡ Sales Velocity</div>
+                              {avgDays === null ? <div style={{ color:'#8a8378', fontSize:'0.8125rem' }}>No closed won deals with creation dates yet.</div> : (
                               <div style={{ display:'grid', gridTemplateColumns: repVelocity.length >= 2 ? '1fr 1fr' : '1fr', gap:'1.25rem' }}>
                                 <div>
                                   <div style={labelStyle}>Avg Days to Close</div>
-                                  <div style={{ fontSize:'2rem', fontWeight:'800', color:'#1e293b', marginBottom:'1rem' }}>{avgDays} <span style={{ fontSize:'1rem', color:'#64748b', fontWeight:'500' }}>days</span></div>
+                                  <div style={{ fontSize:'2rem', fontWeight:'800', color:'#2a2622', marginBottom:'1rem' }}>{avgDays} <span style={{ fontSize:'1rem', color:'#8a8378', fontWeight:'500' }}>days</span></div>
                                   {stageVelocity.length > 0 && <>
                                     <div style={labelStyle}>Avg Days by Stage</div>
                                     {stageVelocity.map(({stage,avg})=>{
                                       const maxAvg = Math.max(...stageVelocity.map(s=>s.avg),1);
                                       return <div key={stage} style={{ marginBottom:'0.5rem' }}>
                                         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.2rem' }}>
-                                          <span style={{ fontSize:'0.75rem', color:'#475569' }}>{stage}</span>
-                                          <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#1e293b' }}>{avg}d</span>
+                                          <span style={{ fontSize:'0.75rem', color:'#5a544c' }}>{stage}</span>
+                                          <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#2a2622' }}>{avg}d</span>
                                         </div>
-                                        <div style={{ height:'5px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
-                                          <div style={{ height:'100%', width:(avg/maxAvg*100)+'%', background:'linear-gradient(to right,#6366f1,#8b5cf6)', borderRadius:'3px' }}/>
+                                        <div style={{ height:'5px', background:'#f5efe3', borderRadius:'3px', overflow:'hidden' }}>
+                                          <div style={{ height:'100%', width:(avg/maxAvg*100)+'%', background:'linear-gradient(to right,#5a4a7a,#5a4a7a)', borderRadius:'3px' }}/>
                                         </div>
                                       </div>;
                                     })}
@@ -890,11 +890,11 @@ ${bodyHtml}
                                   {repVelocity.map(({rep,avg,count,wonRev})=>(
                                     <div key={rep} style={{ marginBottom:'0.625rem' }}>
                                       <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.2rem' }}>
-                                        <span style={{ fontSize:'0.75rem', fontWeight:'600', color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'130px' }}>{rep}</span>
-                                        <span style={{ fontSize:'0.75rem', color:'#94a3b8' }}>{avg}d · {count} deals</span>
+                                        <span style={{ fontSize:'0.75rem', fontWeight:'600', color:'#5a544c', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'130px' }}>{rep}</span>
+                                        <span style={{ fontSize:'0.75rem', color:'#8a8378' }}>{avg}d · {count} deals</span>
                                       </div>
-                                      <div style={{ height:'5px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
-                                        <div style={{ height:'100%', width:(avg/maxRepAvg*100)+'%', background:'linear-gradient(to right,#2563eb,#7c3aed)', borderRadius:'3px' }}/>
+                                      <div style={{ height:'5px', background:'#f5efe3', borderRadius:'3px', overflow:'hidden' }}>
+                                        <div style={{ height:'100%', width:(avg/maxRepAvg*100)+'%', background:'linear-gradient(to right,#3a5a7a,#5a4a7a)', borderRadius:'3px' }}/>
                                       </div>
                                     </div>
                                   ))}
@@ -921,21 +921,21 @@ ${bodyHtml}
                             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem' }}>
                               {/* Win Rate card */}
                               <div style={cardStyle}>
-                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b', marginBottom:'1rem' }}>🏆 Win Rate</div>
+                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622', marginBottom:'1rem' }}>🏆 Win Rate</div>
                                 <div style={{ display:'flex', alignItems:'center', gap:'1.5rem', marginBottom:'1rem' }}>
                                   <div style={{ textAlign:'center' }}>
-                                    <div style={{ fontSize:'2.5rem', fontWeight:'900', color: wRate>=50?'#10b981':wRate>=30?'#f59e0b':'#ef4444' }}>{wRate.toFixed(0)}%</div>
-                                    <div style={{ fontSize:'0.6875rem', color:'#94a3b8' }}>win rate</div>
+                                    <div style={{ fontSize:'2.5rem', fontWeight:'900', color: wRate>=50?'#4d6b3d':wRate>=30?'#b87333':'#9c3a2e' }}>{wRate.toFixed(0)}%</div>
+                                    <div style={{ fontSize:'0.6875rem', color:'#8a8378' }}>win rate</div>
                                   </div>
                                   <div style={{ flex:1 }}>
                                     <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.25rem' }}>
-                                      <span style={{ fontSize:'0.75rem', color:'#10b981', fontWeight:'600' }}>Won: {wonOpps.length}</span>
-                                      <span style={{ fontSize:'0.75rem', color:'#ef4444', fontWeight:'600' }}>Lost: {lostOpps.length}</span>
+                                      <span style={{ fontSize:'0.75rem', color:'#4d6b3d', fontWeight:'600' }}>Won: {wonOpps.length}</span>
+                                      <span style={{ fontSize:'0.75rem', color:'#9c3a2e', fontWeight:'600' }}>Lost: {lostOpps.length}</span>
                                     </div>
-                                    <div style={{ height:'10px', background:'#fee2e2', borderRadius:'5px', overflow:'hidden' }}>
-                                      <div style={{ height:'100%', width:wRate+'%', background:'#10b981', borderRadius:'5px' }}/>
+                                    <div style={{ height:'10px', background:'rgba(156,58,46,0.08)', borderRadius:'5px', overflow:'hidden' }}>
+                                      <div style={{ height:'100%', width:wRate+'%', background:'#4d6b3d', borderRadius:'5px' }}/>
                                     </div>
-                                    <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.375rem' }}>
+                                    <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.375rem' }}>
                                       Avg won deal: ${wonOpps.length>0?Math.round(wonOpps.reduce((s,o)=>s+(o.arr||0),0)/wonOpps.length).toLocaleString():'—'}
                                     </div>
                                   </div>
@@ -943,17 +943,17 @@ ${bodyHtml}
                               </div>
                               {/* Loss Analysis card */}
                               <div style={cardStyle}>
-                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b', marginBottom:'1rem' }}>📉 Loss Analysis</div>
-                                {lostOpps.length === 0 ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem' }}>No closed lost opportunities yet.</div> : <>
-                                  <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginBottom:'0.75rem' }}>{lostOpps.length} deals lost · ${lostARR.toLocaleString()} ARR</div>
+                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622', marginBottom:'1rem' }}>📉 Loss Analysis</div>
+                                {lostOpps.length === 0 ? <div style={{ color:'#8a8378', fontSize:'0.8125rem' }}>No closed lost opportunities yet.</div> : <>
+                                  <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginBottom:'0.75rem' }}>{lostOpps.length} deals lost · ${lostARR.toLocaleString()} ARR</div>
                                   {catRows.map(([cat,cnt])=>(
                                     <div key={cat} style={{ marginBottom:'0.5rem' }}>
                                       <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.2rem' }}>
-                                        <span style={{ fontSize:'0.75rem', color:'#475569' }}>{cat}</span>
-                                        <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#ef4444' }}>{cnt}</span>
+                                        <span style={{ fontSize:'0.75rem', color:'#5a544c' }}>{cat}</span>
+                                        <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#9c3a2e' }}>{cnt}</span>
                                       </div>
-                                      <div style={{ height:'5px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
-                                        <div style={{ height:'100%', width:(cnt/maxCat*100)+'%', background:'#ef4444', borderRadius:'3px', opacity:0.7 }}/>
+                                      <div style={{ height:'5px', background:'#f5efe3', borderRadius:'3px', overflow:'hidden' }}>
+                                        <div style={{ height:'100%', width:(cnt/maxCat*100)+'%', background:'#9c3a2e', borderRadius:'3px', opacity:0.7 }}/>
                                       </div>
                                     </div>
                                   ))}
@@ -979,23 +979,23 @@ ${bodyHtml}
                             if (repStats.length < 2) return null;
                             return (
                             <div style={cardStyle}>
-                              <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b', marginBottom:'0.875rem' }}>🏅 Rep Leaderboard</div>
+                              <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622', marginBottom:'0.875rem' }}>🏅 Rep Leaderboard</div>
                               <div style={{ overflowX:'auto' }}>
                                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem' }}>
                                   <thead><tr>
                                     {['#','Rep','Won Revenue','Deals Won','Win Rate','Open Pipeline'].map(h=>(
-                                      <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign: h==='Rep'||h==='#'?'left':'right', fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', whiteSpace:'nowrap' }}>{h}</th>
+                                      <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign: h==='Rep'||h==='#'?'left':'right', fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', borderBottom:'2px solid #e6ddd0', whiteSpace:'nowrap' }}>{h}</th>
                                     ))}
                                   </tr></thead>
                                   <tbody>
                                     {repStats.map((r,i)=>(
-                                      <tr key={r.rep} style={{ background:i%2===0?'#fff':'#f8fafc' }}>
-                                        <td style={{ padding:'0.5rem 0.75rem', fontWeight:'700', color: i===0?'#f59e0b':i===1?'#94a3b8':i===2?'#d97706':'#cbd5e1' }}>#{i+1}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', fontWeight:'600', color:'#1e293b' }}>{r.rep}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'700', color:'#10b981' }}>${r.wonRev.toLocaleString()}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#475569' }}>{r.wonCount}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color: r.winPct>=50?'#10b981':r.winPct>=30?'#f59e0b':'#ef4444', fontWeight:'600' }}>{r.winPct.toFixed(0)}%</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#2563eb' }}>{r.openCount}</td>
+                                      <tr key={r.rep} style={{ background:i%2===0?'#fff':'#fbf8f3' }}>
+                                        <td style={{ padding:'0.5rem 0.75rem', fontWeight:'700', color: i===0?'#b87333':i===1?'#8a8378':i===2?'#b87333':'#d4c8b4' }}>#{i+1}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', fontWeight:'600', color:'#2a2622' }}>{r.rep}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'700', color:'#4d6b3d' }}>${r.wonRev.toLocaleString()}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#5a544c' }}>{r.wonCount}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color: r.winPct>=50?'#4d6b3d':r.winPct>=30?'#b87333':'#9c3a2e', fontWeight:'600' }}>{r.winPct.toFixed(0)}%</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#3a5a7a' }}>{r.openCount}</td>
                                       </tr>
                                     ))}
                                   </tbody>
@@ -1026,25 +1026,25 @@ ${bodyHtml}
                             const mxD=Math.max(...rSC.filter(r=>r.ad!==null).map(r=>r.ad),1);
                             const fC=v=>v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+Math.round(v/1000)+'K':'$'+Math.round(v);
                             const mts=[
-                              {k:'wonR', lbl:'Won Revenue',   fmt:fC,              mx:mxR, col:'#10b981', hi:true},
-                              {k:'wr',   lbl:'Win Rate',      fmt:v=>v+'%',        mx:100, col:'#2563eb', hi:true},
-                              {k:'pipe', lbl:'Open Pipeline', fmt:fC,              mx:mxP, col:'#6366f1', hi:true},
-                              {k:'ad',   lbl:'Cycle Days',    fmt:v=>v!=null?v+'d':'-', mx:mxD, col:'#f59e0b', hi:false},
+                              {k:'wonR', lbl:'Won Revenue',   fmt:fC,              mx:mxR, col:'#4d6b3d', hi:true},
+                              {k:'wr',   lbl:'Win Rate',      fmt:v=>v+'%',        mx:100, col:'#3a5a7a', hi:true},
+                              {k:'pipe', lbl:'Open Pipeline', fmt:fC,              mx:mxP, col:'#5a4a7a', hi:true},
+                              {k:'ad',   lbl:'Cycle Days',    fmt:v=>v!=null?v+'d':'-', mx:mxD, col:'#b87333', hi:false},
                             ];
                             return(
                               <div style={cardStyle}>
-                                <div style={{fontWeight:'700',fontSize:'0.9375rem',color:'#1e293b',marginBottom:'1rem'}}>&#128202; Rep vs Rep Comparison</div>
+                                <div style={{fontWeight:'700',fontSize:'0.9375rem',color:'#2a2622',marginBottom:'1rem'}}>&#128202; Rep vs Rep Comparison</div>
                                 <div style={{overflowX:'auto'}}>
                                   <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8125rem',minWidth:'480px'}}>
-                                    <thead><tr style={{borderBottom:'2px solid #e2e8f0'}}>
-                                      <th style={{padding:'0.4rem 0.75rem',textAlign:'left',fontSize:'0.6875rem',fontWeight:'700',color:'#94a3b8',textTransform:'uppercase',width:'120px'}}>Metric</th>
-                                      {rSC.map(r=><th key={r.rep} style={{padding:'0.4rem 0.75rem',textAlign:'right',fontSize:'0.6875rem',fontWeight:'700',color:'#1e293b',whiteSpace:'nowrap'}}>{r.rep}</th>)}
+                                    <thead><tr style={{borderBottom:'2px solid #e6ddd0'}}>
+                                      <th style={{padding:'0.4rem 0.75rem',textAlign:'left',fontSize:'0.6875rem',fontWeight:'700',color:'#8a8378',textTransform:'uppercase',width:'120px'}}>Metric</th>
+                                      {rSC.map(r=><th key={r.rep} style={{padding:'0.4rem 0.75rem',textAlign:'right',fontSize:'0.6875rem',fontWeight:'700',color:'#2a2622',whiteSpace:'nowrap'}}>{r.rep}</th>)}
                                     </tr></thead>
                                     <tbody>{mts.map(m=>{
                                       const vals=rSC.map(r=>r[m.k]);
                                       const best=m.hi?Math.max(...vals.filter(v=>v!==null)):Math.min(...vals.filter(v=>v!==null));
-                                      return(<tr key={m.k} style={{borderBottom:'1px solid #f1f5f9'}}>
-                                        <td style={{padding:'0.625rem 0.75rem',fontWeight:'600',color:'#475569',fontSize:'0.75rem',whiteSpace:'nowrap'}}>
+                                      return(<tr key={m.k} style={{borderBottom:'1px solid #f5efe3'}}>
+                                        <td style={{padding:'0.625rem 0.75rem',fontWeight:'600',color:'#5a544c',fontSize:'0.75rem',whiteSpace:'nowrap'}}>
                                           <span style={{display:'inline-block',width:'8px',height:'8px',borderRadius:'50%',background:m.col,marginRight:'6px',verticalAlign:'middle'}}/>{m.lbl}
                                         </td>
                                         {rSC.map(r=>{
@@ -1053,10 +1053,10 @@ ${bodyHtml}
                                           const pct=m.mx>0&&val!==null?Math.round((m.k==='ad'?(1-val/m.mx):val/m.mx)*100):0;
                                           return(<td key={r.rep} style={{padding:'0.5rem 0.75rem',textAlign:'right',verticalAlign:'middle'}}>
                                             <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'3px'}}>
-                                              <span style={{fontWeight:ib?'800':'600',color:ib?m.col:'#475569'}}>
+                                              <span style={{fontWeight:ib?'800':'600',color:ib?m.col:'#5a544c'}}>
                                                 {m.fmt(val)}{ib&&rSC.length>1&&<span style={{marginLeft:'4px',fontSize:'0.6rem',background:m.col+'20',color:m.col,padding:'1px 5px',borderRadius:'999px'}}>best</span>}
                                               </span>
-                                              <div style={{width:'80px',height:'4px',background:'#f1f5f9',borderRadius:'2px',overflow:'hidden'}}>
+                                              <div style={{width:'80px',height:'4px',background:'#f5efe3',borderRadius:'2px',overflow:'hidden'}}>
                                                 <div style={{height:'100%',width:Math.max(pct,2)+'%',background:m.col,borderRadius:'2px'}}/>
                                               </div>
                                             </div>
@@ -1095,15 +1095,15 @@ ${bodyHtml}
                               if(rP.length===0&&rW.length===0)fl.push({t:'info',s:'No open or closed deals in this period'});
                               if(fl.length>0)aF.push({rep,fl});
                             });
-                            const FC={danger:{bg:'#FCEBEB',border:'#F7C1C1',text:'#A32D2D',dot:'#E24B4A'},warning:{bg:'#FAEEDA',border:'#FAC775',text:'#854F0B',dot:'#BA7517'},info:{bg:'#E6F1FB',border:'#B5D4F4',text:'#0C447C',dot:'#378ADD'}};
+                            const FC={danger:{bg:'rgba(156,58,46,0.08)',border:'rgba(156,58,46,0.3)',text:'#9c3a2e',dot:'#9c3a2e'},warning:{bg:'rgba(184,115,51,0.1)',border:'#c8b99a',text:'#7a6a48',dot:'#b87333'},info:{bg:'rgba(58,90,122,0.08)',border:'#d4c8b4',text:'#3a5a7a',dot:'#3a5a7a'}};
                             return(
                               <div style={cardStyle}>
-                                <div style={{fontWeight:'700',fontSize:'0.9375rem',color:'#1e293b',marginBottom:'1rem'}}>&#128681; Coaching Red Flags <span style={{fontSize:'0.6875rem',fontWeight:'400',color:'#94a3b8',marginLeft:'6px'}}>Managers only</span></div>
-                                {aF.length===0?(<div style={{fontSize:'0.8125rem',color:'#166534',background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:'8px',padding:'12px 14px'}}>No coaching concerns detected for this period.</div>):(
+                                <div style={{fontWeight:'700',fontSize:'0.9375rem',color:'#2a2622',marginBottom:'1rem'}}>&#128681; Coaching Red Flags <span style={{fontSize:'0.6875rem',fontWeight:'400',color:'#8a8378',marginLeft:'6px'}}>Managers only</span></div>
+                                {aF.length===0?(<div style={{fontSize:'0.8125rem',color:'#2e4a24',background:'rgba(77,107,61,0.07)',border:'1px solid rgba(77,107,61,0.3)',borderRadius:'8px',padding:'12px 14px'}}>No coaching concerns detected for this period.</div>):(
                                   <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
                                     {aF.map(({rep,fl})=>(
-                                      <div key={rep} style={{border:'1px solid #e2e8f0',borderRadius:'8px',overflow:'hidden'}}>
-                                        <div style={{padding:'7px 14px',background:'#f8fafc',borderBottom:'1px solid #e2e8f0',fontWeight:'700',fontSize:'0.8125rem',color:'#1e293b'}}>{rep} <span style={{fontWeight:'400',color:'#94a3b8',fontSize:'0.6875rem'}}>{fl.length} flag{fl.length>1?'s':''}</span></div>
+                                      <div key={rep} style={{border:'1px solid #e6ddd0',borderRadius:'8px',overflow:'hidden'}}>
+                                        <div style={{padding:'7px 14px',background:'#fbf8f3',borderBottom:'1px solid #e6ddd0',fontWeight:'700',fontSize:'0.8125rem',color:'#2a2622'}}>{rep} <span style={{fontWeight:'400',color:'#8a8378',fontSize:'0.6875rem'}}>{fl.length} flag{fl.length>1?'s':''}</span></div>
                                         <div style={{padding:'8px 14px',display:'flex',flexDirection:'column',gap:'5px'}}>
                                           {fl.map((f,fi)=>{const c=FC[f.t]||FC.info;return(<div key={fi} style={{display:'flex',alignItems:'flex-start',gap:'8px',padding:'6px 10px',background:c.bg,border:'0.5px solid '+c.border,borderRadius:'6px'}}><div style={{width:'7px',height:'7px',borderRadius:'50%',background:c.dot,flexShrink:0,marginTop:'4px'}}/><div style={{fontSize:'0.8125rem',color:c.text,lineHeight:1.5}}>{f.s}</div></div>);})}
                                         </div>
@@ -1129,35 +1129,35 @@ ${bodyHtml}
                           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem' }}>
                             <div style={cardStyle}>
                               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.875rem' }}>
-                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b' }}>📆 Won Revenue by Quarter ({currentYear})</div>
-                                <button onClick={() => { const rows=revenueByQuarter.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'}"><td>${r.q}</td><td style="text-align:right;font-weight:700;">$${r.rev.toLocaleString()}</td></tr>`).join(''); printSection('Won Revenue by Quarter',`<div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622' }}>📆 Won Revenue by Quarter ({currentYear})</div>
+                                <button onClick={() => { const rows=revenueByQuarter.map((r,i)=>`<tr style="background:${i%2===0?'#fff':'#fbf8f3'}"><td>${r.q}</td><td style="text-align:right;font-weight:700;">$${r.rev.toLocaleString()}</td></tr>`).join(''); printSection('Won Revenue by Quarter',`<div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
 <table><thead><tr><th>Quarter</th><th style="text-align:right;">Won Revenue</th></tr></thead><tbody>${rows}</tbody></table>
 </div>`); }} style={printBtnStyle}>🖨️ Print</button>
                               </div>
                               {revenueByQuarter.map(({q,rev})=>(
                                 <div key={q} style={{ marginBottom:'0.625rem' }}>
                                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.3rem' }}>
-                                    <span style={{ fontSize:'0.8125rem', fontWeight:'600', color:'#475569' }}>{q}</span>
-                                    <span style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#1e293b' }}>${rev.toLocaleString()}</span>
+                                    <span style={{ fontSize:'0.8125rem', fontWeight:'600', color:'#5a544c' }}>{q}</span>
+                                    <span style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#2a2622' }}>${rev.toLocaleString()}</span>
                                   </div>
-                                  <div style={{ height:'8px', background:'#f1f5f9', borderRadius:'4px', overflow:'hidden' }}>
-                                    <div style={{ height:'100%', width:(rev/maxQRev*100)+'%', background:'linear-gradient(to right,#2563eb,#7c3aed)', borderRadius:'4px' }}/>
+                                  <div style={{ height:'8px', background:'#f5efe3', borderRadius:'4px', overflow:'hidden' }}>
+                                    <div style={{ height:'100%', width:(rev/maxQRev*100)+'%', background:'linear-gradient(to right,#3a5a7a,#5a4a7a)', borderRadius:'4px' }}/>
                                   </div>
                                 </div>
                               ))}
                             </div>
                             <div style={cardStyle}>
                               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.875rem' }}>
-                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b' }}>📈 Monthly Won Revenue (Last 6 Mo.)</div>
-                                <button onClick={() => { const rows=monthlyData.map((m,i)=>`<tr style="background:${i%2===0?'#fff':'#f8fafc'}"><td>${m.label}</td><td style="text-align:right;font-weight:700;">$${m.rev.toLocaleString()}</td><td style="text-align:center;">${m.count}</td></tr>`).join(''); printSection('Monthly Won Revenue — Last 6 Months',`<div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622' }}>📈 Monthly Won Revenue (Last 6 Mo.)</div>
+                                <button onClick={() => { const rows=monthlyData.map((m,i)=>`<tr style="background:${i%2===0?'#fff':'#fbf8f3'}"><td>${m.label}</td><td style="text-align:right;font-weight:700;">$${m.rev.toLocaleString()}</td><td style="text-align:center;">${m.count}</td></tr>`).join(''); printSection('Monthly Won Revenue — Last 6 Months',`<div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
 <table><thead><tr><th>Month</th><th style="text-align:right;">Won Revenue</th><th style="text-align:center;">Deals</th></tr></thead><tbody>${rows}</tbody></table>
 </div>`); }} style={printBtnStyle}>🖨️ Print</button>
                               </div>
                               <div style={{ display:'flex', alignItems:'flex-end', gap:'0.5rem', height:'120px' }}>
                                 {monthlyData.map((m,i)=>(
                                   <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'0.25rem', height:'100%', justifyContent:'flex-end' }}>
-                                    <div title={'$'+m.rev.toLocaleString()+' · '+m.count+' deals'} style={{ width:'100%', background:m.rev>0?'linear-gradient(to top,#2563eb,#7c3aed)':'#e2e8f0', borderRadius:'4px 4px 0 0', height:Math.max(m.rev/maxMonthRev*100,m.rev>0?4:2)+'%', transition:'height 0.4s ease' }}/>
-                                    <span style={{ fontSize:'0.625rem', color:'#94a3b8', whiteSpace:'nowrap' }}>{m.label}</span>
+                                    <div title={'$'+m.rev.toLocaleString()+' · '+m.count+' deals'} style={{ width:'100%', background:m.rev>0?'linear-gradient(to top,#3a5a7a,#5a4a7a)':'#e6ddd0', borderRadius:'4px 4px 0 0', height:Math.max(m.rev/maxMonthRev*100,m.rev>0?4:2)+'%', transition:'height 0.4s ease' }}/>
+                                    <span style={{ fontSize:'0.625rem', color:'#8a8378', whiteSpace:'nowrap' }}>{m.label}</span>
                                   </div>
                                 ))}
                               </div>
@@ -1170,33 +1170,33 @@ ${bodyHtml}
                             return (
                             <div style={cardStyle}>
                               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.875rem' }}>
-                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b' }}>✅ Closed Won Summary</div>
+                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622' }}>✅ Closed Won Summary</div>
                                 <ReportBtn title="Closed Won Summary" contentFn={() => {
                                   let html='<table><tr><th>Opportunity</th><th>Account</th><th>Rep</th><th style="text-align:right">ARR</th><th style="text-align:right">Impl Cost</th><th>Close Date</th></tr>';
                                   sortedWon.forEach(o=>{ html+=`<tr><td>${o.opportunityName||o.account||'—'}</td><td>${o.account||'—'}</td><td>${o.salesRep||o.assignedTo||'—'}</td><td style="text-align:right">$${(o.arr||0).toLocaleString()}</td><td style="text-align:right">$${(o.implementationCost||0).toLocaleString()}</td><td>${o.forecastedCloseDate||o.closeDate||'—'}</td></tr>`; });
                                   html+='</table>'; return html;
                                 }} />
                               </div>
-                              {sortedWon.length === 0 ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem' }}>No closed won deals yet.</div> : (
+                              {sortedWon.length === 0 ? <div style={{ color:'#8a8378', fontSize:'0.8125rem' }}>No closed won deals yet.</div> : (
                               <div style={{ overflowX:'auto' }}>
                                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem' }}>
                                   <thead><tr>
                                     {['Opportunity','Account','Rep','ARR','Impl Cost','Close Date'].map(h=>(
-                                      <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign:['ARR','Impl Cost'].includes(h)?'right':'left', fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', whiteSpace:'nowrap' }}>{h}</th>
+                                      <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign:['ARR','Impl Cost'].includes(h)?'right':'left', fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', borderBottom:'2px solid #e6ddd0', whiteSpace:'nowrap' }}>{h}</th>
                                     ))}
                                   </tr></thead>
                                   <tbody>
                                     {sortedWon.slice(0,25).map((o,i)=>(
-                                      <tr key={o.id} style={{ background:i%2===0?'#fff':'#f8fafc' }}>
-                                        <td style={{ padding:'0.5rem 0.75rem', fontWeight:'600', color:'#1e293b', maxWidth:'180px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.opportunityName||o.account||'—'}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', color:'#475569', maxWidth:'140px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.account||'—'}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', color:'#475569', whiteSpace:'nowrap' }}>{o.salesRep||o.assignedTo||'—'}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#10b981', fontWeight:'600' }}>${(o.arr||0).toLocaleString()}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#475569' }}>${(o.implementationCost||0).toLocaleString()}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', color:'#64748b', whiteSpace:'nowrap' }}>{o.forecastedCloseDate||o.closeDate||'—'}</td>
+                                      <tr key={o.id} style={{ background:i%2===0?'#fff':'#fbf8f3' }}>
+                                        <td style={{ padding:'0.5rem 0.75rem', fontWeight:'600', color:'#2a2622', maxWidth:'180px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.opportunityName||o.account||'—'}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', color:'#5a544c', maxWidth:'140px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{o.account||'—'}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', color:'#5a544c', whiteSpace:'nowrap' }}>{o.salesRep||o.assignedTo||'—'}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#4d6b3d', fontWeight:'600' }}>${(o.arr||0).toLocaleString()}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#5a544c' }}>${(o.implementationCost||0).toLocaleString()}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', color:'#8a8378', whiteSpace:'nowrap' }}>{o.forecastedCloseDate||o.closeDate||'—'}</td>
                                       </tr>
                                     ))}
-                                    {sortedWon.length > 25 && <tr><td colSpan={6} style={{ padding:'0.5rem 0.75rem', color:'#94a3b8', fontSize:'0.75rem', textAlign:'center' }}>Showing 25 of {sortedWon.length} deals</td></tr>}
+                                    {sortedWon.length > 25 && <tr><td colSpan={6} style={{ padding:'0.5rem 0.75rem', color:'#8a8378', fontSize:'0.75rem', textAlign:'center' }}>Showing 25 of {sortedWon.length} deals</td></tr>}
                                   </tbody>
                                 </table>
                               </div>
@@ -1222,16 +1222,16 @@ ${bodyHtml}
                               const maxRev = Math.max(...rows.map(r=>r.rev),1);
                               return (
                               <div style={cardStyle}>
-                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b', marginBottom:'0.875rem' }}>{icon} {title}</div>
-                                {rows.length === 0 ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem' }}>No data.</div> :
+                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622', marginBottom:'0.875rem' }}>{icon} {title}</div>
+                                {rows.length === 0 ? <div style={{ color:'#8a8378', fontSize:'0.8125rem' }}>No data.</div> :
                                   rows.map(r=>(
                                     <div key={r.name} style={{ marginBottom:'0.625rem' }}>
                                       <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.25rem' }}>
-                                        <span style={{ fontSize:'0.75rem', fontWeight:'600', color:'#475569' }}>{r.name}</span>
-                                        <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#10b981' }}>${r.rev.toLocaleString()} <span style={{ color:'#94a3b8', fontWeight:'400' }}>({r.count} deals)</span></span>
+                                        <span style={{ fontSize:'0.75rem', fontWeight:'600', color:'#5a544c' }}>{r.name}</span>
+                                        <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#4d6b3d' }}>${r.rev.toLocaleString()} <span style={{ color:'#8a8378', fontWeight:'400' }}>({r.count} deals)</span></span>
                                       </div>
-                                      <div style={{ height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
-                                        <div style={{ height:'100%', width:(r.rev/maxRev*100)+'%', background:'linear-gradient(to right,#10b981,#059669)', borderRadius:'3px' }}/>
+                                      <div style={{ height:'6px', background:'#f5efe3', borderRadius:'3px', overflow:'hidden' }}>
+                                        <div style={{ height:'100%', width:(r.rev/maxRev*100)+'%', background:'linear-gradient(to right,#4d6b3d,#4d6b3d)', borderRadius:'3px' }}/>
                                       </div>
                                     </div>
                                   ))
@@ -1264,11 +1264,11 @@ ${bodyHtml}
                             return(
                               <div style={cardStyle}>
                                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem',flexWrap:'wrap',gap:'0.5rem'}}>
-                                  <div style={{fontWeight:'700',fontSize:'0.9375rem',color:'#1e293b'}}>&#128197; Year-over-Year Revenue</div>
+                                  <div style={{fontWeight:'700',fontSize:'0.9375rem',color:'#2a2622'}}>&#128197; Year-over-Year Revenue</div>
                                   <div style={{display:'flex',gap:'1rem',alignItems:'center',flexWrap:'wrap'}}>
-                                    <span style={{fontSize:'0.75rem',color:'#64748b'}}><span style={{display:'inline-block',width:'10px',height:'3px',background:'#2563eb',borderRadius:'2px',marginRight:'5px',verticalAlign:'middle'}}/>{tY}: <strong>{fY(tT)}</strong></span>
-                                    <span style={{fontSize:'0.75rem',color:'#64748b'}}><span style={{display:'inline-block',width:'10px',height:'3px',background:'#cbd5e1',borderRadius:'2px',marginRight:'5px',verticalAlign:'middle'}}/>{lY}: <strong>{fY(lT)}</strong></span>
-                                    {yDl!==null&&<span style={{fontSize:'0.75rem',fontWeight:'700',color:yDl>=0?'#10b981':'#ef4444',background:yDl>=0?'#dcfce7':'#fee2e2',padding:'2px 8px',borderRadius:'999px'}}>{yDl>=0?'+':''}{yDl.toFixed(1)}% YoY</span>}
+                                    <span style={{fontSize:'0.75rem',color:'#8a8378'}}><span style={{display:'inline-block',width:'10px',height:'3px',background:'#3a5a7a',borderRadius:'2px',marginRight:'5px',verticalAlign:'middle'}}/>{tY}: <strong>{fY(tT)}</strong></span>
+                                    <span style={{fontSize:'0.75rem',color:'#8a8378'}}><span style={{display:'inline-block',width:'10px',height:'3px',background:'#d4c8b4',borderRadius:'2px',marginRight:'5px',verticalAlign:'middle'}}/>{lY}: <strong>{fY(lT)}</strong></span>
+                                    {yDl!==null&&<span style={{fontSize:'0.75rem',fontWeight:'700',color:yDl>=0?'#4d6b3d':'#9c3a2e',background:yDl>=0?'rgba(77,107,61,0.1)':'rgba(156,58,46,0.08)',padding:'2px 8px',borderRadius:'999px'}}>{yDl>=0?'+':''}{yDl.toFixed(1)}% YoY</span>}
                                   </div>
                                 </div>
                                 <div style={{display:'flex',gap:'4px',alignItems:'flex-end',height:'120px'}}>
@@ -1277,10 +1277,10 @@ ${bodyHtml}
                                     const tH=Math.round((d.rev/yMx)*100),lH=Math.round((ly/yMx)*100);
                                     return(<div key={d.month} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:'2px'}}>
                                       <div style={{width:'100%',display:'flex',gap:'1px',alignItems:'flex-end',height:'100px'}}>
-                                        <div style={{flex:1,height:Math.max(tH,2)+'%',background:'#2563eb',borderRadius:'2px 2px 0 0',opacity:0.85,minHeight:d.rev>0?'3px':'0'}} title={tY+': '+fY(d.rev)}/>
-                                        <div style={{flex:1,height:Math.max(lH,2)+'%',background:'#cbd5e1',borderRadius:'2px 2px 0 0',minHeight:ly>0?'3px':'0'}} title={lY+': '+fY(ly)}/>
+                                        <div style={{flex:1,height:Math.max(tH,2)+'%',background:'#3a5a7a',borderRadius:'2px 2px 0 0',opacity:0.85,minHeight:d.rev>0?'3px':'0'}} title={tY+': '+fY(d.rev)}/>
+                                        <div style={{flex:1,height:Math.max(lH,2)+'%',background:'#d4c8b4',borderRadius:'2px 2px 0 0',minHeight:ly>0?'3px':'0'}} title={lY+': '+fY(ly)}/>
                                       </div>
-                                      <div style={{fontSize:'0.5rem',color:'#94a3b8'}}>{d.month}</div>
+                                      <div style={{fontSize:'0.5rem',color:'#8a8378'}}>{d.month}</div>
                                     </div>);
                                   })}
                                 </div>
@@ -1360,8 +1360,8 @@ ${bodyHtml}
                               const meta = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
                               const win = window.open('','_blank','width=820,height=600');
                               const headers = hasSpiffs ? '<th>Rep</th><th style="text-align:center">Deals Won</th><th style="text-align:right">Won Revenue</th><th style="text-align:right">Quota</th><th style="text-align:right">Attainment</th><th style="text-align:right">Commission</th><th style="text-align:right">SPIFFs</th><th style="text-align:right">Total</th>' : '<th>Rep</th><th style="text-align:center">Deals Won</th><th style="text-align:right">Won Revenue</th><th style="text-align:right">Quota</th><th style="text-align:right">Attainment</th><th style="text-align:right">Commission</th>';
-                              const rows = repRows2.map(r=>hasSpiffs?`<tr><td>${r.name}</td><td style="text-align:center">${r.deals}</td><td style="text-align:right">$${r.rev.toLocaleString()}</td><td style="text-align:right">${r.quot>0?'$'+r.quot.toLocaleString():'—'}</td><td style="text-align:right">${r.attain!=null?r.attain.toFixed(1)+'%':'—'}</td><td style="text-align:right;font-weight:700;color:#059669">$${Math.round(r.comm).toLocaleString()}</td><td style="text-align:right;color:#7c3aed">$${Math.round(r.spiff).toLocaleString()}</td><td style="text-align:right;font-weight:800">$${Math.round(r.total).toLocaleString()}</td></tr>`:`<tr><td>${r.name}</td><td style="text-align:center">${r.deals}</td><td style="text-align:right">$${r.rev.toLocaleString()}</td><td style="text-align:right">${r.quot>0?'$'+r.quot.toLocaleString():'—'}</td><td style="text-align:right">${r.attain!=null?r.attain.toFixed(1)+'%':'—'}</td><td style="text-align:right;font-weight:700;color:#059669">$${Math.round(r.comm).toLocaleString()}</td></tr>`).join('');
-                              win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Commissions — ${periodLabel}</title><style>body{font-family:system-ui,sans-serif;padding:2rem;color:#1e293b}h1{font-size:1.25rem;font-weight:800}table{width:100%;border-collapse:collapse;margin-top:1rem}th,td{padding:.5rem .75rem;border:1px solid #e2e8f0;font-size:.875rem}th{background:#f8fafc;font-weight:700}tfoot td{font-weight:700;background:#f1f5f9}</style></head><body><h1>Commissions Report — ${periodLabel}</h1><p style="color:#64748b;font-size:.875rem">Generated ${meta} · Sales Pipeline Tracker</p><div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                              const rows = repRows2.map(r=>hasSpiffs?`<tr><td>${r.name}</td><td style="text-align:center">${r.deals}</td><td style="text-align:right">$${r.rev.toLocaleString()}</td><td style="text-align:right">${r.quot>0?'$'+r.quot.toLocaleString():'—'}</td><td style="text-align:right">${r.attain!=null?r.attain.toFixed(1)+'%':'—'}</td><td style="text-align:right;font-weight:700;color:#4d6b3d">$${Math.round(r.comm).toLocaleString()}</td><td style="text-align:right;color:#5a4a7a">$${Math.round(r.spiff).toLocaleString()}</td><td style="text-align:right;font-weight:800">$${Math.round(r.total).toLocaleString()}</td></tr>`:`<tr><td>${r.name}</td><td style="text-align:center">${r.deals}</td><td style="text-align:right">$${r.rev.toLocaleString()}</td><td style="text-align:right">${r.quot>0?'$'+r.quot.toLocaleString():'—'}</td><td style="text-align:right">${r.attain!=null?r.attain.toFixed(1)+'%':'—'}</td><td style="text-align:right;font-weight:700;color:#4d6b3d">$${Math.round(r.comm).toLocaleString()}</td></tr>`).join('');
+                              win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Commissions — ${periodLabel}</title><style>body{font-family:system-ui,sans-serif;padding:2rem;color:#2a2622}h1{font-size:1.25rem;font-weight:800}table{width:100%;border-collapse:collapse;margin-top:1rem}th,td{padding:.5rem .75rem;border:1px solid #e6ddd0;font-size:.875rem}th{background:#fbf8f3;font-weight:700}tfoot td{font-weight:700;background:#f5efe3}</style></head><body><h1>Commissions Report — ${periodLabel}</h1><p style="color:#8a8378;font-size:.875rem">Generated ${meta} · Sales Pipeline Tracker</p><div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
 <table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td>Total</td><td></td><td style="text-align:right">$${totals.rev.toLocaleString()}</td><td></td><td></td><td style="text-align:right">$${Math.round(totals.commission).toLocaleString()}</td>${hasSpiffs?`<td style="text-align:right">$${Math.round(totals.spiff).toLocaleString()}</td><td style="text-align:right">$${Math.round(totals.total).toLocaleString()}</td>`:''}</tr></tfoot></table>
 </div></body></html>`);
                               win.document.close(); setTimeout(()=>win.print(),500);
@@ -1414,11 +1414,11 @@ ${bodyHtml}
                             return (
                             <div style={cardStyle}>
                               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem', flexWrap:'wrap', gap:'0.5rem' }}>
-                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b' }}>💳 Commissions Earned</div>
+                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622' }}>💳 Commissions Earned</div>
                                 <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
                                   <div style={{ display:'flex', gap:'0.25rem', flexWrap:'wrap' }}>
                                     {commissionReportPeriods.map(pill=>(
-                                      <button key={pill} onClick={()=>setCommissionReportFilter(pill)} style={{ padding:'0.2rem 0.625rem', borderRadius:'999px', border:'none', cursor:'pointer', fontSize:'0.6875rem', fontWeight:'700', fontFamily:'inherit', transition:'all 0.15s', background:(commissionReportFilter||'This Quarter')===pill?'#2563eb':'#e2e8f0', color:(commissionReportFilter||'This Quarter')===pill?'#fff':'#64748b' }}>{pill}</button>
+                                      <button key={pill} onClick={()=>setCommissionReportFilter(pill)} style={{ padding:'0.2rem 0.625rem', borderRadius:'999px', border:'none', cursor:'pointer', fontSize:'0.6875rem', fontWeight:'700', fontFamily:'inherit', transition:'all 0.15s', background:(commissionReportFilter||'This Quarter')===pill?'#3a5a7a':'#e6ddd0', color:(commissionReportFilter||'This Quarter')===pill?'#fff':'#8a8378' }}>{pill}</button>
                                     ))}
                                   </div>
                                   <button onClick={printCommissions} style={printBtnStyle}>🖨️ Print</button>
@@ -1431,22 +1431,22 @@ ${bodyHtml}
                                   { label:'Won Revenue',      value: '$'+periodOpps.reduce((s,o)=>s+(o.arr||0)+(o.implementationCost||0),0).toLocaleString() },
                                   { label:'Commissions',      value: '$'+Math.round(totals.commission).toLocaleString() },
                                   ...(hasSpiffs ? [
-                                    { label:'SPIFFs',         value: '$'+Math.round(totals.spiff).toLocaleString(), color:'#7c3aed' },
-                                    { label:'Total Earnings', value: '$'+Math.round(totals.total).toLocaleString(), color:'#059669' },
+                                    { label:'SPIFFs',         value: '$'+Math.round(totals.spiff).toLocaleString(), color:'#5a4a7a' },
+                                    { label:'Total Earnings', value: '$'+Math.round(totals.total).toLocaleString(), color:'#4d6b3d' },
                                   ] : []),
                                 ].map(k=>(
-                                  <div key={k.label} style={{ background:'#f8fafc', borderRadius:'8px', padding:'0.625rem 0.875rem', border:'1px solid #e2e8f0' }}>
+                                  <div key={k.label} style={{ background:'#fbf8f3', borderRadius:'8px', padding:'0.625rem 0.875rem', border:'1px solid #e6ddd0' }}>
                                     <div style={labelStyle}>{k.label}</div>
-                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color: k.color || '#1e293b' }}>{k.value}</div>
+                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color: k.color || '#2a2622' }}>{k.value}</div>
                                   </div>
                                 ))}
                               </div>
                               {hasSpiffs && (
-                                <div style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:'8px', padding:'0.625rem 0.875rem', marginBottom:'1rem' }}>
-                                  <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#6d28d9', marginBottom:'0.375rem' }}>⚡ Active SPIFFs ({activeSpiffs.length})</div>
+                                <div style={{ background:'rgba(90,74,122,0.07)', border:'1px solid rgba(90,74,122,0.25)', borderRadius:'8px', padding:'0.625rem 0.875rem', marginBottom:'1rem' }}>
+                                  <div style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#5a4a7a', marginBottom:'0.375rem' }}>⚡ Active SPIFFs ({activeSpiffs.length})</div>
                                   <div style={{ display:'flex', flexWrap:'wrap', gap:'0.375rem' }}>
                                     {activeSpiffs.map((s,i) => (
-                                      <span key={i} style={{ fontSize:'0.6875rem', background:'#ede9fe', color:'#5b21b6', padding:'2px 8px', borderRadius:'999px', fontWeight:'600' }}>
+                                      <span key={i} style={{ fontSize:'0.6875rem', background:'rgba(90,74,122,0.12)', color:'#5a4a7a', padding:'2px 8px', borderRadius:'999px', fontWeight:'600' }}>
                                         {s.name||'Unnamed'}: {s.type==='flat'?`$${parseFloat(s.amount||0).toLocaleString()} flat`:s.type==='pct'?`${s.amount}% of ARR`:`${s.amount}× multiplier`}
                                         {s.condition ? ` — ${s.condition}` : ''}
                                       </span>
@@ -1454,35 +1454,35 @@ ${bodyHtml}
                                   </div>
                                 </div>
                               )}
-                              {repRows2.length === 0 ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem' }}>No rep data for this period.</div> : (
+                              {repRows2.length === 0 ? <div style={{ color:'#8a8378', fontSize:'0.8125rem' }}>No rep data for this period.</div> : (
                               <div style={{ overflowX:'auto' }}>
                                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem' }}>
                                   <thead><tr>
                                     {['Rep','Deals Won','Won Revenue','Quota','Attainment','Commission',...(hasSpiffs?['SPIFFs','Total']:[])].map(h=>(
-                                      <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign:h==='Rep'?'left':'right', fontSize:'0.6875rem', fontWeight:'700', color:h==='SPIFFs'?'#7c3aed':h==='Total'?'#059669':'#94a3b8', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', whiteSpace:'nowrap' }}>{h}</th>
+                                      <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign:h==='Rep'?'left':'right', fontSize:'0.6875rem', fontWeight:'700', color:h==='SPIFFs'?'#5a4a7a':h==='Total'?'#4d6b3d':'#8a8378', textTransform:'uppercase', borderBottom:'2px solid #e6ddd0', whiteSpace:'nowrap' }}>{h}</th>
                                     ))}
                                   </tr></thead>
                                   <tbody>
                                     {repRows2.map((r,i)=>(
-                                      <tr key={r.name} style={{ background:i%2===0?'#fff':'#f8fafc' }}>
-                                        <td style={{ padding:'0.5rem 0.75rem', fontWeight:'600', color:'#1e293b' }}>{r.name}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#475569' }}>{r.deals}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#10b981', fontWeight:'600' }}>${r.rev.toLocaleString()}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#94a3b8' }}>{r.quot>0?'$'+r.quot.toLocaleString():'—'}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color: r.attain!=null?(r.attain>=100?'#10b981':r.attain>=75?'#f59e0b':'#ef4444'):'#94a3b8', fontWeight:'600' }}>{r.attain!=null?r.attain.toFixed(1)+'%':'—'}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'700', color:'#059669' }}>${Math.round(r.comm).toLocaleString()}</td>
-                                        {hasSpiffs && <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'600', color:'#7c3aed' }}>${Math.round(r.spiff).toLocaleString()}</td>}
-                                        {hasSpiffs && <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'800', color:'#1e293b' }}>${Math.round(r.total).toLocaleString()}</td>}
+                                      <tr key={r.name} style={{ background:i%2===0?'#fff':'#fbf8f3' }}>
+                                        <td style={{ padding:'0.5rem 0.75rem', fontWeight:'600', color:'#2a2622' }}>{r.name}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#5a544c' }}>{r.deals}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#4d6b3d', fontWeight:'600' }}>${r.rev.toLocaleString()}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#8a8378' }}>{r.quot>0?'$'+r.quot.toLocaleString():'—'}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color: r.attain!=null?(r.attain>=100?'#4d6b3d':r.attain>=75?'#b87333':'#9c3a2e'):'#8a8378', fontWeight:'600' }}>{r.attain!=null?r.attain.toFixed(1)+'%':'—'}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'700', color:'#4d6b3d' }}>${Math.round(r.comm).toLocaleString()}</td>
+                                        {hasSpiffs && <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'600', color:'#5a4a7a' }}>${Math.round(r.spiff).toLocaleString()}</td>}
+                                        {hasSpiffs && <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'800', color:'#2a2622' }}>${Math.round(r.total).toLocaleString()}</td>}
                                       </tr>
                                     ))}
-                                    <tr style={{ borderTop:'2px solid #1e293b', fontWeight:'800', background:'#f8fafc' }}>
-                                      <td style={{ padding:'0.5rem 0.75rem', color:'#1e293b' }}>Total</td>
+                                    <tr style={{ borderTop:'2px solid #2a2622', fontWeight:'800', background:'#fbf8f3' }}>
+                                      <td style={{ padding:'0.5rem 0.75rem', color:'#2a2622' }}>Total</td>
                                       <td/>
-                                      <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#10b981' }}>${totals.rev.toLocaleString()}</td>
+                                      <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#4d6b3d' }}>${totals.rev.toLocaleString()}</td>
                                       <td/><td/>
-                                      <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#059669' }}>${Math.round(totals.commission).toLocaleString()}</td>
-                                      {hasSpiffs && <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#7c3aed' }}>${Math.round(totals.spiff).toLocaleString()}</td>}
-                                      {hasSpiffs && <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#059669' }}>${Math.round(totals.total).toLocaleString()}</td>}
+                                      <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#4d6b3d' }}>${Math.round(totals.commission).toLocaleString()}</td>
+                                      {hasSpiffs && <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#5a4a7a' }}>${Math.round(totals.spiff).toLocaleString()}</td>}
+                                      {hasSpiffs && <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#4d6b3d' }}>${Math.round(totals.total).toLocaleString()}</td>}
                                     </tr>
                                   </tbody>
                                 </table>
@@ -1517,10 +1517,10 @@ ${bodyHtml}
                             return (
                             <div style={cardStyle}>
                               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem', flexWrap:'wrap', gap:'0.5rem' }}>
-                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b' }}>📞 Activity Summary</div>
+                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622' }}>📞 Activity Summary</div>
                                 <div style={{ display:'flex', gap:'0.25rem' }}>
                                   {periods.map(p=>(
-                                    <button key={p} onClick={()=>setActPeriod(p)} style={{ padding:'0.2rem 0.625rem', borderRadius:'999px', border:'none', cursor:'pointer', fontSize:'0.6875rem', fontWeight:'700', fontFamily:'inherit', background:actPeriod===p?'#2563eb':'#e2e8f0', color:actPeriod===p?'#fff':'#64748b' }}>{p}</button>
+                                    <button key={p} onClick={()=>setActPeriod(p)} style={{ padding:'0.2rem 0.625rem', borderRadius:'999px', border:'none', cursor:'pointer', fontSize:'0.6875rem', fontWeight:'700', fontFamily:'inherit', background:actPeriod===p?'#3a5a7a':'#e6ddd0', color:actPeriod===p?'#fff':'#8a8378' }}>{p}</button>
                                   ))}
                                 </div>
                               </div>
@@ -1531,9 +1531,9 @@ ${bodyHtml}
                                   { label:'Active Reps',      value: repActRows.length },
                                   { label:'Avg / Rep',        value: repActRows.length > 0 ? Math.round(filtActs.length/repActRows.length) : 0 },
                                 ].map(k=>(
-                                  <div key={k.label} style={{ background:'#f8fafc', borderRadius:'8px', padding:'0.625rem 0.875rem', border:'1px solid #e2e8f0' }}>
+                                  <div key={k.label} style={{ background:'#fbf8f3', borderRadius:'8px', padding:'0.625rem 0.875rem', border:'1px solid #e6ddd0' }}>
                                     <div style={labelStyle}>{k.label}</div>
-                                    <div style={{ fontSize:'1.5rem', fontWeight:'800', color:'#1e293b' }}>{k.value}</div>
+                                    <div style={{ fontSize:'1.5rem', fontWeight:'800', color:'#2a2622' }}>{k.value}</div>
                                   </div>
                                 ))}
                               </div>
@@ -1541,15 +1541,15 @@ ${bodyHtml}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
                                 <div>
                                   <div style={labelStyle}>By Activity Type</div>
-                                  {typeRows.length === 0 ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem', marginTop:'0.5rem' }}>No activities logged yet.</div> :
+                                  {typeRows.length === 0 ? <div style={{ color:'#8a8378', fontSize:'0.8125rem', marginTop:'0.5rem' }}>No activities logged yet.</div> :
                                     typeRows.map(([type,cnt])=>(
                                       <div key={type} style={{ marginBottom:'0.5rem' }}>
                                         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.2rem' }}>
-                                          <span style={{ fontSize:'0.75rem', color:'#475569' }}>{type}</span>
-                                          <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#1e293b' }}>{cnt}</span>
+                                          <span style={{ fontSize:'0.75rem', color:'#5a544c' }}>{type}</span>
+                                          <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#2a2622' }}>{cnt}</span>
                                         </div>
-                                        <div style={{ height:'5px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
-                                          <div style={{ height:'100%', width:(cnt/maxTypeCount*100)+'%', background:'linear-gradient(to right,#2563eb,#7c3aed)', borderRadius:'3px' }}/>
+                                        <div style={{ height:'5px', background:'#f5efe3', borderRadius:'3px', overflow:'hidden' }}>
+                                          <div style={{ height:'100%', width:(cnt/maxTypeCount*100)+'%', background:'linear-gradient(to right,#3a5a7a,#5a4a7a)', borderRadius:'3px' }}/>
                                         </div>
                                       </div>
                                     ))
@@ -1561,26 +1561,26 @@ ${bodyHtml}
                                 </div>{/* end inner 2-col grid */}
                                 <div>
                                   <div style={labelStyle}>Rep Activity Summary</div>
-                                  {repActRows.length === 0 ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem', marginTop:'0.5rem' }}>No activities logged yet.</div> : (
+                                  {repActRows.length === 0 ? <div style={{ color:'#8a8378', fontSize:'0.8125rem', marginTop:'0.5rem' }}>No activities logged yet.</div> : (
                                     <div style={{ overflowX: 'auto', marginTop: '0.5rem' }}>
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
                                         <thead><tr>
                                           {['Rep', 'Total', 'This Week', 'Last Activity', 'Status'].map(h => (
-                                            <th key={h} style={{ padding: '0.4rem 0.75rem', textAlign: h === 'Rep' ? 'left' : 'right', fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>{h}</th>
+                                            <th key={h} style={{ padding: '0.4rem 0.75rem', textAlign: h === 'Rep' ? 'left' : 'right', fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', textTransform: 'uppercase', letterSpacing: '0.04em', borderBottom: '2px solid #e6ddd0', whiteSpace: 'nowrap' }}>{h}</th>
                                           ))}
                                         </tr></thead>
                                         <tbody>
                                           {repActRows.map(([rep, {count, lastDate, thisWeek}], i) => {
                                             const daysSince = lastDate ? Math.floor((now - lastDate) / 86400000) : null;
-                                            const statusColor = daysSince === null ? '#94a3b8' : daysSince <= 3 ? '#10b981' : daysSince <= 7 ? '#f59e0b' : '#ef4444';
+                                            const statusColor = daysSince === null ? '#8a8378' : daysSince <= 3 ? '#4d6b3d' : daysSince <= 7 ? '#b87333' : '#9c3a2e';
                                             const statusLabel = daysSince === null ? '—' : daysSince === 0 ? 'Today' : daysSince === 1 ? 'Yesterday' : daysSince <= 7 ? `${daysSince}d ago` : daysSince <= 30 ? `${daysSince}d ago` : '30d+ ago';
                                             const statusDot = daysSince === null ? '○' : daysSince <= 3 ? '●' : daysSince <= 7 ? '●' : '⚠';
                                             return (
-                                              <tr key={rep} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '0.5rem 0.75rem', fontWeight: '600', color: '#1e293b', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rep}</td>
-                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#475569', fontWeight: '600' }}>{count}</td>
-                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: thisWeek > 0 ? '#2563eb' : '#94a3b8', fontWeight: thisWeek > 0 ? '700' : '400' }}>{thisWeek}</td>
-                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#475569', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                                              <tr key={rep} style={{ background: i % 2 === 0 ? '#fff' : '#fbf8f3', borderBottom: '1px solid #f5efe3' }}>
+                                                <td style={{ padding: '0.5rem 0.75rem', fontWeight: '600', color: '#2a2622', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rep}</td>
+                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#5a544c', fontWeight: '600' }}>{count}</td>
+                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: thisWeek > 0 ? '#3a5a7a' : '#8a8378', fontWeight: thisWeek > 0 ? '700' : '400' }}>{thisWeek}</td>
+                                                <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#5a544c', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
                                                   {lastDate ? lastDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                                                 </td>
                                                 <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -1612,16 +1612,16 @@ ${bodyHtml}
                             const repTaskRows = Object.entries(repTaskMap).sort((a,b)=>b[1].total-a[1].total);
                             return (
                             <div style={cardStyle}>
-                              <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b', marginBottom:'1rem' }}>✔️ Task Completion Rate</div>
+                              <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622', marginBottom:'1rem' }}>✔️ Task Completion Rate</div>
                               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(90px,1fr))', gap:'0.75rem', marginBottom:'1.25rem' }}>
                                 {[
-                                  { label:'Total Tasks',    value: allTasks.length,   color:'#1e293b' },
-                                  { label:'Completed',      value: completed.length,   color:'#10b981' },
-                                  { label:'Open / Active',  value: open.length,        color:'#2563eb' },
-                                  { label:'Overdue',        value: overdue.length,     color:'#ef4444' },
-                                  { label:'Completion Rate',value: compRate.toFixed(0)+'%', color: compRate>=75?'#10b981':compRate>=50?'#f59e0b':'#ef4444' },
+                                  { label:'Total Tasks',    value: allTasks.length,   color:'#2a2622' },
+                                  { label:'Completed',      value: completed.length,   color:'#4d6b3d' },
+                                  { label:'Open / Active',  value: open.length,        color:'#3a5a7a' },
+                                  { label:'Overdue',        value: overdue.length,     color:'#9c3a2e' },
+                                  { label:'Completion Rate',value: compRate.toFixed(0)+'%', color: compRate>=75?'#4d6b3d':compRate>=50?'#b87333':'#9c3a2e' },
                                 ].map(k=>(
-                                  <div key={k.label} style={{ background:'#f8fafc', borderRadius:'8px', padding:'0.625rem 0.875rem', border:'1px solid #e2e8f0' }}>
+                                  <div key={k.label} style={{ background:'#fbf8f3', borderRadius:'8px', padding:'0.625rem 0.875rem', border:'1px solid #e6ddd0' }}>
                                     <div style={labelStyle}>{k.label}</div>
                                     <div style={{ fontSize:'1.375rem', fontWeight:'800', color:k.color }}>{k.value}</div>
                                   </div>
@@ -1634,19 +1634,19 @@ ${bodyHtml}
 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem', marginTop:'0.5rem' }}>
                                   <thead><tr>
                                     {['Rep','Total','Completed','Overdue','Completion %'].map(h=>(
-                                      <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign:h==='Rep'?'left':'right', fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', whiteSpace:'nowrap' }}>{h}</th>
+                                      <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign:h==='Rep'?'left':'right', fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', borderBottom:'2px solid #e6ddd0', whiteSpace:'nowrap' }}>{h}</th>
                                     ))}
                                   </tr></thead>
                                   <tbody>
                                     {repTaskRows.map(([rep,{total,done,overdue}],i)=>{
                                       const pct = total > 0 ? done/total*100 : 0;
                                       return (
-                                      <tr key={rep} style={{ background:i%2===0?'#fff':'#f8fafc' }}>
-                                        <td style={{ padding:'0.5rem 0.75rem', fontWeight:'600', color:'#1e293b' }}>{rep}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#475569' }}>{total}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#10b981', fontWeight:'600' }}>{done}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color: overdue>0?'#ef4444':'#94a3b8', fontWeight: overdue>0?'700':'400' }}>{overdue}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'700', color:pct>=75?'#10b981':pct>=50?'#f59e0b':'#ef4444' }}>{pct.toFixed(0)}%</td>
+                                      <tr key={rep} style={{ background:i%2===0?'#fff':'#fbf8f3' }}>
+                                        <td style={{ padding:'0.5rem 0.75rem', fontWeight:'600', color:'#2a2622' }}>{rep}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#5a544c' }}>{total}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#4d6b3d', fontWeight:'600' }}>{done}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color: overdue>0?'#9c3a2e':'#8a8378', fontWeight: overdue>0?'700':'400' }}>{overdue}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'700', color:pct>=75?'#4d6b3d':pct>=50?'#b87333':'#9c3a2e' }}>{pct.toFixed(0)}%</td>
                                       </tr>
                                       );
                                     })}
@@ -1665,24 +1665,24 @@ ${bodyHtml}
                             const typeIcons = { Call:'📞', Email:'📧', Meeting:'🤝', Demo:'💻', 'Follow-up':'🔔', Note:'📝' };
                             return (
                             <div style={cardStyle}>
-                              <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#1e293b', marginBottom:'0.875rem' }}>🕐 Recent Activity Log <span style={{ fontSize:'0.75rem', fontWeight:'400', color:'#94a3b8' }}>(last 30)</span></div>
-                              {recentActs.length === 0 ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem' }}>No activities logged yet.</div> : (
+                              <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622', marginBottom:'0.875rem' }}>🕐 Recent Activity Log <span style={{ fontSize:'0.75rem', fontWeight:'400', color:'#8a8378' }}>(last 30)</span></div>
+                              {recentActs.length === 0 ? <div style={{ color:'#8a8378', fontSize:'0.8125rem' }}>No activities logged yet.</div> : (
                               <div style={{ overflowX:'auto' }}>
                                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem' }}>
                                   <thead><tr>
                                     {['Date','Type','Subject','Account','Rep','Duration'].map(h=>(
-                                      <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign:'left', fontSize:'0.6875rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', borderBottom:'2px solid #e2e8f0', whiteSpace:'nowrap' }}>{h}</th>
+                                      <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign:'left', fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', borderBottom:'2px solid #e6ddd0', whiteSpace:'nowrap' }}>{h}</th>
                                     ))}
                                   </tr></thead>
                                   <tbody>
                                     {recentActs.map((a,i)=>(
-                                      <tr key={a.id||i} style={{ background:i%2===0?'#fff':'#f8fafc' }}>
-                                        <td style={{ padding:'0.5rem 0.75rem', color:'#64748b', whiteSpace:'nowrap' }}>{a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString() : '—'}</td>
+                                      <tr key={a.id||i} style={{ background:i%2===0?'#fff':'#fbf8f3' }}>
+                                        <td style={{ padding:'0.5rem 0.75rem', color:'#8a8378', whiteSpace:'nowrap' }}>{a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString() : '—'}</td>
                                         <td style={{ padding:'0.5rem 0.75rem', whiteSpace:'nowrap' }}><span>{typeIcons[a.type]||'📋'} {a.type||'—'}</span></td>
-                                        <td style={{ padding:'0.5rem 0.75rem', color:'#1e293b', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.subject||a.title||'—'}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', color:'#475569', maxWidth:'150px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.account||'—'}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', color:'#475569', whiteSpace:'nowrap' }}>{a.rep||a.salesRep||'—'}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', color:'#94a3b8', whiteSpace:'nowrap' }}>{a.duration ? a.duration+'m' : '—'}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', color:'#2a2622', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.subject||a.title||'—'}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', color:'#5a544c', maxWidth:'150px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.account||'—'}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', color:'#5a544c', whiteSpace:'nowrap' }}>{a.rep||a.salesRep||'—'}</td>
+                                        <td style={{ padding:'0.5rem 0.75rem', color:'#8a8378', whiteSpace:'nowrap' }}>{a.duration ? a.duration+'m' : '—'}</td>
                                       </tr>
                                     ))}
                                   </tbody>
@@ -1700,7 +1700,7 @@ ${bodyHtml}
                              TAB: LEADS
                             ════════════════════════════════════════════ */}
                         {reportSubTab === 'leads' && leadsEnabled && (() => {
-                            const stageColors = { 'New':'#94a3b8','Contacted':'#0ea5e9','Qualified':'#8b5cf6','Working':'#f59e0b','Converted':'#10b981','Dead':'#ef4444' };
+                            const stageColors = { 'New':'#8a8378','Contacted':'#3a5a7a','Qualified':'#5a4a7a','Working':'#b87333','Converted':'#4d6b3d','Dead':'#9c3a2e' };
                             const allLeads = reportsTimedLeads;
                             const openLeads = allLeads.filter(l => l.status !== 'Converted' && l.status !== 'Dead');
                             const hotLeads = allLeads.filter(l => (l.score||0) >= 70);
@@ -1731,9 +1731,9 @@ ${bodyHtml}
 
                             // Score distribution
                             const scoreBuckets = [
-                                { label:'Cold (0-39)',  min:0,  max:39,  color:'#3b82f6' },
-                                { label:'Warm (40-69)', min:40, max:69,  color:'#f59e0b' },
-                                { label:'Hot (70-100)', min:70, max:100, color:'#ef4444' },
+                                { label:'Cold (0-39)',  min:0,  max:39,  color:'#5a7a8a' },
+                                { label:'Warm (40-69)', min:40, max:69,  color:'#b87333' },
+                                { label:'Hot (70-100)', min:70, max:100, color:'#9c3a2e' },
                             ].map(b => ({ ...b, count: allLeads.filter(l => (l.score||0) >= b.min && (l.score||0) <= b.max).length }));
 
                             // Monthly trend (last 6 months)
@@ -1747,8 +1747,8 @@ ${bodyHtml}
                             });
                             const maxTrend = Math.max(...monthlyTrend.map(m=>m.created), 1);
 
-                            const cardStyle = { background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' };
-                            const labelStyle = { fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.25rem' };
+                            const cardStyle = { background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'12px', overflow:'hidden' };
+                            const labelStyle = { fontSize:'0.6rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.25rem' };
 
                             return (
                             <div style={{ display:'flex', flexDirection:'column', gap:'1rem', padding:'1rem 1.25rem 1.5rem' }}>
@@ -1756,16 +1756,16 @@ ${bodyHtml}
                                 {/* KPI Strip */}
                                 <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'0.75rem' }}>
                                     {[
-                                        { label:'Total Leads',    value: allLeads.length,                         sub: openLeads.length+' open',            accent:'#2563eb', vcolor:'#1e293b' },
-                                        { label:'🔥 Hot Leads',   value: hotLeads.length,                         sub: 'score ≥ 70',                         accent:'#dc2626', vcolor:'#dc2626' },
-                                        { label:'Converted',      value: convertedLeads.length,                   sub: convRate.toFixed(1)+'% rate',         accent:'#10b981', vcolor:'#10b981' },
-                                        { label:'Est. Pipeline',  value: '$'+(totalEstARR>=1000000?((totalEstARR/1000000).toFixed(1)+'M'):(totalEstARR>=1000?(Math.round(totalEstARR/1000)+'K'):totalEstARR)), sub:'from open leads', accent:'#7c3aed', vcolor:'#7c3aed' },
-                                        { label:'Avg Score',      value: avgScore,                                sub: hotLeads.length+' hot · '+allLeads.filter(l=>(l.score||0)>=40&&(l.score||0)<70).length+' warm', accent:'#f59e0b', vcolor:'#f59e0b' },
+                                        { label:'Total Leads',    value: allLeads.length,                         sub: openLeads.length+' open',            accent:'#3a5a7a', vcolor:'#2a2622' },
+                                        { label:'🔥 Hot Leads',   value: hotLeads.length,                         sub: 'score ≥ 70',                         accent:'#9c3a2e', vcolor:'#9c3a2e' },
+                                        { label:'Converted',      value: convertedLeads.length,                   sub: convRate.toFixed(1)+'% rate',         accent:'#4d6b3d', vcolor:'#4d6b3d' },
+                                        { label:'Est. Pipeline',  value: '$'+(totalEstARR>=1000000?((totalEstARR/1000000).toFixed(1)+'M'):(totalEstARR>=1000?(Math.round(totalEstARR/1000)+'K'):totalEstARR)), sub:'from open leads', accent:'#5a4a7a', vcolor:'#5a4a7a' },
+                                        { label:'Avg Score',      value: avgScore,                                sub: hotLeads.length+' hot · '+allLeads.filter(l=>(l.score||0)>=40&&(l.score||0)<70).length+' warm', accent:'#b87333', vcolor:'#b87333' },
                                     ].map(k => (
-                                        <div key={k.label} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'0.875rem 1rem', borderLeft:'3px solid '+k.accent }}>
+                                        <div key={k.label} style={{ background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'10px', padding:'0.875rem 1rem', borderLeft:'3px solid '+k.accent }}>
                                             <div style={labelStyle}>{k.label}</div>
                                             <div style={{ fontSize:'1.625rem', fontWeight:'800', color:k.vcolor, lineHeight:1 }}>{k.value}</div>
-                                            <div style={{ fontSize:'0.6875rem', color:'#94a3b8', marginTop:'0.25rem' }}>{k.sub}</div>
+                                            <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.25rem' }}>{k.sub}</div>
                                         </div>
                                     ))}
                                 </div>
@@ -1775,8 +1775,8 @@ ${bodyHtml}
 
                                     {/* Lead Funnel */}
                                     <div style={cardStyle}>
-                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
-                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.05em' }}>🔽 Lead Funnel</span>
+                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e6ddd0' }}>
+                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#2a2622', textTransform:'uppercase', letterSpacing:'0.05em' }}>🔽 Lead Funnel</span>
                                         </div>
                                         <div style={{ padding:'1rem' }}>
                                             {Object.entries(stageColors).map(([stage, color]) => {
@@ -1784,13 +1784,13 @@ ${bodyHtml}
                                                 const pct = allLeads.length > 0 ? Math.round(count/allLeads.length*100) : 0;
                                                 return (
                                                     <div key={stage} style={{ display:'flex', alignItems:'center', gap:'0.625rem', marginBottom:'0.5rem' }}>
-                                                        <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#475569', width:'72px', flexShrink:0 }}>{stage}</span>
-                                                        <div style={{ flex:1, background:'#f8fafc', borderRadius:'5px', overflow:'hidden', height:'28px' }}>
+                                                        <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#5a544c', width:'72px', flexShrink:0 }}>{stage}</span>
+                                                        <div style={{ flex:1, background:'#fbf8f3', borderRadius:'5px', overflow:'hidden', height:'28px' }}>
                                                             <div style={{ height:'100%', width:Math.max(pct,count>0?8:0)+'%', background:color, borderRadius:'5px', display:'flex', alignItems:'center', paddingLeft:'0.5rem', transition:'width 0.5s ease' }}>
                                                                 {count > 0 && <span style={{ fontSize:'0.625rem', fontWeight:'800', color:'#fff' }}>{count}</span>}
                                                             </div>
                                                         </div>
-                                                        <span style={{ fontSize:'0.6875rem', color:'#94a3b8', width:'28px', textAlign:'right', flexShrink:0 }}>{pct}%</span>
+                                                        <span style={{ fontSize:'0.6875rem', color:'#8a8378', width:'28px', textAlign:'right', flexShrink:0 }}>{pct}%</span>
                                                     </div>
                                                 );
                                             })}
@@ -1799,21 +1799,21 @@ ${bodyHtml}
 
                                     {/* Source Breakdown */}
                                     <div style={cardStyle}>
-                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
-                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.05em' }}>📡 By Source</span>
+                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e6ddd0' }}>
+                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#2a2622', textTransform:'uppercase', letterSpacing:'0.05em' }}>📡 By Source</span>
                                         </div>
                                         <div style={{ padding:'1rem' }}>
                                             {sourceData.length === 0
-                                                ? <div style={{ color:'#94a3b8', fontSize:'0.8125rem', textAlign:'center', padding:'1rem' }}>No leads yet.</div>
+                                                ? <div style={{ color:'#8a8378', fontSize:'0.8125rem', textAlign:'center', padding:'1rem' }}>No leads yet.</div>
                                                 : sourceData.map(([src, cnt], idx) => {
-                                                    const colors = ['#2563eb','#7c3aed','#0ea5e9','#10b981','#f59e0b','#ef4444','#ec4899'];
+                                                    const colors = ['#3a5a7a','#5a4a7a','#3a5a7a','#4d6b3d','#b87333','#9c3a2e','#8a5a5a'];
                                                     return (
                                                         <div key={src} style={{ display:'flex', alignItems:'center', gap:'0.625rem', marginBottom:'0.625rem' }}>
-                                                            <span style={{ fontSize:'0.75rem', color:'#475569', width:'90px', flexShrink:0, fontWeight:'600', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{src}</span>
-                                                            <div style={{ flex:1, height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
+                                                            <span style={{ fontSize:'0.75rem', color:'#5a544c', width:'90px', flexShrink:0, fontWeight:'600', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{src}</span>
+                                                            <div style={{ flex:1, height:'6px', background:'#f5efe3', borderRadius:'3px', overflow:'hidden' }}>
                                                                 <div style={{ height:'100%', width:Math.round(cnt/maxSource*100)+'%', background:colors[idx%colors.length], borderRadius:'3px', transition:'width 0.5s ease' }}></div>
                                                             </div>
-                                                            <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#1e293b', width:'20px', textAlign:'right', flexShrink:0 }}>{cnt}</span>
+                                                            <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#2a2622', width:'20px', textAlign:'right', flexShrink:0 }}>{cnt}</span>
                                                         </div>
                                                     );
                                                 })
@@ -1827,26 +1827,26 @@ ${bodyHtml}
 
                                     {/* Rep Performance */}
                                     <div style={cardStyle}>
-                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
-                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.05em' }}>👤 Rep Lead Performance</span>
+                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e6ddd0' }}>
+                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#2a2622', textTransform:'uppercase', letterSpacing:'0.05em' }}>👤 Rep Lead Performance</span>
                                         </div>
                                         <div style={{ overflowX:'auto' }}>
                                             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem' }}>
                                                 <thead><tr>
                                                     {['Rep','Assigned','Converted','Rate','Est. ARR'].map(h => (
-                                                        <th key={h} style={{ padding:'0.5rem 0.75rem', background:'#f8fafc', borderBottom:'1px solid #e2e8f0', fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', textAlign:['Assigned','Converted','Rate','Est. ARR'].includes(h)?'right':'left', whiteSpace:'nowrap' }}>{h}</th>
+                                                        <th key={h} style={{ padding:'0.5rem 0.75rem', background:'#fbf8f3', borderBottom:'1px solid #e6ddd0', fontSize:'0.6rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.06em', textAlign:['Assigned','Converted','Rate','Est. ARR'].includes(h)?'right':'left', whiteSpace:'nowrap' }}>{h}</th>
                                                     ))}
                                                 </tr></thead>
                                                 <tbody>
                                                     {repRows.length === 0
-                                                        ? <tr><td colSpan={5} style={{ textAlign:'center', padding:'1rem', color:'#94a3b8', fontSize:'0.8125rem' }}>No leads yet.</td></tr>
+                                                        ? <tr><td colSpan={5} style={{ textAlign:'center', padding:'1rem', color:'#8a8378', fontSize:'0.8125rem' }}>No leads yet.</td></tr>
                                                         : repRows.map((r,i) => (
-                                                            <tr key={r.rep} style={{ background: i%2===0?'#fff':'#f8fafc' }}>
-                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f1f5f9', fontWeight:'600', color: r.rep==='Unassigned'?'#ef4444':'#1e293b' }}>{r.rep}</td>
-                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f1f5f9', textAlign:'right', color:'#475569' }}>{r.assigned}</td>
-                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f1f5f9', textAlign:'right', color:'#10b981', fontWeight:'700' }}>{r.converted}</td>
-                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f1f5f9', textAlign:'right', fontWeight:'700', color: r.rate>=25?'#10b981':r.rate>=15?'#f59e0b':'#ef4444' }}>{r.rep==='Unassigned'?'—':r.rate.toFixed(0)+'%'}</td>
-                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f1f5f9', textAlign:'right', fontWeight:'700', color:'#2563eb' }}>{r.estARR>0?'$'+(r.estARR>=1000000?((r.estARR/1000000).toFixed(1)+'M'):(r.estARR>=1000?(Math.round(r.estARR/1000)+'K'):r.estARR)):'—'}</td>
+                                                            <tr key={r.rep} style={{ background: i%2===0?'#fff':'#fbf8f3' }}>
+                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f5efe3', fontWeight:'600', color: r.rep==='Unassigned'?'#9c3a2e':'#2a2622' }}>{r.rep}</td>
+                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f5efe3', textAlign:'right', color:'#5a544c' }}>{r.assigned}</td>
+                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f5efe3', textAlign:'right', color:'#4d6b3d', fontWeight:'700' }}>{r.converted}</td>
+                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f5efe3', textAlign:'right', fontWeight:'700', color: r.rate>=25?'#4d6b3d':r.rate>=15?'#b87333':'#9c3a2e' }}>{r.rep==='Unassigned'?'—':r.rate.toFixed(0)+'%'}</td>
+                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f5efe3', textAlign:'right', fontWeight:'700', color:'#3a5a7a' }}>{r.estARR>0?'$'+(r.estARR>=1000000?((r.estARR/1000000).toFixed(1)+'M'):(r.estARR>=1000?(Math.round(r.estARR/1000)+'K'):r.estARR)):'—'}</td>
                                                             </tr>
                                                         ))
                                                     }
@@ -1857,33 +1857,33 @@ ${bodyHtml}
 
                                     {/* Score Distribution */}
                                     <div style={cardStyle}>
-                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
-                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.05em' }}>📊 Score Distribution</span>
+                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e6ddd0' }}>
+                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#2a2622', textTransform:'uppercase', letterSpacing:'0.05em' }}>📊 Score Distribution</span>
                                         </div>
                                         <div style={{ padding:'1.25rem' }}>
                                             {scoreBuckets.map(b => (
                                                 <div key={b.label} style={{ marginBottom:'0.875rem' }}>
                                                     <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.3rem' }}>
-                                                        <span style={{ fontSize:'0.75rem', fontWeight:'600', color:'#475569' }}>{b.label}</span>
-                                                        <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#1e293b' }}>{b.count} leads</span>
+                                                        <span style={{ fontSize:'0.75rem', fontWeight:'600', color:'#5a544c' }}>{b.label}</span>
+                                                        <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#2a2622' }}>{b.count} leads</span>
                                                     </div>
-                                                    <div style={{ height:'8px', background:'#f1f5f9', borderRadius:'4px', overflow:'hidden' }}>
+                                                    <div style={{ height:'8px', background:'#f5efe3', borderRadius:'4px', overflow:'hidden' }}>
                                                         <div style={{ height:'100%', width: allLeads.length>0?Math.round(b.count/allLeads.length*100)+'%':'0%', background:b.color, borderRadius:'4px', transition:'width 0.5s ease' }}></div>
                                                     </div>
                                                 </div>
                                             ))}
-                                            <div style={{ marginTop:'1rem', padding:'0.75rem', background:'#f8fafc', borderRadius:'8px', border:'1px solid #e2e8f0', display:'flex', justifyContent:'space-around', textAlign:'center' }}>
+                                            <div style={{ marginTop:'1rem', padding:'0.75rem', background:'#fbf8f3', borderRadius:'8px', border:'1px solid #e6ddd0', display:'flex', justifyContent:'space-around', textAlign:'center' }}>
                                                 <div>
-                                                    <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.2rem' }}>Avg Score</div>
-                                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color: avgScore>=70?'#dc2626':avgScore>=40?'#f59e0b':'#3b82f6' }}>{avgScore}</div>
+                                                    <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.2rem' }}>Avg Score</div>
+                                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color: avgScore>=70?'#9c3a2e':avgScore>=40?'#b87333':'#5a7a8a' }}>{avgScore}</div>
                                                 </div>
                                                 <div>
-                                                    <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.2rem' }}>Hot %</div>
-                                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color:'#dc2626' }}>{allLeads.length>0?Math.round(hotLeads.length/allLeads.length*100):0}%</div>
+                                                    <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.2rem' }}>Hot %</div>
+                                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color:'#9c3a2e' }}>{allLeads.length>0?Math.round(hotLeads.length/allLeads.length*100):0}%</div>
                                                 </div>
                                                 <div>
-                                                    <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.2rem' }}>Unassigned</div>
-                                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color:'#ef4444' }}>{allLeads.filter(l=>!l.assignedTo).length}</div>
+                                                    <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.2rem' }}>Unassigned</div>
+                                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color:'#9c3a2e' }}>{allLeads.filter(l=>!l.assignedTo).length}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -1892,33 +1892,33 @@ ${bodyHtml}
 
                                 {/* Row 4: Monthly Trend */}
                                 <div style={cardStyle}>
-                                    <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e2e8f0' }}>
-                                        <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#0f172a', textTransform:'uppercase', letterSpacing:'0.05em' }}>📅 Lead Trend — Last 6 Months</span>
+                                    <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e6ddd0' }}>
+                                        <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#2a2622', textTransform:'uppercase', letterSpacing:'0.05em' }}>📅 Lead Trend — Last 6 Months</span>
                                     </div>
                                     <div style={{ padding:'1.25rem' }}>
                                         {allLeads.length === 0
-                                            ? <div style={{ textAlign:'center', color:'#94a3b8', fontSize:'0.8125rem', padding:'1rem' }}>No leads yet.</div>
+                                            ? <div style={{ textAlign:'center', color:'#8a8378', fontSize:'0.8125rem', padding:'1rem' }}>No leads yet.</div>
                                             : (
                                             <div>
                                                 <div style={{ display:'flex', gap:'0.75rem', alignItems:'flex-end', height:'80px', marginBottom:'0.5rem' }}>
                                                     {monthlyTrend.map((m,i) => (
                                                         <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'3px', height:'100%', justifyContent:'flex-end' }}>
-                                                            {m.created > 0 && <div style={{ fontSize:'0.5625rem', fontWeight:'700', color:'#475569' }}>{m.created}</div>}
+                                                            {m.created > 0 && <div style={{ fontSize:'0.5625rem', fontWeight:'700', color:'#5a544c' }}>{m.created}</div>}
                                                             <div style={{ width:'100%', display:'flex', alignItems:'flex-end', gap:'2px', height:Math.max(Math.round(m.created/maxTrend*70),2)+'px' }}>
-                                                                <div style={{ flex:1, height:'100%', background:'linear-gradient(to top,#2563eb,#7c3aed)', borderRadius:'3px 3px 0 0', opacity:0.85 }}></div>
-                                                                {m.converted > 0 && <div style={{ flex:1, height:Math.max(Math.round(m.converted/maxTrend*70),4)+'px', background:'#10b981', borderRadius:'3px 3px 0 0' }}></div>}
+                                                                <div style={{ flex:1, height:'100%', background:'linear-gradient(to top,#3a5a7a,#5a4a7a)', borderRadius:'3px 3px 0 0', opacity:0.85 }}></div>
+                                                                {m.converted > 0 && <div style={{ flex:1, height:Math.max(Math.round(m.converted/maxTrend*70),4)+'px', background:'#4d6b3d', borderRadius:'3px 3px 0 0' }}></div>}
                                                             </div>
                                                         </div>
                                                     ))}
                                                 </div>
-                                                <div style={{ display:'flex', gap:'0.75rem', borderTop:'1px solid #f1f5f9', paddingTop:'0.375rem' }}>
+                                                <div style={{ display:'flex', gap:'0.75rem', borderTop:'1px solid #f5efe3', paddingTop:'0.375rem' }}>
                                                     {monthlyTrend.map((m,i) => (
-                                                        <div key={i} style={{ flex:1, textAlign:'center', fontSize:'0.6rem', color:'#94a3b8', fontWeight:'600' }}>{m.label}</div>
+                                                        <div key={i} style={{ flex:1, textAlign:'center', fontSize:'0.6rem', color:'#8a8378', fontWeight:'600' }}>{m.label}</div>
                                                     ))}
                                                 </div>
                                                 <div style={{ display:'flex', gap:'1.25rem', justifyContent:'center', marginTop:'0.75rem' }}>
-                                                    <span style={{ fontSize:'0.6875rem', color:'#64748b', display:'flex', alignItems:'center', gap:'0.375rem' }}><span style={{ width:'10px', height:'10px', background:'linear-gradient(#2563eb,#7c3aed)', borderRadius:'2px', display:'inline-block' }}></span>Created</span>
-                                                    <span style={{ fontSize:'0.6875rem', color:'#64748b', display:'flex', alignItems:'center', gap:'0.375rem' }}><span style={{ width:'10px', height:'10px', background:'#10b981', borderRadius:'2px', display:'inline-block' }}></span>Converted</span>
+                                                    <span style={{ fontSize:'0.6875rem', color:'#8a8378', display:'flex', alignItems:'center', gap:'0.375rem' }}><span style={{ width:'10px', height:'10px', background:'linear-gradient(#3a5a7a,#5a4a7a)', borderRadius:'2px', display:'inline-block' }}></span>Created</span>
+                                                    <span style={{ fontSize:'0.6875rem', color:'#8a8378', display:'flex', alignItems:'center', gap:'0.375rem' }}><span style={{ width:'10px', height:'10px', background:'#4d6b3d', borderRadius:'2px', display:'inline-block' }}></span>Converted</span>
                                                 </div>
                                             </div>
                                         )}
@@ -1991,9 +1991,9 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
         'score-critical': 'AI score critical',
     };
     const outcomeColors = {
-        resolved: { bg: '#EAF3DE', text: '#27500A', label: 'Resolved' },
-        ignored:  { bg: '#FAEEDA', text: '#633806', label: 'Ignored' },
-        pending:  { bg: '#E6F1FB', text: '#0C447C', label: 'Pending' },
+        resolved: { bg: 'rgba(77,107,61,0.12)', text: '#2e4a24', label: 'Resolved' },
+        ignored:  { bg: 'rgba(184,115,51,0.1)', text: '#6b4820', label: 'Ignored' },
+        pending:  { bg: 'rgba(58,90,122,0.08)', text: '#3a5a7a', label: 'Pending' },
     };
     const fmtCurrency = (v) => v >= 1000000 ? '$' + (v/1000000).toFixed(1) + 'M' : v >= 1000 ? '$' + Math.round(v/1000) + 'K' : '$' + Math.round(v||0).toLocaleString();
     const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
@@ -2004,23 +2004,23 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
             <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 {canSeeAll && (
                     <select value={selectedRep} onChange={e => setSelectedRep(e.target.value)}
-                        style={{ fontSize: '0.8125rem', padding: '0.375rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontFamily: 'inherit', color: '#1e293b' }}>
+                        style={{ fontSize: '0.8125rem', padding: '0.375rem 0.75rem', border: '1px solid #e6ddd0', borderRadius: '6px', fontFamily: 'inherit', color: '#2a2622' }}>
                         <option value="">All reps</option>
                         {allReps.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                 )}
                 <select value={days} onChange={e => setDays(Number(e.target.value))}
-                    style={{ fontSize: '0.8125rem', padding: '0.375rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontFamily: 'inherit', color: '#1e293b' }}>
+                    style={{ fontSize: '0.8125rem', padding: '0.375rem 0.75rem', border: '1px solid #e6ddd0', borderRadius: '6px', fontFamily: 'inherit', color: '#2a2622' }}>
                     <option value={7}>Last 7 days</option>
                     <option value={30}>Last 30 days</option>
                     <option value={60}>Last 60 days</option>
                     <option value={90}>Last 90 days</option>
                 </select>
-                <button onClick={fetchData} style={{ fontSize: '0.8125rem', padding: '0.375rem 0.875rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: '#f8fafc', color: '#1e293b', cursor: 'pointer', fontFamily: 'inherit' }}>Refresh</button>
+                <button onClick={fetchData} style={{ fontSize: '0.8125rem', padding: '0.375rem 0.875rem', border: '1px solid #e6ddd0', borderRadius: '6px', background: '#fbf8f3', color: '#2a2622', cursor: 'pointer', fontFamily: 'inherit' }}>Refresh</button>
             </div>
 
-            {loading && <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>}
-            {error && <div style={{ textAlign: 'center', padding: '2rem', color: '#ef4444', fontSize: '0.875rem' }}>Failed to load: {error}</div>}
+            {loading && <div style={{ textAlign: 'center', padding: '3rem', color: '#8a8378', fontSize: '0.875rem' }}>Loading…</div>}
+            {error && <div style={{ textAlign: 'center', padding: '2rem', color: '#9c3a2e', fontSize: '0.875rem' }}>Failed to load: {error}</div>}
 
             {!loading && !error && data && (
                 <>
@@ -2029,14 +2029,14 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
                     <>
                     <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '10px', marginBottom: '1.5rem' }}>
                         {[
-                            { val: data.summary.total, lbl: 'Total actions', color: '#1e293b' },
-                            { val: data.summary.resolveRate != null ? data.summary.resolveRate + '%' : '—', lbl: 'Resolution rate', color: data.summary.resolveRate >= 60 ? '#27500A' : data.summary.resolveRate >= 35 ? '#854F0B' : '#A32D2D' },
-                            { val: data.summary.resolved, lbl: 'Resolved', color: '#27500A' },
-                            { val: data.summary.avgDays != null ? data.summary.avgDays + 'd' : '—', lbl: 'Avg days to resolve', color: '#185FA5' },
+                            { val: data.summary.total, lbl: 'Total actions', color: '#2a2622' },
+                            { val: data.summary.resolveRate != null ? data.summary.resolveRate + '%' : '—', lbl: 'Resolution rate', color: data.summary.resolveRate >= 60 ? '#2e4a24' : data.summary.resolveRate >= 35 ? '#7a6a48' : '#9c3a2e' },
+                            { val: data.summary.resolved, lbl: 'Resolved', color: '#2e4a24' },
+                            { val: data.summary.avgDays != null ? data.summary.avgDays + 'd' : '—', lbl: 'Avg days to resolve', color: '#3a5a7a' },
                         ].map(({ val, lbl, color }) => (
-                            <div key={lbl} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 14px' }}>
+                            <div key={lbl} style={{ background: '#fbf8f3', border: '1px solid #e6ddd0', borderRadius: '8px', padding: '12px 14px' }}>
                                 <div style={{ fontSize: '1.375rem', fontWeight: '700', color }}>{val}</div>
-                                <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '2px' }}>{lbl}</div>
+                                <div style={{ fontSize: '0.6875rem', color: '#8a8378', marginTop: '2px' }}>{lbl}</div>
                             </div>
                         ))}
                     </div>
@@ -2044,17 +2044,17 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
                     {/* By type breakdown */}
                     {Object.keys(data.summary.byType || {}).length > 0 && (
                         <div style={{ marginBottom: '1.5rem' }}>
-                            <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Effectiveness by action type</div>
+                            <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Effectiveness by action type</div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '8px' }}>
                                 {Object.entries(data.summary.byType).map(([type, stats]) => {
                                     const rate = stats.total > 0 ? Math.round((stats.resolved / stats.total) * 100) : 0;
                                     return (
-                                        <div key={type} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b', marginBottom: '6px' }}>{actionTypeLabels[type] || type}</div>
-                                            <div style={{ height: '4px', background: '#f1f5f9', borderRadius: '2px', marginBottom: '6px' }}>
-                                                <div style={{ height: '100%', width: rate + '%', background: rate >= 60 ? '#639922' : rate >= 35 ? '#BA7517' : '#E24B4A', borderRadius: '2px' }} />
+                                        <div key={type} style={{ background: '#fbf8f3', border: '1px solid #e6ddd0', borderRadius: '8px', padding: '10px 12px' }}>
+                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#2a2622', marginBottom: '6px' }}>{actionTypeLabels[type] || type}</div>
+                                            <div style={{ height: '4px', background: '#f5efe3', borderRadius: '2px', marginBottom: '6px' }}>
+                                                <div style={{ height: '100%', width: rate + '%', background: rate >= 60 ? '#4d6b3d' : rate >= 35 ? '#b87333' : '#9c3a2e', borderRadius: '2px' }} />
                                             </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: '#64748b' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: '#8a8378' }}>
                                                 <span>{rate}% resolved</span>
                                                 <span>{stats.resolved}/{stats.total}</span>
                                             </div>
@@ -2066,14 +2066,14 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
                     )}
 
                     {/* Log table */}
-                    <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Action history</div>
-                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                    <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.75rem' }}>Action history</div>
+                    <div style={{ border: '1px solid #e6ddd0', borderRadius: '8px', overflow: 'hidden' }}>
                         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
                             <thead>
-                                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                <tr style={{ background: '#fbf8f3', borderBottom: '1px solid #e6ddd0' }}>
                                     {['Date', 'Rep', 'Type', 'Deal', 'ARR', 'Signal', 'Outcome', 'Days'].map(h => (
-                                        <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: '0.6875rem', fontWeight: '700', color: '#64748b', whiteSpace: 'nowrap' }}>{h}</th>
+                                        <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', whiteSpace: 'nowrap' }}>{h}</th>
                                     ))}
                                 </tr>
                             </thead>
@@ -2081,21 +2081,21 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
                                 {data.logs.map((log, i) => {
                                     const oc = outcomeColors[log.outcome] || outcomeColors.pending;
                                     return (
-                                        <tr key={log.id} style={{ borderBottom: i < data.logs.length-1 ? '1px solid #f1f5f9' : 'none', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                                            <td style={{ padding: '8px 12px', color: '#64748b', whiteSpace: 'nowrap' }}>{fmtDate(log.dismissedAt)}</td>
-                                            <td style={{ padding: '8px 12px', color: '#1e293b', whiteSpace: 'nowrap' }}>{log.repName}</td>
+                                        <tr key={log.id} style={{ borderBottom: i < data.logs.length-1 ? '1px solid #f5efe3' : 'none', background: i % 2 === 0 ? '#fff' : '#fbf8f3' }}>
+                                            <td style={{ padding: '8px 12px', color: '#8a8378', whiteSpace: 'nowrap' }}>{fmtDate(log.dismissedAt)}</td>
+                                            <td style={{ padding: '8px 12px', color: '#2a2622', whiteSpace: 'nowrap' }}>{log.repName}</td>
                                             <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
-                                                <span style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.6875rem', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>
+                                                <span style={{ background: '#f5efe3', color: '#5a544c', fontSize: '0.6875rem', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>
                                                     {actionTypeLabels[log.actionType] || log.actionType}
                                                 </span>
                                             </td>
-                                            <td style={{ padding: '8px 12px', color: '#1e293b', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{log.dealName || '—'}</td>
-                                            <td style={{ padding: '8px 12px', color: '#64748b', whiteSpace: 'nowrap' }}>{log.arrAtRisk ? fmtCurrency(log.arrAtRisk) : '—'}</td>
-                                            <td style={{ padding: '8px 12px', color: '#64748b', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.signal}>{log.signal || '—'}</td>
+                                            <td style={{ padding: '8px 12px', color: '#2a2622', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{log.dealName || '—'}</td>
+                                            <td style={{ padding: '8px 12px', color: '#8a8378', whiteSpace: 'nowrap' }}>{log.arrAtRisk ? fmtCurrency(log.arrAtRisk) : '—'}</td>
+                                            <td style={{ padding: '8px 12px', color: '#8a8378', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={log.signal}>{log.signal || '—'}</td>
                                             <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
                                                 <span style={{ background: oc.bg, color: oc.text, fontSize: '0.6875rem', padding: '2px 8px', borderRadius: '999px', fontWeight: '600' }}>{oc.label}</span>
                                             </td>
-                                            <td style={{ padding: '8px 12px', color: '#64748b', whiteSpace: 'nowrap' }}>{log.daysToResolve != null ? log.daysToResolve + 'd' : '—'}</td>
+                                            <td style={{ padding: '8px 12px', color: '#8a8378', whiteSpace: 'nowrap' }}>{log.daysToResolve != null ? log.daysToResolve + 'd' : '—'}</td>
                                         </tr>
                                     );
                                 })}
@@ -2105,7 +2105,7 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
                     </div>
                     </>
                 ) : (
-                    <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8', fontSize: '0.875rem', border: '1px dashed #e2e8f0', borderRadius: '8px' }}>
+                    <div style={{ textAlign: 'center', padding: '3rem', color: '#8a8378', fontSize: '0.875rem', border: '1px dashed #e6ddd0', borderRadius: '8px' }}>
                         No actions logged yet. Actions are recorded when you dismiss recommendations on the home screen, or when pipeline-alerts sends automated alerts.
                     </div>
                 )}

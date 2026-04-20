@@ -18,6 +18,7 @@
         "npm:@vitejs/plugin-react@^4.3.1",
         "npm:drizzle-kit@~0.31.9",
         "npm:drizzle-orm@~0.45.1",
+        "npm:pdfkit@0.18",
         "npm:react-dom@^18.3.1",
         "npm:react@^18.3.1",
         "npm:vite@^5.4.2"
