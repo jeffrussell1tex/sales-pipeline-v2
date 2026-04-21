@@ -44,17 +44,18 @@ function genQuoteId() {
 // ─── Sub-tab style ────────────────────────────────────────────────────────────
 
 const subTabStyle = (active, current) => ({
-    padding: '0.5rem 1.25rem',
+    padding: '8px 16px',
     border: 'none',
-    borderBottom: active === current ? '2px solid #2563eb' : '2px solid transparent',
+    borderBottom: active === current ? '2px solid #2a2622' : '2px solid transparent',
     background: 'transparent',
-    color: active === current ? '#2563eb' : '#64748b',
-    fontWeight: active === current ? '700' : '500',
-    fontSize: '0.875rem',
+    color: active === current ? '#2a2622' : '#8a8378',
+    fontWeight: active === current ? '600' : '400',
+    fontSize: '0.75rem',
     cursor: 'pointer',
     fontFamily: 'inherit',
-    transition: 'all 0.15s',
+    transition: 'color 120ms, border-color 120ms',
     whiteSpace: 'nowrap',
+    marginBottom: -1,
 });
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
@@ -754,6 +755,148 @@ function buildPrintHTML(quote, opp, lines, subtotal, totalValue, recurringValue,
         '</body></html>';
 }
 
+// ─── QUOTES PIPELINE VIEW (kanban by status) ─────────────────────────────────
+
+function QuotesPipelineView({ quotes, opportunities, onEdit, onNewQuote, currentUser, userRole, settings }) {
+    const managedReps = new Set((settings?.users || [])
+        .filter(u => u.managedBy === currentUser || u.manager === currentUser)
+        .map(u => u.name));
+    const isAdmin   = userRole === 'Admin';
+    const isManager = userRole === 'Manager';
+
+    const roleFiltered = useMemo(() => (quotes || []).filter(q => {
+        if (isAdmin) return true;
+        if (isManager) {
+            const opp = (opportunities || []).find(o => o.id === q.opportunityId);
+            if (!opp) return q.createdBy === currentUser;
+            return managedReps.has(opp.salesRep) || opp.salesRep === currentUser || q.createdBy === currentUser;
+        }
+        return q.createdBy === currentUser;
+    }), [quotes, opportunities, userRole, currentUser]);
+
+    // De-duplicate — latest version per quoteNumber, exclude terminal states
+    const active = useMemo(() => {
+        const seen = new Set();
+        return [...roleFiltered]
+            .filter(q => q.status !== 'Rejected / Lost')
+            .sort((a, b) => (b.version || 1) - (a.version || 1))
+            .filter(q => { if (seen.has(q.quoteNumber)) return false; seen.add(q.quoteNumber); return true; });
+    }, [roleFiltered]);
+
+    const STAGES = [
+        { key: 'Draft',            label: 'Draft',            color: '#8a8378' },
+        { key: 'Pending Approval', label: 'Pending Approval', color: '#b87333' },
+        { key: 'Sent to Customer', label: 'Sent',             color: '#3a5a7a' },
+        { key: 'Approved',         label: 'Approved',         color: '#7a6a48' },
+        { key: 'Accepted',         label: 'Accepted',         color: '#4d6b3d' },
+    ];
+
+    // KPI strip
+    const totalValue   = active.reduce((s, q) => s + (parseFloat(q.totalValue) || calcLineTotals(q.lineItems || [], 0).totalValue), 0);
+    const pendingCount = active.filter(q => q.status === 'Pending Approval').length;
+    const avgDisc      = active.length > 0
+        ? active.reduce((s, q) => {
+            const { avgDisc } = calcLineTotals(q.lineItems || [], 0);
+            return s + avgDisc;
+          }, 0) / active.length
+        : 0;
+
+    const now = Date.now();
+    const daysSince = (d) => d ? Math.floor((now - new Date(d).getTime()) / 86400000) : null;
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {/* KPI strip */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.625rem' }}>
+                {[
+                    { label: 'Active quotes',     value: active.length,                      sub: fmt(totalValue) + ' combined' },
+                    { label: 'Pending approval',  value: pendingCount,                        sub: pendingCount > 0 ? 'need manager action' : 'all clear' },
+                    { label: 'Avg discount',      value: pct(avgDisc),                       sub: 'across active quotes' },
+                    { label: 'Accepted',          value: active.filter(q => q.status === 'Accepted').length, sub: 'awaiting close' },
+                ].map(kpi => (
+                    <div key={kpi.label} style={{ background: '#fff', border: '1px solid #e5e2db', borderRadius: '10px', padding: '0.75rem 1rem' }}>
+                        <div style={{ fontSize: '0.5625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>{kpi.label}</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1c1917', lineHeight: 1, letterSpacing: '-0.02em' }}>{kpi.value}</div>
+                        <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '0.2rem' }}>{kpi.sub}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Kanban columns */}
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${STAGES.length}, 1fr)`, gap: '0.625rem', alignItems: 'flex-start' }}>
+                {STAGES.map(stage => {
+                    const items = active.filter(q => q.status === stage.key);
+                    const colTotal = items.reduce((s, q) => s + (parseFloat(q.totalValue) || calcLineTotals(q.lineItems || [], 0).totalValue), 0);
+                    return (
+                        <div key={stage.key} style={{ background: '#fbf8f3', border: '1px solid #e6ddd0', borderRadius: '4px', display: 'flex', flexDirection: 'column', minHeight: 200 }}>
+                            {/* Column header */}
+                            <div style={{ padding: '10px 12px', borderBottom: '1px solid #e6ddd0', background: '#f5efe3' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: stage.color, flexShrink: 0 }}/>
+                                    <span style={{ fontSize: '0.625rem', fontWeight: '700', color: '#2a2622', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{stage.label}</span>
+                                    <span style={{ marginLeft: 'auto', fontSize: '0.6875rem', color: '#5a544c', fontWeight: 600 }}>{items.length}</span>
+                                </div>
+                                <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#2a2622', fontVariantNumeric: 'tabular-nums' }}>{fmt(colTotal)}</div>
+                            </div>
+                            {/* Cards */}
+                            <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                {items.length === 0 && (
+                                    <div style={{ padding: '1.5rem 0.5rem', textAlign: 'center', fontSize: '0.6875rem', color: '#8a8378', fontStyle: 'italic' }}>No quotes</div>
+                                )}
+                                {items.map(q => {
+                                    const opp      = (opportunities || []).find(o => o.id === q.opportunityId);
+                                    const { totalValue: tv, avgDisc: ad } = calcLineTotals(q.lineItems || [], 0);
+                                    const qTotal   = parseFloat(q.totalValue) || tv;
+                                    const age      = daysSince(q.updatedAt || q.createdAt);
+                                    const stale    = age !== null && age >= 14;
+                                    const validDays = q.validUntil ? Math.ceil((new Date(q.validUntil) - new Date()) / 86400000) : null;
+                                    const expiring  = validDays !== null && validDays >= -1 && validDays <= 7;
+                                    const accent    = expiring ? '#9c3a2e' : stale ? '#b87333' : 'transparent';
+                                    return (
+                                        <div key={q.id} onClick={() => onEdit(q)}
+                                            style={{ background: '#f0ece4', border: '1px solid #e6ddd0', borderRadius: 2, padding: '9px 10px', cursor: 'pointer', position: 'relative', transition: 'border-color 120ms' }}
+                                            onMouseEnter={e => e.currentTarget.style.borderColor = '#d4c8b4'}
+                                            onMouseLeave={e => e.currentTarget.style.borderColor = '#e6ddd0'}>
+                                            {accent !== 'transparent' && (
+                                                <span style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 2, background: accent, borderRadius: '2px 0 0 2px' }}/>
+                                            )}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4, marginBottom: 3 }}>
+                                                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2a2622', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                                    {opp ? (opp.opportunityName || opp.account) : (q.name || q.quoteNumber)}
+                                                </div>
+                                                {(q.version || 1) > 1 && (
+                                                    <span style={{ fontSize: '0.5625rem', fontWeight: 700, color: '#3a5a7a', background: 'rgba(58,90,122,0.12)', padding: '1px 4px', borderRadius: 2, flexShrink: 0 }}>v{q.version}</span>
+                                                )}
+                                            </div>
+                                            <div style={{ fontSize: '0.625rem', color: '#8a8378', fontFamily: 'ui-monospace,monospace', letterSpacing: 0.3, marginBottom: 5 }}>{q.quoteNumber}</div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                                                <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#2a2622' }}>{fmt(qTotal)}</div>
+                                                <div style={{ fontSize: '0.625rem', color: '#8a8378' }}>{pct(ad)} disc</div>
+                                            </div>
+                                            {(stale || expiring || age !== null) && (
+                                                <div style={{ display: 'flex', gap: 8, marginTop: 5, fontSize: '0.625rem', color: '#8a8378', alignItems: 'center' }}>
+                                                    {age !== null && (
+                                                        <span style={{ color: stale ? '#b87333' : '#8a8378' }}>{age}d old</span>
+                                                    )}
+                                                    {expiring && (
+                                                        <span style={{ color: '#9c3a2e', fontWeight: 600 }}>
+                                                            {validDays < 0 ? 'expired' : `expires ${validDays}d`}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 // ─── ALL QUOTES LIST ──────────────────────────────────────────────────────────
 
 function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings, onEdit, onDelete, onNewQuote, loadQuotes, showConfirm, deepLinkOppId, onClearDeepLink }) {
@@ -761,14 +904,17 @@ function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings,
         .filter(u => u.managedBy === currentUser || u.manager === currentUser)
         .map(u => u.name));
 
-    const [filterRep, setFilterRep] = useState('');
+    const [quotesView,   setQuotesView]   = useState(() => localStorage.getItem('tab:quotes:allView') || 'table');
+    const [filterRep,    setFilterRep]    = useState('');
     const [filterPeriod, setFilterPeriod] = useState('all');
     const [filterStatus, setFilterStatus] = useState('');
-    const [filterOpp, setFilterOpp] = useState('');
-    const [customFrom, setCustomFrom] = useState('');
-    const [customTo, setCustomTo] = useState('');
-    const [sortField, setSortField] = useState('createdAt');
-    const [sortDir, setSortDir] = useState('desc');
+    const [filterOpp,    setFilterOpp]    = useState('');
+    const [customFrom,   setCustomFrom]   = useState('');
+    const [customTo,     setCustomTo]     = useState('');
+    const [sortField,    setSortField]    = useState('createdAt');
+    const [sortDir,      setSortDir]      = useState('desc');
+
+    const setAllView = v => { setQuotesView(v); localStorage.setItem('tab:quotes:allView', v); };
 
     // Consume deep link — pre-filter to a specific opportunity
     useEffect(() => {
@@ -854,6 +1000,18 @@ function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings,
             {/* Toolbar */}
             <div className="table-container" style={{ marginBottom: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.625rem 1.25rem', flexWrap: 'wrap' }}>
+                    {/* View toggle — Table vs Pipeline */}
+                    <div style={{ display: 'flex', border: '1px solid #e5e2db', borderRadius: 6, overflow: 'hidden', flexShrink: 0 }}>
+                        {[
+                            { k: 'table',    label: 'List',     icon: '☰' },
+                            { k: 'pipeline', label: 'Pipeline', icon: '⬛' },
+                        ].map(v => (
+                            <button key={v.k} onClick={() => setAllView(v.k)}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0.3rem 0.75rem', border: 'none', background: quotesView === v.k ? '#1c1917' : '#f8f7f5', color: quotesView === v.k ? '#f5f1eb' : '#64748b', fontSize: '0.75rem', fontWeight: quotesView === v.k ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                {v.label}
+                            </button>
+                        ))}
+                    </div>
                     {(isAdmin || isManager) && (
                         <select value={filterRep} onChange={e => setFilterRep(e.target.value)}
                             style={{ ...inp, width: 'auto', fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}>
@@ -891,7 +1049,21 @@ function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings,
                 </div>
             </div>
 
-            {/* Table */}
+            {/* Pipeline kanban view */}
+            {quotesView === 'pipeline' && (
+                <QuotesPipelineView
+                    quotes={displayed}
+                    opportunities={opportunities}
+                    onEdit={onEdit}
+                    onNewQuote={onNewQuote}
+                    currentUser={currentUser}
+                    userRole={userRole}
+                    settings={settings}
+                />
+            )}
+
+            {/* Table view */}
+            {quotesView === 'table' && (
             <div className="table-container">
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
@@ -952,13 +1124,14 @@ function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings,
                     </tbody>
                 </table>
             </div>
+            )}
         </div>
     );
 }
 
 // ─── PRICE BOOK (product management) ─────────────────────────────────────────
 
-function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm }) {
+function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm, quotes, opportunities }) {
     const isAdmin = userRole === 'Admin';
 
     // Settings-driven options with safe fallbacks
@@ -969,6 +1142,64 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
         ...(pbCfg.categories || ['Platform', 'Add-ons', 'Services', 'Hardware']),
         ...(products || []).map(p => p.category).filter(Boolean),
     ])].sort();
+
+    // ── Price book intelligence — computed from real quote + opp data ────────
+    const intelligence = useMemo(() => {
+        const allQuotes = quotes || [];
+        const totalQuotes = allQuotes.length;
+        const map = {};
+        (products || []).forEach(p => {
+            // Quotes containing this product
+            const containing = allQuotes.filter(q =>
+                (q.lineItems || []).some(li => li.productId === p.id || li.productName === p.name)
+            );
+            // Avg discount across all line items for this product
+            const discounts = [];
+            allQuotes.forEach(q => {
+                (q.lineItems || []).filter(li => li.productId === p.id || li.productName === p.name)
+                    .forEach(li => discounts.push(parseFloat(li.discountPct) || 0));
+            });
+            const avgDiscount = discounts.length > 0 ? discounts.reduce((a, b) => a + b, 0) / discounts.length : 0;
+            // Win rate — linked opp reached Closed Won
+            const wins = containing.filter(q => {
+                const opp = (opportunities || []).find(o => o.id === q.opportunityId);
+                return opp?.stage === 'Closed Won';
+            });
+            // Avg deal ARR for quotes containing this product
+            const oppArrs = containing.map(q => {
+                const opp = (opportunities || []).find(o => o.id === q.opportunityId);
+                return parseFloat(opp?.arr) || 0;
+            }).filter(v => v > 0);
+            const avgDealSize = oppArrs.length > 0 ? oppArrs.reduce((a, b) => a + b, 0) / oppArrs.length : 0;
+
+            map[p.id] = {
+                attachRate:  totalQuotes > 0 ? containing.length / totalQuotes : 0,
+                avgDiscount,
+                winRate:     containing.length > 0 ? wins.length / containing.length : 0,
+                avgDealSize,
+                quoteCount:  containing.length,
+            };
+        });
+        return map;
+    }, [products, quotes, opportunities]);
+
+    // Top insights
+    const activeProducts = (products || []).filter(p => p.active !== false);
+    const topAttach     = [...activeProducts].sort((a, b) => (intelligence[b.id]?.attachRate || 0) - (intelligence[a.id]?.attachRate || 0))[0];
+    const mostDisc      = [...activeProducts].filter(p => (intelligence[p.id]?.quoteCount || 0) > 0).sort((a, b) => (intelligence[b.id]?.avgDiscount || 0) - (intelligence[a.id]?.avgDiscount || 0))[0];
+    const bestWin       = [...activeProducts].filter(p => (intelligence[p.id]?.quoteCount || 0) > 0).sort((a, b) => (intelligence[b.id]?.winRate || 0) - (intelligence[a.id]?.winRate || 0))[0];
+
+    const MiniBar = ({ value, max, color }) => {
+        const p = Math.min(1, max > 0 ? value / max : 0);
+        return (
+            <div>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 500, color: '#1c1917', marginBottom: 2 }}>{Math.round(value * 100)}%</div>
+                <div style={{ height: 3, background: '#f0ece4', borderRadius: 1, overflow: 'hidden' }}>
+                    <div style={{ width: `${p * 100}%`, height: '100%', background: color }}/>
+                </div>
+            </div>
+        );
+    };
 
     const TYPE_LABEL   = { recurring: 'Recurring', one_time: 'One-time', service: 'Service' };
 
@@ -1040,6 +1271,32 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+
+            {/* Intelligence insight cards — only shown when we have quote data */}
+            {(quotes || []).length > 0 && (topAttach || mostDisc || bestWin) && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.625rem' }}>
+                    {[
+                        { label: 'Highest attach rate',     product: topAttach, metric: 'attachRate',  sub: 'of all quotes include this',        accent: '#3a5a7a' },
+                        { label: 'Most-discounted product', product: mostDisc,  metric: 'avgDiscount', sub: 'avg discount — review list price?',  accent: '#b87333' },
+                        { label: 'Boosts win rate',         product: bestWin,   metric: 'winRate',     sub: 'win rate when included',             accent: '#4d6b3d' },
+                    ].filter(c => c.product).map(card => {
+                        const intel = intelligence[card.product?.id] || {};
+                        const val   = intel[card.metric] || 0;
+                        return (
+                            <div key={card.label} style={{ background: '#fff', border: '1px solid #e5e2db', borderRadius: '10px', padding: '0.875rem 1rem', position: 'relative', overflow: 'hidden' }}>
+                                <span style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, background: card.accent }}/>
+                                <div style={{ fontSize: '0.5625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.375rem' }}>{card.label}</div>
+                                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#1c1917', marginBottom: '0.25rem', lineHeight: 1.3 }}>{card.product.name}</div>
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                                    <span style={{ fontSize: '1.375rem', fontWeight: '700', color: card.accent, letterSpacing: '-0.02em', lineHeight: 1 }}>{Math.round(val * 100)}%</span>
+                                    <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>{card.sub}</span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
             {/* Toolbar */}
             <div className="table-container" style={{ marginBottom: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 1.25rem', flexWrap: 'wrap' }}>
@@ -1144,7 +1401,7 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                         <tr style={{ background: '#f8f7f5' }}>
-                            {['Name', 'Category', 'Type', 'Price', 'Unit', 'Status', ...(isAdmin ? [''] : [])].map((h, i) => (
+                            {['Name', 'Category', 'Type', 'Price', 'Unit', 'Attach', 'Avg Disc', 'Win Rate', 'Avg Deal', 'Status', ...(isAdmin ? [''] : [])].map((h, i) => (
                                 <th key={i} style={{ padding: '0.5rem 0.75rem', fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left', borderBottom: '1px solid #e8e3da' }}>{h}</th>
                             ))}
                         </tr>
@@ -1166,6 +1423,47 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
                                     {prod.customPrice ? 'Variable' : '$' + Number(prod.listPrice || prod.price || 0).toLocaleString()}
                                 </td>
                                 <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.75rem', color: '#64748b' }}>{prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : prod.unit || 'flat'}</td>
+                                {/* Intelligence columns */}
+                                {(() => {
+                                    const intel = intelligence[prod.id] || {};
+                                    const fmtPct = v => Math.round((v || 0) * 100) + '%';
+                                    const discColor = (intel.avgDiscount || 0) > 0.12 ? '#b87333' : (intel.avgDiscount || 0) > 0.08 ? '#64748b' : '#4d6b3d';
+                                    return (<>
+                                        <td style={{ padding: '0.625rem 0.75rem' }}>
+                                            {intel.quoteCount > 0 ? (
+                                                <div>
+                                                    <div style={{ fontSize: '0.6875rem', fontWeight: 500, color: '#1c1917', marginBottom: 2 }}>{fmtPct(intel.attachRate)}</div>
+                                                    <div style={{ height: 3, background: '#f0ece4', borderRadius: 1, overflow: 'hidden', width: 48 }}>
+                                                        <div style={{ width: `${Math.min(100, (intel.attachRate || 0) * 100)}%`, height: '100%', background: '#3a5a7a' }}/>
+                                                    </div>
+                                                </div>
+                                            ) : <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>—</span>}
+                                        </td>
+                                        <td style={{ padding: '0.625rem 0.75rem' }}>
+                                            {intel.quoteCount > 0 ? (
+                                                <div>
+                                                    <div style={{ fontSize: '0.6875rem', fontWeight: 500, color: discColor, marginBottom: 2 }}>{fmtPct(intel.avgDiscount)}</div>
+                                                    <div style={{ height: 3, background: '#f0ece4', borderRadius: 1, overflow: 'hidden', width: 48 }}>
+                                                        <div style={{ width: `${Math.min(100, (intel.avgDiscount || 0) / 0.3 * 100)}%`, height: '100%', background: discColor }}/>
+                                                    </div>
+                                                </div>
+                                            ) : <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>—</span>}
+                                        </td>
+                                        <td style={{ padding: '0.625rem 0.75rem' }}>
+                                            {intel.quoteCount > 0 ? (
+                                                <div>
+                                                    <div style={{ fontSize: '0.6875rem', fontWeight: 500, color: '#1c1917', marginBottom: 2 }}>{fmtPct(intel.winRate)}</div>
+                                                    <div style={{ height: 3, background: '#f0ece4', borderRadius: 1, overflow: 'hidden', width: 48 }}>
+                                                        <div style={{ width: `${Math.min(100, (intel.winRate || 0) / 0.7 * 100)}%`, height: '100%', background: '#4d6b3d' }}/>
+                                                    </div>
+                                                </div>
+                                            ) : <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>—</span>}
+                                        </td>
+                                        <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.6875rem', color: '#1c1917', fontWeight: 500 }}>
+                                            {intel.avgDealSize > 0 ? fmt(intel.avgDealSize) : <span style={{ color: '#94a3b8' }}>—</span>}
+                                        </td>
+                                    </>);
+                                })()}
                                 <td style={{ padding: '0.625rem 0.75rem' }}>
                                     <span style={{ fontSize: '0.625rem', fontWeight: '700', padding: '0.15rem 0.4rem', borderRadius: '4px', textTransform: 'uppercase',
                                         background: prod.active !== false ? '#d1fae5' : '#f1f5f9',
@@ -1182,7 +1480,7 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
                             </tr>
                         ))}
                         {filteredProducts.length === 0 && (
-                            <tr><td colSpan={isAdmin ? 7 : 6} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem', fontStyle: 'italic' }}>
+                            <tr><td colSpan={isAdmin ? 11 : 10} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem', fontStyle: 'italic' }}>
                                 {pbSearch.trim() ? (
                                     <>No products match <strong>"{pbSearch}"</strong>.{' '}
                                     <button onClick={() => setPbSearch('')} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '0.875rem', fontFamily: 'inherit', padding: 0, textDecoration: 'underline' }}>Clear search</button></>
@@ -1538,6 +1836,8 @@ export default function QuotesTab() {
                     onSave={handleSaveProductLocal}
                     onDelete={handleDeleteProductLocal}
                     showConfirm={showConfirm}
+                    quotes={quotes}
+                    opportunities={opportunities}
                 />
             )}
 

@@ -645,6 +645,19 @@ export default function PipelineTab() {
                             {selectMode ? 'Cancel' : 'Select'}
                         </button>
                     )}
+                    {/* Import CSV */}
+                    {canEdit && (
+                        <button
+                            onClick={() => { setCsvImportType('opportunities'); setShowCsvImportModal(true); }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 11px', background: 'transparent', border: `1px solid ${T.border}`, color: T.inkMid, fontSize: 12, fontWeight: 400, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans }}
+                            onMouseEnter={e => { e.currentTarget.style.background = T.surface2; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10" transform="rotate(180 12 12)"/><line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                            Import
+                        </button>
+                    )}
                     {/* Export CSV */}
                     {canSeeAll && (
                         <button

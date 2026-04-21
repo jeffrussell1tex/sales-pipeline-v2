@@ -90,6 +90,7 @@ const Icon = ({ name, size=13, color='currentColor' }) => {
         case 'book':          return <svg {...p}><path d="M4 19V5a2 2 0 012-2h13v14H6a2 2 0 000 4h13"/><path d="M4 19a2 2 0 002 2h13"/></svg>;
         case 'list':          return <svg {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>;
         case 'filter':        return <svg {...p}><path d="M4 5h16l-6 8v6l-4-2v-4L4 5z"/></svg>;
+        case 'import':        return <svg {...p}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10" transform="rotate(180 12 12)"/><line x1="12" y1="3" x2="12" y2="15"/></svg>;
         case 'export':        return <svg {...p}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>;
         case 'plus':          return <svg {...p}><path d="M12 5v14M5 12h14"/></svg>;
         case 'search':        return <svg {...p}><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>;
@@ -565,11 +566,11 @@ export default function AccountsTab() {
         exportToCSV(`accounts-${new Date().toISOString().slice(0,10)}.csv`, headers, rows, 'accounts');
     };
 
-    // ── Views config ──────────────────────────────────────────
+    // ── Views config — List → Business Book → Signal ─────────
     const views = [
-        { id: 'signal',   label: 'Signal',       icon: 'signal' },
-        { id: 'business', label: 'Business Book', icon: 'book'   },
         { id: 'list',     label: 'List',          icon: 'list'   },
+        { id: 'business', label: 'Business Book',  icon: 'book'   },
+        { id: 'signal',   label: 'Signal',        icon: 'signal' },
     ];
 
     // ── Shared table column header row ────────────────────────
@@ -724,28 +725,7 @@ export default function AccountsTab() {
                 </div>
                 <div style={{ fontSize: 12, color: T.inkMuted }}>
                     <span style={{ fontWeight: 600, color: T.ink }}>{filtered.length}</span> accounts
-                    {view === 'signal'   && <span> · sorted by signal</span>}
-                    {view === 'business' && <span> · grouped by intent</span>}
-                    {view === 'list'     && <span> · alphabetical</span>}
                 </div>
-            </div>
-
-            {/* View toggle */}
-            <div style={{ display: 'flex', gap: 2, border: `1px solid ${T.border}`, borderRadius: T.r, padding: 2, background: T.surface }}>
-                {views.map(v => (
-                    <button key={v.id} onClick={() => setViewPersist(v.id)} style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 5,
-                        padding: '5px 11px',
-                        background: view === v.id ? T.ink : 'transparent',
-                        color:      view === v.id ? T.surface : T.inkMid,
-                        border: 'none', borderRadius: T.r-1,
-                        fontSize: 12, fontWeight: view === v.id ? 600 : 400,
-                        cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms',
-                    }}>
-                        <Icon name={v.icon} size={12} color={view === v.id ? T.surface : T.inkMid} />
-                        {v.label}
-                    </button>
-                ))}
             </div>
 
             {/* Action buttons */}
@@ -775,6 +755,16 @@ export default function AccountsTab() {
                     onApply={setPanelFilters}
                 />
 
+                {canEdit && (
+                    <button
+                        onClick={() => { setCsvImportType('accounts'); setShowCsvImportModal(true); }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 11px', background: 'transparent', border: `1px solid ${T.border}`, color: T.ink, fontSize: 12, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}
+                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <Icon name="import" size={12} color={T.inkMid} />
+                        Import
+                    </button>
+                )}
                 <button
                     onClick={handleExport}
                     disabled={!!exportingCSV}
@@ -855,9 +845,45 @@ export default function AccountsTab() {
         <div className="tab-page" style={{ fontFamily: T.sans }}>
             <Header />
             <FilterBar />
-            {view === 'signal'   && <SignalView />}
-            {view === 'business' && <BusinessBookView />}
+
+            {/* ── Underline sub-tab switcher — matches app standard ── */}
+            <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, marginBottom: 12 }}>
+                {views.map(v => {
+                    const active = view === v.id;
+                    return (
+                        <button key={v.id}
+                            onClick={() => setViewPersist(v.id)}
+                            style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 6,
+                                padding: '8px 16px',
+                                border: 'none',
+                                borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent',
+                                background: 'transparent',
+                                color: active ? T.ink : T.inkMuted,
+                                fontSize: 12, fontWeight: active ? 600 : 400,
+                                cursor: 'pointer', fontFamily: T.sans,
+                                transition: 'color 120ms, border-color 120ms',
+                                whiteSpace: 'nowrap', marginBottom: -1,
+                            }}
+                            onMouseEnter={e => { if (!active) e.currentTarget.style.color = T.inkMid; }}
+                            onMouseLeave={e => { if (!active) e.currentTarget.style.color = T.inkMuted; }}>
+                            <Icon name={v.icon} size={12} color={active ? T.ink : T.inkMuted} />
+                            {v.label}
+                        </button>
+                    );
+                })}
+                <div style={{ flex: 1 }} />
+                <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans, paddingBottom: 4 }}>
+                    {filtered.length} account{filtered.length !== 1 ? 's' : ''}
+                    {view === 'signal'   && ' · by signal'}
+                    {view === 'business' && ' · by intent'}
+                    {view === 'list'     && ' · A–Z'}
+                </div>
+            </div>
+
             {view === 'list'     && <ListView />}
+            {view === 'business' && <BusinessBookView />}
+            {view === 'signal'   && <SignalView />}
         </div>
     );
 }
