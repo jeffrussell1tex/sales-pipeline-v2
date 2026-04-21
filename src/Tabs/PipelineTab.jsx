@@ -34,6 +34,28 @@ const T = {
 };
 const stageColor = (s) => T.stages[s] || T.inkMuted;
 
+// ── Sortable column header ────────────────────────────────────
+function SortHeader({ label, field, currentField, currentDir, onSort, style = {} }) {
+    const active = currentField === field;
+    return (
+        <div
+            onClick={() => onSort(field)}
+            style={{
+                display: 'flex', alignItems: 'center', gap: 3,
+                cursor: 'pointer', userSelect: 'none',
+                color: active ? T.ink : T.inkMuted,
+                fontWeight: active ? 700 : 700,
+                ...style,
+            }}
+        >
+            {label}
+            <span style={{ fontSize: 8, opacity: active ? 1 : 0.3, lineHeight: 1 }}>
+                {active ? (currentDir === 'asc' ? '▲' : '▼') : '▲'}
+            </span>
+        </div>
+    );
+}
+
 // ── Filter Panel Modal ────────────────────────────────────────
 function FilterPanel({
     open, onClose, onApply,
@@ -45,14 +67,12 @@ function FilterPanel({
     allReps, allTerritories, stages,
     getQuarter, getQuarterLabel, currentUser,
 }) {
-    // Local draft state — only applied on "Apply"
     const [draftPipeline,   setDraftPipeline]   = useState(activePipeline?.id || null);
     const [draftTimeWindow, setDraftTimeWindow] = useState(pipelineQuarterFilter[0] || 'thisQuarter');
     const [draftStage,      setDraftStage]      = useState(pipelineStageFilter[0]   || '__allOpen__');
     const [draftRep,        setDraftRep]        = useState(pipelineRepFilter[0]     || '__me__');
     const [draftTerritory,  setDraftTerritory]  = useState(pipelineTerritoryFilter[0] || '__all__');
 
-    // Sync when panel opens
     useEffect(() => {
         if (open) {
             setDraftPipeline(activePipeline?.id || null);
@@ -63,53 +83,32 @@ function FilterPanel({
         }
     }, [open]);
 
-    const today = new Date();
+    if (!open) return null;
+
+    const today    = new Date();
     const currentQ = getQuarter(today.toISOString().split('T')[0]);
     const currentQL = getQuarterLabel(currentQ, today.toISOString().split('T')[0]);
-    const qNum = parseInt(currentQ.replace('Q', ''));
+    const qNum     = parseInt(currentQ.replace('Q', ''));
     const nextQNum = qNum < 4 ? qNum + 1 : 1;
     const nextQDate = new Date(today); nextQDate.setMonth(today.getMonth() + 3);
-    const nextQL = getQuarterLabel('Q' + nextQNum, nextQDate.toISOString().split('T')[0]);
+    const nextQL   = getQuarterLabel('Q' + nextQNum, nextQDate.toISOString().split('T')[0]);
 
     const timeWindows = [
-        { key: 'thisQuarter',  label: 'This quarter',  match: o => o.closeQuarter === currentQL },
-        { key: 'nextQuarter',  label: 'Next quarter',  match: o => o.closeQuarter === nextQL },
-        { key: 'thisAndNext',  label: 'This + next',   match: o => o.closeQuarter === currentQL || o.closeQuarter === nextQL },
-        { key: 'annual',       label: 'This year',     match: o => { const fy = currentQL.split(' ')[0]; return o.closeQuarter && o.closeQuarter.startsWith(fy); }},
-        { key: 'allTime',      label: 'All time',      match: () => true },
+        { key: 'thisQuarter', label: 'This quarter' },
+        { key: 'nextQuarter', label: 'Next quarter' },
+        { key: 'thisAndNext', label: 'This + next' },
+        { key: 'annual',      label: 'This year' },
+        { key: 'allTime',     label: 'All time' },
     ];
 
     const handleApply = () => {
-        // Pipeline
-        if (draftPipeline && setActivePipelineId) {
-            setActivePipelineId(draftPipeline);
-        }
-        // Time window → quarter filter
-        if (draftTimeWindow === 'allTime' || draftTimeWindow === 'thisQuarter') {
-            setPipelineQuarterFilter([]);
-        } else {
-            setPipelineQuarterFilter([draftTimeWindow]);
-        }
-        // Stage
-        if (draftStage === '__allOpen__') {
-            setPipelineStageFilter([]);
-        } else {
-            setPipelineStageFilter([draftStage]);
-        }
-        // Rep
-        if (draftRep === '__me__') {
-            setPipelineRepFilter([currentUser]);
-        } else if (draftRep === '__all__') {
-            setPipelineRepFilter([]);
-        } else {
-            setPipelineRepFilter([draftRep]);
-        }
-        // Territory
-        if (draftTerritory === '__all__') {
-            setPipelineTerritoryFilter([]);
-        } else {
-            setPipelineTerritoryFilter([draftTerritory]);
-        }
+        if (draftPipeline && setActivePipelineId) setActivePipelineId(draftPipeline);
+        setPipelineQuarterFilter(draftTimeWindow === 'allTime' || draftTimeWindow === 'thisQuarter' ? [] : [draftTimeWindow]);
+        setPipelineStageFilter(draftStage === '__allOpen__' ? [] : [draftStage]);
+        if (draftRep === '__me__')  setPipelineRepFilter([currentUser]);
+        else if (draftRep === '__all__') setPipelineRepFilter([]);
+        else setPipelineRepFilter([draftRep]);
+        setPipelineTerritoryFilter(draftTerritory === '__all__' ? [] : [draftTerritory]);
         onApply();
         onClose();
     };
@@ -121,38 +120,29 @@ function FilterPanel({
         setDraftTerritory('__all__');
     };
 
-    if (!open) return null;
-
     const selStyle = {
         width: '100%', padding: '8px 10px',
         border: `1px solid ${T.border}`, borderRadius: T.rSm,
         background: T.surface, color: T.ink,
-        fontSize: 13, fontFamily: T.sans,
-        appearance: 'none',
+        fontSize: 13, fontFamily: T.sans, appearance: 'none',
         backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
         backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center',
         paddingRight: 30, cursor: 'pointer', outline: 'none',
     };
-
     const fieldLabel = { fontSize: 11, fontWeight: 600, color: T.inkMid, marginBottom: 5, display: 'block', fontFamily: T.sans };
 
     return (
         <>
-            {/* Backdrop */}
             <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200 }} />
-            {/* Panel */}
             <div style={{
                 position: 'fixed', top: 60, right: 16, zIndex: 201,
                 background: T.surface, border: `1px solid ${T.border}`,
                 borderRadius: T.rMd, boxShadow: '0 8px 32px rgba(42,38,34,0.18)',
-                width: 300, padding: '20px 20px 16px',
-                fontFamily: T.sans,
+                width: 300, padding: '20px 20px 16px', fontFamily: T.sans,
             }}>
                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: T.inkMuted, marginBottom: 16 }}>
                     Filters
                 </div>
-
-                {/* Pipeline */}
                 {allPipelines?.length > 1 && (
                     <div style={{ marginBottom: 14 }}>
                         <label style={fieldLabel}>Pipeline</label>
@@ -161,14 +151,12 @@ function FilterPanel({
                         </select>
                     </div>
                 )}
-                {/* Time window */}
                 <div style={{ marginBottom: 14 }}>
                     <label style={fieldLabel}>Time window</label>
                     <select value={draftTimeWindow} onChange={e => setDraftTimeWindow(e.target.value)} style={selStyle}>
                         {timeWindows.map(tw => <option key={tw.key} value={tw.key}>{tw.label}</option>)}
                     </select>
                 </div>
-                {/* Stage */}
                 <div style={{ marginBottom: 14 }}>
                     <label style={fieldLabel}>Stage</label>
                     <select value={draftStage} onChange={e => setDraftStage(e.target.value)} style={selStyle}>
@@ -180,7 +168,6 @@ function FilterPanel({
                         <option value="Closed Lost">Closed Lost</option>
                     </select>
                 </div>
-                {/* Rep */}
                 <div style={{ marginBottom: 14 }}>
                     <label style={fieldLabel}>Rep</label>
                     <select value={draftRep} onChange={e => setDraftRep(e.target.value)} style={selStyle}>
@@ -191,7 +178,6 @@ function FilterPanel({
                         ))}
                     </select>
                 </div>
-                {/* Territory */}
                 {allTerritories.length > 0 && (
                     <div style={{ marginBottom: 16 }}>
                         <label style={fieldLabel}>Territory</label>
@@ -201,21 +187,9 @@ function FilterPanel({
                         </select>
                     </div>
                 )}
-
-                {/* Footer buttons */}
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', paddingTop: 4, borderTop: `1px solid ${T.border}`, marginTop: 4 }}>
-                    <button onClick={handleReset} style={{
-                        padding: '7px 16px', background: 'transparent',
-                        border: `1px solid ${T.border}`, borderRadius: T.rSm,
-                        color: T.inkMid, fontSize: 13, fontWeight: 500,
-                        cursor: 'pointer', fontFamily: T.sans,
-                    }}>Reset</button>
-                    <button onClick={handleApply} style={{
-                        padding: '7px 20px', background: T.ink,
-                        border: 'none', borderRadius: T.rSm,
-                        color: T.surface, fontSize: 13, fontWeight: 600,
-                        cursor: 'pointer', fontFamily: T.sans,
-                    }}>Apply</button>
+                    <button onClick={handleReset} style={{ padding: '7px 16px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.rSm, color: T.inkMid, fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>Reset</button>
+                    <button onClick={handleApply} style={{ padding: '7px 20px', background: T.ink, border: 'none', borderRadius: T.rSm, color: T.surface, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Apply</button>
                 </div>
             </div>
         </>
@@ -241,7 +215,7 @@ function SaveViewDialog({ open, onSave, onClose }) {
                     autoFocus
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && name.trim()) { onSave(name.trim()); } if (e.key === 'Escape') onClose(); }}
+                    onKeyDown={e => { if (e.key === 'Enter' && name.trim()) onSave(name.trim()); if (e.key === 'Escape') onClose(); }}
                     placeholder="View name…"
                     style={{
                         width: '100%', padding: '7px 10px', border: `1px solid ${T.border}`,
@@ -273,6 +247,7 @@ export default function PipelineTab() {
         setUndoToast, activePipeline, allPipelines,
         handleDelete, handleSave, completeLostSave,
         viewingRep, viewingTeam, viewingTerritory,
+        setViewingRep, setViewingTeam, setViewingTerritory,
         setEditingOpp, setShowModal,
         setActivityInitialContext, setEditingActivity, setShowActivityModal,
         setSpiffClaimContext, setShowSpiffClaimModal,
@@ -285,42 +260,59 @@ export default function PipelineTab() {
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit    = !isReadOnly;
 
+    // Viewing-as label for banner
+    const viewingAsLabel = viewingRep || viewingTeam || viewingTerritory
+        ? viewingRep
+            ? `Rep: ${viewingRep}`
+            : viewingTeam
+                ? `Team: ${viewingTeam}`
+                : `Territory: ${viewingTerritory}`
+        : null;
+
     const handleAddNew = () => { setEditingOpp(null); setShowModal(true); };
     const handleEdit   = (opp) => { setEditingOpp(opp); setShowModal(true); };
 
-    // ── View state — default to 'table' (List) ──────────────
+    // ── View state ────────────────────────────────────────────
     const [pipelineView, setPipelineView] = useState(
         () => { const v = localStorage.getItem('pipelineView'); return ['table','funnel','kanban','forecast'].includes(v) ? v : 'table'; }
     );
     useEffect(() => { localStorage.setItem('pipelineView', pipelineView); }, [pipelineView]);
 
     const [funnelExpandedStage, setFunnelExpandedStage] = useState(null);
-    const [kanbanDragging, setKanbanDragging]   = useState(null);
-    const [kanbanDragOver, setKanbanDragOver]   = useState(null);
-    const [selectedOpps, setSelectedOpps]       = useState([]);
-    const [selectMode, setSelectMode]            = useState(false);
-    const [pipelineSortField, setPipelineSortField] = useState('forecastedCloseDate');
-    const [pipelineSortDir,   setPipelineSortDir]   = useState('asc');
-    const [bulkScoring, setBulkScoring]         = useState(false);
-    const [bulkScoreProgress, setBulkScoreProgress] = useState(null);
+    const [kanbanDragging,      setKanbanDragging]      = useState(null);
+    const [kanbanDragOver,      setKanbanDragOver]      = useState(null);
+    const [selectedOpps,        setSelectedOpps]        = useState([]);
+    const [selectMode,          setSelectMode]          = useState(false);
+    const [pipelineSortField,   setPipelineSortField]   = useState('forecastedCloseDate');
+    const [pipelineSortDir,     setPipelineSortDir]     = useState('asc');
+    const [bulkScoring,         setBulkScoring]         = useState(false);
+    const [bulkScoreProgress,   setBulkScoreProgress]   = useState(null);
 
-    // ── Filter state ─────────────────────────────────────────
-    const [filterOpen, setFilterOpen]                     = useState(false);
-    const [pipelineQuarterFilter, setPipelineQuarterFilter] = useState([]);
-    const [pipelineStageFilter,   setPipelineStageFilter]   = useState([]);
-    const [pipelineRepFilter,     setPipelineRepFilter]     = useState([]);
-    const [pipelineTeamFilter,    setPipelineTeamFilter]    = useState([]);
+    // ── Column sort handler ───────────────────────────────────
+    const handleSort = (field) => {
+        if (pipelineSortField === field) {
+            setPipelineSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        } else {
+            setPipelineSortField(field);
+            setPipelineSortDir('asc');
+        }
+    };
+
+    // ── Filter state ──────────────────────────────────────────
+    const [filterOpen,              setFilterOpen]              = useState(false);
+    const [pipelineQuarterFilter,   setPipelineQuarterFilter]   = useState([]);
+    const [pipelineStageFilter,     setPipelineStageFilter]     = useState([]);
+    const [pipelineRepFilter,       setPipelineRepFilter]       = useState([]);
+    const [pipelineTeamFilter,      setPipelineTeamFilter]      = useState([]);
     const [pipelineTerritoryFilter, setPipelineTerritoryFilter] = useState([]);
 
     const activeFilterCount = pipelineQuarterFilter.length + pipelineStageFilter.length +
         pipelineRepFilter.length + pipelineTeamFilter.length + pipelineTerritoryFilter.length;
 
-    // ── Saved views — persisted in localStorage ───────────────
+    // ── Saved views ───────────────────────────────────────────
     const [savedViews, setSavedViews] = useState(() => {
-        try {
-            const raw = localStorage.getItem('pipelineSavedViews');
-            return raw ? JSON.parse(raw) : [];
-        } catch { return []; }
+        try { const raw = localStorage.getItem('pipelineSavedViews'); return raw ? JSON.parse(raw) : []; }
+        catch { return []; }
     });
     const [saveDialogOpen, setSaveDialogOpen] = useState(false);
 
@@ -330,22 +322,16 @@ export default function PipelineTab() {
     };
 
     const saveCurrentView = (name) => {
-        const newView = {
-            id:        Date.now().toString(),
-            name,
-            preset:    smartPreset,
-            quarter:   pipelineQuarterFilter,
-            stage:     pipelineStageFilter,
-            rep:       pipelineRepFilter,
+        persistSavedViews([...savedViews, {
+            id: Date.now().toString(), name,
+            preset: smartPreset, quarter: pipelineQuarterFilter,
+            stage: pipelineStageFilter, rep: pipelineRepFilter,
             territory: pipelineTerritoryFilter,
-        };
-        persistSavedViews([...savedViews, newView]);
+        }]);
         setSaveDialogOpen(false);
     };
 
-    const deleteSavedView = (id) => {
-        persistSavedViews(savedViews.filter(v => v.id !== id));
-    };
+    const deleteSavedView = (id) => persistSavedViews(savedViews.filter(v => v.id !== id));
 
     const applySavedView = (view) => {
         setSmartPreset(view.preset || null);
@@ -375,7 +361,7 @@ export default function PipelineTab() {
         return Math.round((Date.now() - new Date(o.stageChangedDate + 'T12:00:00').getTime()) / 86400000) <= 7;
     });
 
-    // ── Filter options (built once, stored on window for compat) ──
+    // ── Filter options ────────────────────────────────────────
     const todayDate  = new Date();
     const currentQ2  = getQuarter(todayDate.toISOString().split('T')[0]);
     const currentQL2 = getQuarterLabel(currentQ2, todayDate.toISOString().split('T')[0]);
@@ -383,6 +369,7 @@ export default function PipelineTab() {
     const nextQ2     = 'Q' + (qNum2 < 4 ? qNum2 + 1 : 1);
     const nextMonth2 = new Date(todayDate); nextMonth2.setMonth(todayDate.getMonth() + 3);
     const nextQL2    = getQuarterLabel(nextQ2, nextMonth2.toISOString().split('T')[0]);
+
     const timeFilterOpts = [
         { key: 'thisQuarter', label: 'This quarter', match: o => o.closeQuarter === currentQL2 },
         { key: 'nextQuarter', label: 'Next quarter', match: o => o.closeQuarter === nextQL2 },
@@ -397,10 +384,19 @@ export default function PipelineTab() {
         ...(settings.users||[]).filter(u => u.name && !excludedRoles.has(u.userType)).map(u => u.name),
         ...visibleOpportunities.filter(o => o.salesRep).map(o => o.salesRep),
     ])].sort() : [];
-    const allTerritories2 = canSeeAll ? [...new Set((settings.users||[]).filter(u => u.territory).map(u => u.territory))].sort() : [];
+    const allTerritories2 = canSeeAll
+        ? [...new Set((settings.users||[]).filter(u => u.territory).map(u => u.territory))].sort()
+        : [];
 
-    // ── Filtered opps ─────────────────────────────────────────
+    // ── Filtered opps — "All open" preset always excludes closed ─
     const pipelineFilteredOpps = visibleOpportunities
+        .filter(opp => {
+            // Always exclude closed from "All open" smart preset
+            if (smartPreset === null && pipelineStageFilter.length === 0) {
+                return opp.stage !== 'Closed Won' && opp.stage !== 'Closed Lost';
+            }
+            return true;
+        })
         .filter(opp => {
             if (pipelineQuarterFilter.length === 0) return true;
             return pipelineQuarterFilter.some(key => {
@@ -433,8 +429,13 @@ export default function PipelineTab() {
         return pipelineFilteredOpps;
     }, [pipelineFilteredOpps, smartPreset]);
 
-    const pipelineTotalARR  = pipelineFilteredOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
-    const commitARR = pipelineFilteredOpps.filter(o => ['Negotiation','Negotiation/Review','Contracts','Closing'].includes(o.stage)).reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+    const pipelineTotalARR   = pipelineFilteredOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
+    const commitARR          = pipelineFilteredOpps.filter(o => ['Negotiation','Negotiation/Review','Contracts','Closing'].includes(o.stage)).reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
+    // Weighted ARR = sum of (arr * probability / 100) across open deals
+    const weightedARR        = pipelineFilteredOpps
+        .filter(o => !['Closed Won','Closed Lost'].includes(o.stage))
+        .reduce((s, o) => s + ((parseFloat(o.arr)||0) * (parseFloat(o.probability)||0) / 100), 0);
+
     const fmtA = n => n >= 1e6 ? '$' + (n/1e6).toFixed(1) + 'M' : '$' + Math.round(n/1000) + 'K';
 
     // ── Bulk AI score ─────────────────────────────────────────
@@ -466,8 +467,31 @@ export default function PipelineTab() {
         setBulkScoreProgress(null);
     };
 
-    // ── View definitions: List, Funnel, Kanban, Forecast (no Map) ──
-    // Icons match the screenshots exactly — list/rows, funnel shape, kanban columns, forecast target
+    // ── Export CSV ────────────────────────────────────────────
+    const handleExport = () => {
+        const headers = ['Deal', 'Account', 'Stage', 'ARR', 'Probability', 'Weighted ARR', 'Close Date', 'Sales Rep', 'Health', 'AI Score', 'Days in Stage'];
+        const rows = smartFilteredOpps.map(o => {
+            const health     = calculateDealHealth(o);
+            const daysInStage = o.stageChangedDate ? Math.max(0, Math.floor((new Date() - new Date(o.stageChangedDate + 'T12:00:00')) / 86400000)) : '';
+            const weightedVal = ((parseFloat(o.arr)||0) * (parseFloat(o.probability)||0) / 100).toFixed(0);
+            return [
+                o.opportunityName || o.account,
+                o.account,
+                o.stage,
+                parseFloat(o.arr)||0,
+                (parseFloat(o.probability)||0) + '%',
+                weightedVal,
+                o.forecastedCloseDate || '',
+                o.salesRep || '',
+                health.score,
+                o.aiScore?.score || '',
+                daysInStage,
+            ];
+        });
+        exportToCSV('pipeline.csv', headers, rows, 'pipeline');
+    };
+
+    // ── View icons ────────────────────────────────────────────
     const ViewIcon = ({ name, active }) => {
         const c = active ? T.ink : T.inkMuted;
         const p = { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: c, strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -486,7 +510,7 @@ export default function PipelineTab() {
         { id: 'forecast', label: 'Forecast', icon: <ViewIcon name="forecast" active={pipelineView === 'forecast'} /> },
     ];
 
-    // ── Chip button helper ────────────────────────────────────
+    // ── Chip button ───────────────────────────────────────────
     const Chip = ({ label, active, count, onClick, onDelete }) => (
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 0 }}>
             <button onClick={onClick} style={{
@@ -498,16 +522,11 @@ export default function PipelineTab() {
                 background: active ? T.ink : 'transparent',
                 color: active ? T.surface : T.ink,
                 fontSize: 12, fontWeight: active ? 600 : 400,
-                cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms',
-                whiteSpace: 'nowrap',
+                cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms', whiteSpace: 'nowrap',
             }}>
                 {label}
                 {count != null && count > 0 && (
-                    <span style={{
-                        fontSize: 11, fontWeight: 500,
-                        color: active ? 'rgba(255,255,255,0.75)' : T.inkMuted,
-                        marginLeft: 1,
-                    }}>{count}</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: active ? 'rgba(255,255,255,0.75)' : T.inkMuted, marginLeft: 1 }}>{count}</span>
                 )}
             </button>
             {onDelete && (
@@ -525,8 +544,38 @@ export default function PipelineTab() {
         </div>
     );
 
+    // ── Grid template — rep col only for canSeeAll ────────────
+    // Columns: [checkbox] [deal] [account] [rep?] [stage] [arr] [close] [ai] [health] [days] [⋯]
+    const listGridCols = canSeeAll
+        ? (selectMode ? '36px 1.4fr 0.9fr 100px 100px 90px 90px 60px 70px 55px 24px' : '28px 1.4fr 0.9fr 100px 100px 90px 90px 60px 70px 55px 24px')
+        : (selectMode ? '36px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px'          : '28px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px');
+
     return (
         <div className="tab-page" style={{ fontFamily: T.sans }} onClick={() => filterOpen && false}>
+
+            {/* ── Viewing-as banner ─────────────────────────────── */}
+            {viewingAsLabel && (
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '6px 14px', marginBottom: 8,
+                    background: 'rgba(58,90,122,0.08)',
+                    border: `1px solid ${T.info}30`,
+                    borderRadius: T.rMd,
+                    fontSize: 12, fontFamily: T.sans,
+                }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.info} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    <span style={{ color: T.info, fontWeight: 600 }}>Viewing pipeline for {viewingAsLabel}</span>
+                    <button
+                        onClick={() => { setViewingRep(null); setViewingTeam(null); setViewingTerritory(null); }}
+                        style={{ marginLeft: 'auto', fontSize: 11, color: T.info, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontFamily: T.sans, opacity: 0.7 }}
+                    >
+                        Clear ✕
+                    </button>
+                </div>
+            )}
 
             {/* ── Page header ──────────────────────────────────── */}
             <div style={{ padding: '0 0 12px', display: 'flex', alignItems: 'flex-end', gap: 24 }}>
@@ -540,6 +589,11 @@ export default function PipelineTab() {
                         </span> open deals
                         <span style={{ margin: '0 7px', color: T.border }}>·</span>
                         <span style={{ fontWeight: 600, color: T.ink }}>{fmtA(pipelineTotalARR)}</span> total pipeline
+                        {weightedARR > 0 && <>
+                            <span style={{ margin: '0 7px', color: T.border }}>·</span>
+                            <span style={{ fontWeight: 600, color: T.ink }}>{fmtA(weightedARR)}</span>
+                            <span style={{ color: T.inkMuted }}> weighted</span>
+                        </>}
                         {commitARR > 0 && <>
                             <span style={{ margin: '0 7px', color: T.border }}>·</span>
                             <span style={{ fontWeight: 600, color: T.ink }}>{fmtA(commitARR)}</span>
@@ -558,8 +612,7 @@ export default function PipelineTab() {
                             border: `1px solid ${activeFilterCount > 0 ? T.ink : T.border}`,
                             color: activeFilterCount > 0 ? T.surface : T.ink,
                             fontSize: 12, fontWeight: 500, borderRadius: T.rSm,
-                            cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap',
-                            transition: 'all 120ms',
+                            cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap', transition: 'all 120ms',
                         }}
                         onMouseEnter={e => { if (!activeFilterCount) e.currentTarget.style.background = T.surface2; }}
                         onMouseLeave={e => { if (!activeFilterCount) e.currentTarget.style.background = 'transparent'; }}>
@@ -568,13 +621,12 @@ export default function PipelineTab() {
                         </svg>
                         Filter{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ''}
                     </button>
-                    {/* Select mode + delete */}
+                    {/* Select mode + bulk delete */}
                     {canEdit && selectMode && selectedOpps.length > 0 && (
                         <button
                             onClick={() => {
                                 showConfirm(`Delete ${selectedOpps.length} deal${selectedOpps.length > 1 ? 's' : ''}? This cannot be undone.`, async () => {
-                                    const toDelete = [...selectedOpps];
-                                    for (const id of toDelete) {
+                                    for (const id of [...selectedOpps]) {
                                         const opp = opportunities.find(o => o.id === id);
                                         if (opp) await handleDelete(opp).catch(console.error);
                                     }
@@ -593,6 +645,20 @@ export default function PipelineTab() {
                             {selectMode ? 'Cancel' : 'Select'}
                         </button>
                     )}
+                    {/* Export CSV */}
+                    {canSeeAll && (
+                        <button
+                            onClick={handleExport}
+                            disabled={!!exportingCSV}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 11px', background: 'transparent', border: `1px solid ${T.border}`, color: T.inkMid, fontSize: 12, fontWeight: 400, borderRadius: T.rSm, cursor: exportingCSV ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: exportingCSV ? 0.5 : 1 }}
+                            onMouseEnter={e => { if (!exportingCSV) e.currentTarget.style.background = T.surface2; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            {exportingCSV === 'pipeline' ? 'Exporting…' : 'Export'}
+                        </button>
+                    )}
                     {!isReadOnly && (
                         <button onClick={handleAddNew} style={{
                             display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -604,7 +670,6 @@ export default function PipelineTab() {
                             New deal
                         </button>
                     )}
-
                     {/* Filter panel */}
                     <FilterPanel
                         open={filterOpen}
@@ -633,49 +698,30 @@ export default function PipelineTab() {
 
             {/* ── Smart views + saved views row ────────────────── */}
             <div style={{ padding: '0 0 8px', display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                {/* SMART VIEWS label */}
                 <span style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans, marginRight: 3 }}>Smart views</span>
-
-                <Chip label="All open"         active={smartPreset === null}      onClick={() => setSmartPreset(null)} />
+                <Chip label="All open"          active={smartPreset === null}      onClick={() => setSmartPreset(null)} />
                 <Chip label="Closing this week" active={smartPreset === 'closing'} count={closingThisWeek.length} onClick={() => setSmartPreset(smartPreset === 'closing' ? null : 'closing')} />
-                <Chip label="Stalled"          active={smartPreset === 'stalled'} count={stalledOpps.length}     onClick={() => setSmartPreset(smartPreset === 'stalled' ? null : 'stalled')} />
-                <Chip label="My commit"        active={smartPreset === 'commit'}  onClick={() => setSmartPreset(smartPreset === 'commit' ? null : 'commit')} />
-                <Chip label="Recently touched" active={smartPreset === 'recent'}  onClick={() => setSmartPreset(smartPreset === 'recent' ? null : 'recent')} />
-
-                {/* Divider */}
+                <Chip label="Stalled"           active={smartPreset === 'stalled'} count={stalledOpps.length}    onClick={() => setSmartPreset(smartPreset === 'stalled' ? null : 'stalled')} />
+                <Chip label="My commit"         active={smartPreset === 'commit'}  onClick={() => setSmartPreset(smartPreset === 'commit' ? null : 'commit')} />
+                <Chip label="Recently touched"  active={smartPreset === 'recent'}  onClick={() => setSmartPreset(smartPreset === 'recent' ? null : 'recent')} />
                 <div style={{ width: 1, height: 20, background: T.border, margin: '0 5px' }} />
-
-                {/* SAVED label */}
                 <span style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans, marginRight: 3 }}>Saved</span>
-
                 {savedViews.map(v => (
-                    <Chip
-                        key={v.id}
-                        label={v.name}
-                        active={false}
+                    <Chip key={v.id} label={v.name} active={false}
                         onClick={() => applySavedView(v)}
                         onDelete={(e) => { e?.stopPropagation(); deleteSavedView(v.id); }}
                     />
                 ))}
-
-                {/* + Save current */}
                 <button
                     onClick={() => setSaveDialogOpen(true)}
-                    style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 4,
-                        padding: '5px 10px', background: 'transparent',
-                        border: `1px solid ${T.border}`, color: T.inkMid,
-                        fontSize: 12, fontWeight: 500, borderRadius: T.rSm,
-                        cursor: 'pointer', fontFamily: T.sans,
-                        transition: 'all 120ms',
-                    }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', background: 'transparent', border: `1px solid ${T.border}`, color: T.inkMid, fontSize: 12, fontWeight: 500, borderRadius: T.rSm, cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms' }}
                     onMouseEnter={e => { e.currentTarget.style.background = T.surface2; e.currentTarget.style.color = T.ink; }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = T.inkMid; }}>
                     + Save current
                 </button>
             </div>
 
-            {/* ── View switcher row — underline sub-tabs per style guide ── */}
+            {/* ── View switcher row ─────────────────────────────── */}
             <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, marginBottom: 2 }}>
                 {views.map(v => {
                     const active = pipelineView === v.id;
@@ -684,8 +730,7 @@ export default function PipelineTab() {
                             onClick={() => { setPipelineView(v.id); setFunnelExpandedStage(null); }}
                             style={{
                                 display: 'inline-flex', alignItems: 'center', gap: 6,
-                                padding: '8px 16px',
-                                border: 'none',
+                                padding: '8px 16px', border: 'none',
                                 borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent',
                                 background: 'transparent',
                                 color: active ? T.ink : T.inkMuted,
@@ -763,36 +808,51 @@ export default function PipelineTab() {
                 {/* ── LIST VIEW ──────────────────────────────────── */}
                 {pipelineView === 'table' && (
                     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, overflow: 'auto', fontFamily: T.sans }}>
-                        {/* Header */}
-                        {/* Select-all header row */}
+                        {/* Sticky header row */}
                         <div style={{
                             display: 'grid',
-                            gridTemplateColumns: selectMode ? '36px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px' : '28px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px',
+                            gridTemplateColumns: listGridCols,
                             alignItems: 'center', padding: '0 14px', height: 36,
                             background: T.surface2, borderBottom: `1px solid ${T.border}`,
                             fontSize: 10, fontWeight: 700, color: T.inkMuted,
                             letterSpacing: 0.6, textTransform: 'uppercase',
                             position: 'sticky', top: 0, zIndex: 1,
                         }}>
+                            {/* Select-all checkbox */}
                             {selectMode ? (
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                     onClick={() => setSelectedOpps(prev => prev.length === smartFilteredOpps.length ? [] : smartFilteredOpps.map(o => o.id))}>
                                     <div style={{ width: 14, height: 14, borderRadius: 3, border: `1.5px solid ${selectedOpps.length === smartFilteredOpps.length && smartFilteredOpps.length > 0 ? T.ink : T.borderStrong}`, background: selectedOpps.length === smartFilteredOpps.length && smartFilteredOpps.length > 0 ? T.ink : 'transparent', cursor: 'pointer' }} />
                                 </div>
                             ) : <div/>}
-                            <div>Deal</div><div>Account</div><div>Stage</div>
-                            <div style={{ textAlign: 'right' }}>ARR</div>
-                            <div>Close</div><div>AI</div><div>Health</div><div>Days</div><div/>
+
+                            <SortHeader label="Deal"    field="opportunityName" currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} />
+                            <SortHeader label="Account" field="account"         currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} />
+                            {canSeeAll && <SortHeader label="Rep" field="salesRep" currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} />}
+                            <div>Stage</div>
+                            <SortHeader label="ARR"   field="arr"                currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} style={{ textAlign: 'right', justifyContent: 'flex-end' }} />
+                            <SortHeader label="Close" field="forecastedCloseDate" currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} />
+                            <div>AI</div>
+                            <div>Health</div>
+                            <SortHeader label="Days" field="stageChangedDate" currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} />
+                            <div/>
                         </div>
-                        {/* Rows */}
+
+                        {/* Data rows */}
                         {smartFilteredOpps
                             .sort((a, b) => {
                                 const dir = pipelineSortDir === 'asc' ? 1 : -1;
                                 switch (pipelineSortField) {
-                                    case 'salesRep': return dir * (a.salesRep||'').localeCompare(b.salesRep||'');
-                                    case 'account':  return dir * (a.account||'').localeCompare(b.account||'');
-                                    case 'arr':      return dir * ((parseFloat(a.arr)||0) - (parseFloat(b.arr)||0));
-                                    default:         return dir * (new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
+                                    case 'opportunityName': return dir * (a.opportunityName||a.account||'').localeCompare(b.opportunityName||b.account||'');
+                                    case 'salesRep':        return dir * (a.salesRep||'').localeCompare(b.salesRep||'');
+                                    case 'account':         return dir * (a.account||'').localeCompare(b.account||'');
+                                    case 'arr':             return dir * ((parseFloat(a.arr)||0) - (parseFloat(b.arr)||0));
+                                    case 'stageChangedDate': {
+                                        const da = a.stageChangedDate ? new Date(a.stageChangedDate+'T12:00:00').getTime() : 0;
+                                        const db = b.stageChangedDate ? new Date(b.stageChangedDate+'T12:00:00').getTime() : 0;
+                                        return dir * (da - db);
+                                    }
+                                    default: return dir * (new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
                                 }
                             })
                             .map(opp => {
@@ -802,44 +862,71 @@ export default function PipelineTab() {
                                 const closeDays   = opp.forecastedCloseDate ? Math.round((new Date(opp.forecastedCloseDate + 'T12:00:00') - new Date()) / 86400000) : null;
                                 const overdue     = closeDays !== null && closeDays < 0;
                                 const aiRisk      = opp.aiScore && opp.aiScore.score < 50;
+                                const isSelected  = selectedOpps.includes(opp.id);
+
                                 return (
                                     <div key={opp.id}
-                                        onClick={() => selectMode ? setSelectedOpps(prev => prev.includes(opp.id) ? prev.filter(x => x !== opp.id) : [...prev, opp.id]) : (setEditingOpp(opp), setShowModal(true))}
+                                        onClick={() => selectMode
+                                            ? setSelectedOpps(prev => prev.includes(opp.id) ? prev.filter(x => x !== opp.id) : [...prev, opp.id])
+                                            : (setEditingOpp(opp), setShowModal(true))
+                                        }
                                         style={{
                                             display: 'grid',
-                                            gridTemplateColumns: selectMode ? '36px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px' : '28px 1.6fr 1fr 100px 90px 90px 60px 70px 55px 24px',
+                                            gridTemplateColumns: listGridCols,
                                             alignItems: 'center', padding: '0 14px', height: 42,
                                             borderBottom: `1px solid ${T.border}`,
-                                            background: selectedOpps.includes(opp.id) ? 'rgba(42,38,34,0.04)' : 'transparent',
+                                            background: isSelected ? 'rgba(42,38,34,0.04)' : 'transparent',
                                             fontSize: 12, color: T.ink, cursor: 'pointer', transition: 'background 100ms',
                                         }}
-                                        onMouseEnter={e => { if (!selectedOpps.includes(opp.id)) e.currentTarget.style.background = T.surface2; }}
-                                        onMouseLeave={e => { if (!selectedOpps.includes(opp.id)) e.currentTarget.style.background = selectedOpps.includes(opp.id) ? 'rgba(42,38,34,0.04)' : 'transparent'; }}>
-                                        {/* Checkbox — only in select mode */}
+                                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = T.surface2; }}
+                                        onMouseLeave={e => { e.currentTarget.style.background = isSelected ? 'rgba(42,38,34,0.04)' : 'transparent'; }}>
+
+                                        {/* Checkbox */}
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                             onClick={e => { e.stopPropagation(); setSelectedOpps(prev => prev.includes(opp.id) ? prev.filter(x => x !== opp.id) : [...prev, opp.id]); }}>
                                             {selectMode && (
-                                                <div style={{ width: 16, height: 16, borderRadius: 3, border: `1.5px solid ${selectedOpps.includes(opp.id) ? T.ink : T.borderStrong}`, background: selectedOpps.includes(opp.id) ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
-                                                    {selectedOpps.includes(opp.id) && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={T.surface} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
+                                                <div style={{ width: 16, height: 16, borderRadius: 3, border: `1.5px solid ${isSelected ? T.ink : T.borderStrong}`, background: isSelected ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
+                                                    {isSelected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={T.surface} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
                                                 </div>
                                             )}
                                         </div>
-                                        {/* Deal */}
-                                        <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>{opp.opportunityName || opp.account}</div>
+
+                                        {/* Deal — with next step tooltip on hover */}
+                                        <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}
+                                            title={opp.nextStep ? `Next step: ${opp.nextStep}` : undefined}>
+                                            {opp.opportunityName || opp.account}
+                                            {opp.nextStep && (
+                                                <span style={{ marginLeft: 5, fontSize: 10, color: T.goldInk, fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    → {opp.nextStep.length > 40 ? opp.nextStep.slice(0, 40) + '…' : opp.nextStep}
+                                                </span>
+                                            )}
+                                        </div>
+
                                         {/* Account */}
                                         <div style={{ color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>{opp.account}</div>
+
+                                        {/* Rep — canSeeAll only */}
+                                        {canSeeAll && (
+                                            <div style={{ color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8, fontSize: 11 }}>
+                                                {opp.salesRep || opp.assignedTo || '—'}
+                                            </div>
+                                        )}
+
                                         {/* Stage */}
                                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rSm, fontSize: 11, fontWeight: 500, width: 'fit-content' }}>
                                             <div style={{ width: 6, height: 6, borderRadius: 1, background: stageColor(opp.stage) }}/>{opp.stage}
                                         </div>
+
                                         {/* ARR */}
                                         <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: T.ink }}>
                                             ${(parseFloat(opp.arr)||0) >= 1000 ? Math.round((parseFloat(opp.arr)||0)/1000) + 'K' : (parseFloat(opp.arr)||0).toLocaleString()}
                                         </div>
+
                                         {/* Close */}
                                         <div style={{ fontSize: 11, color: overdue ? T.danger : T.inkMid, fontWeight: overdue ? 600 : 400 }}>
                                             {opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                                         </div>
+
                                         {/* AI */}
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                                             {opp.aiScore ? (
@@ -847,15 +934,18 @@ export default function PipelineTab() {
                                                 <span style={{ fontSize: 11, color: aiRisk ? T.danger : T.inkMid }}>{opp.aiScore.score}</span></>
                                             ) : <span style={{ fontSize: 11, color: T.inkMuted }}>—</span>}
                                         </div>
+
                                         {/* Health */}
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                                             <div style={{ width: 6, height: 6, borderRadius: '50%', background: health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger }}/>
                                             <span style={{ fontSize: 11, color: T.inkMid }}>{health.score}</span>
                                         </div>
-                                        {/* Days */}
+
+                                        {/* Days in stage */}
                                         <div style={{ fontSize: 11, color: stale ? T.danger : T.inkMuted, fontWeight: stale ? 600 : 400 }}>
                                             {daysInStage !== null ? daysInStage + 'd' : '—'}
                                         </div>
+
                                         {/* ⋯ */}
                                         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>
@@ -900,13 +990,13 @@ export default function PipelineTab() {
 
                 {/* ── FORECAST VIEW ─────────────────────────────────── */}
                 {pipelineView === 'forecast' && (() => {
-                    const open         = smartFilteredOpps.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
-                    const commitDeals  = open.filter(o => ['Negotiation','Negotiation/Review','Contracts','Closing'].includes(o.stage)).sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
-                    const bestDeals    = open.filter(o => ['Proposal'].includes(o.stage)).sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
-                    const pipeDeals    = open.filter(o => ['Prospecting','Qualification','Discovery','Evaluation (Demo)'].includes(o.stage)).sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
-                    const sumARR = arr => arr.reduce((s,o) => s + (parseFloat(o.arr)||0), 0);
+                    const open        = smartFilteredOpps.filter(o => !['Closed Won','Closed Lost'].includes(o.stage));
+                    const commitDeals = open.filter(o => ['Negotiation','Negotiation/Review','Contracts','Closing'].includes(o.stage)).sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
+                    const bestDeals   = open.filter(o => ['Proposal'].includes(o.stage)).sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
+                    const pipeDeals   = open.filter(o => ['Prospecting','Qualification','Discovery','Evaluation (Demo)'].includes(o.stage)).sort((a,b) => new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
+                    const sumARR      = arr => arr.reduce((s,o) => s + (parseFloat(o.arr)||0), 0);
+                    const forecastTotalARR = smartFilteredOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
 
-                    // Real "this week" stats
                     const weekStart    = new Date(); weekStart.setDate(weekStart.getDate() - weekStart.getDay()); weekStart.setHours(0,0,0,0);
                     const weekStartStr = weekStart.toISOString().split('T')[0];
                     const dealsAdvanced = visibleOpportunities.filter(o => o.stageChangedDate >= weekStartStr && !['Closed Won','Closed Lost'].includes(o.stage)).length;
@@ -921,7 +1011,14 @@ export default function PipelineTab() {
                         const overdue   = closedays !== null && closedays < 0;
                         const health    = calculateDealHealth(opp);
                         const hColor    = health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger;
-                        const relDay    = d => { if (!d) return '—'; const diff = Math.round((new Date(d+'T12:00:00') - new Date()) / 86400000); if (diff === 0) return 'today'; if (diff < 0) return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}); if (diff <= 14) return diff+'d'; return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}); };
+                        const relDay    = d => {
+                            if (!d) return '—';
+                            const diff = Math.round((new Date(d+'T12:00:00') - new Date()) / 86400000);
+                            if (diff === 0) return 'today';
+                            if (diff < 0)  return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+                            if (diff <= 14) return diff+'d';
+                            return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+                        };
                         return (
                             <div onClick={() => { setEditingOpp(opp); setShowModal(true); }}
                                 style={{ background: T.surface, border: `1px solid ${T.border}`, borderLeft: `3px solid ${stageColor(opp.stage)}`, borderRadius: T.rSm, padding: '9px 12px', minWidth: 200, maxWidth: 220, flexShrink: 0, cursor: 'pointer', transition: 'box-shadow 120ms', fontFamily: T.sans }}
@@ -961,18 +1058,16 @@ export default function PipelineTab() {
 
                     return (
                         <div style={{ paddingBottom: 20 }}>
-                            {/* Forecast header */}
                             <div style={{ marginBottom: 14 }}>
                                 <div style={{ fontFamily: T.serif, fontSize: 26, fontStyle: 'italic', fontWeight: 300, letterSpacing: -0.8, color: T.ink, lineHeight: 1, marginBottom: 4 }}>Your quarter, at a glance.</div>
                                 <div style={{ fontSize: 12, color: T.inkMuted }}>Three lanes: what's committed, what's likely, what's coming.</div>
                             </div>
-                            {/* This week strip */}
                             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 20, fontSize: 12, fontFamily: T.sans, marginBottom: 20 }}>
                                 <span style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase' }}>This week</span>
                                 {dealsAdvanced > 0 && <span><span style={{ color: T.ok, fontWeight: 700 }}>+{dealsAdvanced}</span> <span style={{ color: T.inkMid }}>deals advanced</span></span>}
                                 {dealsAdvanced > 0 && <span style={{ color: T.border }}>·</span>}
                                 {dealsSlipped > 0 && <><span><span style={{ color: T.danger, fontWeight: 700 }}>{dealsSlipped}</span> <span style={{ color: T.inkMid }}>slipped</span></span><span style={{ color: T.border }}>·</span></>}
-                                <span><span style={{ color: T.ink, fontWeight: 700 }}>{fmtA(pipelineTotalARR)}</span> <span style={{ color: T.inkMid }}>total pipeline</span></span>
+                                <span><span style={{ color: T.ink, fontWeight: 700 }}>{fmtA(forecastTotalARR)}</span> <span style={{ color: T.inkMid }}>total pipeline</span></span>
                                 <div style={{ flex: 1 }}/>
                             </div>
                             <ForecastLane label="Commit"    subtitle={`${commitDeals.length} deal${commitDeals.length !== 1 ? 's' : ''} you're betting on`} opps={commitDeals} total={sumARR(commitDeals)} accent={T.ok}/>
@@ -983,8 +1078,6 @@ export default function PipelineTab() {
                 })()}
 
             </div>{/* end spt-pipeline-desktop */}
-
-
 
             {/* Save view dialog */}
             <SaveViewDialog
