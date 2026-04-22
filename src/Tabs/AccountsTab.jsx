@@ -166,12 +166,145 @@ function AccountCard({ account, warmthData, onClick, selectMode, isSelected, onT
     );
 }
 
-// ── Account row — with optional child rows ────────────────────
+// ── Sub-account side drawer ───────────────────────────────────
+function SubAccountDrawer({ parentAccount, subAccounts, contacts, onClose, onView }) {
+    const [q, setQ] = useState('');
+    const inputRef = useRef(null);
+
+    // Focus search on open
+    React.useEffect(() => {
+        const t = setTimeout(() => inputRef.current?.focus(), 80);
+        return () => clearTimeout(t);
+    }, []);
+
+    // Close on Escape
+    React.useEffect(() => {
+        const handler = e => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [onClose]);
+
+    const filtered = subAccounts.filter(s =>
+        !q.trim() || (s.name||'').toLowerCase().includes(q.toLowerCase())
+    );
+
+    const totalContacts = subAccounts.reduce((sum, s) => {
+        return sum + contacts.filter(c => (c.company||'').toLowerCase() === (s.name||'').toLowerCase()).length;
+    }, 0);
+
+    return (
+        <>
+            {/* Backdrop — clicking closes drawer */}
+            <div
+                onClick={onClose}
+                style={{ position: 'fixed', inset: 0, zIndex: 290, background: 'transparent' }}
+            />
+
+            {/* Drawer panel */}
+            <div style={{
+                position: 'fixed', top: 0, right: 0, bottom: 0,
+                width: 340, zIndex: 300,
+                background: T.surface,
+                borderLeft: `1px solid ${T.borderStrong}`,
+                boxShadow: '-8px 0 32px rgba(42,38,34,0.14)',
+                display: 'flex', flexDirection: 'column',
+                fontFamily: T.sans,
+                animation: 'slideInDrawer 160ms ease-out',
+            }}>
+                {/* Drawer header */}
+                <div style={{ padding: '16px 18px 12px', borderBottom: `1px solid ${T.border}` }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: T.inkMuted }}>
+                            Sub-accounts
+                        </div>
+                        <button
+                            onClick={onClose}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 18, lineHeight: 1, padding: '0 2px', display: 'flex', alignItems: 'center' }}>
+                            ×
+                        </button>
+                    </div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: T.ink, letterSpacing: -0.3, lineHeight: 1.1, marginBottom: 4 }}>
+                        {parentAccount.name}
+                    </div>
+                    <div style={{ fontSize: 12, color: T.inkMuted }}>
+                        {subAccounts.length} sub-account{subAccounts.length !== 1 ? 's' : ''} · {totalContacts} contact{totalContacts !== 1 ? 's' : ''} total
+                    </div>
+
+                    {/* Search within drawer */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '6px 10px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r }}>
+                        <Icon name="search" size={13} color={T.inkMuted} />
+                        <input
+                            ref={inputRef}
+                            value={q}
+                            onChange={e => setQ(e.target.value)}
+                            placeholder="Search sub-accounts"
+                            style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12.5, color: T.ink, fontFamily: T.sans, flex: 1 }}
+                        />
+                        {q && <button onClick={() => setQ('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>}
+                    </div>
+                </div>
+
+                {/* Sub-account list */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+                    {filtered.length === 0 ? (
+                        <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontStyle: 'italic' }}>
+                            {q ? `No sub-accounts match "${q}"` : 'No sub-accounts'}
+                        </div>
+                    ) : filtered.map((sub, i) => {
+                        const subContactCount = contacts.filter(c =>
+                            (c.company||'').toLowerCase() === (sub.name||'').toLowerCase()
+                        ).length;
+                        const industry = sub.verticalMarket || sub.industry || null;
+                        return (
+                            <div
+                                key={sub.id}
+                                onClick={() => { onClose(); onView(sub); }}
+                                style={{
+                                    padding: '11px 18px',
+                                    borderBottom: i < filtered.length - 1 ? `1px solid ${T.border}` : 'none',
+                                    cursor: 'pointer',
+                                    transition: 'background 80ms',
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                <div style={{ fontSize: 13.5, fontWeight: 600, color: T.ink, marginBottom: 3 }}>
+                                    {sub.name}
+                                </div>
+                                <div style={{ fontSize: 11.5, color: T.inkMuted, display: 'flex', alignItems: 'center', gap: 5 }}>
+                                    {industry && <span>{industry}</span>}
+                                    {industry && <span style={{ opacity: 0.4 }}>·</span>}
+                                    <span>{subContactCount} contact{subContactCount !== 1 ? 's' : ''}</span>
+                                </div>
+                            </div>
+                        );
+                    })}
+
+                    {/* "and N more" footer when search is empty and list is long */}
+                    {!q && subAccounts.length > 8 && (
+                        <div style={{ padding: '10px 18px', fontSize: 11.5, color: T.inkMuted, textAlign: 'center', borderTop: `1px solid ${T.border}` }}>
+                            and {subAccounts.length - 8} more…{' '}
+                            <span style={{ color: T.goldInk, fontWeight: 600, cursor: 'pointer' }}>Show all</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <style>{`
+                @keyframes slideInDrawer {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to   { transform: translateX(0);    opacity: 1; }
+                }
+            `}</style>
+        </>
+    );
+}
+
+// ── Account row — sub-accounts open in side drawer, not inline ───
 function AccountRow({
     account, warmthData, contacts, onView, onEdit,
     isEven, selectMode, isSelected, onToggleSelect,
     getSubAccounts, getWarmthFn, opportunities, activities,
-    expanded, onToggleExpand,
+    onOpenDrawer,
     depth = 0,
 }) {
     const [hov, setHov] = useState(false);
@@ -180,138 +313,115 @@ function AccountRow({
     const contactCount = contacts.filter(c => (c.company||'').toLowerCase() === (account.name||'').toLowerCase()).length;
     const ownerInitials = (account.accountOwner||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
 
+    // Only top-level rows show sub-account badge
     const subAccounts = depth === 0 ? getSubAccounts(account.id) : [];
     const hasChildren = subAccounts.length > 0;
 
     return (
-        <>
-            <div
-                onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: selectMode
-                        ? '36px 3px 1.8fr 1fr 90px 60px 110px 100px 28px'
-                        : '3px 1.8fr 1fr 90px 60px 110px 100px 28px',
-                    alignItems: 'center', height: 52,
-                    borderBottom: `1px solid ${T.border}`,
-                    background: isSelected
-                        ? 'rgba(42,38,34,0.04)'
-                        : depth > 0
-                            ? T.bg
-                            : hov ? T.surface2 : isEven ? T.surface : T.bg,
-                    cursor: 'pointer', fontFamily: T.sans, transition: 'background 80ms',
-                    paddingLeft: depth > 0 ? depth * 20 : 0,
-                }}
-                onClick={() => selectMode ? onToggleSelect(account.id) : onView(account)}>
+        <div
+            onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+            style={{
+                display: 'grid',
+                gridTemplateColumns: selectMode
+                    ? '36px 3px 1.8fr 1fr 90px 60px 110px 100px 28px'
+                    : '3px 1.8fr 1fr 90px 60px 110px 100px 28px',
+                alignItems: 'center', height: 52,
+                borderBottom: `1px solid ${T.border}`,
+                background: isSelected
+                    ? 'rgba(42,38,34,0.04)'
+                    : depth > 0
+                        ? T.bg
+                        : hov ? T.surface2 : isEven ? T.surface : T.bg,
+                cursor: 'pointer', fontFamily: T.sans, transition: 'background 80ms',
+                paddingLeft: depth > 0 ? depth * 20 : 0,
+            }}
+            onClick={() => selectMode ? onToggleSelect(account.id) : onView(account)}>
 
-                {/* Checkbox — select mode only */}
-                {selectMode && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        onClick={e => { e.stopPropagation(); onToggleSelect(account.id); }}>
-                        <div style={{ width: 16, height: 16, borderRadius: 3, border: `1.5px solid ${isSelected ? T.ink : T.borderStrong}`, background: isSelected ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
-                            {isSelected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fbf8f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
-                        </div>
-                    </div>
-                )}
-
-                {/* Warmth accent bar */}
-                <div style={{ width: 3, height: '100%', background: dot, flexShrink: 0 }} />
-
-                {/* Account name + expand toggle */}
-                <div style={{ paddingLeft: 12, paddingRight: 8, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {/* Expand/collapse toggle for parent accounts */}
-                    {hasChildren && depth === 0 && (
-                        <button
-                            onClick={e => { e.stopPropagation(); onToggleExpand(account.id); }}
-                            style={{ flexShrink: 0, background: 'none', border: 'none', padding: 2, cursor: 'pointer', color: T.inkMuted, display: 'flex', alignItems: 'center', transition: 'transform 120ms', transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
-                            <Icon name="chevron-down" size={12} color={T.inkMuted} />
-                        </button>
-                    )}
-                    {/* Child indent indicator */}
-                    {depth > 0 && (
-                        <Icon name="building" size={11} color={T.inkMuted} />
-                    )}
-                    <div style={{ minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontSize: 13, fontWeight: depth > 0 ? 500 : 600, color: depth > 0 ? T.inkMid : T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.name}</span>
-                            {account.isVip && <span style={{ fontSize: 8, fontWeight: 700, color: T.goldInk, background: 'rgba(200,185,154,0.2)', padding: '1px 5px', borderRadius: T.r, border: `1px solid ${T.gold}`, letterSpacing: 0.5 }}>VIP</span>}
-                            {account.isDnc && <span style={{ fontSize: 8, fontWeight: 700, color: T.danger, background: 'rgba(156,58,46,0.1)', padding: '1px 5px', borderRadius: T.r, border: `1px solid rgba(156,58,46,0.3)`, letterSpacing: 0.5 }}>DNC</span>}
-                            {hasChildren && !expanded && (
-                                <span style={{ fontSize: 9, color: T.inkMuted, background: T.surface2, border: `1px solid ${T.border}`, padding: '1px 5px', borderRadius: 9, fontWeight: 600 }}>{subAccounts.length}</span>
-                            )}
-                        </div>
-                        <div style={{ fontSize: 10, color: T.inkMuted, marginTop: 1 }}>
-                            {contactCount > 0 && `${contactCount} contact${contactCount!==1?'s':''}`}
-                            {contactCount > 0 && account.employeeCount && ' · '}
-                            {account.employeeCount && `${account.employeeCount} employees`}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Industry */}
-                <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
-                    {account.verticalMarket || account.industry || '—'}
-                </div>
-
-                {/* Pipeline */}
-                <div style={{ fontSize: 12, fontWeight: 600, color: pipeline > 0 ? T.ink : T.inkMuted, fontVariantNumeric: 'tabular-nums', paddingRight: 8 }}>
-                    {pipeline > 0 ? fmtArr(pipeline) : '—'}
-                </div>
-
-                {/* Deals */}
-                <div style={{ fontSize: 12, color: T.inkMid, textAlign: 'center' }}>
-                    {activeOpps.length || '—'}
-                </div>
-
-                {/* Last contact — use lastAct.date directly */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, paddingRight: 8 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: dot, flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, color: daysSince !== null && daysSince < 7 ? T.danger : T.inkMuted }}>
-                        {lastAct?.date ? relDate(lastAct.date) : '—'}
-                    </span>
-                </div>
-
-                {/* Owner */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {account.accountOwner && (
-                        <div style={{ width: 22, height: 22, borderRadius: '50%', background: avatarBg(account.accountOwner), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, flexShrink: 0 }}>{ownerInitials}</div>
-                    )}
-                    <span style={{ fontSize: 11, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.accountOwner || '—'}</span>
-                </div>
-
-                {/* Edit */}
+            {/* Checkbox — select mode only */}
+            {selectMode && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    onClick={e => { e.stopPropagation(); onEdit(account); }}>
-                    <Icon name="dots" size={14} color={hov ? T.inkMid : T.border} />
+                    onClick={e => { e.stopPropagation(); onToggleSelect(account.id); }}>
+                    <div style={{ width: 16, height: 16, borderRadius: 3, border: `1.5px solid ${isSelected ? T.ink : T.borderStrong}`, background: isSelected ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
+                        {isSelected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fbf8f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
+                    </div>
+                </div>
+            )}
+
+            {/* Warmth accent bar */}
+            <div style={{ width: 3, height: '100%', background: dot, flexShrink: 0 }} />
+
+            {/* Account name + sub-account badge */}
+            <div style={{ paddingLeft: 12, paddingRight: 8, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                {depth > 0 && <Icon name="building" size={11} color={T.inkMuted} />}
+                <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: depth > 0 ? 500 : 600, color: depth > 0 ? T.inkMid : T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.name}</span>
+                        {account.isVip && <span style={{ fontSize: 8, fontWeight: 700, color: T.goldInk, background: 'rgba(200,185,154,0.2)', padding: '1px 5px', borderRadius: T.r, border: `1px solid ${T.gold}`, letterSpacing: 0.5 }}>VIP</span>}
+                        {account.isDnc && <span style={{ fontSize: 8, fontWeight: 700, color: T.danger, background: 'rgba(156,58,46,0.1)', padding: '1px 5px', borderRadius: T.r, border: `1px solid rgba(156,58,46,0.3)`, letterSpacing: 0.5 }}>DNC</span>}
+                    </div>
+                    <div style={{ fontSize: 10, color: T.inkMuted, marginTop: 1 }}>
+                        {contactCount > 0 && `${contactCount} contact${contactCount!==1?'s':''}`}
+                        {contactCount > 0 && account.employeeCount && ' · '}
+                        {account.employeeCount && `${account.employeeCount} employees`}
+                    </div>
                 </div>
             </div>
 
-            {/* Child rows — rendered when expanded */}
-            {hasChildren && expanded && subAccounts.map((child, ci) => {
-                const childWarmth = getWarmthFn(child, opportunities, activities);
-                return (
-                    <AccountRow
-                        key={child.id}
-                        account={child}
-                        warmthData={childWarmth}
-                        contacts={contacts}
-                        onView={onView}
-                        onEdit={onEdit}
-                        isEven={ci % 2 === 0}
-                        selectMode={selectMode}
-                        isSelected={false}
-                        onToggleSelect={onToggleSelect}
-                        getSubAccounts={getSubAccounts}
-                        getWarmthFn={getWarmthFn}
-                        opportunities={opportunities}
-                        activities={activities}
-                        expanded={false}
-                        onToggleExpand={() => {}}
-                        depth={depth + 1}
-                    />
-                );
-            })}
-        </>
+            {/* Industry */}
+            <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                {account.verticalMarket || account.industry || '—'}
+            </div>
+
+            {/* Pipeline */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: pipeline > 0 ? T.ink : T.inkMuted, fontVariantNumeric: 'tabular-nums', paddingRight: 8 }}>
+                {pipeline > 0 ? fmtArr(pipeline) : '—'}
+            </div>
+
+            {/* Deals — shows sub-account badge here when account has children */}
+            <div style={{ fontSize: 12, color: T.inkMid, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {hasChildren ? (
+                    <button
+                        onClick={e => { e.stopPropagation(); onOpenDrawer(account, subAccounts); }}
+                        title={`${subAccounts.length} sub-account${subAccounts.length !== 1 ? 's' : ''}`}
+                        style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            padding: '3px 8px',
+                            background: T.ink, color: T.surface,
+                            border: 'none', borderRadius: T.r,
+                            fontSize: 11, fontWeight: 700,
+                            cursor: 'pointer', fontFamily: T.sans,
+                            letterSpacing: 0.2,
+                        }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18M3 9h18"/></svg>
+                        {subAccounts.length}
+                    </button>
+                ) : (
+                    activeOpps.length || '—'
+                )}
+            </div>
+
+            {/* Last contact */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, paddingRight: 8 }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: dot, flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: daysSince !== null && daysSince < 7 ? T.danger : T.inkMuted }}>
+                    {lastAct?.date ? relDate(lastAct.date) : '—'}
+                </span>
+            </div>
+
+            {/* Owner */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {account.accountOwner && (
+                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: avatarBg(account.accountOwner), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, flexShrink: 0 }}>{ownerInitials}</div>
+                )}
+                <span style={{ fontSize: 11, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.accountOwner || '—'}</span>
+            </div>
+
+            {/* Edit */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onClick={e => { e.stopPropagation(); onEdit(account); }}>
+                <Icon name="dots" size={14} color={hov ? T.inkMid : T.border} />
+            </div>
+        </div>
     );
 }
 
@@ -433,6 +543,7 @@ export default function AccountsTab() {
     const [expandedIds, setExpandedIds] = useState({});  // { [accountId]: bool }
     const [filterOpen, setFilterOpen]   = useState(false);
     const [panelFilters, setPanelFilters] = useState({ industry: '__all__', owner: '__all__', hasPipe: '__all__' });
+    const [drawerAccount, setDrawerAccount] = useState(null); // account whose subs are shown in side drawer
     const searchRef = useRef(null);
 
     const activePanelFilterCount = [
@@ -609,7 +720,7 @@ export default function AccountsTab() {
         opportunities, activities,
         selectMode, onToggleSelect: toggleSelect,
         onView: setViewingAccount, onEdit: handleEditAccount,
-        expandedIds, onToggleExpand: toggleExpand,
+        onOpenDrawer: (account, subs) => setDrawerAccount({ account, subs }),
     };
 
     // ── Signal view ───────────────────────────────────────────
@@ -845,6 +956,17 @@ export default function AccountsTab() {
         <div className="tab-page" style={{ fontFamily: T.sans }}>
             <Header />
             <FilterBar />
+
+            {/* Sub-account side drawer */}
+            {drawerAccount && (
+                <SubAccountDrawer
+                    parentAccount={drawerAccount.account}
+                    subAccounts={drawerAccount.subs}
+                    contacts={contacts}
+                    onClose={() => setDrawerAccount(null)}
+                    onView={setViewingAccount}
+                />
+            )}
 
             {/* ── Underline sub-tab switcher — matches app standard ── */}
             <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, marginBottom: 12 }}>
