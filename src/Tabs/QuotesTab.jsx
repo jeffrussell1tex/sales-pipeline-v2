@@ -447,7 +447,234 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
     );
 };
 
-// ─── Configurator right panel ─────────────────────────────────
+// ─── Inline line item editor — opens when "Edit in builder" is clicked ────────
+const LineItemEditor = ({ quote, products, onSave, onClose, saving }) => {
+    const [lineItems,     setLineItems]     = useState(() => (quote.lineItems || []).map((li, i) => ({ ...li, _key: li._key || (Date.now() + i) })));
+    const [catalogSearch, setCatalogSearch] = useState('');
+    const [paymentTerms,  setPaymentTerms]  = useState(quote.paymentTerms || 'Net 30 · Annual');
+    const [validUntil,    setValidUntil]    = useState(quote.validUntil || '');
+    const [notes,         setNotes]         = useState(quote.notes || '');
+    const [error,         setError]         = useState(null);
+
+    const { lines, listTotal, totalValue, avgDisc, avgDiscPct } = calcLineTotals(lineItems, products || []);
+    const tier = tierForDiscount(avgDisc);
+
+    // Catalog — grouped by category, filtered
+    const catalogGroups = useMemo(() => {
+        const groups = {};
+        [...(products || [])].filter(p => p.active !== false)
+            .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+            .forEach(p => {
+                if (catalogSearch.trim()) {
+                    const q = catalogSearch.toLowerCase();
+                    if (!(p.name || '').toLowerCase().includes(q) && !(p.category || '').toLowerCase().includes(q)) return;
+                }
+                const cat = p.category || 'Other';
+                if (!groups[cat]) groups[cat] = [];
+                groups[cat].push(p);
+            });
+        return groups;
+    }, [products, catalogSearch]);
+
+    const addProduct = (prod) => {
+        if (lineItems.some(li => li.productId === prod.id)) return; // already added
+        const normType = (prod.productType || prod.type || '').replace('_', '-');
+        setLineItems(prev => [...prev, {
+            _key:        Date.now() + Math.random(),
+            productId:   prod.id,
+            productName: prod.name,
+            productType: normType,
+            unit:        prod.unit || 'flat',
+            listPrice:   prod.customPrice ? '' : (Number(prod.listPrice || prod.price) || 0),
+            quantity:    1,
+            discountPct: 0,
+            customPrice: prod.customPrice === true,
+        }]);
+    };
+
+    const updateLine = (key, field, val) => {
+        setLineItems(prev => prev.map(li => li._key === key ? { ...li, [field]: val } : li));
+    };
+
+    const removeLine = (key) => setLineItems(prev => prev.filter(li => li._key !== key));
+
+    const handleSave = async () => {
+        setError(null);
+        const payload = { ...quote, lineItems: lineItems.map(({ _key, ...li }) => li), paymentTerms, validUntil, notes };
+        try { await onSave(payload); onClose(); }
+        catch (err) { setError(err.message || 'Failed to save.'); }
+    };
+
+    return (
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {/* Editor header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: `1px solid ${T.border}`, background: T.ink }}>
+                <div style={{ width: 3, height: 22, background: T.gold, borderRadius: 2 }} />
+                <div style={{ fontSize: 13, fontWeight: 600, color: T.surface, fontFamily: T.sans }}>
+                    Line items — {quote.name || quote.quoteNumber}
+                </div>
+                <div style={{ flex: 1 }} />
+                {tier.approver && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: T.warn, background: `${T.warn}25`, border: `1px solid ${T.warn}50`, padding: '2px 8px', borderRadius: 10, fontFamily: T.sans }}>
+                        ⚠ {tier.label} — {Math.round(avgDiscPct)}% avg disc
+                    </span>
+                )}
+                <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', color: T.surface, borderRadius: T.r, padding: '5px 10px', fontSize: 12, cursor: 'pointer', fontFamily: T.sans }}>✕ Close</button>
+            </div>
+
+            <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                {/* LEFT: Product catalog */}
+                <div style={{ width: 240, flexShrink: 0, background: '#1c1917', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+                    <div style={{ padding: '10px 12px', borderBottom: '1px solid rgba(245,241,235,0.1)' }}>
+                        <div style={{ fontSize: '0.625rem', fontWeight: 700, color: T.gold, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Product Catalog</div>
+                        <input
+                            value={catalogSearch}
+                            onChange={e => setCatalogSearch(e.target.value)}
+                            placeholder="Search products…"
+                            style={{ width: '100%', padding: '5px 8px', background: 'rgba(245,241,235,0.08)', border: '1px solid rgba(245,241,235,0.12)', borderRadius: T.r, color: '#f5f1eb', fontSize: 12, fontFamily: T.sans, outline: 'none', boxSizing: 'border-box' }}
+                        />
+                    </div>
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
+                        {Object.keys(catalogGroups).length === 0 && (
+                            <div style={{ padding: '1rem', fontSize: 12, color: '#a8a29e', textAlign: 'center', fontFamily: T.sans }}>
+                                {(products || []).length === 0 ? 'No products in catalog yet.' : 'No products match.'}
+                            </div>
+                        )}
+                        {Object.entries(catalogGroups).map(([cat, prods]) => (
+                            <div key={cat}>
+                                <div style={{ padding: '6px 12px 3px', fontSize: '0.5625rem', fontWeight: 700, color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: T.sans }}>{cat}</div>
+                                {prods.map(prod => {
+                                    const alreadyAdded = lineItems.some(li => li.productId === prod.id);
+                                    return (
+                                        <div key={prod.id}
+                                            style={{ padding: '6px 12px', cursor: alreadyAdded ? 'default' : 'pointer', opacity: alreadyAdded ? 0.45 : 1, transition: 'background 80ms' }}
+                                            onMouseEnter={e => { if (!alreadyAdded) e.currentTarget.style.background = 'rgba(245,241,235,0.06)'; }}
+                                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ fontSize: 12, fontWeight: 600, color: '#f5f1eb', lineHeight: 1.3, fontFamily: T.sans }}>{prod.name}</div>
+                                                    <div style={{ fontSize: 10.5, color: '#a8a29e', marginTop: 1, fontFamily: T.sans }}>
+                                                        {prod.customPrice ? 'Custom price' : ('$' + Number(prod.listPrice || prod.price || 0).toLocaleString() + (prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : ''))}
+                                                    </div>
+                                                </div>
+                                                {!alreadyAdded && (
+                                                    <button onClick={() => addProduct(prod)}
+                                                        style={{ background: 'rgba(245,241,235,0.12)', border: '1px solid rgba(245,241,235,0.15)', color: '#f5f1eb', borderRadius: T.r, padding: '2px 7px', fontSize: '0.625rem', fontWeight: 700, cursor: 'pointer', fontFamily: T.sans, flexShrink: 0 }}>
+                                                        + Add
+                                                    </button>
+                                                )}
+                                                {alreadyAdded && <span style={{ fontSize: '0.5625rem', color: '#78716c', fontFamily: T.sans }}>Added</span>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* RIGHT: Line items + meta */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '12px 16px', gap: 12 }}>
+                    {/* Meta row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10 }}>
+                        <div>
+                            <label style={lbl}>Payment Terms</label>
+                            <select value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)} style={inp}>
+                                {['Net 30 · Annual', 'Net 30 · Monthly', 'Net 60 · Annual', 'Net 15 · Annual', 'Due on Receipt'].map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label style={lbl}>Valid Until</label>
+                            <input type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} style={inp} />
+                        </div>
+                        <div>
+                            <label style={lbl}>Notes</label>
+                            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add notes…" style={inp} />
+                        </div>
+                    </div>
+
+                    {/* Line items table */}
+                    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                        {/* Column headers */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 72px 88px 72px 72px 28px', gap: 8, padding: '7px 12px', background: T.surface2, borderBottom: `1px solid ${T.border}` }}>
+                            {['Product', 'Type', 'Unit Price', 'Qty', 'Disc %', ''].map((h, i) => (
+                                <div key={i} style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: i >= 2 ? 'right' : 'left', fontFamily: T.sans }}>{h}</div>
+                            ))}
+                        </div>
+                        {lines.length === 0 ? (
+                            <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 12.5, fontStyle: 'italic', fontFamily: T.sans }}>
+                                ← Add products from the catalog on the left
+                            </div>
+                        ) : (
+                            lines.map((item) => (
+                                <div key={item._key} style={{ display: 'grid', gridTemplateColumns: '1.8fr 72px 88px 72px 72px 28px', gap: 8, padding: '8px 12px', alignItems: 'center', borderBottom: `1px solid ${T.border}` }}>
+                                    <div>
+                                        <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{item.productName}</div>
+                                        {item.customPrice && <div style={{ fontSize: 10.5, color: '#7c3aed', fontFamily: T.sans }}>Custom price — enter below</div>}
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <TypeBadge type={item.productType} />
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <input type="number" min="0" value={item.listPrice}
+                                            onChange={e => updateLine(item._key, 'listPrice', Number(e.target.value))}
+                                            style={{ ...inp, width: '100%', textAlign: 'right', padding: '3px 6px', borderColor: item.customPrice ? '#7c3aed' : undefined, boxShadow: item.customPrice ? '0 0 0 2px rgba(124,58,237,0.1)' : undefined }}
+                                            placeholder={item.customPrice ? 'Enter $' : '0'}
+                                        />
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <input type="number" min="1" value={item.quantity}
+                                            onChange={e => updateLine(item._key, 'quantity', Number(e.target.value))}
+                                            style={{ ...inp, width: '100%', textAlign: 'right', padding: '3px 6px' }}
+                                        />
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <input type="number" min="0" max="100" value={item.discountPct}
+                                            onChange={e => updateLine(item._key, 'discountPct', Number(e.target.value))}
+                                            style={{ ...inp, width: '100%', textAlign: 'right', padding: '3px 6px', borderColor: Number(item.discountPct) >= 10 ? T.warn : undefined }}
+                                        />
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                        <button onClick={() => removeLine(item._key)} style={{ background: 'none', border: 'none', color: T.danger, cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>✕</button>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    {/* Totals + actions */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 20, alignItems: 'flex-start' }}>
+                        {/* Totals */}
+                        <div style={{ width: 260, background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                            {[
+                                { l: 'Subtotal',                               v: fmtFull(listTotal),                muted: true },
+                                { l: `Avg discount (${Math.round(avgDiscPct)}%)`, v: '-' + fmtFull(listTotal - totalValue), color: avgDiscPct > 0 ? T.warn : T.inkMuted },
+                                { l: 'Net total',                              v: fmtFull(totalValue),               bold: true },
+                            ].map(r => (
+                                <div key={r.l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', borderBottom: r.bold ? 'none' : `1px solid ${T.border}`, background: r.bold ? T.surface2 : 'transparent' }}>
+                                    <span style={{ fontSize: r.bold ? 13 : 11.5, fontWeight: r.bold ? 700 : 400, color: r.color || (r.muted ? T.inkMid : T.ink), fontFamily: T.sans }}>{r.l}</span>
+                                    <span style={{ fontSize: r.bold ? 15 : 12, fontWeight: r.bold ? 800 : 600, color: r.color || (r.bold ? T.ink : T.inkMid), fontFamily: 'ui-monospace,Menlo,monospace' }}>{r.v}</span>
+                                </div>
+                            ))}
+                        </div>
+                        {/* Action buttons */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 140 }}>
+                            {error && <div style={{ fontSize: 11.5, color: T.danger, fontFamily: T.sans }}>{error}</div>}
+                            <button onClick={handleSave} disabled={saving}
+                                style={{ background: T.ink, color: T.surface, border: 'none', borderRadius: T.r, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans, opacity: saving ? 0.6 : 1 }}>
+                                {saving ? 'Saving…' : 'Save quote'}
+                            </button>
+                            <button onClick={onClose}
+                                style={{ background: 'transparent', color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '7px 16px', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer, onPreviewPDF, onSaveDraft, saving }) => {
     const { avgDisc, margin } = calcLineTotals(quote.lineItems || [], products || []);
     const tier = tierForDiscount(avgDisc);
@@ -971,6 +1198,7 @@ export default function QuotesTab() {
     const [subTab,             setSubTabRaw]        = useState(() => localStorage.getItem('tab:quotes:subTab') || 'deals');
     const [configuratorOppId,  setConfiguratorOppId] = useState(null);
     const [configuratorQId,    setConfiguratorQId]   = useState(null);
+    const [editingQuoteId,     setEditingQuoteId]    = useState(null); // line item editor open
     const [viewMode,           setViewMode]          = useState('build');
     const [tplOpp,             setTplOpp]            = useState(null);
     const [saving,             setSaving]            = useState(false);
@@ -1041,6 +1269,7 @@ export default function QuotesTab() {
     const openConfigurator = (oppId, quoteId = null) => {
         setConfiguratorOppId(oppId);
         setConfiguratorQId(quoteId);
+        setEditingQuoteId(null);
         setViewMode('build');
         setTab('configurator');
     };
@@ -1097,6 +1326,7 @@ export default function QuotesTab() {
     const handleSubmitApproval  = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote, status: 'Pending Approval' }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
     const handleSendToCustomer  = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote, status: 'Sent to Customer' }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
     const handleSaveDraft       = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
+    const handleSaveLineItems   = async (payload) => { setSaving(true); try { await handleSaveQuote(payload, payload); } catch (err) { throw err; } finally { setSaving(false); } };
     const handleApprove         = async (q) => { await handleSaveQuote({ ...q, status: 'Approved' }, q); };
     const handleReject          = async (q) => { await handleSaveQuote({ ...q, status: 'Rejected / Lost' }, q); };
     const handleSaveProductLocal  = async (data) => { await handleSaveProduct(data, data.id ? (products || []).find(p => p.id === data.id) || null : null); };
@@ -1323,7 +1553,7 @@ export default function QuotesTab() {
                                 <div style={{ ...eyebrow(T.inkMid), fontSize: 11 }}>Compare versions</div>
                                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                     {configuratorQuotes.map(q => (
-                                        <button key={q.id} onClick={() => setConfiguratorQId(q.id)}
+                                        <button key={q.id} onClick={() => { setConfiguratorQId(q.id); setEditingQuoteId(null); }}
                                             style={{ padding: '6px 12px', background: q.id === activeQuote?.id ? T.ink : T.surface, color: q.id === activeQuote?.id ? T.surface : T.ink, border: `1px solid ${q.id === activeQuote?.id ? T.ink : T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                             v{q.version || 1}<span style={{ fontSize: 10, opacity: 0.7 }}>· {q.status}</span>
                                         </button>
@@ -1355,9 +1585,36 @@ export default function QuotesTab() {
                             {/* Build mode */}
                             {configuratorQuotes.length > 0 && viewMode === 'build' && (
                                 <>
+                                    {/* Inline line item editor — shown when "Edit in builder" is clicked */}
+                                    {editingQuoteId && (() => {
+                                        const editQ = configuratorQuotes.find(q => q.id === editingQuoteId);
+                                        if (!editQ) return null;
+                                        return (
+                                            <div style={{ marginBottom: 14 }}>
+                                                <LineItemEditor
+                                                    quote={editQ}
+                                                    products={products || []}
+                                                    onSave={handleSaveLineItems}
+                                                    onClose={() => setEditingQuoteId(null)}
+                                                    saving={saving}
+                                                />
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Side-by-side columns — always visible, editor is above */}
                                     <div style={{ display: 'grid', gridTemplateColumns: prevQuote ? '1fr 1fr 280px' : '1fr 280px', gap: 10, alignItems: 'flex-start' }}>
                                         {prevQuote && <QuoteColumn quote={prevQuote} otherQuote={activeQuote} label="Previous" readOnly products={products || []} />}
-                                        {activeQuote && <QuoteColumn quote={activeQuote} otherQuote={prevQuote} label={prevQuote ? 'Current' : 'Active'} editable products={products || []} onEdit={() => { /* future: open inline editor */ }} />}
+                                        {activeQuote && (
+                                            <QuoteColumn
+                                                quote={activeQuote}
+                                                otherQuote={prevQuote}
+                                                label={prevQuote ? 'Current' : 'Active'}
+                                                editable
+                                                products={products || []}
+                                                onEdit={() => setEditingQuoteId(activeQuote.id)}
+                                            />
+                                        )}
                                         {activeQuote && <ConfiguratorPanel quote={activeQuote} products={products || []} onSubmitApproval={handleSubmitApproval} onSendToCustomer={handleSendToCustomer} onPreviewPDF={() => setViewMode('preview')} onSaveDraft={handleSaveDraft} saving={saving} />}
                                     </div>
                                     {activeQuote && <div style={{ marginTop: 14 }}><QuoteActivityLog quote={activeQuote} /></div>}
