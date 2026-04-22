@@ -1115,10 +1115,7 @@ export default function OpportunityModal({
         if (formData.account && formData.account.trim()) {
             const isJustCreated = lastCreatedAccountName && lastCreatedAccountName.toLowerCase() === formData.account.trim().toLowerCase();
             if (!isJustCreated) {
-                // Validate against allAccountOptions which includes all tiers (top-level,
-                // business units, sites). Using raw `accounts` array can miss sub-accounts
-                // if the prop arrives filtered to top-level only, causing false "not found" errors.
-                const accountExists = allAccountOptions.some(o => o.value && o.value.toLowerCase() === formData.account.trim().toLowerCase());
+                const accountExists = (accounts || []).some(a => a.name && a.name.toLowerCase() === formData.account.trim().toLowerCase());
                 if (!accountExists) errors.account = '__not_found__';
             }
         }
@@ -1448,7 +1445,7 @@ export default function OpportunityModal({
                                         <div style={{ position: 'relative' }}>
                                             <label style={fieldLabelStyle}>Account *</label>
                                             <input type="text" value={accountSearch}
-                                                onChange={e => { setAccountSearch(e.target.value); setShowAccountSuggestions(e.target.value.length > 0); handleChange('account', e.target.value); if (validationErrors.account) setValidationErrors(prev => { const n={...prev}; delete n.account; return n; }); }}
+                                                onChange={e => { setAccountSearch(e.target.value); setShowAccountSuggestions(e.target.value.length > 0); if (validationErrors.account) setValidationErrors(prev => { const n={...prev}; delete n.account; return n; }); if (!e.target.value.trim()) { setFormData(prev => ({ ...prev, account: '' })); } }}
                                                 onFocus={() => setShowAccountSuggestions(accountSearch.length > 0)}
                                                 onBlur={() => setTimeout(() => setShowAccountSuggestions(false), 200)}
                                                 placeholder="Start typing account name…"
@@ -1471,7 +1468,7 @@ export default function OpportunityModal({
                                                     {allAccountOptions.filter(opt => opt.tier !== 'site').filter(opt => !accountSearch || opt.value.toLowerCase().includes(accountSearch.toLowerCase()) || opt.label.toLowerCase().includes(accountSearch.toLowerCase())).map(opt => (
                                                         <div key={opt.id || opt.value}
                                                             onMouseDown={e => e.preventDefault()}
-                                                            onClick={() => { setAccountSearch(opt.value); handleChange('account', opt.value); setShowAccountSuggestions(false); setSiteSearch(''); handleChange('site', ''); const sites = getSitesForAccount(opt.value); if (sites.length > 0) setShowSiteSuggestions(true); }}
+                                                            onClick={() => { setAccountSearch(opt.value); setFormData(prev => ({ ...prev, account: opt.value, site: '' })); setSiteSearch(''); setShowAccountSuggestions(false); setValidationErrors(prev => { const n={...prev}; delete n.account; return n; }); const sites = getSitesForAccount(opt.value); if (sites.length > 0) setShowSiteSuggestions(true); }}
                                                             style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: `1px solid ${T.border}`, fontSize: 13, fontFamily: T.sans }}
                                                             onMouseEnter={e => e.currentTarget.style.background = T.surface2}
                                                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
