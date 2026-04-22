@@ -652,191 +652,124 @@ ${bodyHtml}
                             </div>
                         )}
 
-                        {/* ── Row 2: Viewing + Period filters (left) + Export PDF (right) ── */}
-                        <div style={{ marginTop: '0.625rem', marginBottom: '0' }}>
-                          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0', flexWrap:'wrap', gap:'0.5rem' }}>
+                        {/* ── Filter bar: Grouped By segmented control + Period dropdown + Export ── */}
+                        {(() => {
+                          const now = new Date();
+                          const fy = now.getFullYear();
+                          const periodOptions = [
+                            { value:'all',    label:'All Time' },
+                            { value:'FY',     label:`FY ${fy}` },
+                            { value:'Q1',     label:'Q1' },
+                            { value:'Q2',     label:'Q2' },
+                            { value:'Q3',     label:'Q3' },
+                            { value:'Q4',     label:'Q4' },
+                            { value:'custom', label:'Custom…' },
+                          ];
+                          const selectedPeriodLabel = periodOptions.find(p => p.value === reportTimePeriod)?.label || 'This quarter';
+                          return (
+                          <div style={{ display:'flex', alignItems:'center', gap:'0.875rem', padding:'0.625rem 0', flexWrap:'wrap', borderBottom:'1px solid #e6ddd0', marginBottom:'0' }}>
 
-                            {/* Left side: Viewing slice + Period filter */}
-                            <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', flexWrap:'wrap' }}>
-                              {hasReportsSlicing && (
-                                <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap' }}>
-                                  <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.05em' }}>Viewing:</span>
-                                  {rAllReps.length > 1 && <SliceDropdown label="Rep" icon="👤" options={rAllReps} selected={reportsRep} onSelect={v => { setReportsRep(v); if(v){setReportsTeam(null);setReportsTerritory(null);} }} />}
-                                  {rAllTeams.length > 0 && <SliceDropdown label="Team" icon="👥" options={rAllTeams} selected={reportsTeam} onSelect={v => { setReportsTeam(v); if(v){setReportsRep(null);setReportsTerritory(null);} }} />}
-                                  {rAllTerritories.length > 0 && <SliceDropdown label="Territory" icon="📍" options={rAllTerritories} selected={reportsTerritory} onSelect={v => { setReportsTerritory(v); if(v){setReportsRep(null);setReportsTeam(null);} }} />}
-                                  {(reportsRep || reportsTeam || reportsTerritory) && (
-                                    <button onClick={() => { setReportsRep(null); setReportsTeam(null); setReportsTerritory(null); }}
-                                      style={{ padding:'0.2rem 0.5rem', borderRadius:'4px', border:'1px solid #e6ddd0', background:'#fbf8f3', color:'#8a8378', fontSize:'0.625rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>✕ Clear</button>
-                                  )}
-                                  <div style={{ width:'1px', height:'16px', background:'#e6ddd0', flexShrink:0 }} />
+                            {/* Grouped by — segmented control (admins/managers only) */}
+                            {hasReportsSlicing && (
+                              <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.05em', whiteSpace:'nowrap' }}>Grouped by</span>
+                                <div style={{ display:'flex', border:'1px solid #e6ddd0', borderRadius:'6px', overflow:'hidden', background:'#fbf8f3' }}>
+                                  {[
+                                    ...(rAllReps.length > 1    ? [{ value:'rep',       label:'Rep' }]       : []),
+                                    ...(rAllTeams.length > 0   ? [{ value:'team',      label:'Team' }]      : []),
+                                    ...(rAllTerritories.length > 0 ? [{ value:'territory', label:'Territory' }] : []),
+                                  ].map((opt, idx, arr) => {
+                                    const isActive = (
+                                      (opt.value === 'rep'       && reportsRep) ||
+                                      (opt.value === 'team'      && reportsTeam) ||
+                                      (opt.value === 'territory' && reportsTerritory)
+                                    );
+                                    return (
+                                      <button key={opt.value} onClick={() => {
+                                        if (opt.value === 'rep')       { setReportsRep(rAllReps[0]||null); setReportsTeam(null); setReportsTerritory(null); }
+                                        if (opt.value === 'team')      { setReportsTeam(rAllTeams[0]||null); setReportsRep(null); setReportsTerritory(null); }
+                                        if (opt.value === 'territory') { setReportsTerritory(rAllTerritories[0]||null); setReportsRep(null); setReportsTeam(null); }
+                                      }} style={{
+                                        padding:'4px 12px', background: isActive ? '#2a2622' : 'transparent',
+                                        color: isActive ? '#fbf8f3' : '#5a544c',
+                                        border:'none', borderRight: idx < arr.length - 1 ? '1px solid #e6ddd0' : 'none',
+                                        fontSize:'0.75rem', fontWeight: isActive ? '600' : '500',
+                                        cursor:'pointer', fontFamily:'inherit', transition:'all 120ms',
+                                      }}>{opt.label}</button>
+                                    );
+                                  })}
                                 </div>
-                              )}
-                              {/* Period filter */}
-                              <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap' }}>
-                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.05em', flexShrink:0 }}>Period:</span>
-                                {(() => { const now = new Date(); const fy = now.getFullYear(); return (
-                                <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
-                                    {['FY','Q1','Q2','Q3','Q4','all','custom'].map(p => (
-                                        <button key={p} onClick={() => setReportTimePeriod(p)}
-                                            style={{ padding:'3px 12px', borderRadius:'999px', border:'1px solid', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'600', transition:'all 0.12s',
-                                                background: reportTimePeriod === p ? '#2a2622' : '#fbf8f3',
-                                                color:      reportTimePeriod === p ? '#fff' : '#5a544c',
-                                                borderColor: reportTimePeriod === p ? '#2a2622' : '#e6ddd0' }}>
-                                            {p === 'all' ? 'All Time' : p === 'FY' ? `FY ${fy}` : p === 'custom' ? 'Custom' : p}
-                                        </button>
-                                    ))}
-                                    {reportTimePeriod === 'custom' && (
-                                        <div style={{ display:'flex', alignItems:'center', gap:'0.375rem' }}>
-                                            <input type="date" value={reportDateFrom} onChange={e => setReportDateFrom(e.target.value)}
-                                                style={{ padding:'3px 8px', border:'1px solid #e6ddd0', borderRadius:'6px', fontSize:'0.6875rem', fontFamily:'inherit', color:'#2a2622' }} />
-                                            <span style={{ fontSize:'0.6875rem', color:'#8a8378' }}>to</span>
-                                            <input type="date" value={reportDateTo} onChange={e => setReportDateTo(e.target.value)}
-                                                style={{ padding:'3px 8px', border:'1px solid #e6ddd0', borderRadius:'6px', fontSize:'0.6875rem', fontFamily:'inherit', color:'#2a2622' }} />
-                                        </div>
-                                    )}
-                                </div>
-                                ); })()}
+                                {/* Slice value dropdown when a group is active */}
+                                {reportsRep && (
+                                  <select value={reportsRep||''} onChange={e => setReportsRep(e.target.value||null)}
+                                    style={{ fontSize:'0.75rem', padding:'4px 8px', border:'1px solid #e6ddd0', borderRadius:'6px', background:'#fbf8f3', color:'#2a2622', fontFamily:'inherit', cursor:'pointer' }}>
+                                    {rAllReps.map(r => <option key={r} value={r}>{r}</option>)}
+                                  </select>
+                                )}
+                                {reportsTeam && (
+                                  <select value={reportsTeam||''} onChange={e => setReportsTeam(e.target.value||null)}
+                                    style={{ fontSize:'0.75rem', padding:'4px 8px', border:'1px solid #e6ddd0', borderRadius:'6px', background:'#fbf8f3', color:'#2a2622', fontFamily:'inherit', cursor:'pointer' }}>
+                                    {rAllTeams.map(t => <option key={t} value={t}>{t}</option>)}
+                                  </select>
+                                )}
+                                {reportsTerritory && (
+                                  <select value={reportsTerritory||''} onChange={e => setReportsTerritory(e.target.value||null)}
+                                    style={{ fontSize:'0.75rem', padding:'4px 8px', border:'1px solid #e6ddd0', borderRadius:'6px', background:'#fbf8f3', color:'#2a2622', fontFamily:'inherit', cursor:'pointer' }}>
+                                    {rAllTerritories.map(t => <option key={t} value={t}>{t}</option>)}
+                                  </select>
+                                )}
+                                {(reportsRep || reportsTeam || reportsTerritory) && (
+                                  <button onClick={() => { setReportsRep(null); setReportsTeam(null); setReportsTerritory(null); }}
+                                    style={{ padding:'3px 8px', border:'1px solid #e6ddd0', borderRadius:'4px', background:'#fbf8f3', color:'#8a8378', fontSize:'0.625rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>✕</button>
+                                )}
+                                <div style={{ width:'1px', height:'18px', background:'#e6ddd0', flexShrink:0 }} />
                               </div>
+                            )}
+
+                            {/* Period — dropdown */}
+                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                              <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.05em', whiteSpace:'nowrap' }}>Period</span>
+                              <select value={reportTimePeriod} onChange={e => setReportTimePeriod(e.target.value)}
+                                style={{ fontSize:'0.75rem', padding:'4px 28px 4px 10px', border:'1px solid #e6ddd0', borderRadius:'6px', background:'#fbf8f3', color:'#2a2622', fontFamily:'inherit', cursor:'pointer', appearance:'none',
+                                  backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+                                  backgroundRepeat:'no-repeat', backgroundPosition:'right 8px center' }}>
+                                {periodOptions.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                              </select>
+                              {reportTimePeriod === 'custom' && (
+                                <div style={{ display:'flex', alignItems:'center', gap:'0.375rem' }}>
+                                  <input type="date" value={reportDateFrom} onChange={e => setReportDateFrom(e.target.value)}
+                                    style={{ padding:'3px 8px', border:'1px solid #e6ddd0', borderRadius:'6px', fontSize:'0.6875rem', fontFamily:'inherit', color:'#2a2622', background:'#fbf8f3' }} />
+                                  <span style={{ fontSize:'0.6875rem', color:'#8a8378' }}>to</span>
+                                  <input type="date" value={reportDateTo} onChange={e => setReportDateTo(e.target.value)}
+                                    style={{ padding:'3px 8px', border:'1px solid #e6ddd0', borderRadius:'6px', fontSize:'0.6875rem', fontFamily:'inherit', color:'#2a2622', background:'#fbf8f3' }} />
+                                </div>
+                              )}
                             </div>
 
-                            {/* Right side: Customize (custom tab only) + Export PDF */}
-                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexShrink:0 }}>
-                              {reportSubTab === 'custom' && (
-                                <button
-                                  onClick={() => document.dispatchEvent(new CustomEvent('accelerep:openCustomize'))}
-                                  style={{ display:'inline-flex', alignItems:'center', gap:'0.375rem', padding:'0.3rem 0.875rem', border:'1px solid #e6ddd0', borderRadius:'3px', background:'#fbf8f3', color:'#2a2622', fontSize:'0.75rem', fontWeight:'500', cursor:'pointer', fontFamily:'inherit' }}
-                                >
-                                  ⚙️ Customize
-                                </button>
-                              )}
-                              <button onClick={()=>{
-                                const lbl={pipeline:'Pipeline',performance:'Performance',revenue:'Revenue',activity:'Activity',leads:'Leads',actions:'Actions'}[reportSubTab]||'Report';
-                                const win=window.open('','_blank','width=900,height=700');
-                                if(!win){alert('Allow popups to export PDF');return;}
-                                const el=document.querySelector('[data-rpt]');
-                                const body=el?el.innerHTML:'<p>Could not capture report.</p>';
-                                const d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
-                                win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Accelerep — '+lbl+'</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#2a2622}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #3a5a7a;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#8a8378}button,select{display:none!important}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#fbf8f3;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#8a8378;border-bottom:2px solid #e6ddd0}td{padding:6px 10px;border-bottom:1px solid #f5efe3}</style></head><body><div class="hdr"><h1>Accelerep — '+lbl+'</h1><div class="meta">'+d+'</div></div>'+body+'<scr'+'ipt>window.onload=function(){window.print()}<\/script></body></html>');
-                                win.document.close();
-                              }} style={{ display:'inline-flex', alignItems:'center', gap:'0.3rem', fontSize:'0.75rem', padding:'0.3rem 0.875rem', border:'1px solid #e6ddd0', borderRadius:'3px', background:'#fbf8f3', color:'#2a2622', cursor:'pointer', fontFamily:'inherit', fontWeight:'500' }}>
-                                &#128424; Export PDF
+                            <div style={{ flex:1 }} />
+
+                            {/* Right: Customize (custom tab) + Export PDF */}
+                            {reportSubTab === 'custom' && (
+                              <button onClick={() => document.dispatchEvent(new CustomEvent('accelerep:openCustomize'))}
+                                style={{ display:'inline-flex', alignItems:'center', gap:'0.375rem', padding:'0.3rem 0.875rem', border:'1px solid #e6ddd0', borderRadius:'6px', background:'#fbf8f3', color:'#2a2622', fontSize:'0.75rem', fontWeight:'500', cursor:'pointer', fontFamily:'inherit' }}>
+                                ⚙️ Customize
                               </button>
-                            </div>
+                            )}
+                            <button onClick={()=>{
+                              const lbl={pipeline:'Pipeline & Forecast',performance:'Performance',revenue:'Revenue',activity:'Activity',leads:'Leads',actions:'Actions'}[reportSubTab]||'Report';
+                              const win=window.open('','_blank','width=900,height=700');
+                              if(!win){alert('Allow popups to export PDF');return;}
+                              const el=document.querySelector('[data-rpt]');
+                              const body=el?el.innerHTML:'<p>Could not capture report.</p>';
+                              const d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+                              win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Accelerep — '+lbl+'</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#2a2622}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #3a5a7a;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#8a8378}button,select{display:none!important}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#fbf8f3;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#8a8378;border-bottom:2px solid #e6ddd0}td{padding:6px 10px;border-bottom:1px solid #f5efe3}</style></head><body><div class="hdr"><h1>Accelerep — '+lbl+'</h1><div class="meta">'+d+'</div></div>'+body+'<scr'+'ipt>window.onload=function(){window.print()}<\/script></body></html>');
+                              win.document.close();
+                            }} style={{ display:'inline-flex', alignItems:'center', gap:'0.3rem', fontSize:'0.75rem', padding:'0.3rem 0.875rem', border:'1px solid #e6ddd0', borderRadius:'6px', background:'#fbf8f3', color:'#2a2622', cursor:'pointer', fontFamily:'inherit', fontWeight:'500' }}>
+                              ↗ Export PDF
+                            </button>
 
                           </div>
-                        </div>
-
-                        {/* ── KPI summary strip (always visible, below period filter) ── */}
-                        {(() => {
-                            const _now = new Date();
-                            const fy = _now.getFullYear();
-                            const fiscalStart = settings.fiscalYearStart || 10;
-                            const getFiscalQRanges = (baseYear) => {
-                                const qs = {};
-                                ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
-                                    const rawMonth = fiscalStart - 1 + qi * 3;
-                                    const sm = (rawMonth % 12) + 1;
-                                    const sy = rawMonth >= 12 ? baseYear + 1 : baseYear;
-                                    const endRaw = new Date(sy, sm - 1 + 3, 0);
-                                    qs[q] = { start: new Date(`${sy}-${String(sm).padStart(2,'0')}-01`), end: endRaw };
-                                });
-                                qs['FY'] = { start: qs['Q1'].start, end: qs['Q4'].end };
-                                return qs;
-                            };
-                            // Build time buckets that match the selected period filter
-                            const buildBuckets = () => {
-                                if (reportTimePeriod === 'all') {
-                                    // Last 6 months
-                                    return Array.from({ length: 6 }, (_, i) => {
-                                        const d = new Date(fy, _now.getMonth() - (5 - i), 1);
-                                        return { start: d, end: new Date(d.getFullYear(), d.getMonth() + 1, 1) };
-                                    });
-                                } else if (reportTimePeriod === 'FY') {
-                                    // Each fiscal quarter of the fiscal year
-                                    const fsRanges = getFiscalQRanges(fy);
-                                    return ['Q1','Q2','Q3','Q4'].map(q => ({
-                                        start: fsRanges[q].start,
-                                        end: new Date(fsRanges[q].end.getTime() + 86400000)
-                                    }));
-                                } else if (['Q1','Q2','Q3','Q4'].includes(reportTimePeriod)) {
-                                    // Each month within the fiscal quarter
-                                    const fsRanges = getFiscalQRanges(fy);
-                                    const qStart = fsRanges[reportTimePeriod].start;
-                                    return Array.from({ length: 3 }, (_, i) => {
-                                        const d = new Date(qStart.getFullYear(), qStart.getMonth() + i, 1);
-                                        return { start: d, end: new Date(qStart.getFullYear(), qStart.getMonth() + i + 1, 1) };
-                                    });
-                                } else if (reportTimePeriod === 'custom' && reportDateFrom && reportDateTo) {
-                                    // Split custom range into 6 equal segments
-                                    const start = new Date(reportDateFrom).getTime();
-                                    const end = new Date(reportDateTo).getTime() + 86400000;
-                                    const seg = (end - start) / 6;
-                                    return Array.from({ length: 6 }, (_, i) => ({
-                                        start: new Date(start + i * seg),
-                                        end: new Date(start + (i + 1) * seg)
-                                    }));
-                                }
-                                // Fallback: last 6 months
-                                return Array.from({ length: 6 }, (_, i) => {
-                                    const d = new Date(fy, _now.getMonth() - (5 - i), 1);
-                                    return { start: d, end: new Date(d.getFullYear(), d.getMonth() + 1, 1) };
-                                });
-                            };
-                            const monthBuckets = buildBuckets().map(({ start, end }) => {
-                                const bucketOpps = reportsTimedOpps.filter(o => {
-                                    const c = o.forecastedCloseDate || o.closeDate;
-                                    if (!c) return false;
-                                    const cd = new Date(c);
-                                    return cd >= start && cd < end;
-                                });
-                                const bucketWon = bucketOpps.filter(o => o.stage === 'Closed Won');
-                                const bucketLost = bucketOpps.filter(o => o.stage === 'Closed Lost');
-                                const wonRev = bucketWon.reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
-                                const pipelineVal = bucketOpps.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost').reduce((s, o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
-                                const wr = (bucketWon.length + bucketLost.length) > 0 ? (bucketWon.length / (bucketWon.length + bucketLost.length)) * 100 : 0;
-                                const avg = bucketWon.length > 0 ? wonRev / bucketWon.length : 0;
-                                return { wonRev, pipelineVal, wr, avg };
-                            });
-                            const sparkSvg = (vals, color) => {
-                                const mx = Math.max(...vals, 1);
-                                const n = vals.length;
-                                const pts = vals.map((v, i) => `${Math.round((i/(n-1))*100)},${Math.round(24-Math.max(0,v/mx)*20)}`).join(' ');
-                                const pf = pts + ' 100,24 0,24';
-                                return (
-                                    <svg width="100%" height="24" viewBox="0 0 100 24" preserveAspectRatio="none" style={{ display:'block', marginTop:'6px' }}>
-                                        <polyline fill={color} fillOpacity="0.10" stroke="none" points={pf} />
-                                        <polyline fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" points={pts} opacity="0.8" />
-                                    </svg>
-                                );
-                            };
-                            return (
-                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(90px,1fr))', gap:'0.75rem', padding:'0.75rem 0' }}>
-                                <div className="kpi-card accent-green" style={{ borderRadius:'3px', padding:'0.875rem 1rem 0.625rem 1.25rem', background:'#fbf8f3', border:'1px solid #e6ddd0' }}>
-                                    <div style={labelStyle}>Won Revenue</div>
-                                    <div style={valueStyle}>{'$'+totalWonRevenue.toLocaleString()}</div>
-                                    <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.125rem' }}>{wonOpps.length} deals</div>
-                                    {sparkSvg(monthBuckets.map(b => b.wonRev), '#4d6b3d')}
-                                </div>
-                                <div className="kpi-card accent-blue" style={{ borderRadius:'3px', padding:'0.875rem 1rem 0.625rem 1.25rem', background:'#fbf8f3', border:'1px solid #e6ddd0' }}>
-                                    <div style={labelStyle}>Pipeline Value</div>
-                                    <div style={valueStyle}>{'$'+totalPipelineValue.toLocaleString()}</div>
-                                    <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.125rem' }}>{openOpps.length} open</div>
-                                    {sparkSvg(monthBuckets.map(b => b.pipelineVal), '#3a5a7a')}
-                                </div>
-                                <div className="kpi-card accent-purple" style={{ borderRadius:'3px', padding:'0.875rem 1rem 0.625rem 1.25rem', background:'#fbf8f3', border:'1px solid #e6ddd0' }}>
-                                    <div style={labelStyle}>Win Rate</div>
-                                    <div style={valueStyle}>{winRate.toFixed(1)+'%'}</div>
-                                    <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.125rem' }}>{wonOpps.length} won / {lostOpps.length} lost</div>
-                                    {sparkSvg(monthBuckets.map(b => b.wr), '#5a4a7a')}
-                                </div>
-                                <div className="kpi-card accent-amber" style={{ borderRadius:'3px', padding:'0.875rem 1rem 0.625rem 1.25rem', background:'#fbf8f3', border:'1px solid #e6ddd0' }}>
-                                    <div style={labelStyle}>Avg Deal Size</div>
-                                    <div style={valueStyle}>{'$'+Math.round(avgDealSize).toLocaleString()}</div>
-                                    <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.125rem' }}>closed won</div>
-                                    {sparkSvg(monthBuckets.map(b => b.avg), '#b87333')}
-                                </div>
-                            </div>
-                            );
+                          );
                         })()}
 
                         <div data-rpt="1">
@@ -900,15 +833,56 @@ ${bodyHtml}
                             });
                             const wfColor=(k)=>k==='total'?T.ink:k==='pos'?T.ok:k==='won'?'#3a5530':T.danger;
 
-                            // Stage funnel data
-                            const stageOrder=['Prospecting','Qualification','Discovery','Proposal','Negotiation','Closing'];
-                            const stageFunnelData = stageOrder.map((st,i,arr)=>{
-                              const entered = reportsOpps.filter(o=>o.stage===st).length;
-                              const next = arr[i+1] ? reportsOpps.filter(o=>o.stage===arr[i+1]).length : null;
-                              const stageColors2={'Prospecting':'#b0a088','Qualification':'#c8a978','Discovery':'#b07a55','Proposal':'#b87333','Negotiation':'#7a5a3c','Closing':'#4d6b3d'};
-                              return { stage:st, entered, advanced:next, color:stageColors2[st]||T.inkMuted };
-                            }).filter(s=>s.entered>0);
-                            const maxEntered = Math.max(...stageFunnelData.map(s=>s.entered),1);
+                            // Stage conversion funnel — cohort-based calculation
+                            // Logic: for each stage N, "entered" = all opps that have ever
+                            // been at stage N or beyond (using stageHistory if available, else
+                            // current stage as proxy). "Advanced" = opps that reached stage N+1
+                            // or beyond. Conversion = advanced / entered.
+                            // Example: 100 in Discovery, 80 reached Proposal = 80% conv rate.
+                            // Then 80 in Proposal, 40 reached Negotiation = 50% conv rate.
+                            const stageOrder = ['Prospecting','Qualification','Discovery','Proposal','Negotiation','Closing','Closed Won'];
+                            const stageColors2 = {
+                              'Prospecting':'#b0a088','Qualification':'#c8a978','Discovery':'#b07a55',
+                              'Proposal':'#b87333','Negotiation':'#7a5a3c','Closing':'#4d6b3d','Closed Won':'#3a5530',
+                            };
+                            // All opps in scope (open + closed, so the funnel includes terminal outcomes)
+                            const allScopeOpps = reportsOpps;
+                            const stageRank = (stage) => stageOrder.indexOf(stage);
+
+                            // For each opp, determine the highest stage it has reached.
+                            // Use stageHistory if present, otherwise fall back to current stage.
+                            const oppMaxStage = allScopeOpps.map(o => {
+                              if (o.stageHistory && o.stageHistory.length > 0) {
+                                const ranks = o.stageHistory.map(h => stageRank(h.stage)).filter(r => r >= 0);
+                                const currentRank = stageRank(o.stage);
+                                return Math.max(...ranks, currentRank >= 0 ? currentRank : 0);
+                              }
+                              return stageRank(o.stage) >= 0 ? stageRank(o.stage) : 0;
+                            });
+
+                            // Build funnel — exclude Closed Won from the displayed rows
+                            // (it appears as the denominator for Closing's conversion)
+                            const funnelStages = stageOrder.slice(0, -1); // exclude Closed Won display row
+                            const stageFunnelData = funnelStages.map((st, i) => {
+                              const myRank = stageRank(st);
+                              // Entered = opps that reached at least this stage
+                              const entered = oppMaxStage.filter(r => r >= myRank).length;
+                              // Advanced = opps that reached the next stage (rank myRank+1 or beyond)
+                              const advanced = i < funnelStages.length - 1
+                                ? oppMaxStage.filter(r => r >= myRank + 1).length
+                                : null; // Closing → Closed Won
+                              // For the last visible stage (Closing), advanced = Closed Won count
+                              const advancedFinal = st === 'Closing'
+                                ? oppMaxStage.filter(r => r >= stageRank('Closed Won')).length
+                                : advanced;
+                              return {
+                                stage: st,
+                                entered,
+                                advanced: advancedFinal,
+                                color: stageColors2[st] || '#8a8378',
+                              };
+                            }).filter(s => s.entered > 0);
+                            const maxEntered = Math.max(...stageFunnelData.map(s => s.entered), 1);
 
                             // Deals at risk
                             const today2iso = new Date().toISOString().slice(0,10);
@@ -1065,11 +1039,13 @@ ${bodyHtml}
                                       {['Stage','Entered → Next','Conv.',''].map((h,i)=><div key={i} style={{ ...eb(T.inkMuted), textAlign:i>=2?'right':'left' }}>{h}</div>)}
                                     </div>
                                     {stageFunnelData.map((s,i)=>{
-                                      // Clamp conv to 1.0 max — advanced > entered is a data artifact
-                                      // when opps skip stages; >100% is mathematically misleading.
-                                      const rawConv=s.advanced!=null&&s.entered>0?s.advanced/s.entered:null;
-                                      const conv=rawConv!=null?Math.min(rawConv,1):null;
-                                      const weak=conv!=null&&conv<0.55;
+                                      // Correct cohort conversion: advanced / entered
+                                      // This cannot exceed 100% because advanced is always a
+                                      // subset of entered (both counted from the same opp pool)
+                                      const conv = s.advanced != null && s.entered > 0
+                                        ? s.advanced / s.entered
+                                        : null;
+                                      const weak = conv != null && conv < 0.55;
                                       return (
                                         <div key={s.stage} style={{ display:'grid', gridTemplateColumns:'110px 1fr 55px 65px', gap:10, alignItems:'center', padding:'8px 0', borderBottom:i<stageFunnelData.length-1?`1px solid ${T.border}`:'none' }}>
                                           <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, fontWeight:500, color:T.ink, fontFamily:T.sans }}>
@@ -1088,7 +1064,7 @@ ${bodyHtml}
                                     })}
                                     {stageFunnelData.length===0&&<div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No open opportunities in this period.</div>}
                                     <div style={{ marginTop:10, padding:'7px 10px', background:T.surface2, borderRadius:T.r, fontSize:11, color:T.inkMuted, lineHeight:1.5, fontFamily:T.sans }}>
-                                      <strong style={{ color:T.inkMid }}>How this is calculated:</strong> counts deals currently at each stage. Conversion = deals in the next stage ÷ this stage. Rates are capped at 100% — full cohort history requires stage-transition logs.
+                                      <strong style={{ color:T.inkMid }}>How this is calculated:</strong> "Entered" = all opps that reached each stage. "Advanced" = those that continued to the next stage. Conversion = advanced ÷ entered — e.g. 100 in Discovery, 80 reach Proposal = 80%.
                                     </div>
                                   </Panel>
 
