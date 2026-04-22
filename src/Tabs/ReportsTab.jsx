@@ -47,6 +47,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
         localStorage.setItem('tab:reports:subTab', tab);
     };
     const [reportTimePeriod, setReportTimePeriod] = useState('all');
+    const [reportCompareTo, setReportCompareTo] = useState('previous_quarter');
     const [reportDateFrom, setReportDateFrom] = useState('');
     const [reportDateTo, setReportDateTo] = useState('');
     const [reportsRep, setReportsRep] = useState(null);
@@ -275,6 +276,83 @@ export default function ReportsTab({ leadsEnabled = true }) {
                         return d >= from && d <= to;
                     });
                 })();
+
+                // ── Comparison period data ─────────────────────────────────────────────
+                // Computes a parallel set of opps for the prior period so the UI can
+                // show deltas (e.g. pipeline value vs previous quarter).
+                // reportCompareTo: 'previous_quarter' | 'previous_year' | 'none'
+                const comparedOpps = (() => {
+                    if (reportCompareTo === 'none') return null;
+                    const now = new Date();
+                    const fy = now.getFullYear();
+                    const fiscalStart = settings.fiscalYearStart || 10;
+
+                    // Build fiscal quarter ranges for a given base year
+                    const getFQR = (baseYear) => {
+                        const qs = {};
+                        ['Q1','Q2','Q3','Q4'].forEach((q, qi) => {
+                            const rawMonth = fiscalStart - 1 + qi * 3;
+                            const sm = (rawMonth % 12) + 1;
+                            const sy = rawMonth >= 12 ? baseYear + 1 : baseYear;
+                            const endRaw = new Date(sy, sm - 1 + 3, 0);
+                            qs[q] = {
+                                from: `${sy}-${String(sm).padStart(2,'0')}-01`,
+                                to:   `${endRaw.getFullYear()}-${String(endRaw.getMonth()+1).padStart(2,'0')}-${String(endRaw.getDate()).padStart(2,'0')}`,
+                            };
+                        });
+                        qs['FY'] = { from: qs['Q1'].from, to: qs['Q4'].to };
+                        return qs;
+                    };
+
+                    // Determine what the "prior" date range is based on current period + compare mode
+                    let priorFrom = null, priorTo = null;
+                    const thisQRanges = getFQR(fy);
+                    const lastQRanges = getFQR(fy - 1);
+
+                    if (reportCompareTo === 'previous_quarter') {
+                        if (['Q1','Q2','Q3','Q4'].includes(reportTimePeriod)) {
+                            const qKeys = ['Q1','Q2','Q3','Q4'];
+                            const idx = qKeys.indexOf(reportTimePeriod);
+                            if (idx === 0) { priorFrom = lastQRanges['Q4'].from; priorTo = lastQRanges['Q4'].to; }
+                            else           { priorFrom = thisQRanges[qKeys[idx-1]].from; priorTo = thisQRanges[qKeys[idx-1]].to; }
+                        } else if (reportTimePeriod === 'FY') {
+                            priorFrom = lastQRanges['FY'].from; priorTo = lastQRanges['FY'].to;
+                        } else {
+                            // 'all' or custom — compare to prior 90 days
+                            const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - 90);
+                            const prior = new Date(cutoff); prior.setDate(prior.getDate() - 90);
+                            priorFrom = prior.toISOString().slice(0,10);
+                            priorTo   = cutoff.toISOString().slice(0,10);
+                        }
+                    } else if (reportCompareTo === 'previous_year') {
+                        if (['Q1','Q2','Q3','Q4'].includes(reportTimePeriod)) {
+                            priorFrom = lastQRanges[reportTimePeriod].from;
+                            priorTo   = lastQRanges[reportTimePeriod].to;
+                        } else if (reportTimePeriod === 'FY') {
+                            priorFrom = lastQRanges['FY'].from; priorTo = lastQRanges['FY'].to;
+                        } else {
+                            const cutoff = new Date(now); cutoff.setFullYear(cutoff.getFullYear()-1);
+                            const prior  = new Date(cutoff); prior.setDate(prior.getDate() - 90);
+                            priorFrom = prior.toISOString().slice(0,10);
+                            priorTo   = cutoff.toISOString().slice(0,10);
+                        }
+                    }
+
+                    if (!priorFrom) return null;
+                    return roleFilteredOpps.filter(o => {
+                        const d = o.forecastedCloseDate || o.closeDate || o.createdDate || '';
+                        return d >= priorFrom && d <= priorTo;
+                    });
+                })();
+
+                // Helper: compute a delta label vs comparison period, or null if no comparison
+                const cmpDelta = (currentVal, cmpOppsFilter) => {
+                    if (!comparedOpps || reportCompareTo === 'none') return null;
+                    const priorVal = comparedOpps.filter(cmpOppsFilter).reduce((s,o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
+                    if (priorVal === 0) return null;
+                    const pct = ((currentVal - priorVal) / priorVal) * 100;
+                    return { pct, label: (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%', good: pct >= 0 };
+                };
 
                 const wonOpps = reportsTimedOpps.filter(o => o.stage === 'Closed Won');
                 const lostOpps = reportsTimedOpps.filter(o => o.stage === 'Closed Lost');
@@ -652,7 +730,7 @@ ${bodyHtml}
                             </div>
                         )}
 
-                        {/* ── Filter bar: Grouped By segmented control + Period dropdown + Export ── */}
+                        {/* ── Filter bar: Grouped By segmented control + Period dropdown + Compare to + Export ── */}
                         {(() => {
                           const now = new Date();
                           const fy = now.getFullYear();
@@ -665,18 +743,31 @@ ${bodyHtml}
                             { value:'Q4',     label:'Q4' },
                             { value:'custom', label:'Custom…' },
                           ];
-                          const selectedPeriodLabel = periodOptions.find(p => p.value === reportTimePeriod)?.label || 'This quarter';
+                          const compareOptions = [
+                            { value:'previous_quarter', label:'Previous quarter' },
+                            { value:'previous_year',    label:'Previous year' },
+                            { value:'none',             label:'No comparison' },
+                          ];
+                          const selectStyle = {
+                            fontSize:'0.75rem', padding:'4px 28px 4px 10px',
+                            border:'1px solid #e6ddd0', borderRadius:'6px',
+                            background:'#fbf8f3', color:'#2a2622',
+                            fontFamily:'inherit', cursor:'pointer', appearance:'none',
+                            backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+                            backgroundRepeat:'no-repeat', backgroundPosition:'right 8px center',
+                          };
+                          const labelStyle2 = { fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.05em', whiteSpace:'nowrap' };
                           return (
                           <div style={{ display:'flex', alignItems:'center', gap:'0.875rem', padding:'0.625rem 0', flexWrap:'wrap', borderBottom:'1px solid #e6ddd0', marginBottom:'0' }}>
 
                             {/* Grouped by — segmented control (admins/managers only) */}
                             {hasReportsSlicing && (
                               <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-                                <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.05em', whiteSpace:'nowrap' }}>Grouped by</span>
+                                <span style={labelStyle2}>Grouped by</span>
                                 <div style={{ display:'flex', border:'1px solid #e6ddd0', borderRadius:'6px', overflow:'hidden', background:'#fbf8f3' }}>
                                   {[
-                                    ...(rAllReps.length > 1    ? [{ value:'rep',       label:'Rep' }]       : []),
-                                    ...(rAllTeams.length > 0   ? [{ value:'team',      label:'Team' }]      : []),
+                                    ...(rAllReps.length > 1        ? [{ value:'rep',       label:'Rep' }]       : []),
+                                    ...(rAllTeams.length > 0       ? [{ value:'team',      label:'Team' }]      : []),
                                     ...(rAllTerritories.length > 0 ? [{ value:'territory', label:'Territory' }] : []),
                                   ].map((opt, idx, arr) => {
                                     const isActive = (
@@ -699,22 +790,18 @@ ${bodyHtml}
                                     );
                                   })}
                                 </div>
-                                {/* Slice value dropdown when a group is active */}
                                 {reportsRep && (
-                                  <select value={reportsRep||''} onChange={e => setReportsRep(e.target.value||null)}
-                                    style={{ fontSize:'0.75rem', padding:'4px 8px', border:'1px solid #e6ddd0', borderRadius:'6px', background:'#fbf8f3', color:'#2a2622', fontFamily:'inherit', cursor:'pointer' }}>
+                                  <select value={reportsRep} onChange={e => setReportsRep(e.target.value||null)} style={selectStyle}>
                                     {rAllReps.map(r => <option key={r} value={r}>{r}</option>)}
                                   </select>
                                 )}
                                 {reportsTeam && (
-                                  <select value={reportsTeam||''} onChange={e => setReportsTeam(e.target.value||null)}
-                                    style={{ fontSize:'0.75rem', padding:'4px 8px', border:'1px solid #e6ddd0', borderRadius:'6px', background:'#fbf8f3', color:'#2a2622', fontFamily:'inherit', cursor:'pointer' }}>
+                                  <select value={reportsTeam} onChange={e => setReportsTeam(e.target.value||null)} style={selectStyle}>
                                     {rAllTeams.map(t => <option key={t} value={t}>{t}</option>)}
                                   </select>
                                 )}
                                 {reportsTerritory && (
-                                  <select value={reportsTerritory||''} onChange={e => setReportsTerritory(e.target.value||null)}
-                                    style={{ fontSize:'0.75rem', padding:'4px 8px', border:'1px solid #e6ddd0', borderRadius:'6px', background:'#fbf8f3', color:'#2a2622', fontFamily:'inherit', cursor:'pointer' }}>
+                                  <select value={reportsTerritory} onChange={e => setReportsTerritory(e.target.value||null)} style={selectStyle}>
                                     {rAllTerritories.map(t => <option key={t} value={t}>{t}</option>)}
                                   </select>
                                 )}
@@ -728,11 +815,8 @@ ${bodyHtml}
 
                             {/* Period — dropdown */}
                             <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-                              <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.05em', whiteSpace:'nowrap' }}>Period</span>
-                              <select value={reportTimePeriod} onChange={e => setReportTimePeriod(e.target.value)}
-                                style={{ fontSize:'0.75rem', padding:'4px 28px 4px 10px', border:'1px solid #e6ddd0', borderRadius:'6px', background:'#fbf8f3', color:'#2a2622', fontFamily:'inherit', cursor:'pointer', appearance:'none',
-                                  backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
-                                  backgroundRepeat:'no-repeat', backgroundPosition:'right 8px center' }}>
+                              <span style={labelStyle2}>Period</span>
+                              <select value={reportTimePeriod} onChange={e => setReportTimePeriod(e.target.value)} style={selectStyle}>
                                 {periodOptions.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                               </select>
                               {reportTimePeriod === 'custom' && (
@@ -746,25 +830,36 @@ ${bodyHtml}
                               )}
                             </div>
 
+                            {/* Compare to — dropdown */}
+                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                              <span style={labelStyle2}>Compare to</span>
+                              <select value={reportCompareTo} onChange={e => setReportCompareTo(e.target.value)} style={selectStyle}>
+                                {compareOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                              </select>
+                            </div>
+
                             <div style={{ flex:1 }} />
 
-                            {/* Right: Customize (custom tab) + Export PDF */}
+                            {/* Right: Customize (custom tab) + Export — styled as app ghost button */}
                             {reportSubTab === 'custom' && (
                               <button onClick={() => document.dispatchEvent(new CustomEvent('accelerep:openCustomize'))}
-                                style={{ display:'inline-flex', alignItems:'center', gap:'0.375rem', padding:'0.3rem 0.875rem', border:'1px solid #e6ddd0', borderRadius:'6px', background:'#fbf8f3', color:'#2a2622', fontSize:'0.75rem', fontWeight:'500', cursor:'pointer', fontFamily:'inherit' }}>
+                                className="btn btn-secondary"
+                                style={{ display:'inline-flex', alignItems:'center', gap:'0.375rem' }}>
                                 ⚙️ Customize
                               </button>
                             )}
-                            <button onClick={()=>{
-                              const lbl={pipeline:'Pipeline & Forecast',performance:'Performance',revenue:'Revenue',activity:'Activity',leads:'Leads',actions:'Actions'}[reportSubTab]||'Report';
-                              const win=window.open('','_blank','width=900,height=700');
-                              if(!win){alert('Allow popups to export PDF');return;}
-                              const el=document.querySelector('[data-rpt]');
-                              const body=el?el.innerHTML:'<p>Could not capture report.</p>';
-                              const d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
-                              win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Accelerep — '+lbl+'</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#2a2622}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #3a5a7a;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#8a8378}button,select{display:none!important}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#fbf8f3;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#8a8378;border-bottom:2px solid #e6ddd0}td{padding:6px 10px;border-bottom:1px solid #f5efe3}</style></head><body><div class="hdr"><h1>Accelerep — '+lbl+'</h1><div class="meta">'+d+'</div></div>'+body+'<scr'+'ipt>window.onload=function(){window.print()}<\/script></body></html>');
-                              win.document.close();
-                            }} style={{ display:'inline-flex', alignItems:'center', gap:'0.3rem', fontSize:'0.75rem', padding:'0.3rem 0.875rem', border:'1px solid #e6ddd0', borderRadius:'6px', background:'#fbf8f3', color:'#2a2622', cursor:'pointer', fontFamily:'inherit', fontWeight:'500' }}>
+                            <button className="btn btn-secondary"
+                              style={{ display:'inline-flex', alignItems:'center', gap:'0.375rem' }}
+                              onClick={()=>{
+                                const lbl={pipeline:'Pipeline & Forecast',performance:'Performance',revenue:'Revenue',activity:'Activity',leads:'Leads',actions:'Actions'}[reportSubTab]||'Report';
+                                const win=window.open('','_blank','width=900,height=700');
+                                if(!win){alert('Allow popups to export PDF');return;}
+                                const el=document.querySelector('[data-rpt]');
+                                const body=el?el.innerHTML:'<p>Could not capture report.</p>';
+                                const d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+                                win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Accelerep \u2014 '+lbl+'</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#2a2622}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #3a5a7a;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#8a8378}button,select{display:none!important}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#fbf8f3;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#8a8378;border-bottom:2px solid #e6ddd0}td{padding:6px 10px;border-bottom:1px solid #f5efe3}</style></head><body><div class="hdr"><h1>Accelerep \u2014 '+lbl+'</h1><div class="meta">'+d+'</div></div>'+body+'<scr'+'ipt>window.onload=function(){window.print()}<\/script></body></html>');
+                                win.document.close();
+                              }}>
                               ↗ Export PDF
                             </button>
 
@@ -930,8 +1025,31 @@ ${bodyHtml}
                             const fcPath=fxHasData?fxHistory.map((h,i)=>`${i===0?'M':'L'}${fxX(i)},${fxY(h.fc)}`).join(' '):'M0,0';
                             const acPath=fxHasData?fxHistory.map((h,i)=>`${i===0?'M':'L'}${fxX(i)},${fxY(h.ac)}`).join(' '):'M0,0';
 
+                            // Comparison deltas for pipeline tab
+                            const pipelineDelta  = cmpDelta(totalPipelineValue, o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
+                            const wonRevDelta     = cmpDelta(totalWonRevenue,   o => o.stage === 'Closed Won');
+                            const compareLabel    = reportCompareTo === 'previous_quarter' ? 'vs prev. quarter'
+                                                  : reportCompareTo === 'previous_year'    ? 'vs prev. year'
+                                                  : null;
+
                             return (
                               <>
+                                {/* Comparison context chip — only when a comparison is active */}
+                                {compareLabel && comparedOpps !== null && (
+                                  <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'6px 12px', background:T.surface2, borderRadius:T.r, fontSize:11.5, color:T.inkMid, fontFamily:T.sans, flexWrap:'wrap' }}>
+                                    <span style={{ fontWeight:600, color:T.inkMuted, letterSpacing:0.3, textTransform:'uppercase', fontSize:10 }}>{compareLabel}</span>
+                                    {pipelineDelta && (
+                                      <span>Pipeline: <strong style={{ color: pipelineDelta.good ? T.ok : T.danger }}>{pipelineDelta.label}</strong></span>
+                                    )}
+                                    {wonRevDelta && (
+                                      <span>Won revenue: <strong style={{ color: wonRevDelta.good ? T.ok : T.danger }}>{wonRevDelta.label}</strong></span>
+                                    )}
+                                    {!pipelineDelta && !wonRevDelta && (
+                                      <span style={{ fontStyle:'italic' }}>No prior period data to compare</span>
+                                    )}
+                                  </div>
+                                )}
+
                                 {/* Pipeline waterfall */}
                                 <Panel>
                                   <SecHdr title="Pipeline movement" sub="Last 7 days — what changed"
