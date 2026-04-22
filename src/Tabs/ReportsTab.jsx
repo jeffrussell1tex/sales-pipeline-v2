@@ -1998,10 +1998,7 @@ ${bodyHtml}
                             const allLeads = reportsTimedLeads;
                             const total4  = allLeads.length;
 
-                            // leadsAgg() — wired to real DB field names:
-                            //   l.assignee     (not assignedTo)
-                            //   l.rev          (not estimatedARR)
-                            //   l.lastTouch    (string like "2d" or null, not a date field)
+                            // leadsAgg() — real DB field names: assignedTo, estimatedARR, firstTouchDate, convertedAt
                             const agg4 = (() => {
                                 const open      = allLeads.filter(l => l.status !== 'Converted' && l.status !== 'Dead');
                                 const hot       = allLeads.filter(l => (l.score||0) >= 70).length;
@@ -2011,19 +2008,41 @@ ${bodyHtml}
                                 const converted = allLeads.filter(l => l.status === 'Converted').length;
                                 const dead      = allLeads.filter(l => l.status === 'Dead').length;
                                 const convRate  = total4 ? converted / total4 : 0;
-                                // rev is the real field name for estimated revenue
-                                const estPipeline = open.reduce((s,l) => s+(parseFloat(l.rev)||0), 0);
+                                const estPipeline = open.reduce((s,l) => s+(parseFloat(l.estimatedARR)||0), 0);
                                 const avgScore  = total4 ? Math.round(allLeads.reduce((s,l) => s+(l.score||0), 0) / total4) : 0;
-                                // assignee is the real field (null = unassigned)
-                                const unassigned = allLeads.filter(l => !l.assignee).length;
-                                // lastTouch is a string like "2d", "14d", or null — parse as integer days
-                                const staleThreshold = 7;
+                                const unassigned = allLeads.filter(l => !l.assignedTo).length;
+
+                                // Stale: never touched (no firstTouchDate) or not updated in 7+ days
                                 const isStaleL = l => {
                                     if (l.status === 'Converted' || l.status === 'Dead') return false;
-                                    if (!l.lastTouch) return true;
-                                    return parseInt(l.lastTouch) >= staleThreshold;
+                                    if (!l.firstTouchDate) return true;
+                                    const daysSince = l.updatedAt
+                                        ? Math.floor((Date.now() - new Date(l.updatedAt).getTime()) / 86400000)
+                                        : 999;
+                                    return daysSince >= 7;
                                 };
                                 const stale = open.filter(isStaleL).length;
+
+                                // Avg speed-to-lead: median days createdAt → firstTouchDate
+                                const speedSamples = allLeads
+                                    .filter(l => l.firstTouchDate && l.createdAt)
+                                    .map(l => Math.max(0, Math.floor(
+                                        (new Date(l.firstTouchDate+'T12:00:00') - new Date(l.createdAt)) / 86400000
+                                    )));
+                                const avgSpeedToLead = speedSamples.length > 0
+                                    ? speedSamples.sort((a,b)=>a-b)[Math.floor(speedSamples.length/2)]
+                                    : null;
+
+                                // Lead → opp velocity: median days createdAt → convertedAt
+                                const velocitySamples = allLeads
+                                    .filter(l => l.status === 'Converted' && l.convertedAt && l.createdAt)
+                                    .map(l => Math.max(0, Math.floor(
+                                        (new Date(l.convertedAt+'T12:00:00') - new Date(l.createdAt)) / 86400000
+                                    )));
+                                const avgVelocity = velocitySamples.length > 0
+                                    ? velocitySamples.sort((a,b)=>a-b)[Math.floor(velocitySamples.length/2)]
+                                    : null;
+
                                 // funnel: per-status counts
                                 const funnel = FUNNEL_ORDER4.map(st => ({
                                     status: st,
@@ -2036,7 +2055,7 @@ ${bodyHtml}
                                     if (!srcMap[s]) srcMap[s] = { name:s, count:0, converted:0, rev:0, scoreSum:0 };
                                     srcMap[s].count++;
                                     if (l.status === 'Converted') srcMap[s].converted++;
-                                    srcMap[s].rev += parseFloat(l.rev)||0;
+                                    srcMap[s].rev += parseFloat(l.estimatedARR)||0;
                                     srcMap[s].scoreSum += l.score||0;
                                 });
                                 const sources = Object.values(srcMap).map(s => ({
@@ -2045,21 +2064,23 @@ ${bodyHtml}
                                     avgScore: s.count ? Math.round(s.scoreSum/s.count) : 0,
                                     avgRev:   s.count ? Math.round(s.rev/s.count) : 0,
                                 })).sort((a,b) => b.count - a.count);
-                                // reps — keyed by l.assignee
+                                // reps — keyed by assignedTo
                                 const repMap = {};
                                 allLeads.forEach(l => {
-                                    const key = l.assignee || 'Unassigned';
+                                    const key = l.assignedTo || 'Unassigned';
                                     if (!repMap[key]) repMap[key] = { rep:key, assigned:0, converted:0, rev:0, working:0, stale:0 };
                                     repMap[key].assigned++;
                                     if (l.status === 'Converted') repMap[key].converted++;
-                                    repMap[key].rev += parseFloat(l.rev)||0;
+                                    repMap[key].rev += parseFloat(l.estimatedARR)||0;
                                     if (['Working','Qualified','Contacted'].includes(l.status)) repMap[key].working++;
                                     if (isStaleL(l)) repMap[key].stale++;
                                 });
                                 const reps = Object.values(repMap)
                                     .map(r => ({ ...r, rate: r.assigned ? r.converted/r.assigned : 0 }))
                                     .sort((a,b) => (b.assigned-a.assigned)||(b.rev-a.rev));
-                                return { open:open.length, hot, warm, cool, cold, converted, dead, convRate, estPipeline, avgScore, unassigned, stale, funnel, sources, reps };
+                                return { open:open.length, hot, warm, cool, cold, converted, dead, convRate,
+                                    estPipeline, avgScore, unassigned, stale, funnel, sources, reps,
+                                    avgSpeedToLead, avgVelocity };
                             })();
 
                             if (total4 === 0) return (
@@ -2152,10 +2173,10 @@ ${bodyHtml}
                                             {/* Footer strip */}
                                             <div style={{ marginTop:18, padding:'12px 16px', background:T4.surface2, borderRadius:T4.r, display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:20 }}>
                                                 {[
-                                                    { k:'Overall conversion', v:`${(agg4.convRate*100).toFixed(1)}%`, sub:`${agg4.converted} of ${total4} leads` },
-                                                    { k:'Marked dead',        v:agg4.dead,                              sub:agg4.dead===0?'no losses recorded':`${Math.round((agg4.dead/total4)*100)}% leak` },
-                                                    { k:'Unassigned',         v:agg4.unassigned,                        sub:agg4.unassigned===0?'all routed':'need routing' },
-                                                    { k:'Stale > 7 days',     v:agg4.stale,                             sub:"haven’t been touched" },
+                                                    { k:'Overall conversion',  v:`${(agg4.convRate*100).toFixed(1)}%`,                       sub:`${agg4.converted} of ${total4} leads` },
+                                                    { k:'Marked dead',         v:agg4.dead,                                                   sub:agg4.dead===0?'no losses recorded':`${Math.round((agg4.dead/total4)*100)}% leak` },
+                                                    { k:'Avg speed-to-lead',   v:agg4.avgSpeedToLead!=null?agg4.avgSpeedToLead+'d':'—',  sub:agg4.avgSpeedToLead!=null?'create → first touch':'no touch data yet' },
+                                                    { k:'Lead → opp velocity', v:agg4.avgVelocity!=null?agg4.avgVelocity+'d':'—',        sub:agg4.avgVelocity!=null?'median days to convert':'no conversions yet' },
                                                 ].map(s => (
                                                     <div key={s.k}>
                                                         <div style={eb4(T4.inkMuted)}>{s.k}</div>
