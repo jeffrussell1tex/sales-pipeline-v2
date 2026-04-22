@@ -1998,7 +1998,10 @@ ${bodyHtml}
                             const allLeads = reportsTimedLeads;
                             const total4  = allLeads.length;
 
-                            // leadsAgg() — adapted to real field names (assignedTo, estimatedARR, score, status, source)
+                            // leadsAgg() — wired to real DB field names:
+                            //   l.assignee     (not assignedTo)
+                            //   l.rev          (not estimatedARR)
+                            //   l.lastTouch    (string like "2d" or null, not a date field)
                             const agg4 = (() => {
                                 const open      = allLeads.filter(l => l.status !== 'Converted' && l.status !== 'Dead');
                                 const hot       = allLeads.filter(l => (l.score||0) >= 70).length;
@@ -2008,16 +2011,20 @@ ${bodyHtml}
                                 const converted = allLeads.filter(l => l.status === 'Converted').length;
                                 const dead      = allLeads.filter(l => l.status === 'Dead').length;
                                 const convRate  = total4 ? converted / total4 : 0;
-                                const estPipeline = open.reduce((s,l) => s+(parseFloat(l.estimatedARR)||0), 0);
+                                // rev is the real field name for estimated revenue
+                                const estPipeline = open.reduce((s,l) => s+(parseFloat(l.rev)||0), 0);
                                 const avgScore  = total4 ? Math.round(allLeads.reduce((s,l) => s+(l.score||0), 0) / total4) : 0;
-                                const unassigned = allLeads.filter(l => !l.assignedTo).length;
-                                // stale = open lead with no lastTouch or last activity > 7 days ago
-                                const stale = open.filter(l => {
-                                    if (!l.lastActivityDate) return true;
-                                    const d = Math.floor((new Date() - new Date(l.lastActivityDate+'T12:00:00')) / 86400000);
-                                    return d >= 7;
-                                }).length;
-                                // funnel: cumulative counts (leads that reached >= this stage)
+                                // assignee is the real field (null = unassigned)
+                                const unassigned = allLeads.filter(l => !l.assignee).length;
+                                // lastTouch is a string like "2d", "14d", or null — parse as integer days
+                                const staleThreshold = 7;
+                                const isStaleL = l => {
+                                    if (l.status === 'Converted' || l.status === 'Dead') return false;
+                                    if (!l.lastTouch) return true;
+                                    return parseInt(l.lastTouch) >= staleThreshold;
+                                };
+                                const stale = open.filter(isStaleL).length;
+                                // funnel: per-status counts
                                 const funnel = FUNNEL_ORDER4.map(st => ({
                                     status: st,
                                     count:  allLeads.filter(l => l.status === st).length,
@@ -2029,7 +2036,7 @@ ${bodyHtml}
                                     if (!srcMap[s]) srcMap[s] = { name:s, count:0, converted:0, rev:0, scoreSum:0 };
                                     srcMap[s].count++;
                                     if (l.status === 'Converted') srcMap[s].converted++;
-                                    srcMap[s].rev += parseFloat(l.estimatedARR)||0;
+                                    srcMap[s].rev += parseFloat(l.rev)||0;
                                     srcMap[s].scoreSum += l.score||0;
                                 });
                                 const sources = Object.values(srcMap).map(s => ({
@@ -2038,17 +2045,16 @@ ${bodyHtml}
                                     avgScore: s.count ? Math.round(s.scoreSum/s.count) : 0,
                                     avgRev:   s.count ? Math.round(s.rev/s.count) : 0,
                                 })).sort((a,b) => b.count - a.count);
-                                // reps
+                                // reps — keyed by l.assignee
                                 const repMap = {};
                                 allLeads.forEach(l => {
-                                    const key = l.assignedTo || 'Unassigned';
+                                    const key = l.assignee || 'Unassigned';
                                     if (!repMap[key]) repMap[key] = { rep:key, assigned:0, converted:0, rev:0, working:0, stale:0 };
                                     repMap[key].assigned++;
                                     if (l.status === 'Converted') repMap[key].converted++;
-                                    repMap[key].rev += parseFloat(l.estimatedARR)||0;
+                                    repMap[key].rev += parseFloat(l.rev)||0;
                                     if (['Working','Qualified','Contacted'].includes(l.status)) repMap[key].working++;
-                                    const isStale = !l.lastActivityDate || Math.floor((new Date()-new Date(l.lastActivityDate+'T12:00:00'))/86400000) >= 7;
-                                    if (isStale && l.status !== 'Converted' && l.status !== 'Dead') repMap[key].stale++;
+                                    if (isStaleL(l)) repMap[key].stale++;
                                 });
                                 const reps = Object.values(repMap)
                                     .map(r => ({ ...r, rate: r.assigned ? r.converted/r.assigned : 0 }))
