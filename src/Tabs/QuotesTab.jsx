@@ -1,1295 +1,594 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Design tokens ────────────────────────────────────────────
+const T = {
+    bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
+    border: '#e6ddd0', borderStrong: '#d4c8b4',
+    ink: '#2a2622', inkMid: '#5a544c', inkMuted: '#8a8378',
+    gold: '#c8b99a', goldInk: '#7a6a48',
+    ok: '#4d6b3d', warn: '#b87333', danger: '#9c3a2e', info: '#3a5a7a',
+    sans: '"Plus Jakarta Sans", system-ui, sans-serif',
+    serif: 'Georgia, serif',
+    r: 3,
+};
 
+// ─── Helpers ──────────────────────────────────────────────────
 const fmt = (n) => {
-    const num = parseFloat(n) || 0;
-    if (num >= 1000000) return '$' + (num / 1000000).toFixed(1) + 'M';
-    if (num >= 1000) return '$' + Math.round(num / 1000) + 'K';
-    return '$' + Math.round(num).toLocaleString();
+    const v = parseFloat(n) || 0;
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+    if (v >= 1e4) return '$' + Math.round(v / 1e3) + 'K';
+    if (v >= 1e3) return '$' + (v / 1e3).toFixed(1) + 'K';
+    return '$' + Math.round(v).toLocaleString();
 };
 const fmtFull = (n) => '$' + (parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const pct = (n) => (parseFloat(n) || 0).toFixed(1) + '%';
+const eyebrow = (color) => ({ fontSize: 10, fontWeight: 700, color: color || T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans });
 
-function calcLineTotals(lineItems = [], dealDiscountPct = 0) {
-    let subtotal = 0, recurring = 0, oneTime = 0;
-    const lines = lineItems.map(item => {
-        const qty = Number(item.quantity) || 1;
-        const list = Number(item.listPrice) || 0;
-        const disc = Math.min(Math.max(Number(item.discountPct) || 0, 0), 100);
-        const net = list * (1 - disc / 100);
-        const total = net * qty;
-        subtotal += total;
-        if (item.productType === 'recurring') {
-            recurring += item.unit === 'month' ? total * 12 : total;
-        } else {
-            oneTime += total;
-        }
-        return { ...item, netPrice: net, lineTotal: total };
-    });
-    const discAmt = subtotal * (Number(dealDiscountPct) || 0) / 100;
-    const totalValue = subtotal - discAmt;
-    const avgDisc = subtotal > 0
-        ? lineItems.reduce((acc, item) => acc + (Number(item.discountPct) || 0), 0) / (lineItems.length || 1)
-        : 0;
-    return { lines, subtotal, totalValue, recurringValue: recurring, oneTimeValue: oneTime, avgDisc };
-}
-
-function genQuoteId() {
-    return 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-}
-
-// ─── Sub-tab style ────────────────────────────────────────────────────────────
-
-const subTabStyle = (active, current) => ({
-    padding: '8px 16px',
-    border: 'none',
-    borderBottom: active === current ? '2px solid #2a2622' : '2px solid transparent',
-    background: 'transparent',
-    color: active === current ? '#2a2622' : '#8a8378',
-    fontWeight: active === current ? '600' : '400',
-    fontSize: '0.75rem',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition: 'color 120ms, border-color 120ms',
-    whiteSpace: 'nowrap',
-    marginBottom: -1,
-});
-
-// ─── Status badge ─────────────────────────────────────────────────────────────
-
-const STATUS_COLORS = {
-    'Draft':            { bg: '#f1f5f9', color: '#64748b' },
-    'Pending Approval': { bg: '#fef3c7', color: '#92400e' },
-    'Approved':         { bg: '#d1fae5', color: '#065f46' },
-    'Sent to Customer': { bg: '#dbeafe', color: '#1e40af' },
-    'Accepted':         { bg: '#d1fae5', color: '#047857' },
-    'Rejected / Lost':  { bg: '#fee2e2', color: '#b91c1c' },
+const relDate = (iso) => {
+    if (!iso) return '—';
+    const diff = Math.round((Date.now() - new Date(iso + (iso.includes('T') ? '' : 'T12:00:00')).getTime()) / 86400000);
+    if (diff === 0) return 'today';
+    if (diff === 1) return 'yesterday';
+    if (diff < 0) return `in ${Math.abs(diff)}d`;
+    if (diff < 7) return `${diff}d ago`;
+    if (diff < 30) return `${Math.round(diff / 7)}w ago`;
+    return `${Math.round(diff / 30)}mo ago`;
 };
 
-function StatusBadge({ status }) {
-    const c = STATUS_COLORS[status] || { bg: '#f1f5f9', color: '#64748b' };
-    return (
-        <span style={{ background: c.bg, color: c.color, fontSize: '0.625rem', fontWeight: '700',
-            textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0.2rem 0.5rem',
-            borderRadius: '4px', whiteSpace: 'nowrap' }}>
-            {status}
-        </span>
-    );
+function genQuoteId() { return 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7); }
+
+// ─── Approval tiers ───────────────────────────────────────────
+const APPROVAL_TIERS = [
+    { maxDiscount: 0.10, approver: null,            label: 'Rep authority', color: T.ok },
+    { maxDiscount: 0.20, approver: 'Sales Manager', label: 'Mgr approval',  color: T.warn },
+    { maxDiscount: 0.30, approver: 'VP Sales',      label: 'VP approval',   color: '#b55634' },
+    { maxDiscount: 1.00, approver: 'CFO',           label: 'CFO approval',  color: T.danger },
+];
+const tierForDiscount = (d) => {
+    for (const t of APPROVAL_TIERS) if (d <= t.maxDiscount) return t;
+    return APPROVAL_TIERS[APPROVAL_TIERS.length - 1];
+};
+
+// ─── Quote math ───────────────────────────────────────────────
+function calcLineTotals(lineItems = [], products = []) {
+    let listTotal = 0, netTotal = 0, recurring = 0, oneTime = 0, costTotal = 0;
+    const lines = (lineItems || []).map(item => {
+        const p    = products.find(p => p.id === item.productId) || {};
+        const qty  = Number(item.quantity) || 1;
+        const list = Number(item.listPrice ?? p.listPrice ?? p.price) || 0;
+        const disc = Math.min(Math.max(Number(item.discountPct) || 0, 0), 100);
+        const net  = list * (1 - disc / 100);
+        const lineList = list * qty;
+        const lineNet  = net * qty;
+        const cost     = (Number(p.cost) || 0) * qty;
+        listTotal += lineList;
+        netTotal  += lineNet;
+        costTotal += cost;
+        const normType = (item.productType || p.type || p.productType || '').replace('_', '-');
+        if (normType === 'recurring') recurring += item.unit === 'month' ? lineNet * 12 : lineNet;
+        else oneTime += lineNet;
+        return { ...item, netPrice: net, lineTotal: lineNet, lineList, productName: item.productName || p.name || '' };
+    });
+    const avgDisc  = listTotal > 0 ? 1 - netTotal / listTotal : 0;
+    const margin   = netTotal > 0 ? (netTotal - costTotal) / netTotal : 0;
+    return { lines, listTotal, netTotal, totalValue: netTotal, recurringValue: recurring, oneTimeValue: oneTime, avgDisc, avgDiscPct: avgDisc * 100, margin };
 }
 
-// ─── Product type badge ───────────────────────────────────────────────────────
+// ─── Status colours ───────────────────────────────────────────
+const STATUS_COLORS = {
+    'Draft':            { bg: 'rgba(138,131,120,0.12)', fg: '#5a544c', dot: '#8a8378' },
+    'Pending Approval': { bg: 'rgba(184,115,51,0.12)',  fg: '#b87333', dot: '#b87333' },
+    'Approved':         { bg: 'rgba(77,107,61,0.15)',   fg: '#3a5530', dot: '#4d6b3d' },
+    'Sent to Customer': { bg: 'rgba(58,90,122,0.12)',   fg: '#3a5a7a', dot: '#3a5a7a' },
+    'Negotiating':      { bg: 'rgba(200,169,120,0.25)', fg: '#7a6a48', dot: '#c8a978' },
+    'Accepted':         { bg: 'rgba(77,107,61,0.15)',   fg: '#3a5530', dot: '#4d6b3d' },
+    'Rejected / Lost':  { bg: 'rgba(156,58,46,0.12)',   fg: '#9c3a2e', dot: '#9c3a2e' },
+    'Superseded':       { bg: 'transparent',            fg: '#8a8378', dot: '#b0a088' },
+    'Expired':          { bg: 'rgba(42,38,34,0.08)',    fg: '#8a8378', dot: '#8a8378' },
+};
 
+const QStatus = ({ status }) => {
+    const c = STATUS_COLORS[status] || { bg: 'rgba(138,131,120,0.12)', fg: '#5a544c', dot: '#8a8378' };
+    return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 10, fontSize: 9.5, fontWeight: 700, background: c.bg, color: c.fg, whiteSpace: 'nowrap', fontFamily: T.sans }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: c.dot }} />{status}
+        </span>
+    );
+};
+
+// ─── Input / label styles ─────────────────────────────────────
+const inp = { width: '100%', padding: '0.4rem 0.6rem', border: '1px solid #e5e2db', borderRadius: 6, fontSize: '0.8125rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' };
+const lbl = { display: 'block', fontSize: '0.6875rem', fontWeight: '600', color: '#57534e', marginBottom: '0.25rem' };
+
+// ─── Type badge ───────────────────────────────────────────────
 const TYPE_COLORS = {
     recurring:  { bg: '#dbeafe', color: '#1e40af', label: 'Recurring' },
     'one-time': { bg: '#fef3c7', color: '#92400e', label: 'One-time' },
     one_time:   { bg: '#fef3c7', color: '#92400e', label: 'One-time' },
     service:    { bg: '#f3e8ff', color: '#6b21a8', label: 'Service' },
 };
+const TypeBadge = ({ type }) => {
+    const c = TYPE_COLORS[type] || { bg: '#f1f5f9', color: '#64748b', label: type || '—' };
+    return <span style={{ background: c.bg, color: c.color, fontSize: '0.5625rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0.15rem 0.4rem', borderRadius: 4 }}>{c.label}</span>;
+};
 
-function TypeBadge({ type }) {
-    const c = TYPE_COLORS[type] || { bg: '#f1f5f9', color: '#64748b', label: type };
+// ─── Approval gauge ───────────────────────────────────────────
+const ApprovalGauge = ({ discount }) => {
+    const pctVal = Math.min(1, discount / 0.4);
+    const color  = discount <= 0.10 ? T.ok : discount <= 0.20 ? T.warn : discount <= 0.30 ? '#b55634' : T.danger;
     return (
-        <span style={{ background: c.bg, color: c.color, fontSize: '0.5625rem', fontWeight: '700',
-            textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0.15rem 0.4rem', borderRadius: '4px' }}>
-            {c.label}
-        </span>
+        <div>
+            <div style={{ position: 'relative', height: 10, background: T.surface2, borderRadius: 5, overflow: 'hidden' }}>
+                {[0.10, 0.20, 0.30].map(t => (
+                    <div key={t} style={{ position: 'absolute', left: `${t / 0.4 * 100}%`, top: 0, bottom: 0, width: 1, background: 'rgba(0,0,0,0.15)' }} />
+                ))}
+                <div style={{ width: `${pctVal * 100}%`, height: '100%', background: color, transition: 'width 240ms ease-out' }} />
+                <div style={{ position: 'absolute', left: `${pctVal * 100}%`, top: -2, bottom: -2, width: 2, background: T.ink, transform: 'translateX(-1px)' }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 9, color: T.inkMuted, letterSpacing: 0.3, fontFamily: T.sans }}>
+                <span>0%</span><span>10% Rep</span><span>20% Mgr</span><span>30% VP</span><span>40%+</span>
+            </div>
+        </div>
     );
+};
+
+// ─── Activity log ─────────────────────────────────────────────
+const ACTIVITY_META = {
+    created:   { color: T.inkMuted, icon: '+' },
+    cloned:    { color: T.inkMuted, icon: '⎘' },
+    edit:      { color: T.warn,     icon: '✎' },
+    submitted: { color: T.warn,     icon: '↑' },
+    sent:      { color: T.info,     icon: '→' },
+    opened:    { color: T.ok,       icon: '◉' },
+    accepted:  { color: T.ok,       icon: '✓' },
+    expired:   { color: T.danger,   icon: '×' },
+};
+
+function buildActivityLog(quote) {
+    const log = [];
+    const d = quote.createdAt || quote.updatedAt || '';
+    log.push({ type: 'created', actor: quote.createdBy || 'Rep', date: d, note: `Created v${quote.version || 1}` });
+    if ((quote.version || 1) > 1) log.push({ type: 'cloned', actor: quote.createdBy || 'Rep', date: d, note: `Cloned from v${(quote.version || 1) - 1}` });
+    const heavy = (quote.lineItems || []).filter(li => (Number(li.discountPct) || 0) >= 10);
+    if (heavy.length) log.push({ type: 'edit', actor: quote.createdBy || 'Rep', date: d, note: `Applied discount on ${heavy.length} item${heavy.length === 1 ? '' : 's'}` });
+    if (quote.status === 'Pending Approval') log.push({ type: 'submitted', actor: quote.createdBy || 'Rep', date: quote.updatedAt || d, note: 'Submitted for approval', detail: 'Avg discount exceeds rep tier' });
+    if (quote.status === 'Sent to Customer' || quote.status === 'Negotiating') log.push({ type: 'sent', actor: quote.createdBy || 'Rep', date: quote.updatedAt || d, note: 'Sent to customer' });
+    if (quote.status === 'Accepted') log.push({ type: 'accepted', actor: 'Customer', date: quote.updatedAt || d, note: 'Accepted quote' });
+    if (quote.status === 'Expired') log.push({ type: 'expired', actor: 'System', date: quote.validUntil || d, note: 'Quote expired without acceptance' });
+    return log.filter(e => e.date);
 }
 
-// ─── Input style ─────────────────────────────────────────────────────────────
-
-const inp = {
-    width: '100%', padding: '0.45rem 0.65rem', border: '1px solid #e5e2db',
-    borderRadius: '8px', fontSize: '0.8125rem', fontFamily: 'inherit',
-    background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box',
-};
-const lbl = {
-    display: 'block', fontSize: '0.6875rem', fontWeight: '600',
-    color: '#57534e', marginBottom: '0.25rem',
-};
-
-// ─── APPROVAL DISCOUNT THRESHOLD (configurable — could come from settings later) ──
-const DISCOUNT_APPROVAL_THRESHOLD = 15; // percent
-
-// ─── QUOTE BUILDER ────────────────────────────────────────────────────────────
-
-function QuoteBuilder({ quote, onSave, onClose, opportunities, products, settings, currentUser, userRole, quotes, getNextQuoteNumber, defaultOppId }) {
-    const isNew = !quote;
-    const versions = useMemo(() =>
-        isNew ? [] : (quotes || []).filter(q => q.quoteNumber === quote?.quoteNumber).sort((a, b) => a.version - b.version),
-        [quotes, quote]
-    );
-
-    // Which version are we editing?
-    const [activeVersion, setActiveVersion] = useState(quote?.version || 1);
-    const editingQuote = useMemo(() => versions.find(v => v.version === activeVersion) || quote, [versions, activeVersion, quote]);
-
-    // Form state
-    const [name, setName] = useState(editingQuote?.name || '');
-    const [oppId, setOppId] = useState(editingQuote?.opportunityId || defaultOppId || '');
-    const [validUntil, setValidUntil] = useState(editingQuote?.validUntil || '');
-    const [paymentTerms, setPaymentTerms] = useState(editingQuote?.paymentTerms || 'Net 30 · Annual');
-    // dealDiscount removed — avg line discount is now read-only computed from line items
-    const [lineItems, setLineItems] = useState(editingQuote?.lineItems || []);
-    const [notes, setNotes] = useState(editingQuote?.notes || '');
-    const [billingContact, setBillingContact] = useState(editingQuote?.billingContact || '');
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState(null);
-    const [compareMode, setCompareMode] = useState(false);
-    const [compareVersions, setCompareVersions] = useState([]);
-    const [catalogSearch, setCatalogSearch] = useState('');
-    const [dragOver, setDragOver] = useState(false);
-
-    // Sync form when switching versions
-    useEffect(() => {
-        if (editingQuote) {
-            setName(editingQuote.name || '');
-            setOppId(editingQuote.opportunityId || '');
-            setValidUntil(editingQuote.validUntil || '');
-            setPaymentTerms(editingQuote.paymentTerms || 'Net 30 · Annual');
-            // dealDiscount no longer in state
-            setLineItems(editingQuote.lineItems || []);
-            setNotes(editingQuote.notes || '');
-            setBillingContact(editingQuote.billingContact || '');
-        }
-    }, [editingQuote?.id]);
-
-    const { lines, subtotal, totalValue, recurringValue, oneTimeValue, avgDisc } = useMemo(
-        () => calcLineTotals(lineItems, 0),
-        [lineItems]
-    );
-
-    const needsApproval = avgDisc >= DISCOUNT_APPROVAL_THRESHOLD;
-    const linkedOpp = (opportunities || []).find(o => o.id === oppId);
-
-    // Group products for catalog — categories and products within each are alpha-sorted
-    const catalogGroups = useMemo(() => {
-        const groups = {};
-        [...(products || [])].filter(p => p.active !== false)
-            .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-            .forEach(p => {
-                const cat = p.category || 'Other';
-                if (!groups[cat]) groups[cat] = [];
-                groups[cat].push(p);
-            });
-        // Return with sorted category keys
-        return Object.fromEntries(
-            Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))
-        );
-    }, [products]);
-
-    const filteredGroups = useMemo(() => {
-        if (!catalogSearch.trim()) return catalogGroups;
-        const q = catalogSearch.toLowerCase();
-        const out = {};
-        Object.entries(catalogGroups).forEach(([cat, prods]) => {
-            const f = prods.filter(p => p.name?.toLowerCase().includes(q) || cat.toLowerCase().includes(q));
-            if (f.length) out[cat] = f;
-        });
-        return out;
-    }, [catalogGroups, catalogSearch]);
-
-    const addProduct = (product) => {
-        const rawType = product.productType || product.type || 'one_time';
-        const normType = rawType === 'one_time' ? 'one-time' : rawType;
-        const isCustomPrice = product.customPrice === true;
-        setLineItems(prev => [...prev, {
-            _key: Date.now() + Math.random(),
-            productId: product.id,
-            productName: product.name,
-            productType: normType,
-            unit: product.unit || (normType === 'recurring' ? 'month' : 'flat'),
-            listPrice: isCustomPrice ? '' : (Number(product.listPrice || product.price) || 0),
-            quantity: 1,
-            discountPct: 0,
-            customPrice: isCustomPrice,
-        }]);
-    };
-
-    const updateLine = (idx, field, val) => {
-        setLineItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: val } : item));
-    };
-
-    const removeLine = (idx) => {
-        setLineItems(prev => prev.filter((_, i) => i !== idx));
-    };
-
-    const handleSaveVersion = async (statusOverride) => {
-        if (!oppId) { setError('Please link this quote to an opportunity.'); return; }
-        if (!name.trim()) { setError('Please enter a quote name.'); return; }
-        setError(null);
-        setSaving(true);
-        try {
-            const quoteNumber = isNew ? getNextQuoteNumber() : editingQuote.quoteNumber;
-            const versionNum = isNew ? 1 : (editingQuote?.version || 1);
-            const status = statusOverride || editingQuote?.status || 'Draft';
-            const payload = {
-                id: editingQuote?.id || genQuoteId(),
-                quoteNumber,
-                version: versionNum,
-                name: name.trim(),
-                opportunityId: oppId,
-                validUntil,
-                paymentTerms,
-                dealDiscount: 0,
-                lineItems,
-                notes,
-                billingContact,
-                status,
-                createdBy: editingQuote?.createdBy || currentUser,
-            };
-            await onSave(payload);
-            onClose();
-        } catch (err) {
-            setError(err.message || 'Failed to save.');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleNewVersion = async () => {
-        if (!editingQuote) return;
-        const maxV = Math.max(...versions.map(v => v.version));
-        if (maxV >= 3) { setError('Maximum 3 versions per quote.'); return; }
-        setSaving(true);
-        try {
-            const payload = {
-                id: genQuoteId(),
-                quoteNumber: editingQuote.quoteNumber,
-                version: maxV + 1,
-                name: editingQuote.name + ' v' + (maxV + 1),
-                opportunityId: editingQuote.opportunityId,
-                validUntil: editingQuote.validUntil,
-                paymentTerms: editingQuote.paymentTerms,
-                dealDiscount: 0,
-                lineItems: [...(editingQuote.lineItems || [])],
-                notes: editingQuote.notes,
-                billingContact: editingQuote.billingContact || billingContact,
-                status: 'Draft',
-                createdBy: currentUser,
-            };
-            await onSave(payload);
-            setActiveVersion(maxV + 1);
-        } catch (err) {
-            setError(err.message || 'Failed to create version.');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleSubmitApproval = () => handleSaveVersion('Pending Approval');
-    const [pdfBlockMsg, setPdfBlockMsg] = useState(null);
-
-    const handleExportPDF = async () => {
-        const status = editingQuote?.status || 'Draft';
-        const approved = status === 'Approved' || status === 'Sent to Customer' || status === 'Accepted';
-        if (!approved) {
-            const msgs = {
-                'Draft': 'This quote is still a draft. Submit it for approval before generating a PDF.',
-                'Pending Approval': 'This quote is pending manager approval. A PDF can only be generated once approved.',
-                'Rejected / Lost': 'This quote was rejected and cannot be exported as a PDF.',
-            };
-            setPdfBlockMsg(msgs[status] || 'This quote must be approved before generating a PDF.');
-            setTimeout(() => setPdfBlockMsg(null), 5000);
-            return;
-        }
-        try {
-            const opp = linkedOpp;
-            const res = await dbFetch('/.netlify/functions/quote-pdf', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ quote: editingQuote, opportunity: opp, lines }),
-            });
-            if (!res.ok) throw new Error('PDF generation failed');
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = (editingQuote?.quoteNumber || 'quote') + '-v' + (editingQuote?.version || 1) + '.pdf';
-            a.click();
-            URL.revokeObjectURL(url);
-        } catch {
-            const w = window.open('', '_blank');
-            if (!w) return;
-            w.document.write(buildPrintHTML(editingQuote, linkedOpp, lines, subtotal, totalValue, recurringValue, oneTimeValue));
-            w.document.close();
-            setTimeout(() => w.print(), 400);
-        }
-    };
-
-    // ── Compare mode ──────────────────────────────────────────────────────────
-    const toggleCompareVersion = (v) => {
-        setCompareVersions(prev => {
-            if (prev.includes(v)) return prev.filter(x => x !== v);
-            if (prev.length >= 3) return prev; // max 3
-            return [...prev, v];
-        });
-    };
-
-    if (compareMode && versions.length > 1) {
-        const displayVersions = compareVersions.length >= 2
-            ? versions.filter(v => compareVersions.includes(v.version))
-            : versions.slice(0, 3);
-        return (
-            <VersionCompareView
-                versions={displayVersions}
-                allVersions={versions}
-                compareVersions={compareVersions}
-                onToggle={toggleCompareVersion}
-                onClose={() => setCompareMode(false)}
-                onBack={() => setCompareMode(false)}
-                onSelectVersion={(v) => { setActiveVersion(v); setCompareMode(false); }}
-                linkedOpp={linkedOpp}
-            />
-        );
-    }
-
+const QuoteActivityLog = ({ quote }) => {
+    const log = buildActivityLog(quote);
     return (
-        <div style={{ display: 'flex', height: '100%', overflow: 'hidden', background: '#f0ece4' }}>
-
-            {/* ── LEFT: Product Catalog ───────────────────────────────────── */}
-            <div style={{ width: '260px', flexShrink: 0, background: '#1c1917', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-                <div style={{ padding: '1rem', borderBottom: '1px solid rgba(245,241,235,0.1)' }}>
-                    <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#c8b99a', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.5rem' }}>Product Catalog</div>
-                    <input
-                        value={catalogSearch}
-                        onChange={e => setCatalogSearch(e.target.value)}
-                        placeholder="Search products..."
-                        style={{ ...inp, background: 'rgba(245,241,235,0.08)', border: '1px solid rgba(245,241,235,0.12)', color: '#f5f1eb', fontSize: '0.75rem' }}
-                    />
-                </div>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem 0' }}>
-                    {Object.keys(filteredGroups).length === 0 && (
-                        <div style={{ padding: '1.5rem 1rem', fontSize: '0.75rem', color: '#a8a29e', textAlign: 'center' }}>
-                            {(products || []).length === 0 ? 'No products in Price Book yet.' : 'No products match your search.'}
-                        </div>
-                    )}
-                    {Object.entries(filteredGroups).map(([cat, prods]) => (
-                        <div key={cat}>
-                            <div style={{ padding: '0.5rem 1rem 0.25rem', fontSize: '0.5625rem', fontWeight: '700', color: '#78716c', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{cat}</div>
-                            {prods.map(prod => (
-                                <div key={prod.id}
-                                    draggable
-                                    onDragStart={e => e.dataTransfer.setData('productId', prod.id)}
-                                    style={{ padding: '0.5rem 1rem', cursor: 'grab', transition: 'background 0.1s' }}
-                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(245,241,235,0.06)'}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                >
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#f5f1eb', lineHeight: 1.3, display: 'flex', alignItems: 'center', gap: '0.375rem', flexWrap: 'wrap' }}>
-                                                {prod.name}
-                                                {prod.customPrice && <span style={{ fontSize: '0.5rem', fontWeight: '700', background: 'rgba(167,139,250,0.25)', color: '#c4b5fd', padding: '1px 4px', borderRadius: '3px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Custom</span>}
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '14px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ ...eyebrow(T.inkMid), fontSize: 10.5 }}>Activity — v{quote.version || 1}</div>
+                <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{log.length} event{log.length === 1 ? '' : 's'}</span>
+            </div>
+            {log.length === 0
+                ? <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>No recorded activity yet.</div>
+                : (
+                    <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+                        <div style={{ position: 'absolute', left: 9, top: 6, bottom: 6, width: 1, background: T.border }} />
+                        {log.map((e, i) => {
+                            const m = ACTIVITY_META[e.type] || ACTIVITY_META.edit;
+                            return (
+                                <div key={i} style={{ display: 'flex', gap: 12, paddingBottom: i === log.length - 1 ? 0 : 12, position: 'relative' }}>
+                                    <div style={{ width: 19, height: 19, borderRadius: 10, background: T.surface, border: `1.5px solid ${m.color}`, color: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0, zIndex: 1, fontFamily: T.sans }}>{m.icon}</div>
+                                    <div style={{ flex: 1, paddingTop: 1 }}>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                                            <div style={{ fontSize: 12, color: T.ink, lineHeight: 1.35, fontFamily: T.sans }}>
+                                                <b style={{ fontWeight: 600 }}>{e.actor}</b> <span style={{ color: T.inkMid }}>{e.note}</span>
                                             </div>
-                                            <div style={{ fontSize: '0.6875rem', color: '#a8a29e', marginTop: '0.15rem' }}>
-                                                {prod.customPrice ? 'Price set on quote' : '$' + Number(prod.listPrice || prod.price || 0).toLocaleString() + ' ' + (prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : 'flat')}
-                                            </div>
-                                            <TypeBadge type={prod.productType || prod.type} />
+                                            <span style={{ fontSize: 10.5, color: T.inkMuted, flexShrink: 0, fontFamily: T.sans }}>{relDate(e.date)}</span>
                                         </div>
-                                        <button
-                                            onClick={() => addProduct(prod)}
-                                            style={{ background: 'rgba(245,241,235,0.12)', border: '1px solid rgba(245,241,235,0.15)', color: '#f5f1eb', borderRadius: '6px', padding: '0.2rem 0.5rem', fontSize: '0.625rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
-                                        >+ Add</button>
+                                        {e.detail && <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2, fontStyle: 'italic', fontFamily: T.sans }}>"{e.detail}"</div>}
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* ── RIGHT: Quote Canvas ─────────────────────────────────────── */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-
-                {/* Canvas header */}
-                <div style={{ background: '#fff', borderBottom: '1px solid #ddd8cf', padding: '0.75rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: '1rem' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            {!isNew && <span style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#78716c' }}>{editingQuote?.quoteNumber}</span>}
-                            <span style={{ fontSize: '0.8125rem', color: '#44403c', fontWeight: '600' }}>{linkedOpp ? linkedOpp.opportunityName || linkedOpp.account : '—'}</span>
-                            {editingQuote?.status && <StatusBadge status={editingQuote.status} />}
-                            {needsApproval && <span style={{ fontSize: '0.5625rem', fontWeight: '700', background: '#fef3c7', color: '#92400e', padding: '0.15rem 0.4rem', borderRadius: '4px', textTransform: 'uppercase' }}>⚠ Approval Required</span>}
-                        </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
-                            <button onClick={handleExportPDF}
-                                style={{ background: (editingQuote?.status === 'Approved' || editingQuote?.status === 'Sent to Customer' || editingQuote?.status === 'Accepted') ? '#1c1917' : '#94a3b8', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                Export PDF
-                            </button>
-                            {pdfBlockMsg && (
-                                <div style={{ fontSize: '0.6875rem', color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.3rem 0.625rem', maxWidth: '260px', textAlign: 'right', lineHeight: 1.4 }}>
-                                    {pdfBlockMsg}
-                                </div>
-                            )}
-                        </div>
-                        {userRole === 'Manager' && editingQuote?.status === 'Pending Approval' ? (
-                            <button onClick={() => handleSaveVersion('Approved')}
-                                style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                ✓ Approve
-                            </button>
-                        ) : (
-                            <button onClick={handleSubmitApproval} disabled={saving}
-                                style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1 }}>
-                                {needsApproval ? '⚠ Submit for Approval' : 'Submit for Approval'}
-                            </button>
-                        )}
-                    </div>
-                </div>
-
-                {/* Version pills */}
-                {!isNew && versions.length > 0 && (
-                    <div style={{ background: '#fff', borderBottom: '1px solid #ddd8cf', padding: '0.5rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.375rem', flexShrink: 0 }}>
-                        <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', marginRight: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Versions:</span>
-                        {versions.map(v => {
-                            const tv = parseFloat(v.totalValue) || 0;
-                            const isActive = v.version === activeVersion;
-                            return (
-                                <button key={v.version} onClick={() => setActiveVersion(v.version)}
-                                    style={{ padding: '0.2rem 0.625rem', borderRadius: '999px', border: isActive ? 'none' : '1px solid #e2e8f0',
-                                        background: isActive ? '#2563eb' : '#f1f5f9', color: isActive ? '#fff' : '#64748b',
-                                        fontSize: '0.6875rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                    v{v.version} — {fmt(tv)}
-                                </button>
                             );
                         })}
-                        {versions.length < 3 && (
-                            <button onClick={handleNewVersion} disabled={saving}
-                                style={{ padding: '0.2rem 0.625rem', borderRadius: '999px', border: '1px dashed #c8b99a',
-                                    background: 'transparent', color: '#a8a29e', fontSize: '0.6875rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                + New
-                            </button>
-                        )}
-                        {versions.length > 1 && (
-                            <button onClick={() => { setCompareVersions(versions.map(v => v.version).slice(0, 3)); setCompareMode(true); }}
-                                style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#2563eb', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                Compare versions →
-                            </button>
-                        )}
                     </div>
-                )}
-
-                {/* Quote meta fields */}
-                <div style={{ padding: '1rem 1.25rem', background: '#fff', borderBottom: '1px solid #ddd8cf', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '0.75rem', flexShrink: 0 }}>
-                    <div>
-                        <label style={lbl}>Quote Name</label>
-                        <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Acme ERP Enterprise v1" style={inp} />
-                    </div>
-                    <div>
-                        <label style={lbl}>Linked Opportunity *</label>
-                        <select value={oppId} onChange={e => setOppId(e.target.value)} style={inp}>
-                            <option value="">— Select —</option>
-                            {(opportunities || []).filter(o => o.stage !== 'Closed Lost').map(o => (
-                                <option key={o.id} value={o.id}>{o.opportunityName || o.account}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div>
-                        <label style={lbl}>Valid Until</label>
-                        <input type="date" value={validUntil} onChange={e => setValidUntil(e.target.value)} style={inp} />
-                    </div>
-                    <div>
-                        <label style={lbl}>Payment Terms</label>
-                        <select value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)} style={inp}>
-                            {['Net 30 · Annual', 'Net 30 · Monthly', 'Net 60 · Annual', 'Net 15 · Annual', 'Due on Receipt', 'Custom'].map(t => (
-                                <option key={t} value={t}>{t}</option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
-
-                {/* Billing contact row */}
-                <div style={{ padding: '0 1.25rem 0.875rem', background: '#fff', borderBottom: '1px solid #ddd8cf', display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexShrink: 0 }}>
-                    <div style={{ flex: 1 }}>
-                        <label style={lbl}>
-                            Billing Contact Email
-                            <span style={{ fontWeight: '400', color: '#94a3b8', marginLeft: '0.375rem' }}>— used when sending the quote to the customer</span>
-                        </label>
-                        <input
-                            value={billingContact}
-                            onChange={e => setBillingContact(e.target.value)}
-                            placeholder="Karen Russell <karen@acme.com>  or  karen@acme.com"
-                            style={{ ...inp, width: '100%', boxSizing: 'border-box' }}
-                        />
-                    </div>
-                </div>
-
-                {/* Line items table */}
-                <div style={{ flex: 1, padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-
-                    <div style={{ background: '#fff', border: '1px solid #ddd8cf', borderRadius: '12px', overflow: 'hidden' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                                <tr style={{ background: '#f8f7f5' }}>
-                                    {['Product', 'Type', 'Qty', 'Unit Price', 'Disc %', 'Total', ''].map((h, i) => (
-                                        <th key={i} style={{ padding: '0.5rem 0.75rem', fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: i >= 2 ? 'right' : 'left', borderBottom: '1px solid #e8e3da', whiteSpace: 'nowrap' }}>{h}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody
-                                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                                onDragLeave={() => setDragOver(false)}
-                                onDrop={e => {
-                                    e.preventDefault();
-                                    setDragOver(false);
-                                    const pid = e.dataTransfer.getData('productId');
-                                    const prod = (products || []).find(p => p.id === pid);
-                                    if (prod) addProduct(prod);
-                                }}
-                            >
-                                {lines.map((item, idx) => (
-                                    <tr key={item._key || idx} style={{ borderBottom: '1px solid #f0ece4' }}>
-                                        <td style={{ padding: '0.5rem 0.75rem', minWidth: '160px' }}>
-                                            <div style={{ fontWeight: '600', fontSize: '0.8125rem', color: '#1c1917', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                                                {item.productName}
-                                                {item.customPrice && <span style={{ fontSize: '0.5rem', fontWeight: '700', background: '#f3e8ff', color: '#7c3aed', padding: '1px 4px', borderRadius: '3px', textTransform: 'uppercase' }}>Custom</span>}
-                                            </div>
-                                            {item.productType === 'recurring' && <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>/mo × 12 months</div>}
-                                            {item.productType === 'service' && <div style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>flat fee</div>}
-                                            {item.customPrice && <div style={{ fontSize: '0.6875rem', color: '#7c3aed', fontWeight: '600' }}>Enter project price →</div>}
-                                        </td>
-                                        <td style={{ padding: '0.5rem 0.75rem' }}><TypeBadge type={item.productType} /></td>
-                                        <td style={{ padding: '0.5rem 0.5rem', textAlign: 'right' }}>
-                                            <input type="number" min="1" value={item.quantity}
-                                                onChange={e => updateLine(idx, 'quantity', Number(e.target.value))}
-                                                style={{ ...inp, width: '60px', textAlign: 'right', padding: '0.3rem 0.4rem' }} />
-                                        </td>
-                                        <td style={{ padding: '0.5rem 0.5rem', textAlign: 'right' }}>
-                                            <input type="number" min="0" value={item.listPrice}
-                                                onChange={e => updateLine(idx, 'listPrice', Number(e.target.value))}
-                                                style={{ ...inp, width: '90px', textAlign: 'right', padding: '0.3rem 0.4rem',
-                                                    borderColor: item.customPrice ? '#7c3aed' : '#e5e2db',
-                                                    boxShadow: item.customPrice ? '0 0 0 2px rgba(124,58,237,0.12)' : 'none',
-                                                }}
-                                                placeholder={item.customPrice ? 'Enter $' : '0'}
-                                            />
-                                        </td>
-                                        <td style={{ padding: '0.5rem 0.5rem', textAlign: 'right' }}>
-                                            <input type="number" min="0" max="100" value={item.discountPct}
-                                                onChange={e => updateLine(idx, 'discountPct', Number(e.target.value))}
-                                                style={{ ...inp, width: '60px', textAlign: 'right', padding: '0.3rem 0.4rem', borderColor: Number(item.discountPct) >= DISCOUNT_APPROVAL_THRESHOLD ? '#d97706' : '#e5e2db' }} />
-                                        </td>
-                                        <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: '700', fontSize: '0.875rem', color: item.customPrice && !item.listPrice ? '#94a3b8' : '#1c1917', whiteSpace: 'nowrap' }}>
-                                            {item.customPrice && !item.listPrice ? '—' : fmtFull(item.lineTotal)}
-                                        </td>
-                                        <td style={{ padding: '0.5rem 0.5rem', textAlign: 'right' }}>
-                                            <button onClick={() => removeLine(idx)}
-                                                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.875rem', lineHeight: 1, padding: '0.25rem' }}>✕</button>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {lines.length === 0 && (
-                                    <tr>
-                                        <td colSpan={7}>
-                                            <div style={{ padding: '2rem', textAlign: 'center', color: dragOver ? '#2563eb' : '#94a3b8', fontSize: '0.8125rem', fontStyle: 'italic', borderRadius: '8px', border: dragOver ? '2px dashed #2563eb' : '2px dashed transparent', transition: 'all 0.15s', margin: '0.5rem' }}>
-                                                ← Click + Add from the product catalog, or drag a product here
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Deal-level discount + totals */}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <div style={{ width: '320px', background: '#fff', border: '1px solid #ddd8cf', borderRadius: '12px', overflow: 'hidden' }}>
-                            <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #f0ece4', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.8125rem', color: '#64748b' }}>Subtotal</span>
-                                <span style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1c1917' }}>{fmtFull(subtotal)}</span>
-                            </div>
-                            <div style={{ padding: '0.5rem 1rem', borderBottom: '1px solid #f0ece4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                                <span style={{ fontSize: '0.8125rem', color: '#64748b', flexShrink: 0 }}>Avg Line Discount</span>
-                                <span style={{ fontSize: '0.875rem', fontWeight: '700', color: avgDisc >= DISCOUNT_APPROVAL_THRESHOLD ? '#dc2626' : '#1c1917' }}>{pct(avgDisc)}</span>
-                            </div>
-                            <div style={{ padding: '0.75rem 1rem', background: '#f8f7f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>Total</span>
-                                <span style={{ fontSize: '1.125rem', fontWeight: '800', color: '#1c1917' }}>{fmtFull(totalValue)}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* KPI strip */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
-                        {[
-                            { label: 'Quote Total', value: fmtFull(totalValue), color: '#2563eb' },
-                            { label: 'Annual Recurring', value: fmtFull(recurringValue), color: '#7c3aed' },
-                            { label: 'One-time / Services', value: fmtFull(oneTimeValue), color: '#d97706' },
-                            { label: 'Avg Discount', value: pct(avgDisc), color: needsApproval ? '#dc2626' : '#16a34a' },
-                        ].map(kpi => (
-                            <div key={kpi.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderLeft: '3px solid ' + kpi.color, borderRadius: '10px', padding: '0.75rem 1rem' }}>
-                                <div style={{ fontSize: '0.5625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.2rem' }}>{kpi.label}</div>
-                                <div style={{ fontSize: '1.375rem', fontWeight: '800', color: '#1c1917', letterSpacing: '-0.02em', lineHeight: 1 }}>{kpi.value}</div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Notes */}
-                    <div style={{ background: '#fff', border: '1px solid #ddd8cf', borderRadius: '12px', padding: '0.875rem 1rem' }}>
-                        <label style={{ ...lbl, marginBottom: '0.375rem' }}>Notes / Terms</label>
-                        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
-                            placeholder="Add quote notes, terms, or conditions..."
-                            style={{ ...inp, resize: 'vertical' }} />
-                    </div>
-
-                    {/* Save actions */}
-                    {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '0.625rem 0.875rem', fontSize: '0.8125rem', color: '#dc2626' }}>{error}</div>}
-                    <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', paddingBottom: '1rem' }}>
-                        <button onClick={onClose}
-                            style={{ background: '#e8e3da', color: '#78716c', border: '1px solid #ddd8cf', borderRadius: '8px', padding: '0.4rem 1rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>
-                            Cancel
-                        </button>
-                        <button onClick={() => handleSaveVersion()} disabled={saving}
-                            style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.4rem 1rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1 }}>
-                            {saving ? 'Saving…' : 'Save Draft'}
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ─── VERSION COMPARE VIEW ─────────────────────────────────────────────────────
-
-function VersionCompareView({ versions, allVersions, compareVersions, onToggle, onClose, onSelectVersion, linkedOpp }) {
-    const displayV = versions.slice(0, 3);
-
-    const colColor = ['#2563eb', '#7c3aed', '#d97706'];
-
-    return (
-        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', height: '100%', overflowY: 'auto', background: '#f0ece4' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '0.875rem', fontFamily: 'inherit' }}>← Back</button>
-                    <span style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>Version Comparison</span>
-                </div>
-                <div style={{ display: 'flex', gap: '0.375rem' }}>
-                    {allVersions.map(v => (
-                        <button key={v.version} onClick={() => onToggle(v.version)}
-                            style={{ padding: '0.2rem 0.625rem', borderRadius: '999px', border: compareVersions.includes(v.version) ? 'none' : '1px solid #e2e8f0',
-                                background: compareVersions.includes(v.version) ? '#2563eb' : '#f1f5f9',
-                                color: compareVersions.includes(v.version) ? '#fff' : '#64748b',
-                                fontSize: '0.6875rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                            v{v.version}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${displayV.length}, 1fr)`, gap: '1rem' }}>
-                {displayV.map((v, ci) => {
-                    const { lines, subtotal, totalValue, recurringValue, oneTimeValue, avgDisc } = calcLineTotals(v.lineItems || [], v.dealDiscount || 0);
-                    const color = colColor[ci];
-                    return (
-                        <div key={v.version} style={{ background: '#fff', border: '2px solid ' + color + '22', borderRadius: '12px', overflow: 'hidden' }}>
-                            <div style={{ background: color, padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <div style={{ fontSize: '0.75rem', fontWeight: '800', color: '#fff' }}>v{v.version}</div>
-                                    <div style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.8)', marginTop: '1px' }}>{v.name}</div>
-                                </div>
-                                <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontSize: '1.125rem', fontWeight: '800', color: '#fff' }}>{fmt(totalValue)}</div>
-                                    <StatusBadge status={v.status || 'Draft'} />
-                                </div>
-                            </div>
-                            <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid #f0ece4' }}>
-                                {lines.map((item, i) => (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.25rem 0', fontSize: '0.75rem' }}>
-                                        <span style={{ color: '#44403c', fontWeight: '500' }}>{item.productName}</span>
-                                        <span style={{ color: '#1c1917', fontWeight: '700' }}>{fmtFull(item.lineTotal)}</span>
-                                    </div>
-                                ))}
-                                {lines.length === 0 && <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>No line items</div>}
-                            </div>
-                            <div style={{ padding: '0.75rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                                {[
-                                    ['Total', fmtFull(totalValue), true],
-                                    ['ARR Recurring', fmtFull(recurringValue), false],
-                                    ['One-time', fmtFull(oneTimeValue), false],
-                                    ['Avg Discount', pct(avgDisc), false],
-                                ].map(([label, val, bold]) => (
-                                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
-                                        <span style={{ color: '#64748b' }}>{label}</span>
-                                        <span style={{ fontWeight: bold ? '800' : '600', color: '#1c1917' }}>{val}</span>
-                                    </div>
-                                ))}
-                            </div>
-                            <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid #f0ece4' }}>
-                                <button onClick={() => onSelectVersion(v.version)}
-                                    style={{ width: '100%', padding: '0.4rem', background: color, color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.75rem', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                    Edit v{v.version}
-                                </button>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
-    );
-}
-
-// ─── PRINT HTML for PDF fallback ──────────────────────────────────────────────
-
-function buildPrintHTML(quote, opp, lines, subtotal, totalValue, recurringValue, oneTimeValue, dealDiscount) {
-    const safeQ = quote || {};
-    const rows = (lines || []).map(item =>
-        '<tr><td>' + (item.productName || '') + '</td><td>' + (item.productType || '') + '</td><td style="text-align:right">' + (item.quantity || 1) + '</td><td style="text-align:right">$' + Number(item.listPrice || 0).toLocaleString() + '</td><td style="text-align:right">' + (item.discountPct || 0) + '%</td><td style="text-align:right">$' + Math.round(item.lineTotal || 0).toLocaleString() + '</td></tr>'
-    ).join('');
-    return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + (safeQ.quoteNumber || 'Quote') + '</title>' +
-        '<style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}h1{font-size:1.5rem;margin-bottom:0.25rem}' +
-        'table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid #e2e8f0;font-size:0.875rem}' +
-        'th{background:#f8fafc;font-weight:700;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em}' +
-        '.totals{margin-top:1rem;text-align:right}.totals td{border:none}.big{font-size:1.25rem;font-weight:800}' +
-        '</style></head><body>' +
-        '<h1>' + (safeQ.name || safeQ.quoteNumber || 'Quote') + '</h1>' +
-        '<p style="color:#64748b;margin:0">' + (opp ? (opp.opportunityName || opp.account || '') : '') + ' · Valid until ' + (safeQ.validUntil || '—') + ' · ' + (safeQ.paymentTerms || '') + '</p>' +
-        '<table><thead><tr><th>Product</th><th>Type</th><th style="text-align:right">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Disc%</th><th style="text-align:right">Total</th></tr></thead>' +
-        '<tbody>' + rows + '</tbody></table>' +
-        '<table class="totals"><tr><td>Subtotal</td><td>$' + Math.round(subtotal || 0).toLocaleString() + '</td></tr>' +
-        '' +
-        '<tr><td class="big">Total</td><td class="big">$' + Math.round(totalValue || 0).toLocaleString() + '</td></tr></table>' +
-        '</body></html>';
-}
-
-// ─── QUOTES PIPELINE VIEW (kanban by status) ─────────────────────────────────
-
-function QuotesPipelineView({ quotes, opportunities, onEdit, onNewQuote, currentUser, userRole, settings }) {
-    const managedReps = new Set((settings?.users || [])
-        .filter(u => u.managedBy === currentUser || u.manager === currentUser)
-        .map(u => u.name));
-    const isAdmin   = userRole === 'Admin';
-    const isManager = userRole === 'Manager';
-
-    const roleFiltered = useMemo(() => (quotes || []).filter(q => {
-        if (isAdmin) return true;
-        if (isManager) {
-            const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-            if (!opp) return q.createdBy === currentUser;
-            return managedReps.has(opp.salesRep) || opp.salesRep === currentUser || q.createdBy === currentUser;
-        }
-        return q.createdBy === currentUser;
-    }), [quotes, opportunities, userRole, currentUser]);
-
-    // De-duplicate — latest version per quoteNumber, exclude terminal states
-    const active = useMemo(() => {
-        const seen = new Set();
-        return [...roleFiltered]
-            .filter(q => q.status !== 'Rejected / Lost')
-            .sort((a, b) => (b.version || 1) - (a.version || 1))
-            .filter(q => { if (seen.has(q.quoteNumber)) return false; seen.add(q.quoteNumber); return true; });
-    }, [roleFiltered]);
-
-    const STAGES = [
-        { key: 'Draft',            label: 'Draft',            color: '#8a8378' },
-        { key: 'Pending Approval', label: 'Pending Approval', color: '#b87333' },
-        { key: 'Sent to Customer', label: 'Sent',             color: '#3a5a7a' },
-        { key: 'Approved',         label: 'Approved',         color: '#7a6a48' },
-        { key: 'Accepted',         label: 'Accepted',         color: '#4d6b3d' },
-    ];
-
-    // KPI strip
-    const totalValue   = active.reduce((s, q) => s + (parseFloat(q.totalValue) || calcLineTotals(q.lineItems || [], 0).totalValue), 0);
-    const pendingCount = active.filter(q => q.status === 'Pending Approval').length;
-    const avgDisc      = active.length > 0
-        ? active.reduce((s, q) => {
-            const { avgDisc } = calcLineTotals(q.lineItems || [], 0);
-            return s + avgDisc;
-          }, 0) / active.length
-        : 0;
-
-    const now = Date.now();
-    const daysSince = (d) => d ? Math.floor((now - new Date(d).getTime()) / 86400000) : null;
-
-    return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {/* KPI strip */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.625rem' }}>
-                {[
-                    { label: 'Active quotes',     value: active.length,                      sub: fmt(totalValue) + ' combined' },
-                    { label: 'Pending approval',  value: pendingCount,                        sub: pendingCount > 0 ? 'need manager action' : 'all clear' },
-                    { label: 'Avg discount',      value: pct(avgDisc),                       sub: 'across active quotes' },
-                    { label: 'Accepted',          value: active.filter(q => q.status === 'Accepted').length, sub: 'awaiting close' },
-                ].map(kpi => (
-                    <div key={kpi.label} style={{ background: '#fff', border: '1px solid #e5e2db', borderRadius: '10px', padding: '0.75rem 1rem' }}>
-                        <div style={{ fontSize: '0.5625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>{kpi.label}</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1c1917', lineHeight: 1, letterSpacing: '-0.02em' }}>{kpi.value}</div>
-                        <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '0.2rem' }}>{kpi.sub}</div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Kanban columns */}
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${STAGES.length}, 1fr)`, gap: '0.625rem', alignItems: 'flex-start' }}>
-                {STAGES.map(stage => {
-                    const items = active.filter(q => q.status === stage.key);
-                    const colTotal = items.reduce((s, q) => s + (parseFloat(q.totalValue) || calcLineTotals(q.lineItems || [], 0).totalValue), 0);
-                    return (
-                        <div key={stage.key} style={{ background: '#fbf8f3', border: '1px solid #e6ddd0', borderRadius: '4px', display: 'flex', flexDirection: 'column', minHeight: 200 }}>
-                            {/* Column header */}
-                            <div style={{ padding: '10px 12px', borderBottom: '1px solid #e6ddd0', background: '#f5efe3' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: stage.color, flexShrink: 0 }}/>
-                                    <span style={{ fontSize: '0.625rem', fontWeight: '700', color: '#2a2622', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{stage.label}</span>
-                                    <span style={{ marginLeft: 'auto', fontSize: '0.6875rem', color: '#5a544c', fontWeight: 600 }}>{items.length}</span>
-                                </div>
-                                <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#2a2622', fontVariantNumeric: 'tabular-nums' }}>{fmt(colTotal)}</div>
-                            </div>
-                            {/* Cards */}
-                            <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                {items.length === 0 && (
-                                    <div style={{ padding: '1.5rem 0.5rem', textAlign: 'center', fontSize: '0.6875rem', color: '#8a8378', fontStyle: 'italic' }}>No quotes</div>
-                                )}
-                                {items.map(q => {
-                                    const opp      = (opportunities || []).find(o => o.id === q.opportunityId);
-                                    const { totalValue: tv, avgDisc: ad } = calcLineTotals(q.lineItems || [], 0);
-                                    const qTotal   = parseFloat(q.totalValue) || tv;
-                                    const age      = daysSince(q.updatedAt || q.createdAt);
-                                    const stale    = age !== null && age >= 14;
-                                    const validDays = q.validUntil ? Math.ceil((new Date(q.validUntil) - new Date()) / 86400000) : null;
-                                    const expiring  = validDays !== null && validDays >= -1 && validDays <= 7;
-                                    const accent    = expiring ? '#9c3a2e' : stale ? '#b87333' : 'transparent';
-                                    return (
-                                        <div key={q.id} onClick={() => onEdit(q)}
-                                            style={{ background: '#f0ece4', border: '1px solid #e6ddd0', borderRadius: 2, padding: '9px 10px', cursor: 'pointer', position: 'relative', transition: 'border-color 120ms' }}
-                                            onMouseEnter={e => e.currentTarget.style.borderColor = '#d4c8b4'}
-                                            onMouseLeave={e => e.currentTarget.style.borderColor = '#e6ddd0'}>
-                                            {accent !== 'transparent' && (
-                                                <span style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 2, background: accent, borderRadius: '2px 0 0 2px' }}/>
-                                            )}
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4, marginBottom: 3 }}>
-                                                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2a2622', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                                                    {opp ? (opp.opportunityName || opp.account) : (q.name || q.quoteNumber)}
-                                                </div>
-                                                {(q.version || 1) > 1 && (
-                                                    <span style={{ fontSize: '0.5625rem', fontWeight: 700, color: '#3a5a7a', background: 'rgba(58,90,122,0.12)', padding: '1px 4px', borderRadius: 2, flexShrink: 0 }}>v{q.version}</span>
-                                                )}
-                                            </div>
-                                            <div style={{ fontSize: '0.625rem', color: '#8a8378', fontFamily: 'ui-monospace,monospace', letterSpacing: 0.3, marginBottom: 5 }}>{q.quoteNumber}</div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                                                <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#2a2622' }}>{fmt(qTotal)}</div>
-                                                <div style={{ fontSize: '0.625rem', color: '#8a8378' }}>{pct(ad)} disc</div>
-                                            </div>
-                                            {(stale || expiring || age !== null) && (
-                                                <div style={{ display: 'flex', gap: 8, marginTop: 5, fontSize: '0.625rem', color: '#8a8378', alignItems: 'center' }}>
-                                                    {age !== null && (
-                                                        <span style={{ color: stale ? '#b87333' : '#8a8378' }}>{age}d old</span>
-                                                    )}
-                                                    {expiring && (
-                                                        <span style={{ color: '#9c3a2e', fontWeight: 600 }}>
-                                                            {validDays < 0 ? 'expired' : `expires ${validDays}d`}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
-    );
-}
-
-// ─── ALL QUOTES LIST ──────────────────────────────────────────────────────────
-
-function AllQuotesList({ quotes, opportunities, currentUser, userRole, settings, onEdit, onDelete, onNewQuote, loadQuotes, showConfirm, deepLinkOppId, onClearDeepLink }) {
-    const managedReps = new Set((settings?.users || [])
-        .filter(u => u.managedBy === currentUser || u.manager === currentUser)
-        .map(u => u.name));
-
-    const [quotesView,   setQuotesView]   = useState(() => localStorage.getItem('tab:quotes:allView') || 'table');
-    const [filterRep,    setFilterRep]    = useState('');
-    const [filterPeriod, setFilterPeriod] = useState('all');
-    const [filterStatus, setFilterStatus] = useState('');
-    const [filterOpp,    setFilterOpp]    = useState('');
-    const [customFrom,   setCustomFrom]   = useState('');
-    const [customTo,     setCustomTo]     = useState('');
-    const [sortField,    setSortField]    = useState('createdAt');
-    const [sortDir,      setSortDir]      = useState('desc');
-
-    const setAllView = v => { setQuotesView(v); localStorage.setItem('tab:quotes:allView', v); };
-
-    // Consume deep link — pre-filter to a specific opportunity
-    useEffect(() => {
-        if (deepLinkOppId) {
-            setFilterOpp(deepLinkOppId);
-        }
-    }, [deepLinkOppId]);
-
-    const isAdmin = userRole === 'Admin';
-    const isManager = userRole === 'Manager';
-
-    // Role-based filtering
-    const roleFiltered = useMemo(() => {
-        return (quotes || []).filter(q => {
-            if (isAdmin) return true;
-            if (isManager) {
-                // Manager sees their reps' quotes
-                const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-                if (!opp) return q.createdBy === currentUser;
-                return managedReps.has(opp.salesRep) || opp.salesRep === currentUser || q.createdBy === currentUser;
+                )
             }
-            // Rep sees own quotes
-            return q.createdBy === currentUser;
-        });
-    }, [quotes, opportunities, userRole, currentUser, managedReps]);
-
-    // Period filtering
-    const periodFiltered = useMemo(() => {
-        const now = new Date();
-        return roleFiltered.filter(q => {
-            const created = q.createdAt ? new Date(q.createdAt) : null;
-            if (!created) return true;
-            if (filterPeriod === 'q1') { const m = created.getMonth(); return m >= 0 && m <= 2; }
-            if (filterPeriod === 'q2') { const m = created.getMonth(); return m >= 3 && m <= 5; }
-            if (filterPeriod === 'q3') { const m = created.getMonth(); return m >= 6 && m <= 8; }
-            if (filterPeriod === 'q4') { const m = created.getMonth(); return m >= 9 && m <= 11; }
-            if (filterPeriod === 'custom' && customFrom && customTo) {
-                return created >= new Date(customFrom) && created <= new Date(customTo + 'T23:59:59');
-            }
-            return true;
-        });
-    }, [roleFiltered, filterPeriod, customFrom, customTo]);
-
-    const displayed = useMemo(() => {
-        let out = periodFiltered;
-        if (filterRep) out = out.filter(q => {
-            const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-            return opp?.salesRep === filterRep || q.createdBy === filterRep;
-        });
-        if (filterOpp) out = out.filter(q => q.opportunityId === filterOpp);
-        if (filterStatus) out = out.filter(q => q.status === filterStatus);
-        out = [...out].sort((a, b) => {
-            let av = a[sortField] || '', bv = b[sortField] || '';
-            if (sortField === 'totalValue') { av = parseFloat(av) || 0; bv = parseFloat(bv) || 0; }
-            if (sortDir === 'asc') return av > bv ? 1 : -1;
-            return av < bv ? 1 : -1;
-        });
-        // De-duplicate — show only latest version per quoteNumber
-        const seen = new Set();
-        return out.filter(q => {
-            if (seen.has(q.quoteNumber)) return false;
-            seen.add(q.quoteNumber);
-            return true;
-        });
-    }, [periodFiltered, filterRep, filterStatus, filterOpp, sortField, sortDir, opportunities]);
-
-    // Opp name for banner display
-    const deepLinkOpp = deepLinkOppId
-        ? (opportunities || []).find(o => o.id === deepLinkOppId)
-        : null;
-
-    const th = (label, field) => (
-        <th onClick={() => { setSortField(field); setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }}
-            style={{ padding: '0.5rem 0.75rem', fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left', borderBottom: '1px solid #e8e3da', cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none' }}>
-            {label} {sortField === field ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-        </th>
+        </div>
     );
+};
 
-    const allReps = [...new Set((settings?.users || []).map(u => u.name).filter(Boolean))].sort();
-
+// ─── PDF preview ──────────────────────────────────────────────
+const QuotePDFPreview = ({ quote, opp, products }) => {
+    const { lines, listTotal, totalValue, avgDisc } = calcLineTotals(quote.lineItems || [], products || []);
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {/* Toolbar */}
-            <div className="table-container" style={{ marginBottom: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.625rem 1.25rem', flexWrap: 'wrap' }}>
-                    {/* View toggle — Table vs Pipeline */}
-                    <div style={{ display: 'flex', border: '1px solid #e5e2db', borderRadius: 6, overflow: 'hidden', flexShrink: 0 }}>
-                        {[
-                            { k: 'table',    label: 'List',     icon: '☰' },
-                            { k: 'pipeline', label: 'Pipeline', icon: '⬛' },
-                        ].map(v => (
-                            <button key={v.k} onClick={() => setAllView(v.k)}
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '0.3rem 0.75rem', border: 'none', background: quotesView === v.k ? '#1c1917' : '#f8f7f5', color: quotesView === v.k ? '#f5f1eb' : '#64748b', fontSize: '0.75rem', fontWeight: quotesView === v.k ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
-                                {v.label}
-                            </button>
-                        ))}
+        <div style={{ background: '#fafaf7', padding: '20px 24px 24px', border: `1px solid ${T.border}`, borderRadius: T.r }}>
+            <div style={{ background: '#fff', border: `1px solid ${T.border}`, boxShadow: '0 2px 8px rgba(26,22,18,0.06)', padding: '40px 44px', fontFamily: 'Georgia,"Times New Roman",serif', color: '#2a2622', minHeight: 600 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: 18, borderBottom: '2px solid #2a2622', marginBottom: 24 }}>
+                    <div>
+                        <div style={{ fontFamily: T.sans, fontSize: 11, fontWeight: 700, letterSpacing: 2, color: T.goldInk, marginBottom: 4 }}>ACCELEREP</div>
+                        <div style={{ fontFamily: T.sans, fontSize: 10.5, color: T.inkMid, lineHeight: 1.55 }}>500 Market Street, Suite 800<br />San Francisco, CA 94103</div>
                     </div>
-                    {(isAdmin || isManager) && (
-                        <select value={filterRep} onChange={e => setFilterRep(e.target.value)}
-                            style={{ ...inp, width: 'auto', fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}>
-                            <option value="">All Reps</option>
-                            {allReps.map(r => <option key={r} value={r}>{r}</option>)}
-                        </select>
-                    )}
-                    <select value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)}
-                        style={{ ...inp, width: 'auto', fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}>
-                        <option value="all">All Time</option>
-                        <option value="q1">Q1</option>
-                        <option value="q2">Q2</option>
-                        <option value="q3">Q3</option>
-                        <option value="q4">Q4</option>
-                        <option value="custom">Custom…</option>
-                    </select>
-                    {filterPeriod === 'custom' && (
-                        <>
-                            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-                                style={{ ...inp, width: 'auto', fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} />
-                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>to</span>
-                            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
-                                style={{ ...inp, width: 'auto', fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} />
-                        </>
-                    )}
-                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-                        style={{ ...inp, width: 'auto', fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}>
-                        <option value="">All Statuses</option>
-                        {Object.keys(STATUS_COLORS).map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <button onClick={onNewQuote}
-                        style={{ marginLeft: 'auto', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>
-                        + New Quote
-                    </button>
+                    <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontFamily: T.sans, fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: T.inkMuted }}>QUOTE</div>
+                        <div style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 13, fontWeight: 600, color: '#2a2622', marginTop: 2 }}>{quote.quoteNumber || quote.id}</div>
+                        <div style={{ fontFamily: T.sans, fontSize: 10.5, color: T.inkMuted, marginTop: 4 }}>Valid until: {quote.validUntil || '—'}</div>
+                    </div>
                 </div>
-            </div>
-
-            {/* Pipeline kanban view */}
-            {quotesView === 'pipeline' && (
-                <QuotesPipelineView
-                    quotes={displayed}
-                    opportunities={opportunities}
-                    onEdit={onEdit}
-                    onNewQuote={onNewQuote}
-                    currentUser={currentUser}
-                    userRole={userRole}
-                    settings={settings}
-                />
-            )}
-
-            {/* Table view */}
-            {quotesView === 'table' && (
-            <div className="table-container">
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <div style={{ marginBottom: 24 }}>
+                    <div style={{ fontFamily: T.sans, fontSize: 9.5, fontWeight: 700, letterSpacing: 1, color: T.inkMuted, textTransform: 'uppercase', marginBottom: 6 }}>Bill to</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: '#2a2622' }}>{opp?.account || '—'}</div>
+                    {quote.billingContact && <div style={{ fontFamily: T.sans, fontSize: 12, color: T.inkMid, marginTop: 2 }}>{quote.billingContact}</div>}
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20, fontFamily: T.sans }}>
                     <thead>
-                        <tr style={{ background: '#f8f7f5' }}>
-                            {th('Quote #', 'quoteNumber')}
-                            {th('Name', 'name')}
-                            {th('Opportunity', 'opportunityId')}
-                            {(isAdmin || isManager) && th('Rep', 'createdBy')}
-                            {th('Status', 'status')}
-                            {th('Total', 'totalValue')}
-                            {th('Valid Until', 'validUntil')}
-                            {th('Versions', 'version')}
-                            <th style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid #e8e3da' }}></th>
+                        <tr style={{ borderBottom: '1.5px solid #2a2622' }}>
+                            {['Product', 'Type', 'Qty', 'Unit Price', 'Total'].map((h, i) => (
+                                <th key={i} style={{ padding: '6px 8px 8px', fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, color: T.inkMuted, textAlign: i >= 2 ? 'right' : 'left' }}>{h}</th>
+                            ))}
                         </tr>
                     </thead>
                     <tbody>
-                        {displayed.map(q => {
-                            const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-                            // All versions for this quote number
-                            const allV = (quotes || []).filter(x => x.quoteNumber === q.quoteNumber).sort((a, b) => b.version - a.version);
-                            const latestV = allV[0] || q;
-                            return (
-                                <tr key={q.id} style={{ borderBottom: '1px solid #f0ece4', cursor: 'pointer' }}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#faf9f7'}
-                                    onMouseLeave={e => e.currentTarget.style.background = ''}
-                                    onClick={() => onEdit(latestV)}>
-                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', fontWeight: '700', color: '#1c1917' }}>{q.quoteNumber}</td>
-                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', color: '#1c1917' }}>{latestV.name || q.name}</td>
-                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', color: '#44403c' }}>{opp ? (opp.opportunityName || opp.account) : '—'}</td>
-                                    {(isAdmin || isManager) && <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', color: '#64748b' }}>{q.createdBy || '—'}</td>}
-                                    <td style={{ padding: '0.625rem 0.75rem' }}><StatusBadge status={latestV.status || 'Draft'} /></td>
-                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>{fmtFull(latestV.totalValue || 0)}</td>
-                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.75rem', color: '#64748b' }}>{latestV.validUntil || '—'}</td>
-                                    <td style={{ padding: '0.625rem 0.75rem' }}>
-                                        <div style={{ display: 'flex', gap: '0.25rem' }}>
-                                            {allV.slice(0, 3).map(v => (
-                                                <span key={v.version} onClick={e => { e.stopPropagation(); onEdit(v); }}
-                                                    style={{ fontSize: '0.5625rem', fontWeight: '700', padding: '0.15rem 0.375rem', borderRadius: '999px',
-                                                        background: v.version === latestV.version ? '#2563eb' : '#f1f5f9',
-                                                        color: v.version === latestV.version ? '#fff' : '#64748b', cursor: 'pointer' }}>
-                                                    v{v.version}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </td>
-                                    <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                                        <button onClick={e => { e.stopPropagation(); showConfirm ? showConfirm('Delete this quote?', () => onDelete(q.id), true) : (window.confirm('Delete this quote?') && onDelete(q.id)); }}
-                                            style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'inherit' }}>Delete</button>
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                        {displayed.length === 0 && (
-                            <tr><td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem', fontStyle: 'italic' }}>
-                                No quotes found. Click "+ New Quote" to get started.
-                            </td></tr>
-                        )}
+                        {lines.map((li, i) => (
+                            <tr key={i} style={{ borderBottom: `1px solid ${T.border}` }}>
+                                <td style={{ padding: '8px', fontSize: 12.5, color: '#2a2622', fontWeight: 500 }}>{li.productName}</td>
+                                <td style={{ padding: '8px', fontSize: 11 }}><TypeBadge type={li.productType} /></td>
+                                <td style={{ padding: '8px', fontSize: 12.5, textAlign: 'right', color: T.inkMid }}>{li.quantity || 1}</td>
+                                <td style={{ padding: '8px', fontSize: 12.5, textAlign: 'right', fontFamily: 'ui-monospace,Menlo,monospace' }}>{fmtFull(li.netPrice)}</td>
+                                <td style={{ padding: '8px', fontSize: 13, textAlign: 'right', fontFamily: 'ui-monospace,Menlo,monospace', fontWeight: 600, color: '#2a2622' }}>{fmtFull(li.lineTotal)}</td>
+                            </tr>
+                        ))}
                     </tbody>
                 </table>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
+                    <div style={{ width: 280 }}>
+                        {[
+                            { l: 'List total', v: fmtFull(listTotal), muted: true },
+                            { l: `Discount (${Math.round(avgDisc * 100)}%)`, v: '-' + fmtFull(listTotal - totalValue), muted: true },
+                            { l: 'Net total', v: fmtFull(totalValue), bold: true },
+                        ].map(r => (
+                            <div key={r.l} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: r.bold ? '1.5px solid #2a2622' : undefined, marginTop: r.bold ? 4 : 0 }}>
+                                <span style={{ fontFamily: T.sans, fontSize: r.bold ? 13 : 11.5, fontWeight: r.bold ? 700 : 400, color: r.muted ? T.inkMid : '#2a2622' }}>{r.l}</span>
+                                <span style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: r.bold ? 14 : 11.5, fontWeight: r.bold ? 700 : 400, color: r.muted ? T.inkMid : '#2a2622' }}>{r.v}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                {quote.paymentTerms && <div style={{ fontFamily: T.sans, fontSize: 11, color: T.inkMid, marginBottom: 20 }}>Payment terms: {quote.paymentTerms}</div>}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 40, marginTop: 30, fontFamily: T.sans }}>
+                    {['Customer signature', 'Accelerep signature'].map(s => (
+                        <div key={s}>
+                            <div style={{ borderBottom: `1px solid #2a2622`, height: 40, marginBottom: 6 }} />
+                            <div style={{ fontSize: 10, color: T.inkMuted, letterSpacing: 0.4, textTransform: 'uppercase' }}>{s}</div>
+                        </div>
+                    ))}
+                </div>
             </div>
-            )}
         </div>
     );
+};
+
+// ─── Template picker modal ────────────────────────────────────
+const TemplatePickerModal = ({ opp, products, onPick, onClose }) => {
+    const [selected, setSelected] = useState(null);
+    const templates = useMemo(() => [
+        { id: 'smb',    name: 'SMB Starter',     desc: 'Core + Pipeline + Reports + Basic onboarding. 10–50 seats.', productIds: (products || []).filter(p => ['platform', 'modules'].includes(p.category)).slice(0, 4).map(p => p.id), winRate: 0.48 },
+        { id: 'growth', name: 'Growth Package',  desc: 'Full core modules + white-glove services. 50–200 seats.',   productIds: (products || []).filter(p => ['platform', 'modules', 'services'].includes(p.category)).slice(0, 6).map(p => p.id), winRate: 0.44 },
+        { id: 'ent',    name: 'Enterprise',      desc: 'Premium stack + dedicated CSM. 200+ seats, multi-year.',    productIds: (products || []).slice(0, 8).map(p => p.id), winRate: 0.57 },
+        { id: 'trial',  name: 'Trial → Paid',    desc: 'Minimal Core + basic onboarding. Conversion template.',     productIds: (products || []).slice(0, 2).map(p => p.id), winRate: 0.52 },
+    ], [products]);
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(26,22,18,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }} onClick={onClose}>
+            <div onClick={e => e.stopPropagation()} style={{ background: T.surface, borderRadius: 6, width: 820, boxShadow: '0 30px 80px rgba(26,22,18,0.35)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+                <div style={{ padding: '18px 24px 14px', borderBottom: `1px solid ${T.border}` }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                        <div>
+                            <div style={{ ...eyebrow(T.inkMuted), marginBottom: 4 }}>Start quote · {opp?.account}</div>
+                            <div style={{ fontSize: 20, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300, color: T.ink }}>Pick a template to begin</div>
+                            <div style={{ fontSize: 12, color: T.inkMid, marginTop: 2, fontFamily: T.sans }}>{opp?.opportunityName || opp?.account} · {fmt(opp?.arr)} target</div>
+                        </div>
+                        <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: T.inkMid, fontSize: 18 }}>×</button>
+                    </div>
+                </div>
+                <div style={{ padding: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, overflowY: 'auto' }}>
+                    {templates.map(t => {
+                        const isSel = selected === t.id;
+                        return (
+                            <div key={t.id} onClick={() => setSelected(t.id)} style={{ background: T.surface, border: `1.5px solid ${isSel ? T.ink : T.border}`, borderRadius: T.r + 1, padding: 16, cursor: 'pointer', position: 'relative', transition: 'border-color 120ms' }}>
+                                {isSel && <div style={{ position: 'absolute', top: 12, right: 12, width: 18, height: 18, borderRadius: 9, background: T.ink, color: T.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>✓</div>}
+                                <div style={{ fontSize: 14, fontWeight: 600, color: T.ink, marginBottom: 4, fontFamily: T.sans }}>{t.name}</div>
+                                <div style={{ fontSize: 11.5, color: T.inkMid, lineHeight: 1.45, marginBottom: 12, fontFamily: T.sans }}>{t.desc}</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${T.border}` }}>
+                                    {(products || []).filter(p => t.productIds.includes(p.id)).slice(0, 4).map(p => (
+                                        <div key={p.id} style={{ fontSize: 11, color: T.inkMid, display: 'flex', alignItems: 'center', gap: 6, fontFamily: T.sans }}>
+                                            <span style={{ width: 4, height: 4, borderRadius: 2, background: T.inkMuted }} />{p.name}
+                                        </div>
+                                    ))}
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>
+                                    <span>{Math.round(t.winRate * 100)}% avg win rate</span>
+                                    <span style={{ color: T.inkMid, fontWeight: 600 }}>{t.productIds.length} line items</span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                    <div onClick={() => setSelected('blank')} style={{ background: 'transparent', border: `1.5px dashed ${selected === 'blank' ? T.ink : T.border}`, borderRadius: T.r + 1, padding: 16, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 140, color: T.inkMid, gridColumn: '1 / -1' }}>
+                        <div style={{ fontSize: 24, marginBottom: 6 }}>+</div>
+                        <div style={{ fontSize: 13, fontWeight: 500, fontFamily: T.sans }}>Start from scratch</div>
+                        <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2, fontFamily: T.sans }}>Blank quote, add line items manually</div>
+                    </div>
+                </div>
+                <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>You can edit anything after the quote is created.</div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={onClose} style={{ background: 'transparent', color: T.inkMid, border: `1px solid ${T.border}`, padding: '8px 14px', fontSize: 12.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
+                        <button onClick={() => selected && onPick(selected)} disabled={!selected} style={{ background: selected ? T.ink : T.surface2, color: selected ? T.surface : T.inkMuted, border: 'none', padding: '8px 16px', fontSize: 12.5, fontWeight: 600, borderRadius: T.r, cursor: selected ? 'pointer' : 'not-allowed', fontFamily: T.sans }}>
+                            Create quote →
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ─── Quote column — side-by-side comparator ───────────────────
+const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, onEdit }) => {
+    const { lines, listTotal, totalValue, avgDisc, margin } = calcLineTotals(quote.lineItems || [], products || []);
+    const otherResult = otherQuote ? calcLineTotals(otherQuote.lineItems || [], products || []) : null;
+    const otherIds    = new Set((otherQuote?.lineItems || []).map(li => li.productId));
+    const myIds       = new Set((quote.lineItems || []).map(li => li.productId));
+    const tier        = tierForDiscount(avgDisc);
+
+    return (
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, display: 'flex', flexDirection: 'column', opacity: readOnly ? 0.85 : 1 }}>
+            {/* Column header */}
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.border}`, background: readOnly ? T.surface2 : T.surface }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ ...eyebrow(T.inkMid), fontSize: 10.5 }}>{label} · v{quote.version || 1}</span>
+                        <QStatus status={quote.status} />
+                        {editable && (() => {
+                            const color = tier.approver ? tier.color : T.ok;
+                            const labelText = tier.approver ? `Needs ${tier.label}` : 'Within rep authority';
+                            return (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 10, fontSize: 9.5, fontWeight: 700, background: `${color}18`, color, border: `1px solid ${color}40`, fontFamily: T.sans }}>
+                                    {tier.approver ? '⚠' : '✓'} {labelText}
+                                </span>
+                            );
+                        })()}
+                    </div>
+                    <span style={{ fontSize: 10, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace' }}>{quote.quoteNumber}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 10 }}>
+                    <div>
+                        <div style={{ fontSize: 20, fontWeight: 600, color: T.ink, letterSpacing: -0.5, fontFamily: T.sans }}>{fmt(totalValue)}</div>
+                        <div style={{ fontSize: 11, color: T.inkMid, fontFamily: T.sans }}>{quote.paymentTerms || 'Annual'} · TCV {fmt(totalValue * ((quote.termMonths || 12) / 12))}</div>
+                    </div>
+                    {otherResult && (
+                        <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: totalValue > otherResult.totalValue ? T.ok : totalValue < otherResult.totalValue ? T.danger : T.inkMuted, fontFamily: T.sans }}>
+                                {totalValue > otherResult.totalValue ? '▲' : totalValue < otherResult.totalValue ? '▼' : '–'} {fmt(Math.abs(totalValue - otherResult.totalValue))}
+                            </div>
+                            <div style={{ fontSize: 10, color: T.inkMuted, fontFamily: T.sans }}>vs prev</div>
+                        </div>
+                    )}
+                </div>
+                {editable && !readOnly && onEdit && (
+                    <button onClick={onEdit} style={{ marginTop: 10, width: '100%', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, padding: 6, fontSize: 12, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
+                        Edit in builder →
+                    </button>
+                )}
+            </div>
+
+            {/* Line items with diff */}
+            <div style={{ padding: 4 }}>
+                {lines.map((li, i) => {
+                    const otherLi   = (otherQuote?.lineItems || []).find(oli => oli.productId === li.productId);
+                    const isNew     = otherQuote && !otherIds.has(li.productId);
+                    const discChg   = otherLi && (Number(otherLi.discountPct) || 0) !== (Number(li.discountPct) || 0);
+                    const qtyChg    = otherLi && (Number(otherLi.quantity) || 1) !== (Number(li.quantity) || 1);
+                    const changed   = discChg || qtyChg;
+                    const p         = (products || []).find(p => p.id === li.productId) || {};
+                    return (
+                        <div key={li.productId + i} style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: '1fr 48px 52px 76px', gap: 6, alignItems: 'center', fontSize: 11.5, fontFamily: T.sans, background: isNew ? 'rgba(77,107,61,0.08)' : changed ? 'rgba(200,185,154,0.15)' : 'transparent', borderLeft: isNew ? `2px solid ${T.ok}` : changed ? `2px solid ${T.gold}` : '2px solid transparent', marginBottom: 2 }}>
+                            <div>
+                                <div style={{ color: T.ink, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5 }}>
+                                    {li.productName || p.name}
+                                    {isNew && <span style={{ fontSize: 8.5, fontWeight: 700, color: T.ok, background: `${T.ok}20`, padding: '1px 4px', borderRadius: 2 }}>ADDED</span>}
+                                </div>
+                                <div style={{ fontSize: 9.5, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace' }}>{p.sku || ''}</div>
+                            </div>
+                            <div style={{ textAlign: 'center', color: T.inkMid }}>
+                                {li.quantity || 1}
+                                {qtyChg && <div style={{ fontSize: 9, color: T.inkMuted, textDecoration: 'line-through' }}>{otherLi.quantity || 1}</div>}
+                            </div>
+                            <div style={{ textAlign: 'center', color: (Number(li.discountPct) || 0) > 10 ? T.warn : T.inkMid, fontWeight: 500 }}>
+                                {(Number(li.discountPct) || 0) > 0 ? `-${Number(li.discountPct)}%` : '—'}
+                                {discChg && <div style={{ fontSize: 9, color: T.inkMuted, textDecoration: 'line-through' }}>{Number(otherLi.discountPct) || 0}%</div>}
+                            </div>
+                            <div style={{ textAlign: 'right', color: T.ink, fontWeight: 600, fontFamily: 'ui-monospace,Menlo,monospace' }}>{fmt(li.lineTotal)}</div>
+                        </div>
+                    );
+                })}
+                {/* Removed items */}
+                {otherQuote && (otherQuote.lineItems || []).filter(oli => !myIds.has(oli.productId)).map((oli, i) => {
+                    const p = (products || []).find(p => p.id === oli.productId) || {};
+                    return (
+                        <div key={'rm' + i} style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: 0.5, textDecoration: 'line-through', fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>
+                            <span>{oli.productName || p.name}</span><span>removed</span>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Footer totals */}
+            <div style={{ padding: '12px 16px', borderTop: `1px solid ${T.border}`, background: T.surface2, fontSize: 11.5, fontFamily: T.sans }}>
+                {[
+                    { label: 'List total',              value: fmtFull(listTotal),                 muted: true },
+                    { label: `Discount (${Math.round(avgDisc * 100)}%)`, value: '-' + fmtFull(listTotal - totalValue), color: T.warn },
+                    { label: 'Net',                     value: fmtFull(totalValue),                bold: true },
+                    { label: 'Est. margin',             value: null, extra: <span style={{ color: margin > 0.5 ? T.ok : margin > 0.35 ? T.inkMid : T.warn, fontWeight: 600 }}>{Math.round(margin * 100)}%</span> },
+                ].map(r => (
+                    <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: r.bold ? 12.5 : 11.5, fontWeight: r.bold ? 600 : 400, color: r.color || (r.bold ? T.ink : T.inkMid) }}>
+                        <span>{r.label}</span>
+                        <span style={{ fontFamily: r.value ? 'ui-monospace,Menlo,monospace' : 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {r.value}{r.extra}
+                        </span>
+                    </div>
+                ))}
+                <div style={{ marginTop: 8, padding: '6px 8px', background: `${tier.color}12`, border: `1px solid ${tier.color}40`, borderRadius: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: tier.color }} />
+                    <span style={{ fontSize: 10.5, color: tier.color, fontWeight: 600, fontFamily: T.sans }}>{tier.label}</span>
+                    {tier.approver && <span style={{ fontSize: 10.5, color: T.inkMid, marginLeft: 'auto', fontFamily: T.sans }}>{tier.approver}</span>}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ─── Configurator right panel ─────────────────────────────────
+const ConfiguratorPanel = ({ quote, products, onSubmitApproval, onSendToCustomer, onPreviewPDF, onSaveDraft, saving }) => {
+    const { avgDisc, margin } = calcLineTotals(quote.lineItems || [], products || []);
+    const tier = tierForDiscount(avgDisc);
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '14px 16px' }}>
+                <div style={{ ...eyebrow(T.inkMid), fontSize: 10.5, marginBottom: 10 }}>Approval threshold</div>
+                <ApprovalGauge discount={avgDisc} />
+                <div style={{ fontSize: 11.5, color: T.inkMid, lineHeight: 1.45, marginTop: 10, fontFamily: T.sans }}>
+                    <b style={{ color: T.ink }}>{Math.round(avgDisc * 100)}% avg discount.</b>{' '}
+                    {tier.approver
+                        ? <><b style={{ color: tier.color }}>{tier.approver}</b> sign-off required before send.</>
+                        : <>Within your discretion — no approval needed.</>}
+                </div>
+            </div>
+
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '14px 16px' }}>
+                <div style={{ ...eyebrow(T.inkMid), fontSize: 10.5, marginBottom: 8 }}>Margin</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+                    <div style={{ fontSize: 26, fontWeight: 600, color: margin > 0.5 ? T.ok : margin > 0.35 ? T.ink : T.warn, letterSpacing: -0.5, fontFamily: T.sans }}>{Math.round(margin * 100)}%</div>
+                    <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>gross margin</div>
+                </div>
+                <div style={{ fontSize: 11, color: T.inkMid, lineHeight: 1.4, fontFamily: T.sans }}>
+                    Target: 40%. This quote is {margin > 0.4
+                        ? <b style={{ color: T.ok }}>above target</b>
+                        : <b style={{ color: T.warn }}>below target</b>}.
+                </div>
+            </div>
+
+            {(quote.status === 'Sent to Customer' || quote.status === 'Negotiating' || quote.status === 'Accepted') && (
+                <div style={{ background: 'rgba(77,107,61,0.08)', border: `1px solid rgba(77,107,61,0.25)`, borderRadius: T.r, padding: '10px 14px' }}>
+                    <div style={{ fontSize: 11, color: T.ok, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 4, fontFamily: T.sans }}>• Customer signal</div>
+                    <div style={{ fontSize: 11.5, color: T.inkMid, lineHeight: 1.4, fontFamily: T.sans }}>
+                        Quote delivered to customer.{quote.status === 'Accepted' ? ' Customer has accepted.' : ' Awaiting response.'}
+                    </div>
+                </div>
+            )}
+
+            <div style={{ background: T.ink, borderRadius: T.r, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <button onClick={tier.approver ? onSubmitApproval : onSendToCustomer} disabled={saving} style={{ background: T.gold, color: T.ink, border: 'none', padding: '10px 14px', fontSize: 13, fontWeight: 600, borderRadius: T.r, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: T.sans, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>
+                    {saving ? 'Saving…' : tier.approver ? `Submit for ${tier.label}` : 'Send to customer'} →
+                </button>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <button onClick={onSaveDraft} disabled={saving} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Save draft</button>
+                    <button onClick={onPreviewPDF} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Preview PDF</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ─── Catalog tab (Price Book with intelligence) ───────────────
+function calcProductIntelligence(products, quotes, opportunities) {
+    const total = (quotes || []).length;
+    const map   = {};
+    (products || []).forEach(p => {
+        const containing = (quotes || []).filter(q => (q.lineItems || []).some(li => li.productId === p.id));
+        const discs = [];
+        (quotes || []).forEach(q => { (q.lineItems || []).filter(li => li.productId === p.id).forEach(li => discs.push(Number(li.discountPct) || 0)); });
+        const avgDiscount = discs.length > 0 ? discs.reduce((a, b) => a + b, 0) / discs.length : 0;
+        const wins = containing.filter(q => { const opp = (opportunities || []).find(o => o.id === q.opportunityId); return opp?.stage === 'Closed Won'; });
+        const oppArrs = containing.map(q => { const opp = (opportunities || []).find(o => o.id === q.opportunityId); return parseFloat(opp?.arr) || 0; }).filter(v => v > 0);
+        const avgDealSize = oppArrs.length > 0 ? oppArrs.reduce((a, b) => a + b, 0) / oppArrs.length : 0;
+        map[p.id] = { attachRate: total > 0 ? containing.length / total : 0, avgDiscount: avgDiscount / 100, winRate: containing.length > 0 ? wins.length / containing.length : 0, avgDealSize, quoteCount: containing.length };
+    });
+    return map;
 }
 
-// ─── PRICE BOOK (product management) ─────────────────────────────────────────
+function CatalogTab({ products, settings, userRole, quotes, opportunities, onSave, onDelete, showConfirm }) {
+    const isAdmin   = userRole === 'Admin';
+    const pbCfg     = settings?.priceBookConfig || {};
+    const unitOpts  = pbCfg.units      || ['flat', 'month', 'year', 'user', 'hour', 'day'];
+    const typeOpts  = pbCfg.types      || ['recurring', 'one_time', 'service'];
+    const catOpts   = [...new Set([...(pbCfg.categories || ['Platform', 'Add-ons', 'Services', 'Hardware']), ...(products || []).map(p => p.category).filter(Boolean)])].sort();
 
-function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm, quotes, opportunities }) {
-    const isAdmin = userRole === 'Admin';
+    const [editing, setEditing] = useState(null);
+    const [form,    setForm]    = useState({});
+    const [saving,  setSaving]  = useState(false);
+    const [error,   setError]   = useState(null);
+    const [search,  setSearch]  = useState('');
 
-    // Settings-driven options with safe fallbacks
-    const pbCfg        = settings?.priceBookConfig || {};
-    const unitOptions  = pbCfg.units      || ['flat', 'month', 'year', 'user', 'hour', 'day'];
-    const typeOptions  = pbCfg.types      || ['recurring', 'one_time', 'service'];
-    const catOptions   = [...new Set([
-        ...(pbCfg.categories || ['Platform', 'Add-ons', 'Services', 'Hardware']),
-        ...(products || []).map(p => p.category).filter(Boolean),
-    ])].sort();
+    const EMPTY = { name: '', category: '', productType: typeOpts[0] || 'recurring', listPrice: '', unit: unitOpts[0] || 'flat', description: '', active: true, customPrice: false };
 
-    // ── Price book intelligence — computed from real quote + opp data ────────
-    const intelligence = useMemo(() => {
-        const allQuotes = quotes || [];
-        const totalQuotes = allQuotes.length;
-        const map = {};
-        (products || []).forEach(p => {
-            // Quotes containing this product
-            const containing = allQuotes.filter(q =>
-                (q.lineItems || []).some(li => li.productId === p.id || li.productName === p.name)
-            );
-            // Avg discount across all line items for this product
-            const discounts = [];
-            allQuotes.forEach(q => {
-                (q.lineItems || []).filter(li => li.productId === p.id || li.productName === p.name)
-                    .forEach(li => discounts.push(parseFloat(li.discountPct) || 0));
-            });
-            const avgDiscount = discounts.length > 0 ? discounts.reduce((a, b) => a + b, 0) / discounts.length : 0;
-            // Win rate — linked opp reached Closed Won
-            const wins = containing.filter(q => {
-                const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-                return opp?.stage === 'Closed Won';
-            });
-            // Avg deal ARR for quotes containing this product
-            const oppArrs = containing.map(q => {
-                const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-                return parseFloat(opp?.arr) || 0;
-            }).filter(v => v > 0);
-            const avgDealSize = oppArrs.length > 0 ? oppArrs.reduce((a, b) => a + b, 0) / oppArrs.length : 0;
+    const intelligence = useMemo(() => calcProductIntelligence(products, quotes, opportunities), [products, quotes, opportunities]);
+    const activeP   = (products || []).filter(p => p.active !== false);
+    const topAttach = [...activeP].sort((a, b) => (intelligence[b.id]?.attachRate || 0) - (intelligence[a.id]?.attachRate || 0))[0];
+    const mostDisc  = [...activeP].filter(p => (intelligence[p.id]?.quoteCount || 0) > 0).sort((a, b) => (intelligence[b.id]?.avgDiscount || 0) - (intelligence[a.id]?.avgDiscount || 0))[0];
+    const bestWin   = [...activeP].filter(p => (intelligence[p.id]?.quoteCount || 0) > 0).sort((a, b) => (intelligence[b.id]?.winRate || 0) - (intelligence[a.id]?.winRate || 0))[0];
 
-            map[p.id] = {
-                attachRate:  totalQuotes > 0 ? containing.length / totalQuotes : 0,
-                avgDiscount,
-                winRate:     containing.length > 0 ? wins.length / containing.length : 0,
-                avgDealSize,
-                quoteCount:  containing.length,
-            };
-        });
-        return map;
-    }, [products, quotes, opportunities]);
+    const sorted   = [...(products || [])].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const filtered = search.trim() ? sorted.filter(p => (p.name || '').toLowerCase().includes(search.toLowerCase()) || (p.category || '').toLowerCase().includes(search.toLowerCase())) : sorted;
 
-    // Top insights
-    const activeProducts = (products || []).filter(p => p.active !== false);
-    const topAttach     = [...activeProducts].sort((a, b) => (intelligence[b.id]?.attachRate || 0) - (intelligence[a.id]?.attachRate || 0))[0];
-    const mostDisc      = [...activeProducts].filter(p => (intelligence[p.id]?.quoteCount || 0) > 0).sort((a, b) => (intelligence[b.id]?.avgDiscount || 0) - (intelligence[a.id]?.avgDiscount || 0))[0];
-    const bestWin       = [...activeProducts].filter(p => (intelligence[p.id]?.quoteCount || 0) > 0).sort((a, b) => (intelligence[b.id]?.winRate || 0) - (intelligence[a.id]?.winRate || 0))[0];
+    const openNew  = () => { setForm(EMPTY); setEditing('new'); setError(null); };
+    const openEdit = (p) => { setForm({ name: p.name || '', category: p.category || '', productType: p.productType || p.type || typeOpts[0] || 'recurring', listPrice: p.listPrice || p.price || '', unit: p.unit || unitOpts[0] || 'flat', description: p.description || '', active: p.active !== false, customPrice: p.customPrice === true }); setEditing(p.id); setError(null); };
+    const cancel   = () => { setEditing(null); setError(null); };
+
+    const handleSave = async () => {
+        if (!form.name.trim()) { setError('Product name is required.'); return; }
+        if (!form.customPrice && (form.listPrice === '' || isNaN(Number(form.listPrice)))) { setError('A valid list price is required.'); return; }
+        setSaving(true);
+        try {
+            const payload = { ...form, listPrice: form.customPrice ? null : Number(form.listPrice), id: editing === 'new' ? undefined : editing };
+            await onSave(payload, editing === 'new' ? null : (products || []).find(p => p.id === editing) || null);
+            cancel();
+        } catch (err) { setError(err.message || 'Failed to save.'); }
+        finally { setSaving(false); }
+    };
+    const handleDelete = (id) => { showConfirm && showConfirm('Delete this product?', async () => { await onDelete(id); }); };
 
     const MiniBar = ({ value, max, color }) => {
-        const p = Math.min(1, max > 0 ? value / max : 0);
+        const p2 = Math.min(1, max > 0 ? value / max : 0);
         return (
             <div>
-                <div style={{ fontSize: '0.6875rem', fontWeight: 500, color: '#1c1917', marginBottom: 2 }}>{Math.round(value * 100)}%</div>
-                <div style={{ height: 3, background: '#f0ece4', borderRadius: 1, overflow: 'hidden' }}>
-                    <div style={{ width: `${p * 100}%`, height: '100%', background: color }}/>
+                <div style={{ fontSize: '0.6875rem', fontWeight: 500, color: T.ink, marginBottom: 2, fontFamily: T.sans }}>{Math.round(value * 100)}%</div>
+                <div style={{ height: 3, background: T.surface2, borderRadius: 1, overflow: 'hidden', width: 48 }}>
+                    <div style={{ width: `${p2 * 100}%`, height: '100%', background: color }} />
                 </div>
             </div>
         );
     };
 
-    const TYPE_LABEL   = { recurring: 'Recurring', one_time: 'One-time', service: 'Service' };
-
-    const EMPTY = { name: '', category: '', productType: typeOptions[0] || 'recurring', listPrice: '', unit: unitOptions[0] || 'flat', description: '', active: true, customPrice: false };
-    const [editing, setEditing] = useState(null); // product id or 'new'
-    const [form, setForm] = useState(EMPTY);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState(null);
-    const [pbSearch, setPbSearch] = useState('');
-
-    const openNew = () => { setForm(EMPTY); setEditing('new'); setError(null); };
-    const openEdit = (p) => {
-        setForm({
-            name: p.name || '',
-            category: p.category || '',
-            productType: p.productType || p.type || typeOptions[0] || 'recurring',
-            listPrice: p.listPrice || p.price || '',
-            unit: p.unit || unitOptions[0] || 'flat',
-            description: p.description || '',
-            active: p.active !== false,
-            customPrice: p.customPrice === true,
-        });
-        setEditing(p.id);
-        setError(null);
-    };
-    const cancel = () => { setEditing(null); setError(null); };
-
-    const handleSave = async () => {
-        if (!form.name.trim()) { setError('Product name is required.'); return; }
-        if (!form.customPrice && (form.listPrice === '' || isNaN(Number(form.listPrice)))) { setError('A valid list price is required (or enable Custom Price).'); return; }
-        setSaving(true);
-        setError(null);
-        try {
-            const payload = {
-                ...form,
-                listPrice: form.customPrice ? 0 : Number(form.listPrice),
-                id: editing === 'new' ? undefined : editing,
-            };
-            await onSave(payload);
-            cancel();
-        } catch (err) {
-            setError(err.message || 'Failed to save.');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleDelete = (prodId) => {
-        if (showConfirm) {
-            showConfirm('Deactivate this product? It will no longer appear in the catalog for new quotes.', () => onDelete(prodId), true);
-        } else {
-            onDelete(prodId);
-        }
-    };
-
-    // Always alpha-sorted, then filtered by search
-    const sortedProducts = [...(products || [])].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    const filteredProducts = pbSearch.trim()
-        ? sortedProducts.filter(p => {
-            const q = pbSearch.toLowerCase();
-            return (
-                (p.name || '').toLowerCase().includes(q) ||
-                (p.category || '').toLowerCase().includes(q) ||
-                (p.description || '').toLowerCase().includes(q) ||
-                (p.productType || p.type || '').toLowerCase().includes(q)
-            );
-          })
-        : sortedProducts;
-
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-
-            {/* Intelligence insight cards — only shown when we have quote data */}
+            {/* Insight cards */}
             {(quotes || []).length > 0 && (topAttach || mostDisc || bestWin) && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.625rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.625rem' }}>
                     {[
-                        { label: 'Highest attach rate',     product: topAttach, metric: 'attachRate',  sub: 'of all quotes include this',        accent: '#3a5a7a' },
-                        { label: 'Most-discounted product', product: mostDisc,  metric: 'avgDiscount', sub: 'avg discount — review list price?',  accent: '#b87333' },
-                        { label: 'Boosts win rate',         product: bestWin,   metric: 'winRate',     sub: 'win rate when included',             accent: '#4d6b3d' },
+                        { label: 'Highest attach rate',     product: topAttach, metric: 'attachRate',  sub: 'of all quotes include this',       accent: T.info },
+                        { label: 'Most-discounted product', product: mostDisc,  metric: 'avgDiscount', sub: 'avg discount — review list price?', accent: T.warn },
+                        { label: 'Boosts win rate',         product: bestWin,   metric: 'winRate',     sub: 'win rate when included',           accent: T.ok },
                     ].filter(c => c.product).map(card => {
                         const intel = intelligence[card.product?.id] || {};
                         const val   = intel[card.metric] || 0;
                         return (
-                            <div key={card.label} style={{ background: '#fff', border: '1px solid #e5e2db', borderRadius: '10px', padding: '0.875rem 1rem', position: 'relative', overflow: 'hidden' }}>
-                                <span style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, background: card.accent }}/>
-                                <div style={{ fontSize: '0.5625rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.375rem' }}>{card.label}</div>
-                                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#1c1917', marginBottom: '0.25rem', lineHeight: 1.3 }}>{card.product.name}</div>
+                            <div key={card.label} style={{ background: '#fff', border: '1px solid #e5e2db', borderRadius: 10, padding: '0.875rem 1rem', position: 'relative', overflow: 'hidden' }}>
+                                <span style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, background: card.accent }} />
+                                <div style={{ fontSize: '0.5625rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.375rem', fontFamily: T.sans }}>{card.label}</div>
+                                <div style={{ fontSize: '0.875rem', fontWeight: 600, color: T.ink, marginBottom: '0.25rem', lineHeight: 1.3, fontFamily: T.sans }}>{card.product.name}</div>
                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                                    <span style={{ fontSize: '1.375rem', fontWeight: '700', color: card.accent, letterSpacing: '-0.02em', lineHeight: 1 }}>{Math.round(val * 100)}%</span>
-                                    <span style={{ fontSize: '0.6875rem', color: '#64748b' }}>{card.sub}</span>
+                                    <span style={{ fontSize: '1.375rem', fontWeight: 700, color: card.accent, letterSpacing: '-0.02em', lineHeight: 1, fontFamily: T.sans }}>{Math.round(val * 100)}%</span>
+                                    <span style={{ fontSize: '0.6875rem', color: '#64748b', fontFamily: T.sans }}>{card.sub}</span>
                                 </div>
                             </div>
                         );
@@ -1300,98 +599,40 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
             {/* Toolbar */}
             <div className="table-container" style={{ marginBottom: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 1.25rem', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '0.8125rem', color: '#64748b', flexShrink: 0 }}>
-                        {filteredProducts.length !== sortedProducts.length
-                            ? `${filteredProducts.length} of ${sortedProducts.length} product${sortedProducts.length !== 1 ? 's' : ''}`
-                            : `${sortedProducts.length} product${sortedProducts.length !== 1 ? 's' : ''} in Price Book`}
-                    </span>
-                    {/* Search input */}
-                    <div style={{ position: 'relative', flex: '1', minWidth: '160px', maxWidth: '280px' }}>
-                        <span style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: '#a8a29e', fontSize: '0.8125rem', pointerEvents: 'none', lineHeight: 1 }}>🔍</span>
-                        <input
-                            type="text"
-                            value={pbSearch}
-                            onChange={e => setPbSearch(e.target.value)}
-                            placeholder="Search price book..."
-                            style={{ width: '100%', paddingLeft: '1.875rem', paddingRight: pbSearch ? '1.75rem' : '0.75rem', paddingTop: '0.375rem', paddingBottom: '0.375rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.8125rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' }}
-                        />
-                        {pbSearch && (
-                            <button onClick={() => setPbSearch('')}
-                                style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#a8a29e', cursor: 'pointer', fontSize: '0.875rem', lineHeight: 1, padding: 0 }}>
-                                ×
-                            </button>
-                        )}
+                    <div style={{ position: 'relative', flex: 1, minWidth: 160, maxWidth: 280 }}>
+                        <span style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: '#a8a29e', fontSize: '0.8125rem' }}>🔍</span>
+                        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search catalog..." style={{ width: '100%', paddingLeft: '1.875rem', paddingRight: search ? '1.75rem' : '0.75rem', paddingTop: '0.375rem', paddingBottom: '0.375rem', border: '1px solid #e5e2db', borderRadius: 8, fontSize: '0.8125rem', fontFamily: T.sans, background: T.bg, color: T.ink, outline: 'none', boxSizing: 'border-box' }} />
+                        {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#a8a29e', cursor: 'pointer', fontSize: '0.875rem', lineHeight: 1, padding: 0 }}>×</button>}
                     </div>
-                    {isAdmin && (
-                        <button onClick={openNew}
-                            style={{ marginLeft: 'auto', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
-                            + Add Product
-                        </button>
-                    )}
+                    <span style={{ fontSize: '0.8125rem', color: '#64748b', flexShrink: 0, fontFamily: T.sans }}>{filtered.length} product{filtered.length !== 1 ? 's' : ''}</span>
+                    {isAdmin && <button onClick={openNew} style={{ marginLeft: 'auto', background: T.ink, color: T.surface, border: 'none', borderRadius: 8, padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>+ Add Product</button>}
                 </div>
             </div>
 
-            {/* Edit / New form — Admin only */}
+            {/* Edit form */}
             {isAdmin && editing && (
                 <div className="table-container" style={{ padding: '1.25rem' }}>
-                    <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1c1917', marginBottom: '1rem' }}>{editing === 'new' ? 'New Product' : 'Edit Product'}</div>
+                    <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: T.ink, marginBottom: '1rem', fontFamily: T.sans }}>{editing === 'new' ? 'New Product' : 'Edit Product'}</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                        <div>
-                            <label style={lbl}>Product Name</label>
-                            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={inp} placeholder="e.g. Enterprise Platform" />
-                        </div>
-                        <div>
-                            <label style={lbl}>Category</label>
-                            <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={inp}>
-                                <option value="">— Select —</option>
-                                {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={lbl}>Type</label>
-                            <select value={form.productType} onChange={e => setForm(f => ({ ...f, productType: e.target.value }))} style={inp}>
-                                {typeOptions.map(t => <option key={t} value={t}>{TYPE_LABEL[t] || t}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={lbl}>Price ($)</label>
-                            {form.customPrice ? (
-                                <div style={{ ...inp, color: '#94a3b8', fontStyle: 'italic', display: 'flex', alignItems: 'center', fontSize: '0.75rem' }}>Rep enters on quote</div>
-                            ) : (
-                                <input type="number" min="0" value={form.listPrice} onChange={e => setForm(f => ({ ...f, listPrice: e.target.value }))} style={inp} placeholder="0" />
-                            )}
-                        </div>
-                        <div>
-                            <label style={lbl}>Unit</label>
-                            <select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} style={inp}>
-                                {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                            </select>
-                        </div>
+                        <div><label style={lbl}>Product Name</label><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} style={inp} placeholder="e.g. Enterprise Platform" /></div>
+                        <div><label style={lbl}>Category</label><select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={inp}><option value="">— Select —</option>{catOpts.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                        <div><label style={lbl}>Type</label><select value={form.productType} onChange={e => setForm(f => ({ ...f, productType: e.target.value }))} style={inp}>{typeOpts.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                        <div><label style={lbl}>Price ($)</label>{form.customPrice ? <div style={{ ...inp, color: '#94a3b8', fontStyle: 'italic', display: 'flex', alignItems: 'center', fontSize: '0.75rem' }}>Rep enters on quote</div> : <input type="number" min="0" value={form.listPrice} onChange={e => setForm(f => ({ ...f, listPrice: e.target.value }))} style={inp} placeholder="0" />}</div>
+                        <div><label style={lbl}>Unit</label><select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} style={inp}>{unitOpts.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
                     </div>
-                    <div style={{ marginBottom: '0.75rem' }}>
-                        <label style={lbl}>Description (optional)</label>
-                        <input value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={inp} placeholder="Brief description shown in quotes" />
-                    </div>
-                    {/* Custom Price toggle */}
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
-                        <input type="checkbox" id="pb-custom-price" checked={!!form.customPrice}
-                            onChange={e => setForm(f => ({ ...f, customPrice: e.target.checked, listPrice: e.target.checked ? '' : f.listPrice }))}
-                            style={{ marginTop: '2px', cursor: 'pointer' }} />
-                        <label htmlFor="pb-custom-price" style={{ cursor: 'pointer' }}>
-                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1c1917' }}>Custom / Variable Price</div>
-                            <div style={{ fontSize: '0.75rem', color: '#78716c', marginTop: '2px' }}>When enabled, reps enter the price directly on the quote. Ideal for services that vary by project.</div>
-                        </label>
+                    <div style={{ marginBottom: '0.75rem' }}><label style={lbl}>Description</label><input value={form.description || ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={inp} placeholder="Brief description" /></div>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', background: T.bg, border: '1px solid #e5e2db', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
+                        <input type="checkbox" id="pb-custom" checked={!!form.customPrice} onChange={e => setForm(f => ({ ...f, customPrice: e.target.checked, listPrice: e.target.checked ? '' : f.listPrice }))} style={{ marginTop: 2, cursor: 'pointer' }} />
+                        <label htmlFor="pb-custom" style={{ cursor: 'pointer' }}><div style={{ fontSize: '0.8125rem', fontWeight: 600, color: T.ink, fontFamily: T.sans }}>Custom / Variable Price</div><div style={{ fontSize: '0.75rem', color: '#78716c', marginTop: 2, fontFamily: T.sans }}>Rep enters price directly on the quote.</div></label>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
                         <input type="checkbox" id="prod-active" checked={form.active !== false} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} />
-                        <label htmlFor="prod-active" style={{ fontSize: '0.8125rem', color: '#44403c', cursor: 'pointer' }}>Active (visible in quote builder)</label>
+                        <label htmlFor="prod-active" style={{ fontSize: '0.8125rem', color: '#44403c', cursor: 'pointer', fontFamily: T.sans }}>Active (visible in quote builder)</label>
                     </div>
-                    {error && <div style={{ color: '#dc2626', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>{error}</div>}
+                    {error && <div style={{ color: '#dc2626', fontSize: '0.8125rem', marginBottom: '0.5rem', fontFamily: T.sans }}>{error}</div>}
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={cancel} style={{ background: '#e8e3da', color: '#78716c', border: '1px solid #ddd8cf', borderRadius: '8px', padding: '0.4rem 1rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-                        <button onClick={handleSave} disabled={saving} style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.4rem 1rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1 }}>
-                            {saving ? 'Saving…' : 'Save Product'}
-                        </button>
+                        <button onClick={cancel} style={{ background: '#e8e3da', color: '#78716c', border: '1px solid #ddd8cf', borderRadius: 8, padding: '0.4rem 1rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
+                        <button onClick={handleSave} disabled={saving} style={{ background: T.ink, color: T.surface, border: 'none', borderRadius: 8, padding: '0.4rem 1rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans, opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save Product'}</button>
                     </div>
                 </div>
             )}
@@ -1402,93 +643,33 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
                     <thead>
                         <tr style={{ background: '#f8f7f5' }}>
                             {['Name', 'Category', 'Type', 'Price', 'Unit', 'Attach', 'Avg Disc', 'Win Rate', 'Avg Deal', 'Status', ...(isAdmin ? [''] : [])].map((h, i) => (
-                                <th key={i} style={{ padding: '0.5rem 0.75rem', fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left', borderBottom: '1px solid #e8e3da' }}>{h}</th>
+                                <th key={i} style={{ padding: '0.5rem 0.75rem', fontSize: '0.6875rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left', borderBottom: '1px solid #e8e3da', fontFamily: T.sans }}>{h}</th>
                             ))}
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredProducts.map(prod => (
-                            <tr key={prod.id} style={{ borderBottom: '1px solid #f0ece4' }}
-                                onMouseEnter={e => e.currentTarget.style.background = '#faf9f7'}
-                                onMouseLeave={e => e.currentTarget.style.background = ''}>
-                                <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', fontWeight: '600', color: prod.active !== false ? '#1c1917' : '#94a3b8' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                                        {prod.name}
-                                        {prod.customPrice && <span style={{ fontSize: '0.5625rem', fontWeight: '700', background: '#f3e8ff', color: '#6b21a8', padding: '1px 5px', borderRadius: '4px', textTransform: 'uppercase' }}>Custom</span>}
-                                    </div>
-                                </td>
-                                <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', color: '#64748b' }}>{prod.category || '—'}</td>
-                                <td style={{ padding: '0.625rem 0.75rem' }}><TypeBadge type={prod.productType || prod.type} /></td>
-                                <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.875rem', fontWeight: '700', color: prod.customPrice ? '#7c3aed' : '#1c1917', fontStyle: prod.customPrice ? 'italic' : 'normal' }}>
-                                    {prod.customPrice ? 'Variable' : '$' + Number(prod.listPrice || prod.price || 0).toLocaleString()}
-                                </td>
-                                <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.75rem', color: '#64748b' }}>{prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : prod.unit || 'flat'}</td>
-                                {/* Intelligence columns */}
-                                {(() => {
-                                    const intel = intelligence[prod.id] || {};
-                                    const fmtPct = v => Math.round((v || 0) * 100) + '%';
-                                    const discColor = (intel.avgDiscount || 0) > 0.12 ? '#b87333' : (intel.avgDiscount || 0) > 0.08 ? '#64748b' : '#4d6b3d';
-                                    return (<>
-                                        <td style={{ padding: '0.625rem 0.75rem' }}>
-                                            {intel.quoteCount > 0 ? (
-                                                <div>
-                                                    <div style={{ fontSize: '0.6875rem', fontWeight: 500, color: '#1c1917', marginBottom: 2 }}>{fmtPct(intel.attachRate)}</div>
-                                                    <div style={{ height: 3, background: '#f0ece4', borderRadius: 1, overflow: 'hidden', width: 48 }}>
-                                                        <div style={{ width: `${Math.min(100, (intel.attachRate || 0) * 100)}%`, height: '100%', background: '#3a5a7a' }}/>
-                                                    </div>
-                                                </div>
-                                            ) : <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>—</span>}
-                                        </td>
-                                        <td style={{ padding: '0.625rem 0.75rem' }}>
-                                            {intel.quoteCount > 0 ? (
-                                                <div>
-                                                    <div style={{ fontSize: '0.6875rem', fontWeight: 500, color: discColor, marginBottom: 2 }}>{fmtPct(intel.avgDiscount)}</div>
-                                                    <div style={{ height: 3, background: '#f0ece4', borderRadius: 1, overflow: 'hidden', width: 48 }}>
-                                                        <div style={{ width: `${Math.min(100, (intel.avgDiscount || 0) / 0.3 * 100)}%`, height: '100%', background: discColor }}/>
-                                                    </div>
-                                                </div>
-                                            ) : <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>—</span>}
-                                        </td>
-                                        <td style={{ padding: '0.625rem 0.75rem' }}>
-                                            {intel.quoteCount > 0 ? (
-                                                <div>
-                                                    <div style={{ fontSize: '0.6875rem', fontWeight: 500, color: '#1c1917', marginBottom: 2 }}>{fmtPct(intel.winRate)}</div>
-                                                    <div style={{ height: 3, background: '#f0ece4', borderRadius: 1, overflow: 'hidden', width: 48 }}>
-                                                        <div style={{ width: `${Math.min(100, (intel.winRate || 0) / 0.7 * 100)}%`, height: '100%', background: '#4d6b3d' }}/>
-                                                    </div>
-                                                </div>
-                                            ) : <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>—</span>}
-                                        </td>
-                                        <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.6875rem', color: '#1c1917', fontWeight: 500 }}>
-                                            {intel.avgDealSize > 0 ? fmt(intel.avgDealSize) : <span style={{ color: '#94a3b8' }}>—</span>}
-                                        </td>
-                                    </>);
-                                })()}
-                                <td style={{ padding: '0.625rem 0.75rem' }}>
-                                    <span style={{ fontSize: '0.625rem', fontWeight: '700', padding: '0.15rem 0.4rem', borderRadius: '4px', textTransform: 'uppercase',
-                                        background: prod.active !== false ? '#d1fae5' : '#f1f5f9',
-                                        color: prod.active !== false ? '#065f46' : '#94a3b8' }}>
-                                        {prod.active !== false ? 'Active' : 'Inactive'}
-                                    </span>
-                                </td>
-                                {isAdmin && (
-                                    <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}>
-                                        <button onClick={() => openEdit(prod)} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'inherit', marginRight: '0.75rem' }}>Edit</button>
-                                        <button onClick={() => handleDelete(prod.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'inherit' }}>Delete</button>
+                        {filtered.map(prod => {
+                            const intel = intelligence[prod.id] || {};
+                            const discColor = (intel.avgDiscount || 0) > 0.12 ? T.warn : (intel.avgDiscount || 0) > 0.08 ? T.inkMid : T.ok;
+                            return (
+                                <tr key={prod.id} style={{ borderBottom: '1px solid #f0ece4' }} onMouseEnter={e => e.currentTarget.style.background = '#faf9f7'} onMouseLeave={e => e.currentTarget.style.background = ''}>
+                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', fontWeight: 600, color: prod.active !== false ? T.ink : '#94a3b8', fontFamily: T.sans }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>{prod.name}{prod.customPrice && <span style={{ fontSize: '0.5625rem', fontWeight: 700, background: '#f3e8ff', color: '#6b21a8', padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase' }}>Custom</span>}</div>
                                     </td>
-                                )}
-                            </tr>
-                        ))}
-                        {filteredProducts.length === 0 && (
-                            <tr><td colSpan={isAdmin ? 11 : 10} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem', fontStyle: 'italic' }}>
-                                {pbSearch.trim() ? (
-                                    <>No products match <strong>"{pbSearch}"</strong>.{' '}
-                                    <button onClick={() => setPbSearch('')} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '0.875rem', fontFamily: 'inherit', padding: 0, textDecoration: 'underline' }}>Clear search</button></>
-                                ) : (
-                                    isAdmin ? 'No products yet. Click "+ Add Product" to build your Price Book.' : 'Contact your admin to add products.'
-                                )}
-                            </td></tr>
-                        )}
+                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', color: '#64748b', fontFamily: T.sans }}>{prod.category || '—'}</td>
+                                    <td style={{ padding: '0.625rem 0.75rem' }}><TypeBadge type={prod.productType || prod.type} /></td>
+                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.875rem', fontWeight: 700, color: prod.customPrice ? '#7c3aed' : T.ink, fontStyle: prod.customPrice ? 'italic' : 'normal', fontFamily: T.sans }}>{prod.customPrice ? 'Variable' : '$' + Number(prod.listPrice || prod.price || 0).toLocaleString()}</td>
+                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.75rem', color: '#64748b', fontFamily: T.sans }}>{prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : prod.unit || 'flat'}</td>
+                                    <td style={{ padding: '0.625rem 0.75rem' }}>{intel.quoteCount > 0 ? <MiniBar value={intel.attachRate} max={1} color={T.info} /> : <span style={{ fontSize: '0.6875rem', color: '#94a3b8', fontFamily: T.sans }}>—</span>}</td>
+                                    <td style={{ padding: '0.625rem 0.75rem' }}>{intel.quoteCount > 0 ? <MiniBar value={intel.avgDiscount} max={0.3} color={discColor} /> : <span style={{ fontSize: '0.6875rem', color: '#94a3b8', fontFamily: T.sans }}>—</span>}</td>
+                                    <td style={{ padding: '0.625rem 0.75rem' }}>{intel.quoteCount > 0 ? <MiniBar value={intel.winRate} max={0.7} color={T.ok} /> : <span style={{ fontSize: '0.6875rem', color: '#94a3b8', fontFamily: T.sans }}>—</span>}</td>
+                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.6875rem', color: T.ink, fontWeight: 500, fontFamily: T.sans }}>{intel.avgDealSize > 0 ? fmt(intel.avgDealSize) : <span style={{ color: '#94a3b8' }}>—</span>}</td>
+                                    <td style={{ padding: '0.625rem 0.75rem' }}><span style={{ fontSize: '0.625rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: 4, textTransform: 'uppercase', background: prod.active !== false ? '#d1fae5' : '#f1f5f9', color: prod.active !== false ? '#065f46' : '#94a3b8' }}>{prod.active !== false ? 'Active' : 'Inactive'}</span></td>
+                                    {isAdmin && <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}><button onClick={() => openEdit(prod)} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '0.75rem', fontFamily: T.sans, marginRight: '0.75rem' }}>Edit</button><button onClick={() => handleDelete(prod.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.75rem', fontFamily: T.sans }}>Delete</button></td>}
+                                </tr>
+                            );
+                        })}
+                        {filtered.length === 0 && <tr><td colSpan={isAdmin ? 11 : 10} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem', fontStyle: 'italic', fontFamily: T.sans }}>{search ? <>No products match <strong>"{search}"</strong>.</> : isAdmin ? 'No products yet. Click "+ Add Product" to build your catalog.' : 'Contact your admin to add products.'}</td></tr>}
                     </tbody>
                 </table>
             </div>
@@ -1496,174 +677,92 @@ function PriceBook({ products, settings, userRole, onSave, onDelete, showConfirm
     );
 }
 
-// ─── APPROVALS SUB-TAB ────────────────────────────────────────────────────────
-
-// ─── QUOTE NOTICE MODAL ───────────────────────────────────────────────────────
-function QuoteNoticeModal({ notice, onClose }) {
-    if (!notice) return null;
-    const isSuccess = notice.type === 'success';
-    return (
-        <div style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 9999, padding: '1rem',
-        }} onClick={onClose}>
-            <div style={{
-                background: '#fff', borderRadius: '16px', padding: '2rem 2rem 1.5rem',
-                maxWidth: '440px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
-                border: `1.5px solid ${isSuccess ? '#bbf7d0' : '#fecaca'}`,
-                textAlign: 'center',
-            }} onClick={e => e.stopPropagation()}>
-                <div style={{
-                    width: '56px', height: '56px', borderRadius: '50%', margin: '0 auto 1rem',
-                    background: isSuccess ? '#f0fdf4' : '#fef2f2',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '1.5rem', color: isSuccess ? '#16a34a' : '#dc2626',
-                }}>
-                    {isSuccess ? '✓' : '⚠'}
-                </div>
-                <div style={{ fontSize: '1.0625rem', fontWeight: '700', color: '#1c1917', marginBottom: '0.5rem' }}>
-                    {notice.title}
-                </div>
-                <div style={{ fontSize: '0.875rem', color: '#64748b', lineHeight: 1.6, marginBottom: notice.detail ? '0.75rem' : '1.5rem' }}>
-                    {notice.message}
-                </div>
-                {notice.detail && (
-                    <div style={{ background: '#f8f6f3', border: '1px solid #e8e3da', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8125rem', color: '#44403c', textAlign: 'left', lineHeight: 1.6 }}>
-                        {notice.detail}
-                    </div>
-                )}
-                <button onClick={onClose} style={{
-                    background: isSuccess ? '#16a34a' : '#1c1917',
-                    color: '#fff', border: 'none', borderRadius: '8px',
-                    padding: '0.6rem 2rem', fontSize: '0.875rem', fontWeight: '600',
-                    cursor: 'pointer', fontFamily: 'inherit',
-                }}>
-                    {isSuccess ? 'Great, thanks!' : 'Got it'}
-                </button>
-            </div>
-        </div>
-    );
-}
-
-function ApprovalsView({ quotes, opportunities, currentUser, userRole, settings, onApprove, onReject, onEdit }) {
+// ─── Approvals tab ────────────────────────────────────────────
+function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, onApprove, onReject, onEdit }) {
     const isManager = userRole === 'Manager';
-    const isAdmin = userRole === 'Admin';
+    const pending   = useMemo(() => (quotes || []).filter(q => q.status === 'Pending Approval'), [quotes]);
+    const approved  = useMemo(() => (quotes || []).filter(q => q.status === 'Approved'), [quotes]);
+    const [notice,  setNotice] = useState(null);
 
-    const pending = useMemo(() => (quotes || []).filter(q => q.status === 'Pending Approval'), [quotes]);
-
-    const [notice, setNotice] = useState(null);
-
-    const getManagerName = (repName) => {
-        if (!repName || !settings?.users) return null;
-        const rep = settings.users.find(u => u.name === repName);
-        return rep?.managedBy || rep?.manager || null;
-    };
-
-    const handleSendToCustomer = async (quote) => {
+    const handleSend = async (quote) => {
         try {
-            const res = await dbFetch('/.netlify/functions/quote-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ quoteId: quote.id }),
-            });
+            const res  = await dbFetch('/.netlify/functions/quote-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quoteId: quote.id }) });
             const data = await res.json();
-            if (!res.ok) {
-                setNotice({ type: 'error', title: 'Send Failed', message: data.error || 'The quote could not be sent. Please try again.' });
-                return;
-            }
-            setNotice({
-                type: 'success',
-                title: 'Quote Sent!',
-                message: `The quote was delivered successfully.`,
-                detail: `Sent to: ${data.customerName || 'Customer'}\nEmail: ${data.customerEmail || '—'}\nQuote: ${data.quoteNumber || quote.quoteNumber || '—'}`,
-            });
-        } catch {
-            setNotice({ type: 'error', title: 'Send Failed', message: 'A network error occurred. Please check your connection and try again.' });
-        }
+            if (!res.ok) { setNotice({ type: 'error', title: 'Send Failed', message: data.error || 'Could not send.' }); return; }
+            setNotice({ type: 'success', title: 'Quote Sent!', message: 'Delivered to customer successfully.' });
+        } catch { setNotice({ type: 'error', title: 'Send Failed', message: 'Network error. Please try again.' }); }
     };
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <QuoteNoticeModal notice={notice} onClose={() => setNotice(null)} />
+            {notice && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setNotice(null)}>
+                    <div style={{ background: '#fff', borderRadius: 16, padding: '2rem', maxWidth: 420, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', textAlign: 'center', border: `1.5px solid ${notice.type === 'success' ? '#bbf7d0' : '#fecaca'}` }} onClick={e => e.stopPropagation()}>
+                        <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>{notice.type === 'success' ? '✓' : '⚠'}</div>
+                        <div style={{ fontSize: '1.0625rem', fontWeight: 700, color: T.ink, marginBottom: '0.5rem', fontFamily: T.sans }}>{notice.title}</div>
+                        <div style={{ fontSize: '0.875rem', color: '#64748b', lineHeight: 1.6, marginBottom: '1.5rem', fontFamily: T.sans }}>{notice.message}</div>
+                        <button onClick={() => setNotice(null)} style={{ background: notice.type === 'success' ? '#16a34a' : T.ink, color: '#fff', border: 'none', borderRadius: 8, padding: '0.6rem 2rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Got it</button>
+                    </div>
+                </div>
+            )}
+
             <div className="table-container">
                 <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f0ece4', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>
-                        Pending Approval <span style={{ background: '#fef3c7', color: '#92400e', fontSize: '0.625rem', fontWeight: '700', padding: '0.15rem 0.5rem', borderRadius: '999px', marginLeft: '0.375rem' }}>{pending.length}</span>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 700, color: T.ink, fontFamily: T.sans }}>
+                        Pending Approval{pending.length > 0 && <span style={{ background: '#fef3c7', color: '#92400e', fontSize: '0.625rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px', marginLeft: '0.375rem' }}>{pending.length}</span>}
                     </span>
                 </div>
-                {pending.length === 0 ? (
-                    <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem', fontStyle: 'italic' }}>No quotes pending approval.</div>
-                ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                        {pending.map(q => {
-                            const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-                            const { totalValue, avgDisc } = calcLineTotals(q.lineItems || [], q.dealDiscount || 0);
-                            const canAct = isManager;
-                            return (
-                                <div key={q.id} style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f0ece4', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontWeight: '700', fontSize: '0.875rem', color: '#1c1917' }}>{q.name || q.quoteNumber}</div>
-                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem' }}>
-                                            {opp ? (opp.opportunityName || opp.account) : '—'} · Rep: {q.createdBy || '—'} · Avg Discount: {pct(avgDisc)}
-                                        </div>
-                                        {(() => { const mgr = getManagerName(q.createdBy); return mgr ? (
-                                            <div style={{ fontSize: '0.6875rem', color: '#d97706', marginTop: '0.25rem' }}>
-                                                <span style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '4px', padding: '0.1rem 0.4rem', fontWeight: '600' }}>
-                                                    ⏳ Awaiting approval from {mgr}
-                                                </span>
-                                            </div>
-                                        ) : null; })()}
-                                    </div>
-                                    <div style={{ fontSize: '1rem', fontWeight: '800', color: '#1c1917', flexShrink: 0 }}>{fmtFull(totalValue)}</div>
-                                    <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                                        <button onClick={() => onEdit(q)} style={{ background: '#e8e3da', color: '#78716c', border: '1px solid #ddd8cf', borderRadius: '8px', padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>View</button>
-                                        {canAct && (
-                                            <>
-                                                <button onClick={() => onApprove(q)} style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>✓ Approve</button>
-                                                <button onClick={() => onReject(q)} style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>✕ Reject</button>
-                                            </>
-                                        )}
-                                    </div>
+                {pending.length === 0
+                    ? <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem', fontStyle: 'italic', fontFamily: T.sans }}>No quotes pending approval.</div>
+                    : pending.map(q => {
+                        const opp = (opportunities || []).find(o => o.id === q.opportunityId);
+                        const { avgDiscPct } = calcLineTotals(q.lineItems || [], []);
+                        return (
+                            <div key={q.id} style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f0ece4', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 700, fontSize: '0.875rem', color: T.ink, fontFamily: T.sans }}>{q.name || q.quoteNumber}</div>
+                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem', fontFamily: T.sans }}>{opp ? (opp.opportunityName || opp.account) : '—'} · Rep: {q.createdBy || '—'} · Avg Discount: {pct(avgDiscPct)}</div>
                                 </div>
-                            );
-                        })}
-                    </div>
-                )}
+                                <div style={{ fontSize: '1rem', fontWeight: 800, color: T.ink, flexShrink: 0, fontFamily: T.sans }}>{fmt(q.totalValue || 0)}</div>
+                                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                                    <button onClick={() => onEdit(q)} style={{ background: '#e8e3da', color: '#78716c', border: '1px solid #ddd8cf', borderRadius: 8, padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>View</button>
+                                    {isManager && <>
+                                        <button onClick={() => onApprove(q)} style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: 8, padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>✓ Approve</button>
+                                        <button onClick={() => onReject(q)}  style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>✕ Reject</button>
+                                    </>}
+                                </div>
+                            </div>
+                        );
+                    })
+                }
             </div>
 
-            {/* Approved quotes ready to send */}
             <div className="table-container">
                 <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f0ece4' }}>
-                    <span style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>Approved — Ready to Send</span>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 700, color: T.ink, fontFamily: T.sans }}>Approved — Ready to Send</span>
                 </div>
-                {(quotes || []).filter(q => q.status === 'Approved').length === 0 ? (
-                    <div style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.8125rem', fontStyle: 'italic' }}>No approved quotes awaiting delivery.</div>
-                ) : (
-                    <div>
-                        {(quotes || []).filter(q => q.status === 'Approved').map(q => {
-                            const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-                            const { totalValue } = calcLineTotals(q.lineItems || [], q.dealDiscount || 0);
-                            return (
-                                <div key={q.id} style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f0ece4', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ fontWeight: '600', fontSize: '0.8125rem', color: '#1c1917' }}>{q.name || q.quoteNumber}</div>
-                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem' }}>{opp ? (opp.opportunityName || opp.account) : '—'}</div>
-                                    </div>
-                                    <div style={{ fontWeight: '700', color: '#1c1917' }}>{fmtFull(totalValue)}</div>
-                                    <button onClick={() => handleSendToCustomer(q)} style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.35rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>📧 Send to Customer</button>
+                {approved.length === 0
+                    ? <div style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.8125rem', fontStyle: 'italic', fontFamily: T.sans }}>No approved quotes awaiting delivery.</div>
+                    : approved.map(q => {
+                        const opp = (opportunities || []).find(o => o.id === q.opportunityId);
+                        return (
+                            <div key={q.id} style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f0ece4', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: T.ink, fontFamily: T.sans }}>{q.name || q.quoteNumber}</div>
+                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem', fontFamily: T.sans }}>{opp ? (opp.opportunityName || opp.account) : '—'}</div>
                                 </div>
-                            );
-                        })}
-                    </div>
-                )}
+                                <div style={{ fontWeight: 700, color: T.ink, fontFamily: T.sans }}>{fmt(q.totalValue || 0)}</div>
+                                <button onClick={() => handleSend(q)} style={{ background: T.ink, color: T.surface, border: 'none', borderRadius: 8, padding: '0.35rem 0.875rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>📧 Send to Customer</button>
+                            </div>
+                        );
+                    })
+                }
             </div>
         </div>
     );
 }
 
-// ─── MAIN QUOTES TAB ──────────────────────────────────────────────────────────
-
+// ─── Main QuotesTab ───────────────────────────────────────────
 export default function QuotesTab() {
     const {
         quotes, setQuotes, products, opportunities, settings, currentUser, userRole,
@@ -1672,177 +771,459 @@ export default function QuotesTab() {
         quotesDeepLinkOppId, setQuotesDeepLinkOppId,
     } = useApp();
 
-    const [subTab, setSubTab] = useState(() => localStorage.getItem('tab:quotes:subTab') || 'builder');
-    const [builderMode, setBuilderMode] = useState(false); // true = showing builder canvas
-    const [editingQuote, setEditingQuote] = useState(null);
-    // Deep link: opp ID passed from OpportunityModal → pre-filter All Quotes
-    const [deepLinkOppId, setDeepLinkOppId] = useState(null);
+    const isAdmin   = userRole === 'Admin';
+    const isManager = userRole === 'Manager';
+    const isReadOnly= userRole === 'ReadOnly';
+    const canEdit   = !isReadOnly;
 
-    const setTab = (t) => { setSubTab(t); localStorage.setItem('tab:quotes:subTab', t); };
+    // ── Tab state ─────────────────────────────────────────────
+    const [subTab,             setSubTabRaw]        = useState(() => localStorage.getItem('tab:quotes:subTab') || 'deals');
+    const [configuratorOppId,  setConfiguratorOppId] = useState(null);
+    const [configuratorQId,    setConfiguratorQId]   = useState(null);
+    const [viewMode,           setViewMode]          = useState('build');
+    const [tplOpp,             setTplOpp]            = useState(null);
+    const [saving,             setSaving]            = useState(false);
+    const [error,              setError]             = useState(null);
 
-    // Consume deep link from context on mount
+    const setTab = (t) => { setSubTabRaw(t); localStorage.setItem('tab:quotes:subTab', t); };
+
+    // Consume deep link from opp modal
     useEffect(() => {
         if (quotesDeepLinkOppId) {
-            setDeepLinkOppId(quotesDeepLinkOppId);
-            setQuotesDeepLinkOppId(null); // consume it
-            setTab('all');
+            setConfiguratorOppId(quotesDeepLinkOppId);
+            setConfiguratorQId(null);
+            setViewMode('build');
+            setQuotesDeepLinkOppId(null);
+            setTab('configurator');
         }
     }, [quotesDeepLinkOppId]);
 
-    const openBuilder = (quote = null) => {
-        setEditingQuote(quote);
-        setBuilderMode(true);
-        setTab('builder');
+    // ── Visibility filter ─────────────────────────────────────
+    const managedReps = useMemo(() => new Set((settings?.users || []).filter(u => u.managedBy === currentUser || u.manager === currentUser).map(u => u.name)), [settings, currentUser]);
+
+    const visibleQuotes = useMemo(() => (quotes || []).filter(q => {
+        if (isAdmin) return true;
+        if (isManager) {
+            const opp = (opportunities || []).find(o => o.id === q.opportunityId);
+            if (!opp) return q.createdBy === currentUser;
+            return managedReps.has(opp.salesRep) || opp.salesRep === currentUser || q.createdBy === currentUser;
+        }
+        return q.createdBy === currentUser;
+    }), [quotes, opportunities, userRole, currentUser, managedReps]);
+
+    // ── Deal summaries ────────────────────────────────────────
+    const oppQuoteSummaries = useMemo(() => {
+        const oppIds = [...new Set(visibleQuotes.map(q => q.opportunityId).filter(Boolean))];
+        return oppIds.map(oid => {
+            const opp    = (opportunities || []).find(o => o.id === oid);
+            const qs     = visibleQuotes.filter(q => q.opportunityId === oid);
+            const active = qs.filter(q => !['Superseded', 'Expired', 'Rejected / Lost'].includes(q.status));
+            const latest = [...active].sort((a, b) => (b.version || 1) - (a.version || 1))[0] || qs[0];
+            return { opp, quotes: qs, active, latest };
+        }).filter(s => s.opp);
+    }, [visibleQuotes, opportunities]);
+
+    const quotedOppIds = useMemo(() => new Set(visibleQuotes.map(q => q.opportunityId)), [visibleQuotes]);
+    const needsQuote   = useMemo(() => (opportunities || [])
+        .filter(o => ['Discovery', 'Proposal', 'Negotiation', 'Closing'].includes(o.stage) && !quotedOppIds.has(o.id))
+        .sort((a, b) => new Date(a.forecastedCloseDate || '9999') - new Date(b.forecastedCloseDate || '9999')),
+    [opportunities, quotedOppIds]);
+
+    // ── Configurator state ────────────────────────────────────
+    const configuratorOpp    = configuratorOppId ? (opportunities || []).find(o => o.id === configuratorOppId) : null;
+    const configuratorQuotes = useMemo(() =>
+        visibleQuotes.filter(q => q.opportunityId === configuratorOppId).sort((a, b) => (a.version || 1) - (b.version || 1)),
+    [visibleQuotes, configuratorOppId]);
+    const activeQuote = useMemo(() =>
+        (configuratorQId ? configuratorQuotes.find(q => q.id === configuratorQId) : null) ||
+        configuratorQuotes[configuratorQuotes.length - 1] || null,
+    [configuratorQuotes, configuratorQId]);
+    const prevQuote = useMemo(() => {
+        if (!activeQuote) return null;
+        const idx = configuratorQuotes.indexOf(activeQuote);
+        return idx > 0 ? configuratorQuotes[idx - 1] : null;
+    }, [activeQuote, configuratorQuotes]);
+
+    const pendingCount = (quotes || []).filter(q => q.status === 'Pending Approval').length;
+
+    // ── Navigation ────────────────────────────────────────────
+    const openConfigurator = (oppId, quoteId = null) => {
+        setConfiguratorOppId(oppId);
+        setConfiguratorQId(quoteId);
+        setViewMode('build');
+        setTab('configurator');
     };
 
-    const closeBuilder = () => {
-        setBuilderMode(false);
-        setEditingQuote(null);
+    // ── Handlers ──────────────────────────────────────────────
+    const handleNewQuoteForOpp = async (oppId) => {
+        if (!canEdit) return;
+        setSaving(true); setError(null);
+        try {
+            const opp     = (opportunities || []).find(o => o.id === oppId);
+            const payload = {
+                id: genQuoteId(),
+                quoteNumber: getNextQuoteNumber(),
+                version: 1,
+                name: (opp?.opportunityName || opp?.account || 'Quote') + ' v1',
+                opportunityId: oppId,
+                lineItems: [],
+                status: 'Draft',
+                createdBy: currentUser,
+                paymentTerms: 'Net 30 · Annual',
+            };
+            await handleSaveQuote(payload, null);
+            openConfigurator(oppId, payload.id);
+        } catch (err) { setError(err.message || 'Failed to create quote.'); }
+        finally { setSaving(false); }
     };
 
-    const handleSave = async (payload) => {
-        // payload.id exists when editing — pass it as editingQuote so hook uses PUT
-        const existing = payload.id ? (quotes || []).find(q => q.id === payload.id) : null;
-        await handleSaveQuote(payload, existing || null);
+    const handleNewVersion = async () => {
+        if (!activeQuote || !canEdit) return;
+        setSaving(true);
+        try {
+            const maxV = Math.max(...configuratorQuotes.map(q => q.version || 1));
+            if (maxV >= 3) { setError('Maximum 3 versions per quote.'); setSaving(false); return; }
+            const payload = {
+                id: genQuoteId(),
+                quoteNumber: activeQuote.quoteNumber,
+                version: maxV + 1,
+                name: (activeQuote.name || '').replace(/\s+v\d+$/, '') + ' v' + (maxV + 1),
+                opportunityId: activeQuote.opportunityId,
+                validUntil: activeQuote.validUntil,
+                paymentTerms: activeQuote.paymentTerms,
+                lineItems: [...(activeQuote.lineItems || [])],
+                notes: activeQuote.notes,
+                billingContact: activeQuote.billingContact || '',
+                status: 'Draft',
+                createdBy: currentUser,
+            };
+            await handleSaveQuote(payload, null);
+            setConfiguratorQId(payload.id);
+        } catch (err) { setError(err.message || 'Failed to create version.'); }
+        finally { setSaving(false); }
     };
 
-    const handleApprove = async (quote) => {
-        await handleSaveQuote({ ...quote, status: 'Approved' }, quote);
+    const handleSubmitApproval  = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote, status: 'Pending Approval' }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
+    const handleSendToCustomer  = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote, status: 'Sent to Customer' }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
+    const handleSaveDraft       = async () => { if (!activeQuote) return; setSaving(true); try { await handleSaveQuote({ ...activeQuote }, activeQuote); } catch (err) { setError(err.message); } finally { setSaving(false); } };
+    const handleApprove         = async (q) => { await handleSaveQuote({ ...q, status: 'Approved' }, q); };
+    const handleReject          = async (q) => { await handleSaveQuote({ ...q, status: 'Rejected / Lost' }, q); };
+    const handleSaveProductLocal  = async (data) => { await handleSaveProduct(data, data.id ? (products || []).find(p => p.id === data.id) || null : null); };
+    const handleDeleteProductLocal = async (id) => { await handleDeleteProduct(id); };
+
+    const handleExportPDF = async () => {
+        if (!activeQuote) return;
+        const { lines, netTotal } = calcLineTotals(activeQuote.lineItems || [], products || []);
+        try {
+            const res = await dbFetch('/.netlify/functions/quote-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quote: activeQuote, opportunity: configuratorOpp, lines }) });
+            if (!res.ok) throw new Error('PDF generation failed');
+            const blob = await res.blob();
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a'); a.href = url; a.download = (activeQuote.quoteNumber || 'quote') + '-v' + (activeQuote.version || 1) + '.pdf'; a.click(); URL.revokeObjectURL(url);
+        } catch {
+            const w = window.open('', '_blank');
+            if (!w) return;
+            w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${activeQuote.quoteNumber || 'Quote'}</title><style>body{font-family:system-ui,sans-serif;color:#1c1917;padding:2rem}table{width:100%;border-collapse:collapse;margin-top:1.5rem}th,td{padding:0.5rem 0.75rem;border-bottom:1px solid #e2e8f0;font-size:0.875rem}th{background:#f8fafc;font-weight:700;text-transform:uppercase;font-size:0.75rem}</style></head><body><h1>${activeQuote.name || activeQuote.quoteNumber || 'Quote'}</h1><p>${configuratorOpp?.account || ''}</p><table><thead><tr><th>Product</th><th>Qty</th><th>Total</th></tr></thead><tbody>${lines.map(li => `<tr><td>${li.productName}</td><td>${li.quantity || 1}</td><td>$${Math.round(li.lineTotal).toLocaleString()}</td></tr>`).join('')}</tbody></table><p><strong>Total: $${Math.round(netTotal).toLocaleString()}</strong></p></body></html>`);
+            w.document.close(); setTimeout(() => w.print(), 400);
+        }
     };
 
-    const handleReject = async (quote) => {
-        await handleSaveQuote({ ...quote, status: 'Rejected / Lost' }, quote);
-    };
+    // ── Stage colour map ──────────────────────────────────────
+    const stageColors = { 'Prospecting': '#b0a088', 'Qualification': '#c8a978', 'Discovery': '#b07a55', 'Proposal': '#b87333', 'Negotiation': '#7a5a3c', 'Closing': '#4d6b3d', 'Closed Won': '#3a5530', 'Closed Lost': '#9c3a2e' };
 
-    const handleSaveProductLocal = async (data) => {
-        const existing = data.id ? (products || []).find(p => p.id === data.id) : null;
-        await handleSaveProduct(data, existing || null);
-    };
-
-    const handleDeleteProductLocal = async (id) => {
-        await handleDeleteProduct(id);
-    };
-
-    // ── Builder mode: full-width split panel ──────────────────────────────────
-    if (builderMode && subTab === 'builder') {
-        return (
-            <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)', overflow: 'hidden' }}>
-                {/* Header bar */}
-                <div style={{ background: '#fff', borderBottom: '1px solid #ddd8cf', padding: '0.625rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', flexShrink: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <div style={{ width: '4px', height: '28px', background: '#c8b99a', borderRadius: '2px' }} />
-                        <h2 style={{ fontSize: '1.125rem', fontWeight: '700', color: '#1c1917', margin: 0 }}>Quote Builder</h2>
-                    </div>
-                    <span style={{ color: '#94a3b8', fontSize: '0.875rem' }}>
-                        {editingQuote ? (editingQuote.name || editingQuote.quoteNumber) : 'New Quote'}
-                    </span>
-                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.375rem' }}>
-                        {['builder', 'quotes', 'pricebook', 'approvals'].map(t => (
-                            <button key={t} onClick={() => { if (t !== 'builder') { setBuilderMode(false); setTab(t); } else setTab(t); }}
-                                style={subTabStyle(subTab, t)}>
-                                {t === 'builder' ? 'Builder' : t === 'quotes' ? 'All Quotes' : t === 'pricebook' ? 'Price Book' : 'Approvals'}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Builder body */}
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                    <QuoteBuilder
-                        quote={editingQuote}
-                        onSave={handleSave}
-                        onClose={closeBuilder}
-                        opportunities={opportunities}
-                        products={products}
-                        settings={settings}
-                        currentUser={currentUser}
-                        userRole={userRole}
-                        quotes={quotes}
-                        getNextQuoteNumber={getNextQuoteNumber}
-                        defaultOppId={editingQuote ? undefined : deepLinkOppId}
-                    />
-                </div>
-            </div>
-        );
-    }
-
-    // ── Standard tab-page layout ──────────────────────────────────────────────
+    // ── RENDER ────────────────────────────────────────────────
     return (
-        <div className="tab-page">
-            <div className="tab-page-header">
-                <div style={{ width: '4px', height: '28px', background: '#c8b99a', borderRadius: '2px' }} />
-                <h2 style={{ fontSize: '1.375rem', fontWeight: '700', color: '#1c1917' }}>Quotes</h2>
+        <div className="tab-page" style={{ fontFamily: T.sans }}>
+
+            {/* Page header */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, paddingBottom: 12 }}>
+                <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 28, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300, letterSpacing: -0.8, color: T.ink, lineHeight: 1, marginBottom: 5 }}>Quotes</div>
+                    <div style={{ fontSize: 12, color: T.inkMuted }}>
+                        <span style={{ fontWeight: 600, color: T.ink }}>{oppQuoteSummaries.length}</span> deals with quotes
+                        {needsQuote.length > 0 && <><span style={{ margin: '0 6px', color: T.border }}>·</span><span style={{ color: T.warn, fontWeight: 600 }}>{needsQuote.length}</span> need a quote</>}
+                        {pendingCount > 0 && <><span style={{ margin: '0 6px', color: T.border }}>·</span><span style={{ color: T.warn, fontWeight: 600 }}>{pendingCount}</span> pending approval</>}
+                    </div>
+                </div>
+                {canEdit && (
+                    <button onClick={() => setTab('deals')} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: T.ink, border: 'none', color: T.surface, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                        + New Quote
+                    </button>
+                )}
             </div>
 
             {/* Sub-tabs */}
-            <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #e2e8f0', marginBottom: '0.25rem' }}>
-                <button style={subTabStyle(subTab, 'builder')} onClick={() => { setTab('builder'); setBuilderMode(false); }}>Builder</button>
-                <button style={subTabStyle(subTab, 'quotes')} onClick={() => setTab('quotes')}>All Quotes</button>
-                <button style={subTabStyle(subTab, 'pricebook')} onClick={() => setTab('pricebook')}>Price Book</button>
-                <button style={subTabStyle(subTab, 'approvals')} onClick={() => setTab('approvals')}>
-                    Approvals
-                    {(() => {
-                        const pendingCount = (quotes || []).filter(q => q.status === 'Pending Approval').length;
-                        return pendingCount > 0 ? (
-                            <span style={{ marginLeft: '0.375rem', background: '#f59e0b', color: '#fff', borderRadius: '999px', fontSize: '0.5rem', fontWeight: '800', minWidth: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>
-                                {pendingCount}
-                            </span>
-                        ) : null;
-                    })()}
-                </button>
-                <button onClick={() => openBuilder(null)}
-                    style={{ marginLeft: 'auto', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.375rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit' }}>
-                    + New Quote
-                </button>
+            <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, marginBottom: 12 }}>
+                {[
+                    { id: 'deals',        label: 'Deals' },
+                    { id: 'configurator', label: 'Configurator' },
+                    { id: 'catalog',      label: 'Catalog' },
+                    { id: 'approvals',    label: 'Approvals', badge: pendingCount > 0 ? pendingCount : null },
+                ].map(v => {
+                    const active = subTab === v.id;
+                    return (
+                        <button key={v.id} onClick={() => setTab(v.id)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 16px', border: 'none', borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent', background: 'transparent', color: active ? T.ink : T.inkMuted, fontSize: 12, fontWeight: active ? 600 : 400, cursor: 'pointer', fontFamily: T.sans, transition: 'color 120ms, border-color 120ms', whiteSpace: 'nowrap', marginBottom: -1 }}
+                            onMouseEnter={e => { if (!active) e.currentTarget.style.color = T.inkMid; }}
+                            onMouseLeave={e => { if (!active) e.currentTarget.style.color = T.inkMuted; }}>
+                            {v.label}
+                            {v.badge && <span style={{ background: T.warn, color: '#fff', borderRadius: '999px', fontSize: '0.5rem', fontWeight: 800, minWidth: 14, height: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{v.badge}</span>}
+                        </button>
+                    );
+                })}
             </div>
 
-            {/* Builder placeholder when not in builder mode */}
-            {subTab === 'builder' && (
-                <div className="table-container" style={{ padding: '3rem', textAlign: 'center' }}>
-                    <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📋</div>
-                    <div style={{ fontSize: '1rem', fontWeight: '700', color: '#1c1917', marginBottom: '0.5rem' }}>Quote Builder</div>
-                    <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '1.5rem' }}>
-                        Create professional CPQ quotes with product catalog, version control, and approval workflows.
+            {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '0.625rem 0.875rem', fontSize: '0.8125rem', color: '#dc2626', marginBottom: 12, fontFamily: T.sans }}>{error}</div>}
+
+            {/* ── DEALS ──────────────────────────────────────── */}
+            {subTab === 'deals' && (
+                <div>
+                    {/* KPI strip */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
+                        {[
+                            { label: 'Deals with quotes', value: oppQuoteSummaries.length, sub: `of ${(opportunities || []).filter(o => !o.stage.startsWith('Closed')).length} active opps` },
+                            { label: 'Need a quote',      value: needsQuote.length,         sub: `${fmt(needsQuote.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0))} in open ARR` },
+                            { label: 'Total quoted',      value: fmt(oppQuoteSummaries.reduce((s, x) => s + (parseFloat(x.latest?.totalValue) || 0), 0)), sub: 'across active quotes' },
+                            { label: 'Pending approval',  value: pendingCount,              sub: pendingCount > 0 ? 'need manager action' : 'all clear' },
+                        ].map(kpi => (
+                            <div key={kpi.label} style={{ background: '#fff', border: '1px solid #e5e2db', borderRadius: 10, padding: '0.75rem 1rem' }}>
+                                <div style={{ fontSize: '0.5625rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem', fontFamily: T.sans }}>{kpi.label}</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: T.ink, lineHeight: 1, letterSpacing: '-0.02em', fontFamily: T.sans }}>{kpi.value}</div>
+                                <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '0.2rem', fontFamily: T.sans }}>{kpi.sub}</div>
+                            </div>
+                        ))}
                     </div>
-                    <button onClick={() => openBuilder(null)}
-                        style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.625rem 1.5rem', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
-                        + New Quote
-                    </button>
+
+                    {/* Needs a quote */}
+                    {needsQuote.length > 0 && (
+                        <div style={{ marginBottom: 22 }}>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+                                <div style={{ ...eyebrow(T.warn) }}>Needs a quote</div>
+                                <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{needsQuote.length} opportunit{needsQuote.length === 1 ? 'y' : 'ies'} in advanced stages with no quote</div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px,1fr))', gap: 10 }}>
+                                {needsQuote.map(opp => {
+                                    const stageColor = stageColors[opp.stage] || T.inkMid;
+                                    const closeIn    = opp.forecastedCloseDate ? Math.round((new Date(opp.forecastedCloseDate + 'T12:00:00') - Date.now()) / 86400000) : null;
+                                    const urgent     = closeIn !== null && closeIn >= 0 && closeIn <= 14;
+                                    const overdue    = closeIn !== null && closeIn < 0;
+                                    return (
+                                        <div key={opp.id} onClick={() => canEdit && setTplOpp(opp)}
+                                            style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '14px 16px', cursor: canEdit ? 'pointer' : 'default', position: 'relative', display: 'flex', flexDirection: 'column', gap: 10, transition: 'border-color 120ms' }}
+                                            onMouseEnter={e => { e.currentTarget.style.borderColor = T.borderStrong; }}
+                                            onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; }}>
+                                            <span style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, background: overdue ? T.danger : urgent ? T.warn : T.gold, borderRadius: `${T.r}px 0 0 ${T.r}px` }} />
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: stageColor }} />
+                                                <span style={{ fontSize: 10.5, color: T.inkMuted, letterSpacing: 0.4, textTransform: 'uppercase', fontWeight: 600, fontFamily: T.sans }}>{opp.stage}</span>
+                                                {closeIn !== null && <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 600, color: overdue ? T.danger : urgent ? T.warn : T.inkMuted, fontFamily: T.sans }}>{overdue ? `${Math.abs(closeIn)}d overdue` : closeIn === 0 ? 'closes today' : `closes in ${closeIn}d`}</span>}
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: 14, fontWeight: 600, color: T.ink, lineHeight: 1.25, fontFamily: T.sans }}>{opp.account}</div>
+                                                <div style={{ fontSize: 11.5, color: T.inkMid, marginTop: 2, lineHeight: 1.35, fontFamily: T.sans }}>{opp.opportunityName || opp.account}</div>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: `1px solid ${T.border}` }}>
+                                                <div>
+                                                    <div style={{ fontSize: 16, fontWeight: 600, color: T.ink, letterSpacing: -0.3, fontFamily: T.sans }}>{fmt(opp.arr)}</div>
+                                                    <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>ARR · {opp.probability || 0}% probability</div>
+                                                </div>
+                                                {canEdit && <button style={{ background: T.ink, color: T.surface, border: 'none', padding: '6px 12px', fontSize: 11.5, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Start quote →</button>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Quotes in flight */}
+                    {oppQuoteSummaries.length > 0 && (
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+                                <div style={{ ...eyebrow(T.inkMid) }}>Quotes in flight</div>
+                                <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{oppQuoteSummaries.length} deal{oppQuoteSummaries.length === 1 ? '' : 's'} with active quote versions</div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                {oppQuoteSummaries.map(s => {
+                                    const { opp, quotes: qs, latest } = s;
+                                    const { totalValue, avgDisc, margin } = calcLineTotals(latest?.lineItems || [], products || []);
+                                    const sc = stageColors[opp.stage] || T.inkMid;
+                                    return (
+                                        <div key={opp.id} onClick={() => openConfigurator(opp.id, latest?.id)}
+                                            style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '14px 18px', display: 'grid', gridTemplateColumns: '1.5fr 1fr auto', gap: 20, alignItems: 'center', cursor: 'pointer', transition: 'border-color 120ms' }}
+                                            onMouseEnter={e => e.currentTarget.style.borderColor = T.borderStrong}
+                                            onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
+                                            <div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc }} />
+                                                    <span style={{ fontSize: 10.5, color: T.inkMuted, fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase', fontFamily: T.sans }}>{opp.stage}</span>
+                                                    {opp.forecastedCloseDate && <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>· closes {opp.forecastedCloseDate}</span>}
+                                                </div>
+                                                <div style={{ fontSize: 14, fontWeight: 600, color: T.ink, marginBottom: 2, fontFamily: T.sans }}>{opp.account}</div>
+                                                <div style={{ fontSize: 12, color: T.inkMid, fontFamily: T.sans }}>{opp.opportunityName || opp.account}</div>
+                                            </div>
+                                            {/* Version timeline */}
+                                            <div>
+                                                <div style={{ ...eyebrow(T.inkMuted), fontSize: 10.5, marginBottom: 6 }}>Quote history · {qs.length} version{qs.length !== 1 ? 's' : ''}</div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                                    {[...qs].sort((a, b) => (a.version || 1) - (b.version || 1)).map((q, i, arr) => {
+                                                        const sc2 = STATUS_COLORS[q.status] || { bg: 'rgba(138,131,120,0.12)', fg: '#5a544c', dot: '#8a8378' };
+                                                        const isLatest = q.id === latest?.id;
+                                                        const faded    = ['Superseded', 'Expired', 'Rejected / Lost'].includes(q.status);
+                                                        return (
+                                                            <React.Fragment key={q.id}>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, opacity: faded ? 0.5 : 1 }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 13, background: isLatest ? sc2.dot : T.bg, border: `1.5px solid ${sc2.dot}`, color: isLatest ? '#fff' : sc2.fg, fontSize: 10, fontWeight: 700, letterSpacing: 0.3, fontFamily: T.sans }}>v{q.version || 1}</div>
+                                                                    <div style={{ fontSize: 9.5, color: T.inkMuted, letterSpacing: 0.3, fontFamily: T.sans }}>{(q.updatedAt || q.createdAt || '').slice(5, 10)}</div>
+                                                                </div>
+                                                                {i < arr.length - 1 && <div style={{ width: 12, height: 1, background: T.border }} />}
+                                                            </React.Fragment>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            <div style={{ textAlign: 'right' }}>
+                                                <div style={{ fontSize: 10.5, color: T.inkMuted, marginBottom: 2, fontFamily: T.sans }}>latest quote</div>
+                                                <div style={{ fontSize: 18, fontWeight: 600, color: T.ink, letterSpacing: -0.3, fontFamily: T.sans }}>{fmt(latest?.totalValue || totalValue || 0)}</div>
+                                                <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{Math.round(avgDisc * 100)}% off list · {Math.round(margin * 100)}% margin</div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {oppQuoteSummaries.length === 0 && needsQuote.length === 0 && (
+                        <div style={{ padding: '4rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>No quotes yet. Start by opening a deal from the Pipeline tab.</div>
+                    )}
                 </div>
             )}
 
-            {subTab === 'quotes' && (
-                <AllQuotesList
-                    quotes={quotes}
-                    opportunities={opportunities}
-                    currentUser={currentUser}
-                    userRole={userRole}
-                    settings={settings}
-                    onEdit={(q) => openBuilder(q)}
-                    onDelete={handleDeleteQuote}
-                    onNewQuote={() => openBuilder(null)}
-                    loadQuotes={loadQuotes}
-                    showConfirm={showConfirm}
-                    deepLinkOppId={deepLinkOppId}
-                    onClearDeepLink={() => setDeepLinkOppId(null)}
-                />
+            {/* ── CONFIGURATOR ───────────────────────────────── */}
+            {subTab === 'configurator' && (
+                <div>
+                    {!configuratorOpp ? (
+                        <div style={{ padding: '4rem', textAlign: 'center' }}>
+                            <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚙</div>
+                            <div style={{ fontSize: '1rem', fontWeight: 700, color: T.ink, marginBottom: '0.5rem', fontFamily: T.sans }}>Configurator</div>
+                            <div style={{ fontSize: '0.875rem', color: T.inkMuted, marginBottom: '1.5rem', fontFamily: T.sans }}>Select a deal from the Deals tab to open the CPQ workspace.</div>
+                            <button onClick={() => setTab('deals')} style={{ background: T.ink, color: T.surface, border: 'none', borderRadius: T.r, padding: '0.625rem 1.5rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Go to Deals →</button>
+                        </div>
+                    ) : (
+                        <div>
+                            {/* Opp context bar */}
+                            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '14px 18px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 16 }}>
+                                <button onClick={() => setTab('deals')} style={{ background: 'transparent', border: 'none', color: T.inkMid, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, padding: 0, fontSize: 12, fontFamily: T.sans }}>← All deals</button>
+                                <div style={{ width: 1, height: 24, background: T.border }} />
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: 11, color: T.inkMuted, marginBottom: 2, fontFamily: T.sans }}>{configuratorOpp.stage} · closes {configuratorOpp.forecastedCloseDate || '—'}</div>
+                                    <div style={{ fontSize: 16, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{configuratorOpp.account}</div>
+                                    <div style={{ fontSize: 12, color: T.inkMid, marginTop: 2, fontFamily: T.sans }}>{configuratorOpp.opportunityName || configuratorOpp.account}</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>opp ARR target</div>
+                                    <div style={{ fontSize: 18, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{fmt(configuratorOpp.arr)}</div>
+                                </div>
+                            </div>
+
+                            {/* Version switcher + Build/Preview toggle */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+                                <div style={{ ...eyebrow(T.inkMid), fontSize: 11 }}>Compare versions</div>
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                    {configuratorQuotes.map(q => (
+                                        <button key={q.id} onClick={() => setConfiguratorQId(q.id)}
+                                            style={{ padding: '6px 12px', background: q.id === activeQuote?.id ? T.ink : T.surface, color: q.id === activeQuote?.id ? T.surface : T.ink, border: `1px solid ${q.id === activeQuote?.id ? T.ink : T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                            v{q.version || 1}<span style={{ fontSize: 10, opacity: 0.7 }}>· {q.status}</span>
+                                        </button>
+                                    ))}
+                                    {canEdit && configuratorQuotes.length < 3 && (
+                                        <button onClick={handleNewVersion} disabled={saving}
+                                            style={{ padding: '6px 12px', background: 'transparent', color: T.inkMid, border: `1px dashed ${T.border}`, borderRadius: T.r, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                            + New version
+                                        </button>
+                                    )}
+                                </div>
+                                <div style={{ flex: 1 }} />
+                                <div style={{ display: 'inline-flex', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, padding: 2 }}>
+                                    {[{ id: 'build', label: 'Build' }, { id: 'preview', label: 'Customer preview' }].map(opt => (
+                                        <button key={opt.id} onClick={() => setViewMode(opt.id)}
+                                            style={{ padding: '5px 12px', fontSize: 11.5, fontWeight: 500, background: viewMode === opt.id ? T.ink : 'transparent', color: viewMode === opt.id ? T.surface : T.inkMid, border: 'none', borderRadius: T.r - 1, cursor: 'pointer', fontFamily: T.sans }}>
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {configuratorQuotes.length === 0 && (
+                                <div style={{ padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
+                                    No quotes for this deal yet.{canEdit && <> <button onClick={() => handleNewQuoteForOpp(configuratorOpp.id)} style={{ background: 'none', border: 'none', color: T.info, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: T.sans }}>Create one →</button></>}
+                                </div>
+                            )}
+
+                            {/* Build mode */}
+                            {configuratorQuotes.length > 0 && viewMode === 'build' && (
+                                <>
+                                    <div style={{ display: 'grid', gridTemplateColumns: prevQuote ? '1fr 1fr 280px' : '1fr 280px', gap: 10, alignItems: 'flex-start' }}>
+                                        {prevQuote && <QuoteColumn quote={prevQuote} otherQuote={activeQuote} label="Previous" readOnly products={products || []} />}
+                                        {activeQuote && <QuoteColumn quote={activeQuote} otherQuote={prevQuote} label={prevQuote ? 'Current' : 'Active'} editable products={products || []} onEdit={() => { /* future: open inline editor */ }} />}
+                                        {activeQuote && <ConfiguratorPanel quote={activeQuote} products={products || []} onSubmitApproval={handleSubmitApproval} onSendToCustomer={handleSendToCustomer} onPreviewPDF={() => setViewMode('preview')} onSaveDraft={handleSaveDraft} saving={saving} />}
+                                    </div>
+                                    {activeQuote && <div style={{ marginTop: 14 }}><QuoteActivityLog quote={activeQuote} /></div>}
+                                </>
+                            )}
+
+                            {/* Preview mode */}
+                            {configuratorQuotes.length > 0 && viewMode === 'preview' && activeQuote && (
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 10, alignItems: 'flex-start' }}>
+                                    <QuotePDFPreview quote={activeQuote} opp={configuratorOpp} products={products || []} />
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '14px 16px' }}>
+                                            <div style={{ ...eyebrow(T.inkMid), fontSize: 10.5, marginBottom: 10 }}>Customer preview</div>
+                                            <div style={{ fontSize: 12, color: T.inkMid, lineHeight: 1.5, marginBottom: 12, fontFamily: T.sans }}>
+                                                This is what the customer sees when you send v{activeQuote.version || 1}. No internal margin or approval details.
+                                            </div>
+                                            {(() => {
+                                                const { avgDisc } = calcLineTotals(activeQuote.lineItems || [], products || []);
+                                                const tier = tierForDiscount(avgDisc);
+                                                return tier.approver
+                                                    ? <div style={{ fontSize: 11, color: tier.color, fontWeight: 600, fontFamily: T.sans }}>⚠ Needs {tier.approver} approval before send.</div>
+                                                    : <div style={{ fontSize: 11, color: T.ok, fontWeight: 600, fontFamily: T.sans }}>✓ Good to send — within rep authority.</div>;
+                                            })()}
+                                        </div>
+                                        <div style={{ background: T.ink, borderRadius: T.r, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                            <button onClick={handleSendToCustomer} disabled={saving} style={{ background: T.gold, color: T.ink, border: 'none', padding: '10px 14px', fontSize: 13, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>Send to customer →</button>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                                                <button onClick={handleExportPDF} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Download PDF</button>
+                                                <button onClick={() => setViewMode('build')} style={{ background: 'transparent', color: T.surface, border: `1px solid rgba(255,255,255,0.2)`, padding: '7px 10px', fontSize: 11.5, fontWeight: 500, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>← Back to build</button>
+                                            </div>
+                                        </div>
+                                        <QuoteActivityLog quote={activeQuote} />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
             )}
 
-            {subTab === 'pricebook' && (
-                <PriceBook
+            {/* ── CATALOG ────────────────────────────────────── */}
+            {subTab === 'catalog' && (
+                <CatalogTab
                     products={products}
                     settings={settings}
                     userRole={userRole}
+                    quotes={quotes}
+                    opportunities={opportunities}
                     onSave={handleSaveProductLocal}
                     onDelete={handleDeleteProductLocal}
                     showConfirm={showConfirm}
-                    quotes={quotes}
-                    opportunities={opportunities}
                 />
             )}
 
+            {/* ── APPROVALS ──────────────────────────────────── */}
             {subTab === 'approvals' && (
-                <ApprovalsView
+                <ApprovalsTab
                     quotes={quotes}
                     opportunities={opportunities}
                     currentUser={currentUser}
@@ -1850,7 +1231,17 @@ export default function QuotesTab() {
                     settings={settings}
                     onApprove={handleApprove}
                     onReject={handleReject}
-                    onEdit={(q) => openBuilder(q)}
+                    onEdit={(q) => openConfigurator(q.opportunityId, q.id)}
+                />
+            )}
+
+            {/* Template picker */}
+            {tplOpp && (
+                <TemplatePickerModal
+                    opp={tplOpp}
+                    products={products || []}
+                    onClose={() => setTplOpp(null)}
+                    onPick={() => { setTplOpp(null); handleNewQuoteForOpp(tplOpp.id); }}
                 />
             )}
         </div>
