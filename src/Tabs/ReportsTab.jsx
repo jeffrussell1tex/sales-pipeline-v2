@@ -552,24 +552,28 @@ ${bodyHtml}
                               { key:'custom',      label:'Custom' },
                             ].map(({ key, label }) => (
                               <button key={key} onClick={() => setReportSubTab(key)} style={{
-                                padding: '0.5rem 1.25rem',
+                                padding: '8px 16px',
                                 border: 'none',
                                 borderBottom: reportSubTab === key ? '2px solid #2a2622' : '2px solid transparent',
                                 background: 'transparent',
                                 color: reportSubTab === key ? '#2a2622' : '#8a8378',
                                 fontWeight: reportSubTab === key ? '600' : '400',
-                                fontSize: '0.8125rem',
+                                fontSize: '0.75rem',
                                 cursor: 'pointer',
                                 fontFamily: 'inherit',
-                                transition: 'all 0.15s',
+                                transition: 'color 120ms, border-color 120ms',
                                 whiteSpace: 'nowrap',
-                              }}>{label}</button>
+                                marginBottom: -1,
+                              }}
+                              onMouseEnter={e => { if (reportSubTab !== key) e.currentTarget.style.color = '#5a544c'; }}
+                              onMouseLeave={e => { if (reportSubTab !== key) e.currentTarget.style.color = '#8a8378'; }}
+                              >{label}</button>
                             ))}
                         </div>
 
                         {/* ── Row 2: Viewing + Period filters (left) + Export PDF (right) ── */}
-                        <div className="table-container" style={{ marginTop: '0.75rem' }}>
-                          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.625rem 1.25rem', borderBottom:'1px solid #e6ddd0', flexWrap:'wrap', gap:'0.5rem' }}>
+                        <div style={{ marginTop: '0.625rem', marginBottom: '0' }}>
+                          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0', flexWrap:'wrap', gap:'0.5rem' }}>
 
                             {/* Left side: Viewing slice + Period filter */}
                             <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', flexWrap:'wrap' }}>
@@ -593,10 +597,10 @@ ${bodyHtml}
                                 <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', alignItems:'center' }}>
                                     {['FY','Q1','Q2','Q3','Q4','all','custom'].map(p => (
                                         <button key={p} onClick={() => setReportTimePeriod(p)}
-                                            style={{ padding:'3px 12px', borderRadius:'999px', border:'1px solid', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'600', transition:'all 0.15s',
-                                                background: reportTimePeriod === p ? '#3a5a7a' : '#fbf8f3',
+                                            style={{ padding:'3px 12px', borderRadius:'999px', border:'1px solid', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'600', transition:'all 0.12s',
+                                                background: reportTimePeriod === p ? '#2a2622' : '#fbf8f3',
                                                 color:      reportTimePeriod === p ? '#fff' : '#5a544c',
-                                                borderColor: reportTimePeriod === p ? '#3a5a7a' : '#e6ddd0' }}>
+                                                borderColor: reportTimePeriod === p ? '#2a2622' : '#e6ddd0' }}>
                                             {p === 'all' ? 'All Time' : p === 'FY' ? `FY ${fy}` : p === 'custom' ? 'Custom' : p}
                                         </button>
                                     ))}
@@ -619,7 +623,7 @@ ${bodyHtml}
                               {reportSubTab === 'custom' && (
                                 <button
                                   onClick={() => document.dispatchEvent(new CustomEvent('accelerep:openCustomize'))}
-                                  style={{ display:'flex', alignItems:'center', gap:'0.375rem', padding:'0.3rem 0.875rem', border:'none', borderRadius:'6px', background:'#2a2622', color:'#fbf8f3', fontSize:'0.75rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}
+                                  style={{ display:'inline-flex', alignItems:'center', gap:'0.375rem', padding:'0.3rem 0.875rem', border:'1px solid #e6ddd0', borderRadius:'3px', background:'#fbf8f3', color:'#2a2622', fontSize:'0.75rem', fontWeight:'500', cursor:'pointer', fontFamily:'inherit' }}
                                 >
                                   ⚙️ Customize
                                 </button>
@@ -633,7 +637,7 @@ ${bodyHtml}
                                 const d=new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
                                 win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Accelerep — '+lbl+'</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#2a2622}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #3a5a7a;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#8a8378}button,select{display:none!important}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#fbf8f3;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#8a8378;border-bottom:2px solid #e6ddd0}td{padding:6px 10px;border-bottom:1px solid #f5efe3}</style></head><body><div class="hdr"><h1>Accelerep — '+lbl+'</h1><div class="meta">'+d+'</div></div>'+body+'<scr'+'ipt>window.onload=function(){window.print()}<\/script></body></html>');
                                 win.document.close();
-                              }} style={{fontSize:'0.75rem',padding:'0.3rem 0.875rem',border:'none',borderRadius:'6px',background:'#2a2622',color:'#fbf8f3',cursor:'pointer',fontFamily:'inherit',fontWeight:'600'}}>
+                              }} style={{ display:'inline-flex', alignItems:'center', gap:'0.3rem', fontSize:'0.75rem', padding:'0.3rem 0.875rem', border:'1px solid #e6ddd0', borderRadius:'3px', background:'#fbf8f3', color:'#2a2622', cursor:'pointer', fontFamily:'inherit', fontWeight:'500' }}>
                                 &#128424; Export PDF
                               </button>
                             </div>
@@ -725,26 +729,26 @@ ${bodyHtml}
                                 );
                             };
                             return (
-                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(90px,1fr))', gap:'0.75rem', padding:'0.75rem 1.25rem' }}>
-                                <div className="kpi-card accent-green" style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.625rem 1.25rem' }}>
+                            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(90px,1fr))', gap:'0.75rem', padding:'0.75rem 0' }}>
+                                <div className="kpi-card accent-green" style={{ borderRadius:'3px', padding:'0.875rem 1rem 0.625rem 1.25rem', background:'#fbf8f3', border:'1px solid #e6ddd0' }}>
                                     <div style={labelStyle}>Won Revenue</div>
                                     <div style={valueStyle}>{'$'+totalWonRevenue.toLocaleString()}</div>
                                     <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.125rem' }}>{wonOpps.length} deals</div>
                                     {sparkSvg(monthBuckets.map(b => b.wonRev), '#4d6b3d')}
                                 </div>
-                                <div className="kpi-card accent-blue" style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.625rem 1.25rem' }}>
+                                <div className="kpi-card accent-blue" style={{ borderRadius:'3px', padding:'0.875rem 1rem 0.625rem 1.25rem', background:'#fbf8f3', border:'1px solid #e6ddd0' }}>
                                     <div style={labelStyle}>Pipeline Value</div>
                                     <div style={valueStyle}>{'$'+totalPipelineValue.toLocaleString()}</div>
                                     <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.125rem' }}>{openOpps.length} open</div>
                                     {sparkSvg(monthBuckets.map(b => b.pipelineVal), '#3a5a7a')}
                                 </div>
-                                <div className="kpi-card accent-purple" style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.625rem 1.25rem' }}>
+                                <div className="kpi-card accent-purple" style={{ borderRadius:'3px', padding:'0.875rem 1rem 0.625rem 1.25rem', background:'#fbf8f3', border:'1px solid #e6ddd0' }}>
                                     <div style={labelStyle}>Win Rate</div>
                                     <div style={valueStyle}>{winRate.toFixed(1)+'%'}</div>
                                     <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.125rem' }}>{wonOpps.length} won / {lostOpps.length} lost</div>
                                     {sparkSvg(monthBuckets.map(b => b.wr), '#5a4a7a')}
                                 </div>
-                                <div className="kpi-card accent-amber" style={{ borderRadius:'10px', padding:'0.875rem 1rem 0.625rem 1.25rem' }}>
+                                <div className="kpi-card accent-amber" style={{ borderRadius:'3px', padding:'0.875rem 1rem 0.625rem 1.25rem', background:'#fbf8f3', border:'1px solid #e6ddd0' }}>
                                     <div style={labelStyle}>Avg Deal Size</div>
                                     <div style={valueStyle}>{'$'+Math.round(avgDealSize).toLocaleString()}</div>
                                     <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.125rem' }}>closed won</div>
