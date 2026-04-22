@@ -1115,7 +1115,10 @@ export default function OpportunityModal({
         if (formData.account && formData.account.trim()) {
             const isJustCreated = lastCreatedAccountName && lastCreatedAccountName.toLowerCase() === formData.account.trim().toLowerCase();
             if (!isJustCreated) {
-                const accountExists = (accounts || []).some(a => a.name && a.name.toLowerCase() === formData.account.trim().toLowerCase());
+                // Validate against allAccountOptions which includes all tiers (top-level,
+                // business units, sites). Using raw `accounts` array can miss sub-accounts
+                // if the prop arrives filtered to top-level only, causing false "not found" errors.
+                const accountExists = allAccountOptions.some(o => o.value && o.value.toLowerCase() === formData.account.trim().toLowerCase());
                 if (!accountExists) errors.account = '__not_found__';
             }
         }
