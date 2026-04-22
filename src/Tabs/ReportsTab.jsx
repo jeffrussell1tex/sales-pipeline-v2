@@ -692,31 +692,43 @@ ${bodyHtml}
                         {/* ── Sub-tab nav — Pipeline / Performance / Revenue / etc. ── */}
                         <div style={{ display:'flex', borderBottom:'1px solid #e6ddd0', overflowX:'auto', marginBottom:'0' }}>
                             {[
-                              { key:'pipeline',    label:'Pipeline & Forecast' },
-                              { key:'performance', label:'Performance' },
-                              { key:'revenue',     label:'Revenue' },
-                              { key:'activity',    label:'Activity' },
-                              ...(leadsEnabled ? [{ key:'leads', label:'Leads' }] : []),
-                              { key:'actions',     label:'Actions' },
-                              { key:'custom',      label:'Custom' },
-                            ].map(({ key, label }) => (
+                              { key:'pipeline',    label:'Pipeline & Forecast', sub:'Is the quarter on track?' },
+                              { key:'performance', label:'Performance',          sub:'Quota, win rate, velocity' },
+                              { key:'revenue',     label:'Revenue',              sub:'What did we close?' },
+                              { key:'activity',    label:'Activity',             sub:'What are reps doing?' },
+                              ...(leadsEnabled ? [{ key:'leads', label:'Leads', sub:'Top of funnel' }] : []),
+                              { key:'actions',     label:'Actions',              sub:'Recommendation log' },
+                              { key:'custom',      label:'Custom',               sub:'Your saved views' },
+                            ].map(({ key, label, sub }) => (
                               <button key={key} onClick={() => setReportSubTabPersisted(key)} style={{
-                                padding: '8px 16px',
+                                padding: '8px 16px 10px',
                                 border: 'none',
                                 borderBottom: reportSubTab === key ? '2px solid #2a2622' : '2px solid transparent',
                                 background: 'transparent',
-                                color: reportSubTab === key ? '#2a2622' : '#8a8378',
-                                fontWeight: reportSubTab === key ? '600' : '400',
-                                fontSize: '0.75rem',
                                 cursor: 'pointer',
                                 fontFamily: 'inherit',
+                                textAlign: 'left',
                                 transition: 'color 120ms, border-color 120ms',
                                 whiteSpace: 'nowrap',
                                 marginBottom: -1,
                               }}
-                              onMouseEnter={e => { if (reportSubTab !== key) e.currentTarget.style.color = '#5a544c'; }}
-                              onMouseLeave={e => { if (reportSubTab !== key) e.currentTarget.style.color = '#8a8378'; }}
-                              >{label}</button>
+                              onMouseEnter={e => { if (reportSubTab !== key) { e.currentTarget.querySelector('.tab-label').style.color = '#5a544c'; } }}
+                              onMouseLeave={e => { if (reportSubTab !== key) { e.currentTarget.querySelector('.tab-label').style.color = '#8a8378'; } }}
+                              >
+                                <div className="tab-label" style={{
+                                  fontSize: '0.8125rem',
+                                  fontWeight: reportSubTab === key ? '700' : '500',
+                                  color: reportSubTab === key ? '#2a2622' : '#8a8378',
+                                  letterSpacing: -0.1,
+                                }}>{label}</div>
+                                <div style={{
+                                  fontSize: '0.6875rem',
+                                  fontWeight: '500',
+                                  color: reportSubTab === key ? '#8a8378' : '#a8a29e',
+                                  marginTop: 2,
+                                  letterSpacing: 0.1,
+                                }}>{sub}</div>
+                              </button>
                             ))}
                         </div>
 
@@ -1285,21 +1297,77 @@ ${bodyHtml}
 
                             return (
                               <>
-                                {/* Team KPI strip */}
-                                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
-                                  {[
-                                    { label:'Team attainment', value:attainPct2.toFixed(0)+'%', sub:`${fmt2(closedWonValue2)} of ${fmt2(totalQuota2)}` },
-                                    { label:'Win rate',        value:winRate.toFixed(0)+'%',     sub:`${wonOpps.length} won / ${lostOpps.length} lost` },
-                                    { label:'Avg deal size',   value:fmt2(avgDealSize),           sub:'closed won' },
-                                    { label:'Open pipeline',   value:fmt2(totalPipelineValue),    sub:`${openOpps.length} deals` },
-                                  ].map(k=>(
-                                    <div key={k.label} style={{ background:T2.surface, border:`1px solid ${T2.border}`, borderRadius:T2.r, padding:'14px 16px' }}>
-                                      <div style={eb2(T2.inkMuted)}>{k.label}</div>
-                                      <div style={{ fontSize:24, fontWeight:700, color:T2.ink, letterSpacing:-0.5, lineHeight:1.1, marginTop:4, fontFamily:T2.sans }}>{k.value}</div>
-                                      <div style={{ fontSize:11, color:T2.inkMuted, marginTop:3, fontFamily:T2.sans }}>{k.sub}</div>
+                                {/* Team KPI strip — 4 cards with delta trend colour coding */}
+                                {(() => {
+                                  // Compute avg sales cycle from won opps
+                                  const cycleDeals = wonOpps.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate));
+                                  const avgCycleDays = cycleDeals.length>0
+                                    ? Math.round(cycleDeals.reduce((s,o)=>s+Math.max(0,Math.floor((new Date(o.forecastedCloseDate||o.closeDate)-new Date(o.createdDate))/86400000)),0)/cycleDeals.length)
+                                    : null;
+
+                                  // Comparison deltas for KPIs
+                                  const cmpWonRev   = comparedOpps ? comparedOpps.filter(o=>o.stage==='Closed Won').reduce((s,o)=>s+(parseFloat(o.arr)||0)+(o.implementationCost||0),0) : null;
+                                  const cmpWinRate  = comparedOpps ? (() => { const cWon=comparedOpps.filter(o=>o.stage==='Closed Won').length; const cLost=comparedOpps.filter(o=>o.stage==='Closed Lost').length; return (cWon+cLost)>0?cWon/(cWon+cLost)*100:null; })() : null;
+                                  const cmpAvgDeal  = comparedOpps ? (() => { const cw=comparedOpps.filter(o=>o.stage==='Closed Won'); return cw.length>0?cw.reduce((s,o)=>s+(parseFloat(o.arr)||0)+(o.implementationCost||0),0)/cw.length:null; })() : null;
+
+                                  const fmtDeltaKpi = (cur, prior, inverted=false) => {
+                                    if(prior===null||prior===undefined||prior===0) return null;
+                                    const pct = ((cur-prior)/prior)*100;
+                                    const good = inverted ? pct<0 : pct>0;
+                                    return { label:(pct>=0?'▲ +':pct<0?'▼ ':'')+Math.abs(pct).toFixed(1)+'%', good, neutral: Math.abs(pct)<1 };
+                                  };
+                                  const kpis = [
+                                    {
+                                      label:'Team attainment', value:attainPct2.toFixed(0)+'%',
+                                      sub:`${fmt2(closedWonValue2)} of ${fmt2(totalQuota2)}`,
+                                      delta: fmtDeltaKpi(closedWonValue2, cmpWonRev),
+                                      accent:'#4d6b3d',
+                                    },
+                                    {
+                                      label:'Win rate', value:winRate.toFixed(0)+'%',
+                                      sub:`${wonOpps.length} won / ${lostOpps.length} lost`,
+                                      delta: fmtDeltaKpi(winRate, cmpWinRate),
+                                      accent:'#3a5a7a',
+                                    },
+                                    {
+                                      label:'Avg deal size', value:fmt2(avgDealSize),
+                                      sub:'closed won',
+                                      delta: fmtDeltaKpi(avgDealSize, cmpAvgDeal),
+                                      accent:'#5a4a7a',
+                                    },
+                                    {
+                                      label:'Sales cycle', value:avgCycleDays!=null?avgCycleDays+'d':'—',
+                                      sub:'avg days to close',
+                                      delta: null, // no comparison for cycle without prior period data
+                                      accent:'#b87333',
+                                    },
+                                  ];
+                                  const compareLabel2 = reportCompareTo==='previous_quarter'?'vs prev. quarter':reportCompareTo==='previous_year'?'vs prev. year':null;
+                                  return (
+                                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, padding:'0 2px' }}>
+                                      {kpis.map(k=>(
+                                        <div key={k.label} style={{
+                                          background:T2.surface, border:`1px solid ${T2.border}`,
+                                          borderLeft:`3px solid ${k.accent}`,
+                                          borderRadius:T2.r, padding:'14px 16px',
+                                        }}>
+                                          <div style={eb2(T2.inkMuted)}>{k.label}</div>
+                                          <div style={{ fontSize:26, fontWeight:700, color:T2.ink, letterSpacing:-0.5, lineHeight:1.1, marginTop:4, fontFamily:T2.sans }}>{k.value}</div>
+                                          <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4 }}>
+                                            {k.delta && (
+                                              <span style={{ fontSize:11, fontWeight:700, color: k.delta.neutral?T2.inkMuted : k.delta.good?T2.ok:T2.danger, fontFamily:T2.sans }}>
+                                                {k.delta.label}
+                                              </span>
+                                            )}
+                                            <span style={{ fontSize:11, color:T2.inkMuted, fontFamily:T2.sans }}>
+                                              {k.delta && compareLabel2 ? compareLabel2 : k.sub}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
                                     </div>
-                                  ))}
-                                </div>
+                                  );
+                                })()}
 
                                 {/* Leaderboard — segmented bars */}
                                 {repRows.length > 0 && (
@@ -1307,7 +1375,7 @@ ${bodyHtml}
                                     {/* Header */}
                                     <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 }}>
                                       <div style={{ flex:1 }}>
-                                        <div style={{ fontSize:16, fontFamily:T2.serif, fontStyle:'italic', fontWeight:400, color:T2.ink, lineHeight:1.1 }}>Quota attainment</div>
+                                        <div style={{ fontSize:16, fontFamily:T2.serif, fontStyle:'italic', fontWeight:400, color:T2.ink, lineHeight:1.1 }}>Quota attainment — leaderboard</div>
                                         <div style={{ fontSize:11.5, color:T2.inkMuted, marginTop:3, fontFamily:T2.sans }}>Closed + commit vs quota, this period</div>
                                       </div>
                                       <div style={{ display:'flex', gap:14, fontSize:11, color:T2.inkMid, fontFamily:T2.sans }}>
@@ -1411,236 +1479,109 @@ ${bodyHtml}
                             );
                           })()}
 
-                          {/* Sales Velocity */}
-                          {(() => {
-                            const velocityDeals = wonOpps.filter(o => o.createdDate && (o.forecastedCloseDate||o.closeDate));
-                            const avgDays = velocityDeals.length > 0 ? Math.round(velocityDeals.reduce((s,o)=>{ const created=new Date(o.createdDate); const closed=new Date(o.forecastedCloseDate||o.closeDate); return s+Math.max(0,Math.floor((closed-created)/86400000)); },0)/velocityDeals.length) : null;
-                            const stageVelocity = (settings.funnelStages||[]).filter(s=>s.name!=='Closed Won'&&s.name!=='Closed Lost').map(st => {
-                              const sDeals = wonOpps.filter(o => (o.stageHistory||[]).some(h=>h.stage===st.name));
-                              const avg = sDeals.length > 0 ? Math.round(sDeals.reduce((s,o)=>{
-                                const entry = (o.stageHistory||[]).find(h=>h.stage===st.name);
-                                return s + (entry ? Math.max(0,Math.floor((new Date()-new Date(entry.enteredAt))/86400000)) : 0);
-                              },0)/sDeals.length) : null;
-                              return { stage:st.name, avg, count:sDeals.length };
-                            }).filter(s=>s.avg!==null);
-                            const allRepsVel = [...new Set(wonOpps.map(o=>o.salesRep||o.assignedTo).filter(Boolean))].sort();
-                            const repVelocity = allRepsVel.map(rep => {
-                              const rDeals = velocityDeals.filter(o=>(o.salesRep||o.assignedTo)===rep);
-                              const avg = rDeals.length > 0 ? Math.round(rDeals.reduce((s,o)=>{ const created=new Date(o.createdDate); const closed=new Date(o.forecastedCloseDate||o.closeDate); return s+Math.max(0,Math.floor((closed-created)/86400000)); },0)/rDeals.length) : 0;
-                              return { rep, avg, count:rDeals.length, wonRev: rDeals.reduce((s,o)=>s+(o.arr||0)+(o.implementationCost||0),0) };
-                            }).sort((a,b)=>a.avg-b.avg);
-                            const maxRepAvg = Math.max(...repVelocity.map(r=>r.avg),1);
-                            return (
-                            <div style={cardStyle}>
-                              <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622', marginBottom:'1rem' }}>⚡ Sales Velocity</div>
-                              {avgDays === null ? <div style={{ color:'#8a8378', fontSize:'0.8125rem' }}>No closed won deals with creation dates yet.</div> : (
-                              <div style={{ display:'grid', gridTemplateColumns: repVelocity.length >= 2 ? '1fr 1fr' : '1fr', gap:'1.25rem' }}>
-                                <div>
-                                  <div style={labelStyle}>Avg Days to Close</div>
-                                  <div style={{ fontSize:'2rem', fontWeight:'800', color:'#2a2622', marginBottom:'1rem' }}>{avgDays} <span style={{ fontSize:'1rem', color:'#8a8378', fontWeight:'500' }}>days</span></div>
-                                  {stageVelocity.length > 0 && <>
-                                    <div style={labelStyle}>Avg Days by Stage</div>
-                                    {stageVelocity.map(({stage,avg})=>{
-                                      const maxAvg = Math.max(...stageVelocity.map(s=>s.avg),1);
-                                      return <div key={stage} style={{ marginBottom:'0.5rem' }}>
-                                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.2rem' }}>
-                                          <span style={{ fontSize:'0.75rem', color:'#5a544c' }}>{stage}</span>
-                                          <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#2a2622' }}>{avg}d</span>
-                                        </div>
-                                        <div style={{ height:'5px', background:'#f5efe3', borderRadius:'3px', overflow:'hidden' }}>
-                                          <div style={{ height:'100%', width:(avg/maxAvg*100)+'%', background:'linear-gradient(to right,#5a4a7a,#5a4a7a)', borderRadius:'3px' }}/>
-                                        </div>
-                                      </div>;
-                                    })}
-                                  </>}
-                                </div>
-                                {repVelocity.length >= 2 && (
-                                <div>
-                                  <div style={labelStyle}>Velocity by Rep</div>
-                                  {repVelocity.map(({rep,avg,count,wonRev})=>(
-                                    <div key={rep} style={{ marginBottom:'0.625rem' }}>
-                                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.2rem' }}>
-                                        <span style={{ fontSize:'0.75rem', fontWeight:'600', color:'#5a544c', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'130px' }}>{rep}</span>
-                                        <span style={{ fontSize:'0.75rem', color:'#8a8378' }}>{avg}d · {count} deals</span>
-                                      </div>
-                                      <div style={{ height:'5px', background:'#f5efe3', borderRadius:'3px', overflow:'hidden' }}>
-                                        <div style={{ height:'100%', width:(avg/maxRepAvg*100)+'%', background:'linear-gradient(to right,#3a5a7a,#5a4a7a)', borderRadius:'3px' }}/>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                                )}
-                              </div>
-                              )}
-                            </div>
-                            );
-                          })()}
 
-                          {/* Win / Loss Analysis */}
-                          {(() => {
+                          {/* Why deals are lost + Activity mix */}
+                          {repRows.length > 0 && (() => {
+                            const T2b = { surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378', ok:'#4d6b3d', warn:'#b87333', danger:'#9c3a2e', gold:'#c8b99a', sans:'"Plus Jakarta Sans",system-ui,sans-serif', serif:'Georgia,serif', r:3 };
+                            const eb2b = (c) => ({ fontSize:10, fontWeight:700, color:c||T2b.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T2b.sans });
+
+                            // Why deals are lost
                             const totalClosed = wonOpps.length + lostOpps.length;
-                            const wRate = totalClosed > 0 ? (wonOpps.length/totalClosed*100) : 0;
-                            const lostARR = lostOpps.reduce((s,o)=>s+(o.arr||0)+(o.implementationCost||0),0);
-                            const catCounts = lostOpps.reduce((acc,o)=>{
+                            const lostTotal = lostOpps.length;
+                            const lostCats = lostOpps.reduce((acc,o)=>{
                               const cat = o.lostReason || o.closedLostReason || 'Unknown';
-                              acc[cat] = (acc[cat]||0)+1; return acc;
+                              acc[cat]=(acc[cat]||0)+1; return acc;
                             },{});
-                            const catRows = Object.entries(catCounts).sort((a,b)=>b[1]-a[1]);
-                            const maxCat = Math.max(...catRows.map(([,c])=>c),1);
-                            return (
-                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem' }}>
-                              {/* Win Rate card */}
-                              <div style={cardStyle}>
-                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622', marginBottom:'1rem' }}>🏆 Win Rate</div>
-                                <div style={{ display:'flex', alignItems:'center', gap:'1.5rem', marginBottom:'1rem' }}>
-                                  <div style={{ textAlign:'center' }}>
-                                    <div style={{ fontSize:'2.5rem', fontWeight:'900', color: wRate>=50?'#4d6b3d':wRate>=30?'#b87333':'#9c3a2e' }}>{wRate.toFixed(0)}%</div>
-                                    <div style={{ fontSize:'0.6875rem', color:'#8a8378' }}>win rate</div>
-                                  </div>
-                                  <div style={{ flex:1 }}>
-                                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.25rem' }}>
-                                      <span style={{ fontSize:'0.75rem', color:'#4d6b3d', fontWeight:'600' }}>Won: {wonOpps.length}</span>
-                                      <span style={{ fontSize:'0.75rem', color:'#9c3a2e', fontWeight:'600' }}>Lost: {lostOpps.length}</span>
-                                    </div>
-                                    <div style={{ height:'10px', background:'rgba(156,58,46,0.08)', borderRadius:'5px', overflow:'hidden' }}>
-                                      <div style={{ height:'100%', width:wRate+'%', background:'#4d6b3d', borderRadius:'5px' }}/>
-                                    </div>
-                                    <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.375rem' }}>
-                                      Avg won deal: ${wonOpps.length>0?Math.round(wonOpps.reduce((s,o)=>s+(o.arr||0),0)/wonOpps.length).toLocaleString():'—'}
-                                    </div>
-                                  </div>
+                            const lostRows = Object.entries(lostCats).sort((a,b)=>b[1]-a[1]);
+                            const maxLost = Math.max(...lostRows.map(([,c])=>c),1);
+
+                            // Activity mix from filtered activities
+                            const actMix = roleFilteredActivities.reduce((acc,a)=>{
+                              const t=a.type||'Other'; acc[t]=(acc[t]||0)+1; return acc;
+                            },{});
+                            const actTotal = roleFilteredActivities.length;
+                            const actRows = Object.entries(actMix).sort((a,b)=>b[1]-a[1]).slice(0,6);
+                            const actColors = { 'Call':'#3a5a7a','Email':'#c8b99a','Meeting':'#4d6b3d','Demo':'#b87333','Note':'#8a8378','Other':'#5a4a7a' };
+                            const maxAct = Math.max(...actRows.map(([,c])=>c),1);
+
+                            const PanelB = ({children,style}) => <div style={{ background:T2b.surface, border:`1px solid ${T2b.border}`, borderRadius:T2b.r, padding:'20px 22px 22px', ...style }}>{children}</div>;
+                            const SecHdrB = ({title,sub,right}) => (
+                              <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 }}>
+                                <div style={{ flex:1 }}>
+                                  <div style={{ fontSize:16, fontFamily:T2b.serif, fontStyle:'italic', fontWeight:400, color:T2b.ink, lineHeight:1.1, letterSpacing:-0.2 }}>{title}</div>
+                                  {sub&&<div style={{ fontSize:11.5, color:T2b.inkMuted, marginTop:3, fontFamily:T2b.sans }}>{sub}</div>}
                                 </div>
+                                {right}
                               </div>
-                              {/* Loss Analysis card */}
-                              <div style={cardStyle}>
-                                <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622', marginBottom:'1rem' }}>📉 Loss Analysis</div>
-                                {lostOpps.length === 0 ? <div style={{ color:'#8a8378', fontSize:'0.8125rem' }}>No closed lost opportunities yet.</div> : <>
-                                  <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginBottom:'0.75rem' }}>{lostOpps.length} deals lost · ${lostARR.toLocaleString()} ARR</div>
-                                  {catRows.map(([cat,cnt])=>(
-                                    <div key={cat} style={{ marginBottom:'0.5rem' }}>
-                                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.2rem' }}>
-                                        <span style={{ fontSize:'0.75rem', color:'#5a544c' }}>{cat}</span>
-                                        <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#9c3a2e' }}>{cnt}</span>
-                                      </div>
-                                      <div style={{ height:'5px', background:'#f5efe3', borderRadius:'3px', overflow:'hidden' }}>
-                                        <div style={{ height:'100%', width:(cnt/maxCat*100)+'%', background:'#9c3a2e', borderRadius:'3px', opacity:0.7 }}/>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </>}
-                              </div>
-                            </div>
                             );
-                          })()}
 
-                          {/* Rep Leaderboard — NEW */}
-                          {(() => {
-                            const repList = [...new Set(reportsOpps.map(o=>o.salesRep||o.assignedTo).filter(Boolean))].sort();
-                            const repStats = repList.map(rep => {
-                              const rOpps = reportsOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
-                              const rWon  = rOpps.filter(o=>o.stage==='Closed Won');
-                              const rLost = rOpps.filter(o=>o.stage==='Closed Lost');
-                              const rOpen = rOpps.filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost');
-                              const wonRev = rWon.reduce((s,o)=>s+(o.arr||0)+(o.implementationCost||0),0);
-                              const winPct = (rWon.length+rLost.length)>0 ? rWon.length/(rWon.length+rLost.length)*100 : 0;
-                              return { rep, wonRev, wonCount:rWon.length, openCount:rOpen.length, winPct };
-                            }).sort((a,b)=>b.wonRev-a.wonRev);
-                            const maxRev = Math.max(...repStats.map(r=>r.wonRev),1);
-                            if (repStats.length < 2) return null;
                             return (
-                            <div style={cardStyle}>
-                              <div style={{ fontWeight:'700', fontSize:'0.9375rem', color:'#2a2622', marginBottom:'0.875rem' }}>🏅 Rep Leaderboard</div>
-                              <div style={{ overflowX:'auto' }}>
-                                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem' }}>
-                                  <thead><tr>
-                                    {['#','Rep','Won Revenue','Deals Won','Win Rate','Open Pipeline'].map(h=>(
-                                      <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign: h==='Rep'||h==='#'?'left':'right', fontSize:'0.6875rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', borderBottom:'2px solid #e6ddd0', whiteSpace:'nowrap' }}>{h}</th>
-                                    ))}
-                                  </tr></thead>
-                                  <tbody>
-                                    {repStats.map((r,i)=>(
-                                      <tr key={r.rep} style={{ background:i%2===0?'#fff':'#fbf8f3' }}>
-                                        <td style={{ padding:'0.5rem 0.75rem', fontWeight:'700', color: i===0?'#b87333':i===1?'#8a8378':i===2?'#b87333':'#d4c8b4' }}>#{i+1}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', fontWeight:'600', color:'#2a2622' }}>{r.rep}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', fontWeight:'700', color:'#4d6b3d' }}>${r.wonRev.toLocaleString()}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#5a544c' }}>{r.wonCount}</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color: r.winPct>=50?'#4d6b3d':r.winPct>=30?'#b87333':'#9c3a2e', fontWeight:'600' }}>{r.winPct.toFixed(0)}%</td>
-                                        <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'#3a5a7a' }}>{r.openCount}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                            );
-                          })()}
+                              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
 
-                          {/* Rep vs Rep Comparison */}
-                          {(() => {
-                            const rLC=[...new Set(reportsOpps.map(o=>o.salesRep||o.assignedTo).filter(Boolean))].sort();
-                            if(rLC.length<2)return null;
-                            const rSC=rLC.map(rep=>{
-                              const rO=reportsOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
-                              const rW=rO.filter(o=>o.stage==='Closed Won');
-                              const rL=rO.filter(o=>o.stage==='Closed Lost');
-                              const rP=rO.filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost');
-                              const wr=(rW.length+rL.length)>0?Math.round(rW.length/(rW.length+rL.length)*100):0;
-                              const vD=rW.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate));
-                              const ad=vD.length>0?Math.round(vD.reduce((s,o)=>{const c=new Date(o.createdDate);const cl=new Date(o.forecastedCloseDate||o.closeDate);return s+Math.max(0,Math.floor((cl-c)/86400000));},0)/vD.length):null;
-                              const wonR=rW.reduce((s,o)=>s+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0),0);
-                              const pipe=rP.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-                              return{rep,wonR,wr,ad,pipe};
-                            });
-                            const mxR=Math.max(...rSC.map(r=>r.wonR),1);
-                            const mxP=Math.max(...rSC.map(r=>r.pipe),1);
-                            const mxD=Math.max(...rSC.filter(r=>r.ad!==null).map(r=>r.ad),1);
-                            const fC=v=>v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+Math.round(v/1000)+'K':'$'+Math.round(v);
-                            const mts=[
-                              {k:'wonR', lbl:'Won Revenue',   fmt:fC,              mx:mxR, col:'#4d6b3d', hi:true},
-                              {k:'wr',   lbl:'Win Rate',      fmt:v=>v+'%',        mx:100, col:'#3a5a7a', hi:true},
-                              {k:'pipe', lbl:'Open Pipeline', fmt:fC,              mx:mxP, col:'#5a4a7a', hi:true},
-                              {k:'ad',   lbl:'Cycle Days',    fmt:v=>v!=null?v+'d':'-', mx:mxD, col:'#b87333', hi:false},
-                            ];
-                            return(
-                              <div style={cardStyle}>
-                                <div style={{fontWeight:'700',fontSize:'0.9375rem',color:'#2a2622',marginBottom:'1rem'}}>&#128202; Rep vs Rep Comparison</div>
-                                <div style={{overflowX:'auto'}}>
-                                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8125rem',minWidth:'480px'}}>
-                                    <thead><tr style={{borderBottom:'2px solid #e6ddd0'}}>
-                                      <th style={{padding:'0.4rem 0.75rem',textAlign:'left',fontSize:'0.6875rem',fontWeight:'700',color:'#8a8378',textTransform:'uppercase',width:'120px'}}>Metric</th>
-                                      {rSC.map(r=><th key={r.rep} style={{padding:'0.4rem 0.75rem',textAlign:'right',fontSize:'0.6875rem',fontWeight:'700',color:'#2a2622',whiteSpace:'nowrap'}}>{r.rep}</th>)}
-                                    </tr></thead>
-                                    <tbody>{mts.map(m=>{
-                                      const vals=rSC.map(r=>r[m.k]);
-                                      const best=m.hi?Math.max(...vals.filter(v=>v!==null)):Math.min(...vals.filter(v=>v!==null));
-                                      return(<tr key={m.k} style={{borderBottom:'1px solid #f5efe3'}}>
-                                        <td style={{padding:'0.625rem 0.75rem',fontWeight:'600',color:'#5a544c',fontSize:'0.75rem',whiteSpace:'nowrap'}}>
-                                          <span style={{display:'inline-block',width:'8px',height:'8px',borderRadius:'50%',background:m.col,marginRight:'6px',verticalAlign:'middle'}}/>{m.lbl}
-                                        </td>
-                                        {rSC.map(r=>{
-                                          const val=r[m.k];
-                                          const ib=val!==null&&val===best&&rSC.filter(x=>x[m.k]===best).length<rSC.length;
-                                          const pct=m.mx>0&&val!==null?Math.round((m.k==='ad'?(1-val/m.mx):val/m.mx)*100):0;
-                                          return(<td key={r.rep} style={{padding:'0.5rem 0.75rem',textAlign:'right',verticalAlign:'middle'}}>
-                                            <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'3px'}}>
-                                              <span style={{fontWeight:ib?'800':'600',color:ib?m.col:'#5a544c'}}>
-                                                {m.fmt(val)}{ib&&rSC.length>1&&<span style={{marginLeft:'4px',fontSize:'0.6rem',background:m.col+'20',color:m.col,padding:'1px 5px',borderRadius:'999px'}}>best</span>}
-                                              </span>
-                                              <div style={{width:'80px',height:'4px',background:'#f5efe3',borderRadius:'2px',overflow:'hidden'}}>
-                                                <div style={{height:'100%',width:Math.max(pct,2)+'%',background:m.col,borderRadius:'2px'}}/>
-                                              </div>
-                                            </div>
-                                          </td>);
-                                        })}
-                                      </tr>);
-                                    })}</tbody>
-                                  </table>
-                                </div>
+                                {/* Why deals are lost */}
+                                <PanelB>
+                                  <SecHdrB title="Why deals are lost" sub={`${lostTotal} closed-lost deals, trailing 90 days`}/>
+                                  {lostTotal === 0 ? (
+                                    <div style={{ padding:'2rem', textAlign:'center', color:T2b.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T2b.sans }}>No lost deals in this period.</div>
+                                  ) : (
+                                    <>
+                                      {lostRows.map(([cat,cnt],i)=>(
+                                        <div key={cat} style={{ display:'grid', gridTemplateColumns:'1fr 36px 46px', gap:10, alignItems:'center', padding:'9px 0', borderTop: i===0?'none':`1px solid ${T2b.border}` }}>
+                                          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                            <span style={{ width:3, height:18, background:i===0?T2b.danger:i===1?T2b.warn:T2b.inkMuted, borderRadius:1.5, flexShrink:0 }}/>
+                                            <span style={{ fontSize:13, color:T2b.ink, fontWeight:500, fontFamily:T2b.sans }}>{cat}</span>
+                                          </div>
+                                          <div style={{ textAlign:'right', fontSize:12, color:T2b.inkMuted, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{cnt}</div>
+                                          <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T2b.ink, fontFamily:T2b.sans }}>{Math.round(cnt/lostTotal*100)}%</div>
+                                        </div>
+                                      ))}
+                                      <div style={{ marginTop:12, padding:'8px 12px', background:T2b.surface2, borderRadius:T2b.r, fontSize:12, color:T2b.inkMid, lineHeight:1.5, fontFamily:T2b.sans }}>
+                                        <strong style={{ color:T2b.ink, fontWeight:700 }}>Biggest leak:</strong>{' '}
+                                        {lostRows[0] ? `${Math.round(lostRows[0][1]/lostTotal*100)}% of losses are "${lostRows[0][0]}"` : 'No loss reason data'}.
+                                        {lostRows[0]?.[0]==='Unknown'||lostRows[0]?.[0]==='No decision'?' Indicates qualification / urgency problem more than feature gap.':''}
+                                      </div>
+                                    </>
+                                  )}
+                                </PanelB>
+
+                                {/* Activity mix */}
+                                <PanelB>
+                                  <SecHdrB title="Activity mix" sub="How reps are spending time this quarter"/>
+                                  {actTotal === 0 ? (
+                                    <div style={{ padding:'2rem', textAlign:'center', color:T2b.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T2b.sans }}>No activities logged this period.</div>
+                                  ) : (
+                                    <>
+                                      {/* Stacked bar */}
+                                      <div style={{ height:10, display:'flex', borderRadius:2, overflow:'hidden', border:`1px solid ${T2b.border}`, marginBottom:14 }}>
+                                        {actRows.map(([type,cnt])=>(
+                                          <div key={type} style={{ width:`${(cnt/actTotal)*100}%`, background:actColors[type]||T2b.inkMuted, height:'100%' }} title={`${type}: ${cnt}`}/>
+                                        ))}
+                                      </div>
+                                      {/* Rows */}
+                                      {actRows.map(([type,cnt],i)=>(
+                                        <div key={type} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 48px', gap:10, alignItems:'center', padding:'8px 0', borderTop:i===0?'none':`1px solid ${T2b.border}` }}>
+                                          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                            <span style={{ width:10, height:10, background:actColors[type]||T2b.inkMuted, borderRadius:2, flexShrink:0 }}/>
+                                            <span style={{ fontSize:13, color:T2b.ink, fontWeight:500, fontFamily:T2b.sans }}>{type}</span>
+                                          </div>
+                                          <div style={{ height:6, background:T2b.surface2, borderRadius:3, overflow:'hidden' }}>
+                                            <div style={{ width:`${(cnt/maxAct)*100}%`, height:'100%', background:actColors[type]||T2b.inkMuted, borderRadius:3 }}/>
+                                          </div>
+                                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:4 }}>
+                                            <span style={{ fontSize:12, fontWeight:600, color:T2b.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{cnt}</span>
+                                            <span style={{ fontSize:12, fontWeight:700, color:T2b.ink, fontFamily:T2b.sans }}>{Math.round(cnt/actTotal*100)}%</span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </>
+                                  )}
+                                </PanelB>
+
                               </div>
                             );
                           })()}
 
-{/* Coaching Red Flags */}
+                          {/* Coaching Red Flags */}
                           {canSeeAll&&(()=>{
                             const WB=45,AB=7,SD=14;
                             const rCF=[...new Set(reportsOpps.map(o=>o.salesRep||o.assignedTo).filter(Boolean))].sort();
