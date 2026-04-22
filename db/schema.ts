@@ -260,6 +260,7 @@ export const leads = pgTable('leads', {
     assignedTo:   varchar('assigned_to', { length: 255 }),
     notes:        text('notes'),
     convertedAt:  varchar('converted_at', { length: 30 }),
+    firstTouchDate: varchar('first_touch_date', { length: 30 }),  // ISO date — set once on first activity/contact after creation
     createdAt:    timestamp('created_at').notNull().defaultNow(),
     orgId:        text('org_id').notNull(),
     updatedAt:    timestamp('updated_at').notNull().defaultNow(),
