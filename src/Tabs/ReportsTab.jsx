@@ -1314,7 +1314,7 @@ ${bodyHtml}
                                     if(prior===null||prior===undefined||prior===0) return null;
                                     const pct = ((cur-prior)/prior)*100;
                                     const good = inverted ? pct<0 : pct>0;
-                                    return { label:(pct>=0?'▲ +':pct<0?'▼ ':'')+Math.abs(pct).toFixed(1)+'%', good, neutral: Math.abs(pct)<1 };
+                                    return { rawPct: pct, good, neutral: Math.abs(pct)<1 };
                                   };
                                   const kpis = [
                                     {
@@ -1344,24 +1344,40 @@ ${bodyHtml}
                                   ];
                                   const compareLabel2 = reportCompareTo==='previous_quarter'?'vs prev. quarter':reportCompareTo==='previous_year'?'vs prev. year':null;
                                   return (
-                                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, padding:'0 2px' }}>
+                                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
                                       {kpis.map(k=>(
                                         <div key={k.label} style={{
-                                          background:T2.surface, border:`1px solid ${T2.border}`,
-                                          borderLeft:`3px solid ${k.accent}`,
-                                          borderRadius:T2.r, padding:'14px 16px',
+                                          background:T2.surface,
+                                          border:`1px solid ${T2.border}`,
+                                          borderRadius:T2.r,
+                                          padding:'14px 18px 14px 18px',
                                         }}>
                                           <div style={eb2(T2.inkMuted)}>{k.label}</div>
                                           <div style={{ fontSize:26, fontWeight:700, color:T2.ink, letterSpacing:-0.5, lineHeight:1.1, marginTop:4, fontFamily:T2.sans }}>{k.value}</div>
-                                          <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4 }}>
-                                            {k.delta && (
-                                              <span style={{ fontSize:11, fontWeight:700, color: k.delta.neutral?T2.inkMuted : k.delta.good?T2.ok:T2.danger, fontFamily:T2.sans }}>
-                                                {k.delta.label}
-                                              </span>
+                                          <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:5, flexWrap:'wrap' }}>
+                                            {k.delta ? (
+                                              <>
+                                                <span style={{
+                                                  fontSize:11, fontWeight:700,
+                                                  color: k.delta.neutral ? T2.inkMuted : k.delta.good ? T2.ok : T2.danger,
+                                                  fontFamily:T2.sans,
+                                                  display:'inline-flex', alignItems:'center', gap:2,
+                                                }}>
+                                                  {!k.delta.neutral && (
+                                                    <svg width="7" height="7" viewBox="0 0 8 8" style={{ display:'inline-block', marginRight:1 }}>
+                                                      <polygon points={k.delta.good ? '4,1 7,7 1,7' : '4,7 7,1 1,1'}
+                                                        fill={k.delta.good ? T2.ok : T2.danger}/>
+                                                    </svg>
+                                                  )}
+                                                  {k.delta.neutral ? '' : (k.delta.good ? '+' : '')}{k.delta.rawPct.toFixed(1)}%
+                                                </span>
+                                                <span style={{ fontSize:11, color:T2.inkMuted, fontFamily:T2.sans }}>
+                                                  {compareLabel2 || k.sub}
+                                                </span>
+                                              </>
+                                            ) : (
+                                              <span style={{ fontSize:11, color:T2.inkMuted, fontFamily:T2.sans }}>{k.sub}</span>
                                             )}
-                                            <span style={{ fontSize:11, color:T2.inkMuted, fontFamily:T2.sans }}>
-                                              {k.delta && compareLabel2 ? compareLabel2 : k.sub}
-                                            </span>
                                           </div>
                                         </div>
                                       ))}
@@ -1435,43 +1451,83 @@ ${bodyHtml}
                                     <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 }}>
                                       <div style={{ flex:1 }}>
                                         <div style={{ fontSize:16, fontFamily:T2.serif, fontStyle:'italic', fontWeight:400, color:T2.ink, lineHeight:1.1 }}>Rep metrics</div>
-                                        <div style={{ fontSize:11.5, color:T2.inkMuted, marginTop:3, fontFamily:T2.sans }}>How each rep compares to team on the fundamentals</div>
+                                        <div style={{ fontSize:11.5, color:T2.inkMuted, marginTop:3, fontFamily:T2.sans }}>How each rep compares to team average on the fundamentals</div>
                                       </div>
                                     </div>
-                                    <div style={{ display:'grid', gridTemplateColumns:'160px 64px 90px 90px 90px 100px', gap:10, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T2.border}` }}>
-                                      {['Rep','Won','Win rate','Avg deal','Cycle','Pipeline'].map((h,i)=><div key={i} style={{ ...eb2(T2.inkMuted), textAlign:i===0?'left':'right' }}>{h}</div>)}
+                                    <div style={{ display:'grid', gridTemplateColumns:'160px 56px 90px 90px 80px 100px', gap:10, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T2.border}` }}>
+                                      {['Rep','Deals','Win rate','Avg deal','Cycle','Activity ratio'].map((h,i)=>(
+                                        <div key={i} style={{ ...eb2(T2.inkMuted), textAlign:i===0?'left':'right' }}>{h}</div>
+                                      ))}
                                     </div>
                                     {(() => {
-                                      const teamAvgWR  = repRows.filter(r=>r.winRate>0).reduce((s,r)=>s+r.winRate,0)/(repRows.filter(r=>r.winRate>0).length||1);
-                                      const teamAvgAD  = repRows.filter(r=>r.avgDeal>0).reduce((s,r)=>s+r.avgDeal,0)/(repRows.filter(r=>r.avgDeal>0).length||1);
-                                      const teamAvgCy  = repRows.filter(r=>r.cycle).reduce((s,r)=>s+(r.cycle||0),0)/(repRows.filter(r=>r.cycle).length||1);
+                                      // Team averages — computed across all reps with data
+                                      const teamAvgWR  = repRows.filter(r=>r.winRate>0).reduce((s,r)=>s+r.winRate,0) / (repRows.filter(r=>r.winRate>0).length||1);
+                                      const teamAvgAD  = repRows.filter(r=>r.avgDeal>0).reduce((s,r)=>s+r.avgDeal,0) / (repRows.filter(r=>r.avgDeal>0).length||1);
+                                      const teamAvgCy  = repRows.filter(r=>r.cycle).reduce((s,r)=>s+(r.cycle||0),0) / (repRows.filter(r=>r.cycle).length||1);
+
+                                      // Activity ratio = activities logged / open deals (per rep)
+                                      const repActCounts = repRows.reduce((acc,r)=>{
+                                        const cnt = roleFilteredActivities.filter(a=>(a.rep||a.salesRep||a.assignedTo||a.author)===r.rep).length;
+                                        const openCnt = openOpps.filter(o=>(o.salesRep||o.assignedTo)===r.rep).length;
+                                        acc[r.rep] = openCnt > 0 ? cnt / openCnt : cnt > 0 ? cnt : 0;
+                                        return acc;
+                                      },{});
+                                      const teamAvgAR = repRows.length > 0
+                                        ? Object.values(repActCounts).reduce((s,v)=>s+v,0) / repRows.length
+                                        : 0;
+
+                                      // DiffCell: shows value + "X% vs team" or "avg" beneath
                                       const DiffCell = ({ value, avg, fmt3, inverted=false }) => {
-                                        if(!value&&value!==0) return <div style={{ textAlign:'right', fontSize:12, color:T2.inkMuted, fontFamily:T2.sans }}>—</div>;
-                                        const p=avg>0?((value-avg)/avg*100):0;
-                                        const good=inverted?p<0:p>0;
-                                        const col=Math.abs(p)<5?T2.inkMuted:good?T2.ok:T2.danger;
+                                        if(value===null||value===undefined) return <div style={{ textAlign:'right', fontSize:12, color:T2.inkMuted, fontFamily:T2.sans }}>—</div>;
+                                        const p = avg>0 ? ((value-avg)/avg*100) : 0;
+                                        const good = inverted ? p<0 : p>0;
+                                        const isAvg = Math.abs(p) < 5;
+                                        const col = isAvg ? T2.inkMuted : good ? T2.ok : T2.danger;
                                         return (
                                           <div style={{ textAlign:'right' }}>
-                                            <div style={{ fontSize:12, fontWeight:600, color:T2.ink, fontFamily:T2.sans }}>{fmt3(value)}</div>
-                                            <div style={{ fontSize:9.5, color:col, fontWeight:600, marginTop:1, fontFamily:T2.sans }}>{Math.abs(p)<5?'avg':(p>0?'+':'')+p.toFixed(0)+'%'}</div>
+                                            <div style={{ fontSize:13, fontWeight:600, color:T2.ink, fontFamily:T2.sans }}>{fmt3(value)}</div>
+                                            <div style={{ fontSize:10, color:col, fontWeight:600, marginTop:1, fontFamily:T2.sans }}>
+                                              {isAvg ? 'avg' : `${p>0?'+':''}${p.toFixed(0)}% vs team`}
+                                            </div>
                                           </div>
                                         );
                                       };
-                                      return repRows.map((r,i)=>(
-                                        <div key={r.rep} style={{ display:'grid', gridTemplateColumns:'160px 64px 90px 90px 90px 100px', gap:10, alignItems:'center', padding:'10px 0', borderBottom:i<repRows.length-1?`1px solid ${T2.border}`:'none' }}>
-                                          <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
-                                            <div style={{ width:22, height:22, borderRadius:'50%', background:'#9c6b4a', color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, flexShrink:0, textTransform:'uppercase' }}>
-                                              {r.rep.split(' ').map(w=>w[0]).join('').slice(0,2)}
+
+                                      return (
+                                        <>
+                                          {repRows.map((r,i)=>(
+                                            <div key={r.rep} style={{ display:'grid', gridTemplateColumns:'160px 56px 90px 90px 80px 100px', gap:10, alignItems:'center', padding:'10px 0', borderBottom:`1px solid ${T2.border}` }}>
+                                              {/* Rep avatar + name */}
+                                              <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
+                                                <div style={{ width:26, height:26, borderRadius:'50%', background:'#9c6b4a', color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, flexShrink:0, textTransform:'uppercase' }}>
+                                                  {r.rep.split(' ').map(w=>w[0]).join('').slice(0,2)}
+                                                </div>
+                                                <div style={{ fontSize:13, fontWeight:600, color:T2.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:T2.sans }}>{r.rep}</div>
+                                              </div>
+                                              {/* Deals */}
+                                              <div style={{ textAlign:'right', fontSize:13, fontWeight:500, color:T2.ink, fontFamily:T2.sans }}>{r.wonCount}</div>
+                                              {/* Win rate */}
+                                              <DiffCell value={r.winRate} avg={teamAvgWR} fmt3={v=>Math.round(v*100)+'%'}/>
+                                              {/* Avg deal */}
+                                              <DiffCell value={r.avgDeal} avg={teamAvgAD} fmt3={fmt2}/>
+                                              {/* Cycle */}
+                                              <DiffCell value={r.cycle} avg={teamAvgCy} fmt3={v=>v+'d'} inverted/>
+                                              {/* Activity ratio */}
+                                              <DiffCell value={repActCounts[r.rep]} avg={teamAvgAR} fmt3={v=>v.toFixed(2)+'×'}/>
                                             </div>
-                                            <div style={{ fontSize:12, fontWeight:500, color:T2.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:T2.sans }}>{r.rep}</div>
+                                          ))}
+
+                                          {/* Team avg footer row */}
+                                          <div style={{ display:'grid', gridTemplateColumns:'160px 56px 90px 90px 80px 100px', gap:10, alignItems:'center', padding:'10px 0', borderTop:`1px dashed ${T2.border}` }}>
+                                            <div style={{ fontSize:11, fontWeight:700, color:T2.inkMuted, letterSpacing:0.4, textTransform:'uppercase', fontFamily:T2.sans }}>Team avg</div>
+                                            <div/>
+                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T2.inkMuted, fontFamily:T2.sans }}>{Math.round(teamAvgWR*100)}%</div>
+                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T2.inkMuted, fontFamily:T2.sans }}>{fmt2(Math.round(teamAvgAD))}</div>
+                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T2.inkMuted, fontFamily:T2.sans }}>{Math.round(teamAvgCy)}d</div>
+                                            <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T2.inkMuted, fontFamily:T2.sans }}>{teamAvgAR.toFixed(2)}×</div>
                                           </div>
-                                          <div style={{ textAlign:'right', fontSize:12, color:T2.ink, fontFamily:T2.sans }}>{r.wonCount}</div>
-                                          <DiffCell value={r.winRate} avg={teamAvgWR} fmt3={v=>Math.round(v*100)+'%'}/>
-                                          <DiffCell value={r.avgDeal} avg={teamAvgAD} fmt3={fmt2}/>
-                                          <DiffCell value={r.cycle} avg={teamAvgCy} fmt3={v=>v+'d'} inverted/>
-                                          <div style={{ textAlign:'right', fontSize:12, color:T2.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmt2(r.openCount>0?openOpps.filter(o=>(o.salesRep||o.assignedTo)===r.rep).reduce((s,o)=>s+(parseFloat(o.arr)||0),0):0)}</div>
-                                        </div>
-                                      ));
+                                        </>
+                                      );
                                     })()}
                                   </div>
                                 )}
