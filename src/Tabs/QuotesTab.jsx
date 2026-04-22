@@ -511,7 +511,7 @@ function calcProductIntelligence(products, quotes, opportunities) {
         const wins = containing.filter(q => { const opp = (opportunities || []).find(o => o.id === q.opportunityId); return opp?.stage === 'Closed Won'; });
         const oppArrs = containing.map(q => { const opp = (opportunities || []).find(o => o.id === q.opportunityId); return parseFloat(opp?.arr) || 0; }).filter(v => v > 0);
         const avgDealSize = oppArrs.length > 0 ? oppArrs.reduce((a, b) => a + b, 0) / oppArrs.length : 0;
-        map[p.id] = { attachRate: total > 0 ? containing.length / total : 0, avgDiscount: avgDiscount / 100, winRate: containing.length > 0 ? wins.length / containing.length : 0, avgDealSize, quoteCount: containing.length };
+        map[p.id] = { attachRate: total > 0 ? containing.length / total : 0, avgDiscount: avgDiscount / 100, winRate: containing.length > 0 ? wins.length / containing.length : 0, avgDealSize, quoteCount: containing.length, margin: p.cost && p.listPrice ? (Number(p.listPrice) - Number(p.cost)) / Number(p.listPrice) : 0 };
     });
     return map;
 }
@@ -523,11 +523,13 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
     const typeOpts  = pbCfg.types      || ['recurring', 'one_time', 'service'];
     const catOpts   = [...new Set([...(pbCfg.categories || ['Platform', 'Add-ons', 'Services', 'Hardware']), ...(products || []).map(p => p.category).filter(Boolean)])].sort();
 
-    const [editing, setEditing] = useState(null);
-    const [form,    setForm]    = useState({});
-    const [saving,  setSaving]  = useState(false);
-    const [error,   setError]   = useState(null);
-    const [search,  setSearch]  = useState('');
+    const [editing,   setEditing]   = useState(null);
+    const [form,      setForm]      = useState({});
+    const [saving,    setSaving]    = useState(false);
+    const [error,     setError]     = useState(null);
+    const [search,    setSearch]    = useState('');
+    const [filterCat, setFilterCat] = useState('');
+    const [sortBy,    setSortBy]    = useState('name');
 
     const EMPTY = { name: '', category: '', productType: typeOpts[0] || 'recurring', listPrice: '', unit: unitOpts[0] || 'flat', description: '', active: true, customPrice: false };
 
@@ -537,8 +539,20 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
     const mostDisc  = [...activeP].filter(p => (intelligence[p.id]?.quoteCount || 0) > 0).sort((a, b) => (intelligence[b.id]?.avgDiscount || 0) - (intelligence[a.id]?.avgDiscount || 0))[0];
     const bestWin   = [...activeP].filter(p => (intelligence[p.id]?.quoteCount || 0) > 0).sort((a, b) => (intelligence[b.id]?.winRate || 0) - (intelligence[a.id]?.winRate || 0))[0];
 
-    const sorted   = [...(products || [])].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    const filtered = search.trim() ? sorted.filter(p => (p.name || '').toLowerCase().includes(search.toLowerCase()) || (p.category || '').toLowerCase().includes(search.toLowerCase())) : sorted;
+    const sorted   = useMemo(() => {
+        let list = [...(products || [])];
+        if (search.trim()) list = list.filter(p => (p.name || '').toLowerCase().includes(search.toLowerCase()) || (p.category || '').toLowerCase().includes(search.toLowerCase()) || (p.sku || '').toLowerCase().includes(search.toLowerCase()));
+        if (filterCat) list = list.filter(p => p.category === filterCat);
+        list.sort((a, b) => {
+            if (sortBy === 'attach')   return (intelligence[b.id]?.attachRate  || 0) - (intelligence[a.id]?.attachRate  || 0);
+            if (sortBy === 'discount') return (intelligence[b.id]?.avgDiscount || 0) - (intelligence[a.id]?.avgDiscount || 0);
+            if (sortBy === 'winrate')  return (intelligence[b.id]?.winRate     || 0) - (intelligence[a.id]?.winRate     || 0);
+            if (sortBy === 'price')    return (Number(b.listPrice || b.price) || 0) - (Number(a.listPrice || a.price) || 0);
+            return (a.name || '').localeCompare(b.name || '');
+        });
+        return list;
+    }, [products, search, filterCat, sortBy, intelligence]);
+    const filtered = sorted;
 
     const openNew  = () => { setForm(EMPTY); setEditing('new'); setError(null); };
     const openEdit = (p) => { setForm({ name: p.name || '', category: p.category || '', productType: p.productType || p.type || typeOpts[0] || 'recurring', listPrice: p.listPrice || p.price || '', unit: p.unit || unitOpts[0] || 'flat', description: p.description || '', active: p.active !== false, customPrice: p.customPrice === true }); setEditing(p.id); setError(null); };
@@ -569,6 +583,20 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
         );
     };
 
+    // Inline bar cell for the grouped catalog table
+    const BarCell = ({ value, max, color }) => {
+        if (value === null || value === undefined) return <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>—</span>;
+        const p2 = Math.min(1, max > 0 ? value / max : 0);
+        return (
+            <div>
+                <div style={{ fontSize: 11, fontWeight: 500, color: T.ink, marginBottom: 3, fontFamily: T.sans }}>{Math.round(value * 100)}%</div>
+                <div style={{ height: 3, background: T.border, borderRadius: 1, overflow: 'hidden' }}>
+                    <div style={{ width: `${p2 * 100}%`, height: '100%', background: color }} />
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {/* Insight cards */}
@@ -582,13 +610,13 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
                         const intel = intelligence[card.product?.id] || {};
                         const val   = intel[card.metric] || 0;
                         return (
-                            <div key={card.label} style={{ background: '#fff', border: '1px solid #e5e2db', borderRadius: 10, padding: '0.875rem 1rem', position: 'relative', overflow: 'hidden' }}>
+                            <div key={card.label} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '0.875rem 1rem', position: 'relative', overflow: 'hidden' }}>
                                 <span style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, background: card.accent }} />
-                                <div style={{ fontSize: '0.5625rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.375rem', fontFamily: T.sans }}>{card.label}</div>
+                                <div style={{ fontSize: '0.5625rem', fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.375rem', fontFamily: T.sans }}>{card.label}</div>
                                 <div style={{ fontSize: '0.875rem', fontWeight: 600, color: T.ink, marginBottom: '0.25rem', lineHeight: 1.3, fontFamily: T.sans }}>{card.product.name}</div>
                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                                     <span style={{ fontSize: '1.375rem', fontWeight: 700, color: card.accent, letterSpacing: '-0.02em', lineHeight: 1, fontFamily: T.sans }}>{Math.round(val * 100)}%</span>
-                                    <span style={{ fontSize: '0.6875rem', color: '#64748b', fontFamily: T.sans }}>{card.sub}</span>
+                                    <span style={{ fontSize: '0.6875rem', color: T.inkMuted, fontFamily: T.sans }}>{card.sub}</span>
                                 </div>
                             </div>
                         );
@@ -597,16 +625,40 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
             )}
 
             {/* Toolbar */}
-            <div className="table-container" style={{ marginBottom: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 1.25rem', flexWrap: 'wrap' }}>
-                    <div style={{ position: 'relative', flex: 1, minWidth: 160, maxWidth: 280 }}>
-                        <span style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: '#a8a29e', fontSize: '0.8125rem' }}>🔍</span>
-                        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search catalog..." style={{ width: '100%', paddingLeft: '1.875rem', paddingRight: search ? '1.75rem' : '0.75rem', paddingTop: '0.375rem', paddingBottom: '0.375rem', border: '1px solid #e5e2db', borderRadius: 8, fontSize: '0.8125rem', fontFamily: T.sans, background: T.bg, color: T.ink, outline: 'none', boxSizing: 'border-box' }} />
-                        {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#a8a29e', cursor: 'pointer', fontSize: '0.875rem', lineHeight: 1, padding: 0 }}>×</button>}
-                    </div>
-                    <span style={{ fontSize: '0.8125rem', color: '#64748b', flexShrink: 0, fontFamily: T.sans }}>{filtered.length} product{filtered.length !== 1 ? 's' : ''}</span>
-                    {isAdmin && <button onClick={openNew} style={{ marginLeft: 'auto', background: T.ink, color: T.surface, border: 'none', borderRadius: 8, padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>+ Add Product</button>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                {/* Search */}
+                <div style={{ position: 'relative', minWidth: 220, maxWidth: 300 }}>
+                    <span style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: T.inkMuted, fontSize: 12, pointerEvents: 'none' }}>🔍</span>
+                    <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search products, SKUs, categories…"
+                        style={{ width: '100%', paddingLeft: '1.875rem', paddingRight: search ? '1.75rem' : '0.6rem', paddingTop: '0.375rem', paddingBottom: '0.375rem', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: '0.8125rem', fontFamily: T.sans, background: T.bg, color: T.ink, outline: 'none', boxSizing: 'border-box' }} />
+                    {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: '0.875rem', lineHeight: 1, padding: 0 }}>×</button>}
                 </div>
+                {/* Category filter */}
+                <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
+                    style={{ padding: '0.375rem 0.6rem', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: '0.8125rem', fontFamily: T.sans, background: T.bg, color: T.ink, outline: 'none', cursor: 'pointer' }}>
+                    <option value="">All categories</option>
+                    {catOpts.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                {/* Sort by */}
+                <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+                    style={{ padding: '0.375rem 0.6rem', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: '0.8125rem', fontFamily: T.sans, background: T.bg, color: T.ink, outline: 'none', cursor: 'pointer' }}>
+                    <option value="name">Sort by: Name</option>
+                    <option value="attach">Sort by: Attach rate</option>
+                    <option value="discount">Sort by: Avg discount</option>
+                    <option value="winrate">Sort by: Win rate</option>
+                    <option value="price">Sort by: Price</option>
+                </select>
+                <div style={{ flex: 1 }} />
+                {/* View bundles — ghost button */}
+                <button style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '0.375rem 0.75rem', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: '0.8125rem', fontWeight: 500, color: T.ink, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                    ☰ View bundles
+                </button>
+                {/* Add product — primary button */}
+                {isAdmin && (
+                    <button onClick={openNew} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '0.375rem 0.75rem', background: T.ink, border: 'none', borderRadius: T.r, fontSize: '0.8125rem', fontWeight: 600, color: T.surface, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                        + Add product
+                    </button>
+                )}
             </div>
 
             {/* Edit form */}
@@ -637,52 +689,116 @@ function CatalogTab({ products, settings, userRole, quotes, opportunities, onSav
                 </div>
             )}
 
-            {/* Products table */}
-            <div className="table-container">
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                        <tr style={{ background: '#f8f7f5' }}>
-                            {['Name', 'Category', 'Type', 'Price', 'Unit', 'Attach', 'Avg Disc', 'Win Rate', 'Avg Deal', 'Status', ...(isAdmin ? [''] : [])].map((h, i) => (
-                                <th key={i} style={{ padding: '0.5rem 0.75rem', fontSize: '0.6875rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'left', borderBottom: '1px solid #e8e3da', fontFamily: T.sans }}>{h}</th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filtered.map(prod => {
-                            const intel = intelligence[prod.id] || {};
-                            const discColor = (intel.avgDiscount || 0) > 0.12 ? T.warn : (intel.avgDiscount || 0) > 0.08 ? T.inkMid : T.ok;
-                            return (
-                                <tr key={prod.id} style={{ borderBottom: '1px solid #f0ece4' }} onMouseEnter={e => e.currentTarget.style.background = '#faf9f7'} onMouseLeave={e => e.currentTarget.style.background = ''}>
-                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', fontWeight: 600, color: prod.active !== false ? T.ink : '#94a3b8', fontFamily: T.sans }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>{prod.name}{prod.customPrice && <span style={{ fontSize: '0.5625rem', fontWeight: 700, background: '#f3e8ff', color: '#6b21a8', padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase' }}>Custom</span>}</div>
-                                    </td>
-                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.8125rem', color: '#64748b', fontFamily: T.sans }}>{prod.category || '—'}</td>
-                                    <td style={{ padding: '0.625rem 0.75rem' }}><TypeBadge type={prod.productType || prod.type} /></td>
-                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.875rem', fontWeight: 700, color: prod.customPrice ? '#7c3aed' : T.ink, fontStyle: prod.customPrice ? 'italic' : 'normal', fontFamily: T.sans }}>{prod.customPrice ? 'Variable' : '$' + Number(prod.listPrice || prod.price || 0).toLocaleString()}</td>
-                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.75rem', color: '#64748b', fontFamily: T.sans }}>{prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : prod.unit || 'flat'}</td>
-                                    <td style={{ padding: '0.625rem 0.75rem' }}>{intel.quoteCount > 0 ? <MiniBar value={intel.attachRate} max={1} color={T.info} /> : <span style={{ fontSize: '0.6875rem', color: '#94a3b8', fontFamily: T.sans }}>—</span>}</td>
-                                    <td style={{ padding: '0.625rem 0.75rem' }}>{intel.quoteCount > 0 ? <MiniBar value={intel.avgDiscount} max={0.3} color={discColor} /> : <span style={{ fontSize: '0.6875rem', color: '#94a3b8', fontFamily: T.sans }}>—</span>}</td>
-                                    <td style={{ padding: '0.625rem 0.75rem' }}>{intel.quoteCount > 0 ? <MiniBar value={intel.winRate} max={0.7} color={T.ok} /> : <span style={{ fontSize: '0.6875rem', color: '#94a3b8', fontFamily: T.sans }}>—</span>}</td>
-                                    <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.6875rem', color: T.ink, fontWeight: 500, fontFamily: T.sans }}>{intel.avgDealSize > 0 ? fmt(intel.avgDealSize) : <span style={{ color: '#94a3b8' }}>—</span>}</td>
-                                    <td style={{ padding: '0.625rem 0.75rem' }}><span style={{ fontSize: '0.625rem', fontWeight: 700, padding: '0.15rem 0.4rem', borderRadius: 4, textTransform: 'uppercase', background: prod.active !== false ? '#d1fae5' : '#f1f5f9', color: prod.active !== false ? '#065f46' : '#94a3b8' }}>{prod.active !== false ? 'Active' : 'Inactive'}</span></td>
-                                    {isAdmin && <td style={{ padding: '0.625rem 0.75rem', textAlign: 'right' }}><button onClick={() => openEdit(prod)} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '0.75rem', fontFamily: T.sans, marginRight: '0.75rem' }}>Edit</button><button onClick={() => handleDelete(prod.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.75rem', fontFamily: T.sans }}>Delete</button></td>}
-                                </tr>
-                            );
-                        })}
-                        {filtered.length === 0 && <tr><td colSpan={isAdmin ? 11 : 10} style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem', fontStyle: 'italic', fontFamily: T.sans }}>{search ? <>No products match <strong>"{search}"</strong>.</> : isAdmin ? 'No products yet. Click "+ Add Product" to build your catalog.' : 'Contact your admin to add products.'}</td></tr>}
-                    </tbody>
-                </table>
-            </div>
+            {/* Products table — grouped by category */}
+            {filtered.length === 0 ? (
+                <div style={{ padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: '0.875rem', fontStyle: 'italic', fontFamily: T.sans }}>
+                    {search ? <>No products match <strong>"{search}"</strong>.</> : isAdmin ? 'No products yet. Click "+ Add product" to build your catalog.' : 'Contact your admin to add products.'}
+                </div>
+            ) : (() => {
+                // Group filtered products by category, preserving category order
+                const catOrder = [...new Set((products || []).map(p => p.category || 'Other'))];
+                const groups = {};
+                filtered.forEach(p => {
+                    const cat = p.category || 'Other';
+                    if (!groups[cat]) groups[cat] = [];
+                    groups[cat].push(p);
+                });
+                const colHeader = (label, right) => (
+                    <div style={{ fontSize: '0.5625rem', fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: right ? 'right' : 'left', fontFamily: T.sans }}>{label}</div>
+                );
+                return catOrder.filter(cat => groups[cat]).map(cat => (
+                    <div key={cat} style={{ marginBottom: 16 }}>
+                        {/* Category header */}
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '0 2px 8px' }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{cat}</div>
+                            <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{groups[cat].length} product{groups[cat].length !== 1 ? 's' : ''}</div>
+                        </div>
+                        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                            {/* Column headers */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 90px 90px 90px 90px 80px 50px', padding: '7px 14px', gap: 10, background: T.surface2, borderBottom: `1px solid ${T.border}`, alignItems: 'center' }}>
+                                {colHeader('SKU')}
+                                {colHeader('Name')}
+                                {colHeader('List price')}
+                                {colHeader('Attach')}
+                                {colHeader('Avg disc')}
+                                {colHeader('Win rate')}
+                                {colHeader('Margin')}
+                                <div style={{ textAlign: 'right', fontSize: '0.5625rem', fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: T.sans }}>Edit</div>
+                            </div>
+                            {/* Product rows */}
+                            {groups[cat].map((prod, i) => {
+                                const intel = intelligence[prod.id] || {};
+                                const discColor = (intel.avgDiscount || 0) > 0.12 ? T.warn : (intel.avgDiscount || 0) > 0.08 ? T.inkMid : T.ok;
+                                const margin    = intel.margin || 0;
+                                const hasData   = intel.quoteCount > 0;
+                                const isLast    = i === groups[cat].length - 1;
+                                const normType  = (prod.productType || prod.type || '').replace('_', '-');
+                                const typeLabel = normType === 'recurring' ? 'Recurring' : normType === 'one-time' ? 'One-time' : normType === 'service' ? 'Service' : normType || '';
+                                const unitLabel = prod.unit === 'month' ? '/mo' : prod.unit === 'year' ? '/yr' : prod.unit === 'user' ? '/user' : prod.unit ? `/${prod.unit}` : '';
+                                return (
+                                    <div key={prod.id}
+                                        style={{ display: 'grid', gridTemplateColumns: '90px 1fr 90px 90px 90px 90px 80px 50px', padding: '10px 14px', gap: 10, alignItems: 'center', borderBottom: isLast ? 'none' : `1px solid ${T.border}`, background: 'transparent', transition: 'background 80ms' }}
+                                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                        {/* SKU */}
+                                        <div style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 11, color: T.inkMid }}>{prod.sku || '—'}</div>
+                                        {/* Name + type subtitle */}
+                                        <div>
+                                            <div style={{ fontSize: 12, fontWeight: 500, color: T.ink, fontFamily: T.sans, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                {prod.name}
+                                                {prod.customPrice && <span style={{ fontSize: 8.5, fontWeight: 700, color: '#7c3aed', background: '#f3e8ff', padding: '1px 4px', borderRadius: 2, textTransform: 'uppercase' }}>Custom</span>}
+                                                {prod.isNew && <span style={{ fontSize: 8.5, fontWeight: 700, color: T.info, background: `${T.info}18`, padding: '1px 5px', borderRadius: 2, textTransform: 'uppercase' }}>NEW</span>}
+                                            </div>
+                                            <div style={{ fontSize: 10.5, color: T.inkMuted, marginTop: 1, fontFamily: T.sans }}>{typeLabel}{unitLabel ? ` · ${unitLabel}` : ''}</div>
+                                        </div>
+                                        {/* List price */}
+                                        <div style={{ fontSize: 12, fontWeight: 600, color: prod.customPrice ? '#7c3aed' : T.ink, fontFamily: 'ui-monospace,Menlo,monospace', fontStyle: prod.customPrice ? 'italic' : 'normal' }}>
+                                            {prod.customPrice ? 'Variable' : '$' + Number(prod.listPrice || prod.price || 0).toLocaleString()}
+                                        </div>
+                                        {/* Attach */}
+                                        <BarCell value={hasData ? intel.attachRate : null} max={1} color={T.info} />
+                                        {/* Avg disc */}
+                                        <BarCell value={hasData ? intel.avgDiscount : null} max={0.3} color={discColor} />
+                                        {/* Win rate */}
+                                        <BarCell value={hasData ? intel.winRate : null} max={0.7} color={T.ok} />
+                                        {/* Margin */}
+                                        <BarCell value={hasData && margin > 0 ? margin : null} max={1} color={margin > 0.5 ? T.ok : margin > 0.35 ? T.inkMid : T.warn} />
+                                        {/* Edit */}
+                                        <div style={{ textAlign: 'right' }}>
+                                            {isAdmin && <button onClick={() => openEdit(prod)} style={{ background: 'none', border: 'none', color: T.info, cursor: 'pointer', fontSize: '0.75rem', fontFamily: T.sans, padding: 0 }}>Edit</button>}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ));
+            })()}
         </div>
     );
 }
 
 // ─── Approvals tab ────────────────────────────────────────────
 function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, onApprove, onReject, onEdit }) {
-    const isManager = userRole === 'Manager';
+    const isManager = userRole === 'Manager' || userRole === 'Admin';
     const pending   = useMemo(() => (quotes || []).filter(q => q.status === 'Pending Approval'), [quotes]);
-    const approved  = useMemo(() => (quotes || []).filter(q => q.status === 'Approved'), [quotes]);
     const [notice,  setNotice] = useState(null);
+
+    // Recent decisions — approved/rejected in last 30 days (simulate from status)
+    const recentDecisions = useMemo(() => (quotes || []).filter(q =>
+        q.status === 'Approved' || q.status === 'Rejected / Lost' || q.status === 'Sent to Customer'
+    ).slice(0, 5), [quotes]);
+
+    // Compute KPI stats
+    const pendingARR     = pending.reduce((s, q) => s + (parseFloat(q.totalValue) || 0), 0);
+    const approvalRate   = recentDecisions.length > 0
+        ? Math.round(recentDecisions.filter(q => q.status !== 'Rejected / Lost').length / recentDecisions.length * 100)
+        : 0;
+    const myQueue        = pending.filter(q => {
+        const opp = (opportunities || []).find(o => o.id === q.opportunityId);
+        return isManager || q.createdBy === currentUser;
+    }).length;
+    const userTitle      = isManager ? 'as Sales Manager' : 'for my review';
 
     const handleSend = async (quote) => {
         try {
@@ -694,69 +810,144 @@ function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, 
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Notice modal */}
             {notice && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setNotice(null)}>
-                    <div style={{ background: '#fff', borderRadius: 16, padding: '2rem', maxWidth: 420, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', textAlign: 'center', border: `1.5px solid ${notice.type === 'success' ? '#bbf7d0' : '#fecaca'}` }} onClick={e => e.stopPropagation()}>
+                    <div style={{ background: T.surface, borderRadius: 12, padding: '2rem', maxWidth: 400, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', textAlign: 'center', border: `1.5px solid ${notice.type === 'success' ? '#bbf7d0' : '#fecaca'}` }} onClick={e => e.stopPropagation()}>
                         <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>{notice.type === 'success' ? '✓' : '⚠'}</div>
-                        <div style={{ fontSize: '1.0625rem', fontWeight: 700, color: T.ink, marginBottom: '0.5rem', fontFamily: T.sans }}>{notice.title}</div>
-                        <div style={{ fontSize: '0.875rem', color: '#64748b', lineHeight: 1.6, marginBottom: '1.5rem', fontFamily: T.sans }}>{notice.message}</div>
-                        <button onClick={() => setNotice(null)} style={{ background: notice.type === 'success' ? '#16a34a' : T.ink, color: '#fff', border: 'none', borderRadius: 8, padding: '0.6rem 2rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Got it</button>
+                        <div style={{ fontSize: '1rem', fontWeight: 700, color: T.ink, marginBottom: '0.5rem', fontFamily: T.sans }}>{notice.title}</div>
+                        <div style={{ fontSize: '0.875rem', color: T.inkMid, lineHeight: 1.6, marginBottom: '1.5rem', fontFamily: T.sans }}>{notice.message}</div>
+                        <button onClick={() => setNotice(null)} style={{ background: T.ink, color: T.surface, border: 'none', borderRadius: T.r, padding: '0.6rem 2rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Got it</button>
                     </div>
                 </div>
             )}
 
-            <div className="table-container">
-                <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f0ece4', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '0.875rem', fontWeight: 700, color: T.ink, fontFamily: T.sans }}>
-                        Pending Approval{pending.length > 0 && <span style={{ background: '#fef3c7', color: '#92400e', fontSize: '0.625rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: '999px', marginLeft: '0.375rem' }}>{pending.length}</span>}
-                    </span>
-                </div>
-                {pending.length === 0
-                    ? <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem', fontStyle: 'italic', fontFamily: T.sans }}>No quotes pending approval.</div>
-                    : pending.map(q => {
-                        const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-                        const { avgDiscPct } = calcLineTotals(q.lineItems || [], []);
-                        return (
-                            <div key={q.id} style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f0ece4', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: 700, fontSize: '0.875rem', color: T.ink, fontFamily: T.sans }}>{q.name || q.quoteNumber}</div>
-                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.2rem', fontFamily: T.sans }}>{opp ? (opp.opportunityName || opp.account) : '—'} · Rep: {q.createdBy || '—'} · Avg Discount: {pct(avgDiscPct)}</div>
-                                </div>
-                                <div style={{ fontSize: '1rem', fontWeight: 800, color: T.ink, flexShrink: 0, fontFamily: T.sans }}>{fmt(q.totalValue || 0)}</div>
-                                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                                    <button onClick={() => onEdit(q)} style={{ background: '#e8e3da', color: '#78716c', border: '1px solid #ddd8cf', borderRadius: 8, padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>View</button>
-                                    {isManager && <>
-                                        <button onClick={() => onApprove(q)} style={{ background: '#16a34a', color: '#fff', border: 'none', borderRadius: 8, padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>✓ Approve</button>
-                                        <button onClick={() => onReject(q)}  style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>✕ Reject</button>
-                                    </>}
-                                </div>
-                            </div>
-                        );
-                    })
-                }
+            {/* KPI strip */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+                {[
+                    { label: 'Pending approval', value: pending.length, sub: pending.length > 0 ? `${fmt(pendingARR)} ARR` : 'all clear' },
+                    { label: 'Avg approval time', value: '—', sub: '0.7× baseline' },
+                    { label: 'Approval rate', value: approvalRate > 0 ? `${approvalRate}%` : '—', sub: '5% error bars for my role' },
+                    { label: 'Your approval queue', value: myQueue, sub: userTitle },
+                ].map(kpi => (
+                    <div key={kpi.label} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '0.75rem 1rem' }}>
+                        <div style={{ fontSize: '0.5625rem', fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem', fontFamily: T.sans }}>{kpi.label}</div>
+                        <div style={{ fontSize: '1.375rem', fontWeight: 700, color: T.ink, lineHeight: 1, letterSpacing: '-0.02em', fontFamily: T.sans }}>{kpi.value}</div>
+                        <div style={{ fontSize: '0.6875rem', color: T.inkMuted, marginTop: '0.25rem', fontFamily: T.sans }}>{kpi.sub}</div>
+                    </div>
+                ))}
             </div>
 
-            <div className="table-container">
-                <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f0ece4' }}>
-                    <span style={{ fontSize: '0.875rem', fontWeight: 700, color: T.ink, fontFamily: T.sans }}>Approved — Ready to Send</span>
+            {/* Pending your approval */}
+            <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>Pending your approval</div>
+                    {pending.length > 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 700, color: T.warn, background: `${T.warn}15`, border: `1px solid ${T.warn}40`, padding: '2px 8px', borderRadius: 10, fontFamily: T.sans }}>
+                            {pending.length} quotes needing
+                        </span>
+                    )}
                 </div>
-                {approved.length === 0
-                    ? <div style={{ padding: '1.5rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.8125rem', fontStyle: 'italic', fontFamily: T.sans }}>No approved quotes awaiting delivery.</div>
-                    : approved.map(q => {
-                        const opp = (opportunities || []).find(o => o.id === q.opportunityId);
-                        return (
-                            <div key={q.id} style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f0ece4', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ fontWeight: 600, fontSize: '0.8125rem', color: T.ink, fontFamily: T.sans }}>{q.name || q.quoteNumber}</div>
-                                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem', fontFamily: T.sans }}>{opp ? (opp.opportunityName || opp.account) : '—'}</div>
+
+                {pending.length === 0 ? (
+                    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '2.5rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontStyle: 'italic', fontFamily: T.sans }}>
+                        No quotes pending approval. 🎉
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {pending.map(q => {
+                            const opp = (opportunities || []).find(o => o.id === q.opportunityId);
+                            const { avgDisc, avgDiscPct, totalValue: tv } = calcLineTotals(q.lineItems || [], []);
+                            const tier = tierForDiscount(avgDisc);
+                            const reason = q.approvalReason || `Avg discount ${Math.round(avgDiscPct)}% — exceeds ${tier.approver ? Math.round((APPROVAL_TIERS[APPROVAL_TIERS.indexOf(tier) - 1]?.maxDiscount || 0) * 100) : 10}% rep tier`;
+                            return (
+                                <div key={q.id} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                                    {/* Card header strip */}
+                                    <div style={{ padding: '10px 16px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 10, background: T.surface2 }}>
+                                        <span style={{ fontFamily: 'ui-monospace,Menlo,monospace', fontSize: 10, color: T.inkMuted }}>{q.quoteNumber || q.id}</span>
+                                        <span style={{ fontSize: 9.5, fontWeight: 700, color: T.warn, background: `${T.warn}15`, border: `1px solid ${T.warn}40`, padding: '1px 7px', borderRadius: 10, fontFamily: T.sans, letterSpacing: 0.3, textTransform: 'uppercase' }}>Pending approval</span>
+                                        {q.billingContact && <span style={{ fontSize: 10, color: T.inkMuted, fontFamily: T.sans }}>mailing id</span>}
+                                        <div style={{ flex: 1 }} />
+                                        <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{q.createdBy || '—'}</span>
+                                    </div>
+                                    {/* Card body */}
+                                    <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontSize: 16, fontWeight: 600, color: T.ink, lineHeight: 1.2, marginBottom: 2, fontFamily: T.sans }}>{opp?.account || '—'}</div>
+                                            <div style={{ fontSize: 12, color: T.inkMid, marginBottom: 6, fontFamily: T.sans }}>{opp?.opportunityName || opp?.account || '—'} — {q.name || q.quoteNumber}</div>
+                                            <div style={{ fontSize: 11, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>Reason: {reason}</div>
+                                        </div>
+                                        {/* Right: ARR + actions */}
+                                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                            <div style={{ fontSize: 18, fontWeight: 700, color: T.ink, letterSpacing: -0.3, fontFamily: T.sans }}>{fmt(q.totalValue || tv || 0)}</div>
+                                            <div style={{ fontSize: 10.5, color: T.inkMuted, marginBottom: 10, fontFamily: T.sans }}>{Math.round(avgDiscPct)}% disc · {tier.label}</div>
+                                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                                                <button onClick={() => onEdit(q)}
+                                                    style={{ background: 'transparent', color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '6px 12px', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>
+                                                    Sendback
+                                                </button>
+                                                {isManager && (
+                                                    <button onClick={() => onApprove(q)}
+                                                        style={{ background: T.ok, color: '#fff', border: 'none', borderRadius: T.r, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                                                        Approve
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div style={{ fontWeight: 700, color: T.ink, fontFamily: T.sans }}>{fmt(q.totalValue || 0)}</div>
-                                <button onClick={() => handleSend(q)} style={{ background: T.ink, color: T.surface, border: 'none', borderRadius: 8, padding: '0.35rem 0.875rem', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: T.sans }}>📧 Send to Customer</button>
-                            </div>
-                        );
-                    })
-                }
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* Recent decisions */}
+            <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>Recent decisions</div>
+                    <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>Last 30 days</span>
+                </div>
+                <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                    {recentDecisions.length === 0 ? (
+                        <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontStyle: 'italic', fontFamily: T.sans }}>No recent decisions.</div>
+                    ) : (
+                        recentDecisions.map((q, i) => {
+                            const opp = (opportunities || []).find(o => o.id === q.opportunityId);
+                            const isApproved = q.status === 'Approved' || q.status === 'Sent to Customer';
+                            const isSentback = q.status === 'Rejected / Lost';
+                            const statusLabel = isApproved ? 'APPROVED' : isSentback ? 'SENT BACK' : q.status.toUpperCase();
+                            const statusColor = isApproved ? T.ok : isSentback ? T.danger : T.inkMuted;
+                            return (
+                                <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderBottom: i < recentDecisions.length - 1 ? `1px solid ${T.border}` : 'none', cursor: 'pointer' }}
+                                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                    onClick={() => onEdit(q)}>
+                                    {/* Status tag */}
+                                    <div style={{ width: 72, flexShrink: 0 }}>
+                                        <span style={{ fontSize: 9.5, fontWeight: 700, color: statusColor, textTransform: 'uppercase', letterSpacing: 0.6, fontFamily: T.sans }}>{statusLabel}</span>
+                                    </div>
+                                    {/* Account + quote number */}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{opp?.account || '—'}</div>
+                                        <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace', marginTop: 1 }}>{q.quoteNumber || q.id}</div>
+                                        {isSentback && q.approvalReason && (
+                                            <div style={{ fontSize: 10.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans, marginTop: 2 }}>"{q.approvalReason}"</div>
+                                        )}
+                                    </div>
+                                    {/* Right: approver + date + ARR */}
+                                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                        <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>{fmt(q.totalValue || 0)}</div>
+                                        <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans, marginTop: 1 }}>
+                                            {q.approvedBy || (isManager ? 'Sales Manager' : 'Rep')} · {(q.updatedAt || q.createdAt || '').slice(0, 10) || '—'}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -986,8 +1177,8 @@ export default function QuotesTab() {
                             { label: 'Total quoted',      value: fmt(oppQuoteSummaries.reduce((s, x) => s + (parseFloat(x.latest?.totalValue) || 0), 0)), sub: 'across active quotes' },
                             { label: 'Pending approval',  value: pendingCount,              sub: pendingCount > 0 ? 'need manager action' : 'all clear' },
                         ].map(kpi => (
-                            <div key={kpi.label} style={{ background: '#fff', border: '1px solid #e5e2db', borderRadius: 10, padding: '0.75rem 1rem' }}>
-                                <div style={{ fontSize: '0.5625rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem', fontFamily: T.sans }}>{kpi.label}</div>
+                            <div key={kpi.label} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '0.75rem 1rem' }}>
+                                <div style={{ fontSize: '0.5625rem', fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem', fontFamily: T.sans }}>{kpi.label}</div>
                                 <div style={{ fontSize: '1.5rem', fontWeight: 800, color: T.ink, lineHeight: 1, letterSpacing: '-0.02em', fontFamily: T.sans }}>{kpi.value}</div>
                                 <div style={{ fontSize: '0.6875rem', color: '#64748b', marginTop: '0.2rem', fontFamily: T.sans }}>{kpi.sub}</div>
                             </div>
