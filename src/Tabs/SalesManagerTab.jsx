@@ -147,7 +147,7 @@ export default function SalesManagerTab() {
 
     const isAdmin   = userRole === 'Admin';
     const isManager = userRole === 'Manager';
-    const [subTab, setSubTab] = useState(() => localStorage.getItem('tab:salesmgr:subTab') || 'audit');
+    const [subTab, setSubTab] = useState(() => localStorage.getItem('tab:salesmgr:subTab') || 'forecast');
 
     if (!isAdmin && !isManager) return null;
 
@@ -211,9 +211,9 @@ export default function SalesManagerTab() {
     const SubTabs = () => (
         <div style={{ display:'flex', alignItems:'center', borderBottom:`1px solid ${T.border}`, marginBottom:16 }}>
             {[
-                { id:'audit',      label:'Overview'       },
                 { id:'forecast',   label:'Forecast'       },
                 { id:'team',       label:'Team'           },
+                { id:'audit',      label:'Pipeline Audit' },
                 { id:'admin',      label:'Administration' },
             ].map(t => {
                 const active = subTab === t.id;
@@ -223,9 +223,11 @@ export default function SalesManagerTab() {
                         borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent',
                         background:'transparent', color: active ? T.ink : T.inkMuted,
                         fontSize:12, fontWeight: active ? 600 : 400,
-                        cursor:'pointer', fontFamily:T.sans, transition:'all 120ms',
+                        cursor:'pointer', fontFamily:T.sans, transition:'color 120ms, border-color 120ms',
                         whiteSpace:'nowrap', marginBottom:-1,
-                    }}>
+                    }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.color = T.inkMid; }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.color = T.inkMuted; }}>
                         {t.label}
                     </button>
                 );
@@ -249,65 +251,56 @@ export default function SalesManagerTab() {
 
         return (
             <>
-            {/* ── Team progress bar ── */}
-            <div style={{ ...card, marginBottom:16 }}>
-                <div style={{ padding:'16px 20px' }}>
-                    <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', marginBottom:12 }}>
-                        <div>
-                            <div style={eyebrow}>Team to quota</div>
-                            <div style={{ display:'flex', alignItems:'baseline', gap:8, marginTop:4 }}>
-                                <span style={{ fontSize:28, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{fmtV(teamClosed)}</span>
-                                <span style={{ fontSize:13, color:T.inkMuted }}>of {fmtV(teamQuota)}</span>
-                                <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>{teamAttain !== null ? teamAttain+'%' : '—'}</span>
-                            </div>
-                        </div>
-                        <div style={{ textAlign:'right' }}>
-                            <div style={eyebrow}>Commit call</div>
-                            <div style={{ fontSize:22, fontWeight:700, color:T.ink, marginTop:4 }}>{fmtV(teamCommit)}</div>
-                            {teamQuota > 0 && teamCommit < teamQuota && (
-                                <div style={{ fontSize:11, color:T.danger, fontWeight:600 }}>Under quota by {fmtV(teamQuota - teamCommit)}</div>
-                            )}
-                        </div>
+            {/* ── Roll-up strip — matches design: bar on left, divider, commit call on right ── */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'18px 20px', marginBottom:16, display:'flex', gap:28, alignItems:'center' }}>
+                <div style={{ flex:1 }}>
+                    <div style={{ fontSize:10, letterSpacing:1, textTransform:'uppercase', color:T.inkMuted, fontWeight:700, fontFamily:T.sans }}>Team to quota</div>
+                    <div style={{ display:'flex', alignItems:'baseline', gap:10, marginTop:4 }}>
+                        <span style={{ fontSize:28, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{fmtV(teamClosed)}</span>
+                        <span style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>of {fmtV(teamQuota)}</span>
+                        <span style={{ fontSize:12, fontWeight:600, color:teamAttain>=100?T.ok:T.inkMid, fontFamily:T.sans }}>{teamAttain !== null ? teamAttain+'%' : '—'}</span>
                     </div>
 
-                    {/* Stacked bar */}
-                    <div style={{ position:'relative', height:10, borderRadius:T.r, background:T.surface2, overflow:'visible', marginBottom:6 }}>
-                        {/* Quota marker */}
-                        <div style={{ position:'absolute', left:quotaW+'%', top:-3, bottom:-3, width:2, background:T.ink, zIndex:3, borderRadius:1 }} />
-                        {/* Pipeline (lightest) */}
-                        <div style={{ position:'absolute', inset:0, width:Math.min(pipeW,100)+'%', background:T.border, borderRadius:T.r }} />
-                        {/* Best case */}
-                        <div style={{ position:'absolute', inset:0, width:Math.min(bestW,100)+'%', background:T.gold+'88', borderRadius:T.r }} />
-                        {/* Commit */}
-                        <div style={{ position:'absolute', inset:0, width:Math.min(commitW,100)+'%', background:T.gold, borderRadius:T.r }} />
-                        {/* Closed */}
-                        <div style={{ position:'absolute', inset:0, width:Math.min(closedW,100)+'%', background:T.ok, borderRadius:T.r }} />
+                    {/* Stacked bar — matches V1 design: flat, no borderRadius, segment order per spec */}
+                    <div style={{ position:'relative', height:8, background:T.surface2, overflow:'visible', marginTop:10, marginBottom:8, border:`1px solid ${T.border}` }}>
+                        <div style={{ position:'absolute', inset:0, width:Math.min(pipeW,100)+'%', background:T.border }} />
+                        <div style={{ position:'absolute', inset:0, width:Math.min(bestW,100)+'%', background:T.gold }} />
+                        <div style={{ position:'absolute', inset:0, width:Math.min(commitW,100)+'%', background:T.goldInk }} />
+                        <div style={{ position:'absolute', inset:0, width:Math.min(closedW,100)+'%', background:T.ok }} />
+                        <div style={{ position:'absolute', left:quotaW+'%', top:-3, bottom:-3, width:2, background:T.ink, zIndex:3 }} />
                     </div>
 
                     {/* Legend */}
-                    <div style={{ display:'flex', gap:16, fontSize:10, color:T.inkMuted, fontFamily:T.sans }}>
-                        {[
-                            { color:T.ok,         label:`Closed ${fmtV(teamClosed)}` },
-                            { color:T.gold,        label:`Commit ${fmtV(teamCommit)}` },
-                            { color:T.gold+'88',   label:`Best-case ${fmtV(teamBest)}` },
-                            { color:T.border,      label:`Open pipeline ${fmtV(teamPipe)}` },
-                        ].map(({ color, label }) => (
-                            <div key={label} style={{ display:'flex', alignItems:'center', gap:4 }}>
-                                <div style={{ width:8, height:8, borderRadius:2, background:color, flexShrink:0 }} />
-                                {label}
-                            </div>
-                        ))}
+                    <div style={{ display:'flex', gap:16, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
+                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:8, height:8, background:T.ok }}/> Closed {fmtV(teamClosed)}</span>
+                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:8, height:8, background:T.goldInk }}/> Commit {fmtV(teamCommit)}</span>
+                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:8, height:8, background:T.gold }}/> Best-case {fmtV(teamBest)}</span>
+                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><div style={{ width:8, height:8, border:`1px solid ${T.border}` }}/> Open pipeline {fmtV(teamPipe)}</span>
                     </div>
+                </div>
+
+                {/* Vertical divider */}
+                <div style={{ width:1, height:60, background:T.border, flexShrink:0 }} />
+
+                {/* Commit call */}
+                <div style={{ flexShrink:0 }}>
+                    <div style={{ fontSize:10, letterSpacing:1, textTransform:'uppercase', color:T.inkMuted, fontWeight:700, fontFamily:T.sans }}>Commit call</div>
+                    <div style={{ fontSize:22, fontWeight:700, color:T.ink, marginTop:4, fontFamily:T.sans }}>{fmtV(teamCommit)}</div>
+                    {teamQuota > 0 && (
+                        <div style={{ fontSize:11, fontWeight:600, color:teamCommit >= teamQuota ? T.ok : T.warn, fontFamily:T.sans }}>
+                            {teamCommit >= teamQuota ? 'Above quota' : 'Under quota by ' + fmtV(teamQuota - teamCommit)}
+                        </div>
+                    )}
                 </div>
             </div>
 
             {/* ── Ledger table ── */}
             <div style={card}>
                 {/* Column headers */}
-                <div style={{ display:'grid', gridTemplateColumns:'180px 80px 80px 100px 90px 90px 70px 80px 70px', alignItems:'center', padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}`, fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
+                <div style={{ display:'grid', gridTemplateColumns:'200px 90px 100px 100px 100px 100px 90px 60px 80px', alignItems:'center', padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}`, fontSize:9, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
                     <div>Rep</div><div style={{textAlign:'right'}}>Quota</div><div style={{textAlign:'right'}}>Closed</div>
-                    <div style={{textAlign:'right'}}>Commit</div><div style={{textAlign:'right'}}>Best Case</div>
-                    <div style={{textAlign:'right'}}>Pipeline</div><div style={{textAlign:'center'}}>Attain</div>
+                    <div style={{textAlign:'right'}}>Commit</div><div style={{textAlign:'right'}}>Best case</div>
+                    <div style={{textAlign:'right'}}>Pipeline</div><div style={{textAlign:'right'}}>Attain</div>
                     <div style={{textAlign:'center'}}>Health</div><div style={{textAlign:'center'}}>Action</div>
                 </div>
 
@@ -315,26 +308,26 @@ export default function SalesManagerTab() {
                 {repStats.map((rs, i) => {
                     const isEditing = editingCommit === rs.rep.id;
                     return (
-                        <div key={rs.rep.id} style={{ display:'grid', gridTemplateColumns:'180px 80px 80px 100px 90px 90px 70px 80px 70px', alignItems:'center', padding:'10px 16px', borderBottom:`1px solid ${T.border}`, background: i%2===0 ? T.surface : T.bg, fontFamily:T.sans, transition:'background 80ms' }}
+                        <div key={rs.rep.id} style={{ display:'grid', gridTemplateColumns:'200px 90px 100px 100px 100px 100px 90px 60px 80px', alignItems:'center', padding:'12px 16px', borderBottom:`1px solid ${T.border}`, background: i%2===0 ? T.surface : T.bg, fontFamily:T.sans, transition:'background 80ms' }}
                             onMouseEnter={e => e.currentTarget.style.background=T.surface2}
                             onMouseLeave={e => e.currentTarget.style.background=i%2===0 ? T.surface : T.bg}>
 
                             {/* Rep name */}
-                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                <Avatar name={rs.rep.name} size={26} />
+                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                <Avatar name={rs.rep.name} size={30} />
                                 <div>
-                                    <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{rs.rep.name}</div>
-                                    <div style={{ fontSize:10, color:T.inkMuted }}>{rs.rep.territory || rs.rep.team || 'AE'}</div>
+                                    <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{rs.rep.name}</div>
+                                    <div style={{ fontSize:10.5, color:T.inkMuted }}>{rs.rep.territory || rs.rep.team || (rs.rep.userType === 'User' ? 'AE' : rs.rep.userType) }</div>
                                 </div>
                             </div>
 
                             {/* Quota */}
-                            <div style={{ textAlign:'right', fontSize:12, fontWeight:600, color:T.ink }}>{fmtV(rs.quota)}</div>
+                            <div style={{ textAlign:'right', fontSize:12.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.quota)}</div>
 
                             {/* Closed */}
-                            <div style={{ textAlign:'right', fontSize:12, color:T.ok, fontWeight:600 }}>{fmtV(rs.closedArr)}</div>
+                            <div style={{ textAlign:'right', fontSize:13, color:T.ink, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.closedArr)}</div>
 
-                            {/* Commit — editable, dashed gold border */}
+                            {/* Commit — dashed gold border box, editable */}
                             <div style={{ textAlign:'right' }}>
                                 {isEditing ? (
                                     <input type="number" defaultValue={rs.commit}
@@ -343,53 +336,54 @@ export default function SalesManagerTab() {
                                         onKeyDown={e => { if (e.key==='Enter'||e.key==='Escape') e.target.blur(); }}
                                         style={{ width:80, padding:'3px 6px', border:`1.5px dashed ${T.goldInk}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, background:T.surface2, color:T.ink, textAlign:'right', outline:'none' }} />
                                 ) : (
-                                    <span onClick={() => setEditingCommit(rs.rep.id)} style={{ fontSize:12, fontWeight:600, color:T.goldInk, cursor:'text', borderBottom:`1.5px dashed ${T.gold}`, paddingBottom:1 }}>
+                                    <span onClick={() => setEditingCommit(rs.rep.id)}
+                                        style={{ fontSize:13, fontWeight:600, color:T.goldInk, cursor:'text', display:'inline-block', border:`1px dashed ${T.gold}`, padding:'2px 6px', borderRadius:2 }}>
                                         {fmtV(rs.commit)}
                                     </span>
                                 )}
                             </div>
 
                             {/* Best case */}
-                            <div style={{ textAlign:'right', fontSize:12, color:T.inkMid }}>{fmtV(rs.bestCase)}</div>
+                            <div style={{ textAlign:'right', fontSize:13, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.bestCase)}</div>
 
                             {/* Pipeline */}
-                            <div style={{ textAlign:'right', fontSize:12, color:T.inkMid }}>{fmtV(rs.pipelineArr)}</div>
+                            <div style={{ textAlign:'right', fontSize:12.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(rs.pipelineArr)}</div>
 
                             {/* Attain % + mini bar */}
-                            <div style={{ textAlign:'center' }}>
-                                <div style={{ fontSize:12, fontWeight:700, color:rs.attainPct>=100 ? T.ok : rs.attainPct>=70 ? T.warn : T.danger }}>
+                            <div style={{ textAlign:'right' }}>
+                                <div style={{ fontSize:13, fontWeight:700, color:rs.attainPct>=100 ? T.ok : rs.attainPct>=70 ? T.ink : rs.attainPct>=40 ? T.warn : T.danger }}>
                                     {rs.attainPct !== null ? rs.attainPct+'%' : '—'}
                                 </div>
-                                <div style={{ height:3, background:T.border, borderRadius:2, marginTop:3 }}>
-                                    <div style={{ height:'100%', width:Math.min(rs.attainPct||0,100)+'%', background:rs.attainPct>=100?T.ok:rs.attainPct>=70?T.warn:T.danger, borderRadius:2 }} />
+                                <div style={{ height:3, background:T.border, marginTop:2, position:'relative' }}>
+                                    <div style={{ position:'absolute', left:0, top:0, bottom:0, width:Math.min(rs.attainPct||0,100)+'%', background:rs.attainPct>=100?T.ok:rs.attainPct>=70?T.goldInk:T.danger }} />
                                 </div>
                             </div>
 
-                            {/* Health dot + trend */}
+                            {/* Health dot + trend arrow */}
                             <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
-                                <div style={{ width:8, height:8, borderRadius:'50%', background:rs.healthColor }} />
-                                <span style={{ fontSize:10, color:rs.trend==='up' ? T.ok : rs.trend==='down' ? T.danger : T.inkMuted }}>
-                                    {rs.trend==='up' ? '↑' : rs.trend==='down' ? '↓' : '–'}
+                                <div style={{ width:7, height:7, borderRadius:'50%', background:rs.healthColor, flexShrink:0 }} />
+                                <span style={{ fontSize:11, color:rs.trend==='up' ? T.ok : rs.trend==='down' ? T.danger : T.inkMuted, fontWeight:700 }}>
+                                    {rs.trend==='up' ? '↑' : rs.trend==='down' ? '↓' : '—'}
                                 </span>
                             </div>
 
                             {/* Coach action */}
                             <div style={{ textAlign:'center' }}>
-                                <button style={{ fontSize:10, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, fontWeight:600 }}>Coach →</button>
+                                <button style={{ fontSize:11, color:T.goldInk, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, fontWeight:600 }}>Coach →</button>
                             </div>
                         </div>
                     );
                 })}
 
                 {/* Team total row */}
-                <div style={{ display:'grid', gridTemplateColumns:'180px 80px 80px 100px 90px 90px 70px 80px 70px', alignItems:'center', padding:'10px 16px', background:T.surface2, borderTop:`2px solid ${T.border}`, fontFamily:T.sans }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:T.ink, textTransform:'uppercase', letterSpacing:0.5 }}>Team Total</div>
-                    <div style={{ textAlign:'right', fontSize:12, fontWeight:700, color:T.ink }}>{fmtV(teamQuota)}</div>
-                    <div style={{ textAlign:'right', fontSize:12, fontWeight:700, color:T.ok }}>{fmtV(teamClosed)}</div>
-                    <div style={{ textAlign:'right', fontSize:12, fontWeight:700, color:T.goldInk }}>{fmtV(teamCommit)}</div>
-                    <div style={{ textAlign:'right', fontSize:12, fontWeight:600, color:T.inkMid }}>{fmtV(teamBest)}</div>
-                    <div style={{ textAlign:'right', fontSize:12, fontWeight:600, color:T.inkMid }}>{fmtV(teamPipe)}</div>
-                    <div style={{ textAlign:'center', fontSize:12, fontWeight:700, color:teamAttain>=100?T.ok:T.inkMid }}>{teamAttain !== null ? teamAttain+'%' : '—'}</div>
+                <div style={{ display:'grid', gridTemplateColumns:'200px 90px 100px 100px 100px 100px 90px 60px 80px', alignItems:'center', padding:'12px 16px', background:T.surface2, borderTop:`2px solid ${T.ink}`, fontFamily:T.sans }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:T.ink, textTransform:'uppercase', letterSpacing:0.5 }}>Team Total</div>
+                    <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamQuota)}</div>
+                    <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ok, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamClosed)}</div>
+                    <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.goldInk, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamCommit)}</div>
+                    <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamBest)}</div>
+                    <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{fmtV(teamPipe)}</div>
+                    <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:teamAttain>=100?T.ok:T.inkMid }}>{teamAttain !== null ? teamAttain+'%' : '—'}</div>
                     <div /><div />
                 </div>
             </div>
