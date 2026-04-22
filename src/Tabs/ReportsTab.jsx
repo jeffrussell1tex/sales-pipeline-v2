@@ -1947,234 +1947,344 @@ ${bodyHtml}
                         </div>
                         )}
 
+
 {/* ════════════════════════════════════════════
-                             TAB: LEADS
+                             TAB: LEADS  (V4 redesign)
                             ════════════════════════════════════════════ */}
                         {reportSubTab === 'leads' && leadsEnabled && (() => {
-                            const stageColors = { 'New':'#8a8378','Contacted':'#3a5a7a','Qualified':'#5a4a7a','Working':'#b87333','Converted':'#4d6b3d','Dead':'#9c3a2e' };
+                            // ── Design tokens (warm-stone, matches Pipeline / Performance / Activity)
+                            const T4 = {
+                                surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', borderStrong:'#d4c8b4',
+                                ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378',
+                                gold:'#c8b99a', goldInk:'#7a6a48',
+                                ok:'#4d6b3d', warn:'#b87333', danger:'#9c3a2e', info:'#3a5a7a',
+                                sans:'"Plus Jakarta Sans",system-ui,sans-serif',
+                                serif:'Georgia,serif', r:3,
+                            };
+                            // Warm ramp for sources — darkest = top source
+                            const SOURCE_RAMP4 = ['#7a5a3c','#8a6d4a','#a08358','#b49875','#c5aa89','#d4bfa2','#e0cfb8'];
+                            const SCORE_BAND_COLORS4 = { Hot:'#8a4f1c', Warm:'#b87333', Cool:'#b0a088', Cold:'#c9c0b0' };
+                            const STATUS_STYLES4 = {
+                                'New':       { dot:'#b0a088', bg:'rgba(176,160,136,0.12)', ink:'#5a544c' },
+                                'Contacted': { dot:'#c8a978', bg:'rgba(200,169,120,0.15)', ink:'#7a5a3c' },
+                                'Working':   { dot:'#b87333', bg:'rgba(184,115,51,0.14)',  ink:'#8a4f1c' },
+                                'Qualified': { dot:'#7a5a3c', bg:'rgba(122,90,60,0.14)',   ink:'#5a3e24' },
+                                'Converted': { dot:'#4d6b3d', bg:'rgba(77,107,61,0.14)',   ink:'#3a5530' },
+                                'Dead':      { dot:'#9c3a2e', bg:'rgba(156,58,46,0.10)',   ink:'#7a2a22' },
+                            };
+                            const FUNNEL_ORDER4 = ['New','Contacted','Working','Qualified','Converted'];
+
+                            // ── Primitives
+                            const fmtM4 = v => { const n=parseFloat(v)||0; return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1e3?'$'+Math.round(n/1e3)+'K':'$'+Math.round(n); };
+                            const eb4 = c => ({ fontSize:10, fontWeight:700, color:c||T4.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T4.sans });
+                            const HBar4 = ({ value, max, color, height=6 }) => {
+                                const pct = Math.min(100, Math.max(0, (value/Math.max(max,1))*100));
+                                return <div style={{ flex:1, height, background:T4.surface2, borderRadius:height/2, overflow:'hidden' }}><div style={{ width:pct+'%', height:'100%', background:color, borderRadius:height/2 }}/></div>;
+                            };
+                            const Panel4 = ({ children, p='20px 22px 22px' }) => (
+                                <div style={{ background:T4.surface, border:`1px solid ${T4.border}`, borderRadius:T4.r, padding:p }}>{children}</div>
+                            );
+                            const SecHdr4 = ({ title, sub, right }) => (
+                                <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 }}>
+                                    <div style={{ flex:1 }}>
+                                        <div style={{ fontSize:16, fontFamily:T4.serif, fontStyle:'italic', fontWeight:400, color:T4.ink, lineHeight:1.1, letterSpacing:-0.2 }}>{title}</div>
+                                        {sub && <div style={{ fontSize:11.5, color:T4.inkMuted, marginTop:3, fontFamily:T4.sans }}>{sub}</div>}
+                                    </div>
+                                    {right}
+                                </div>
+                            );
+
+                            // ── Real data from reportsTimedLeads (respects period filter + role scoping)
                             const allLeads = reportsTimedLeads;
-                            const openLeads = allLeads.filter(l => l.status !== 'Converted' && l.status !== 'Dead');
-                            const hotLeads = allLeads.filter(l => (l.score||0) >= 70);
-                            const convertedLeads = allLeads.filter(l => l.status === 'Converted');
-                            const deadLeads = allLeads.filter(l => l.status === 'Dead');
-                            const totalEstARR = openLeads.reduce((s,l) => s + (parseFloat(l.estimatedARR)||0), 0);
-                            const avgScore = allLeads.length > 0 ? Math.round(allLeads.reduce((s,l) => s + (l.score||50), 0) / allLeads.length) : 0;
-                            const convRate = allLeads.length > 0 ? (convertedLeads.length / allLeads.length * 100) : 0;
+                            const total4  = allLeads.length;
 
-                            // Source breakdown
-                            const sourceMap = {};
-                            allLeads.forEach(l => { const s = l.source || 'Unknown'; sourceMap[s] = (sourceMap[s]||0)+1; });
-                            const sourceData = Object.entries(sourceMap).sort((a,b)=>b[1]-a[1]);
-                            const maxSource = Math.max(...sourceData.map(([,c])=>c), 1);
+                            // leadsAgg() — adapted to real field names (assignedTo, estimatedARR, score, status, source)
+                            const agg4 = (() => {
+                                const open      = allLeads.filter(l => l.status !== 'Converted' && l.status !== 'Dead');
+                                const hot       = allLeads.filter(l => (l.score||0) >= 70).length;
+                                const warm      = allLeads.filter(l => (l.score||0) >= 50 && (l.score||0) < 70).length;
+                                const cool      = allLeads.filter(l => (l.score||0) >= 30 && (l.score||0) < 50).length;
+                                const cold      = allLeads.filter(l => (l.score||0) < 30).length;
+                                const converted = allLeads.filter(l => l.status === 'Converted').length;
+                                const dead      = allLeads.filter(l => l.status === 'Dead').length;
+                                const convRate  = total4 ? converted / total4 : 0;
+                                const estPipeline = open.reduce((s,l) => s+(parseFloat(l.estimatedARR)||0), 0);
+                                const avgScore  = total4 ? Math.round(allLeads.reduce((s,l) => s+(l.score||0), 0) / total4) : 0;
+                                const unassigned = allLeads.filter(l => !l.assignedTo).length;
+                                // stale = open lead with no lastTouch or last activity > 7 days ago
+                                const stale = open.filter(l => {
+                                    if (!l.lastActivityDate) return true;
+                                    const d = Math.floor((new Date() - new Date(l.lastActivityDate+'T12:00:00')) / 86400000);
+                                    return d >= 7;
+                                }).length;
+                                // funnel: cumulative counts (leads that reached >= this stage)
+                                const funnel = FUNNEL_ORDER4.map(st => ({
+                                    status: st,
+                                    count:  allLeads.filter(l => l.status === st).length,
+                                }));
+                                // sources
+                                const srcMap = {};
+                                allLeads.forEach(l => {
+                                    const s = l.source || 'Unknown';
+                                    if (!srcMap[s]) srcMap[s] = { name:s, count:0, converted:0, rev:0, scoreSum:0 };
+                                    srcMap[s].count++;
+                                    if (l.status === 'Converted') srcMap[s].converted++;
+                                    srcMap[s].rev += parseFloat(l.estimatedARR)||0;
+                                    srcMap[s].scoreSum += l.score||0;
+                                });
+                                const sources = Object.values(srcMap).map(s => ({
+                                    ...s,
+                                    convRate: s.count ? s.converted/s.count : 0,
+                                    avgScore: s.count ? Math.round(s.scoreSum/s.count) : 0,
+                                    avgRev:   s.count ? Math.round(s.rev/s.count) : 0,
+                                })).sort((a,b) => b.count - a.count);
+                                // reps
+                                const repMap = {};
+                                allLeads.forEach(l => {
+                                    const key = l.assignedTo || 'Unassigned';
+                                    if (!repMap[key]) repMap[key] = { rep:key, assigned:0, converted:0, rev:0, working:0, stale:0 };
+                                    repMap[key].assigned++;
+                                    if (l.status === 'Converted') repMap[key].converted++;
+                                    repMap[key].rev += parseFloat(l.estimatedARR)||0;
+                                    if (['Working','Qualified','Contacted'].includes(l.status)) repMap[key].working++;
+                                    const isStale = !l.lastActivityDate || Math.floor((new Date()-new Date(l.lastActivityDate+'T12:00:00'))/86400000) >= 7;
+                                    if (isStale && l.status !== 'Converted' && l.status !== 'Dead') repMap[key].stale++;
+                                });
+                                const reps = Object.values(repMap)
+                                    .map(r => ({ ...r, rate: r.assigned ? r.converted/r.assigned : 0 }))
+                                    .sort((a,b) => (b.assigned-a.assigned)||(b.rev-a.rev));
+                                return { open:open.length, hot, warm, cool, cold, converted, dead, convRate, estPipeline, avgScore, unassigned, stale, funnel, sources, reps };
+                            })();
 
-                            // Rep performance
-                            const repMap = {};
-                            allLeads.forEach(l => {
-                                const r = l.assignedTo || '__unassigned__';
-                                if (!repMap[r]) repMap[r] = { assigned:0, converted:0, estARR:0 };
-                                repMap[r].assigned++;
-                                if (l.status === 'Converted') repMap[r].converted++;
-                                repMap[r].estARR += parseFloat(l.estimatedARR)||0;
-                            });
-                            const repRows = Object.entries(repMap)
-                                .map(([rep, d]) => ({ rep: rep === '__unassigned__' ? 'Unassigned' : rep, ...d, rate: d.assigned > 0 ? (d.converted/d.assigned*100) : 0 }))
-                                .sort((a,b) => b.estARR - a.estARR);
-
-                            // Score distribution
-                            const scoreBuckets = [
-                                { label:'Cold (0-39)',  min:0,  max:39,  color:'#5a7a8a' },
-                                { label:'Warm (40-69)', min:40, max:69,  color:'#b87333' },
-                                { label:'Hot (70-100)', min:70, max:100, color:'#9c3a2e' },
-                            ].map(b => ({ ...b, count: allLeads.filter(l => (l.score||0) >= b.min && (l.score||0) <= b.max).length }));
-
-                            // Monthly trend (last 6 months)
-                            const now = new Date();
-                            const monthlyTrend = Array.from({length:6}, (_,i) => {
-                                const d = new Date(now.getFullYear(), now.getMonth() - (5-i), 1);
-                                const next = new Date(d.getFullYear(), d.getMonth()+1, 1);
-                                const created = allLeads.filter(l => { const c = new Date(l.createdAt||0); return c >= d && c < next; }).length;
-                                const converted = convertedLeads.filter(l => { const c = new Date(l.convertedAt||l.createdAt||0); return c >= d && c < next; }).length;
-                                return { label: d.toLocaleString('default',{month:'short'}), created, converted };
-                            });
-                            const maxTrend = Math.max(...monthlyTrend.map(m=>m.created), 1);
-
-                            const cardStyle = { background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'12px', overflow:'hidden' };
-                            const labelStyle = { fontSize:'0.6rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.25rem' };
+                            if (total4 === 0) return (
+                                <div style={{ display:'flex', flexDirection:'column', gap:'1rem', padding:'1rem 1.25rem 1.5rem' }}>
+                                    <div style={{ background:T4.surface, border:`1px solid ${T4.border}`, borderRadius:T4.r, padding:'3rem', textAlign:'center', color:T4.inkMuted, fontSize:14, fontFamily:T4.sans, fontStyle:'italic' }}>
+                                        No leads in this period. Leads will appear here once created.
+                                    </div>
+                                </div>
+                            );
 
                             return (
-                            <div style={{ display:'flex', flexDirection:'column', gap:'1rem', padding:'1rem 1.25rem 1.5rem' }}>
+                            <div style={{ display:'flex', flexDirection:'column', gap:14, padding:'1rem 1.25rem 1.5rem' }}>
 
-                                {/* KPI Strip */}
-                                <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'0.75rem' }}>
+                                {/* ──── KPI ROW ──── */}
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10, margin:'0 8px' }}>
                                     {[
-                                        { label:'Total Leads',    value: allLeads.length,                         sub: openLeads.length+' open',            accent:'#3a5a7a', vcolor:'#2a2622' },
-                                        { label:'🔥 Hot Leads',   value: hotLeads.length,                         sub: 'score ≥ 70',                         accent:'#9c3a2e', vcolor:'#9c3a2e' },
-                                        { label:'Converted',      value: convertedLeads.length,                   sub: convRate.toFixed(1)+'% rate',         accent:'#4d6b3d', vcolor:'#4d6b3d' },
-                                        { label:'Est. Pipeline',  value: '$'+(totalEstARR>=1000000?((totalEstARR/1000000).toFixed(1)+'M'):(totalEstARR>=1000?(Math.round(totalEstARR/1000)+'K'):totalEstARR)), sub:'from open leads', accent:'#5a4a7a', vcolor:'#5a4a7a' },
-                                        { label:'Avg Score',      value: avgScore,                                sub: hotLeads.length+' hot · '+allLeads.filter(l=>(l.score||0)>=40&&(l.score||0)<70).length+' warm', accent:'#b87333', vcolor:'#b87333' },
+                                        { label:'Total leads',  value:total4,                     sub:`${agg4.open} open` },
+                                        { label:'Hot leads',    value:agg4.hot,                   sub:'score ≥ 70' },
+                                        { label:'Converted',    value:agg4.converted,             sub:`${(agg4.convRate*100).toFixed(1)}% rate` },
+                                        { label:'Est. pipeline',value:fmtM4(agg4.estPipeline),    sub:'from open leads' },
+                                        { label:'Avg score',    value:agg4.avgScore,              sub:`${agg4.hot} hot · ${agg4.warm} warm` },
                                     ].map(k => (
-                                        <div key={k.label} style={{ background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'10px', padding:'0.875rem 1rem', borderLeft:'3px solid '+k.accent }}>
-                                            <div style={labelStyle}>{k.label}</div>
-                                            <div style={{ fontSize:'1.625rem', fontWeight:'800', color:k.vcolor, lineHeight:1 }}>{k.value}</div>
-                                            <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.25rem' }}>{k.sub}</div>
+                                        <div key={k.label} style={{ background:T4.surface, border:`1px solid ${T4.border}`, borderRadius:T4.r, padding:'14px 18px' }}>
+                                            <div style={eb4(T4.inkMuted)}>{k.label}</div>
+                                            <div style={{ fontSize:26, fontWeight:700, color:T4.ink, letterSpacing:-0.5, lineHeight:1.1, marginTop:4, fontFamily:T4.sans, fontFeatureSettings:'"tnum"' }}>{k.value}</div>
+                                            <div style={{ fontSize:11, color:T4.inkMuted, marginTop:5, fontFamily:T4.sans }}>{k.sub}</div>
                                         </div>
                                     ))}
                                 </div>
 
-                                {/* Row 2: Funnel + Source */}
-                                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem' }}>
-
-                                    {/* Lead Funnel */}
-                                    <div style={cardStyle}>
-                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e6ddd0' }}>
-                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#2a2622', textTransform:'uppercase', letterSpacing:'0.05em' }}>🔽 Lead Funnel</span>
-                                        </div>
-                                        <div style={{ padding:'1rem' }}>
-                                            {Object.entries(stageColors).map(([stage, color]) => {
-                                                const count = allLeads.filter(l => (l.status||'New') === stage).length;
-                                                const pct = allLeads.length > 0 ? Math.round(count/allLeads.length*100) : 0;
-                                                return (
-                                                    <div key={stage} style={{ display:'flex', alignItems:'center', gap:'0.625rem', marginBottom:'0.5rem' }}>
-                                                        <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#5a544c', width:'72px', flexShrink:0 }}>{stage}</span>
-                                                        <div style={{ flex:1, background:'#fbf8f3', borderRadius:'5px', overflow:'hidden', height:'28px' }}>
-                                                            <div style={{ height:'100%', width:Math.max(pct,count>0?8:0)+'%', background:color, borderRadius:'5px', display:'flex', alignItems:'center', paddingLeft:'0.5rem', transition:'width 0.5s ease' }}>
-                                                                {count > 0 && <span style={{ fontSize:'0.625rem', fontWeight:'800', color:'#fff' }}>{count}</span>}
+                                {/* ──── V2 BIG FUNNEL ──── */}
+                                {(() => {
+                                    // Cumulative reach: how many leads reached >= this stage
+                                    const cum = FUNNEL_ORDER4.map((_, i) =>
+                                        FUNNEL_ORDER4.slice(i).reduce((s, st) =>
+                                            s + allLeads.filter(l => l.status === st).length, 0)
+                                    );
+                                    const maxN = cum[0] || 1;
+                                    const rows = FUNNEL_ORDER4.map((st, i) => {
+                                        const thisN = cum[i];
+                                        const pctOfTotal = total4 ? Math.round((thisN/total4)*100) : 0;
+                                        const pctFromPrev = i === 0 ? null : (cum[i-1] ? Math.round((thisN/cum[i-1])*100) : 0);
+                                        const drop = i === 0 ? 0 : cum[i-1] - thisN;
+                                        return { status:st, count:thisN, drop, pctOfTotal, pctFromPrev };
+                                    });
+                                    return (
+                                        <Panel4 p="22px 24px 24px">
+                                            <SecHdr4
+                                                title="Lead → conversion funnel"
+                                                sub="Every lead’s farthest stage reached — and where they drop out"
+                                                right={
+                                                    <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+                                                        {[{c:T4.gold,l:'reached stage'},{c:T4.danger,o:0.6,l:'dropped at step'}].map(x=>(
+                                                            <div key={x.l} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                                                <span style={{ width:10, height:10, background:x.c, borderRadius:2, opacity:x.o||1 }}/>
+                                                                <span style={{ fontSize:11.5, color:T4.inkMid, fontFamily:T4.sans }}>{x.l}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                }
+                                            />
+                                            <div style={{ display:'flex', flexDirection:'column', gap:2, marginTop:14 }}>
+                                                {rows.map((row, i) => {
+                                                    const st4 = STATUS_STYLES4[row.status] || {};
+                                                    const fill = i === rows.length-1 ? T4.ok : st4.dot || T4.gold;
+                                                    const barPct = maxN ? (row.count/maxN)*100 : 0;
+                                                    return (
+                                                        <div key={row.status} style={{ display:'flex', alignItems:'center', gap:18 }}>
+                                                            <div style={{ width:150, textAlign:'right', paddingRight:4, flexShrink:0 }}>
+                                                                <div style={{ fontSize:13, fontWeight:600, color:T4.ink, fontFamily:T4.sans }}>{row.status}</div>
+                                                                <div style={{ fontSize:10.5, color:T4.inkMuted, letterSpacing:0.3, textTransform:'uppercase', marginTop:1, fontFamily:T4.sans }}>
+                                                                    {row.pctFromPrev != null ? `${row.pctFromPrev}% of prior` : 'Top of funnel'}
+                                                                </div>
+                                                            </div>
+                                                            <div style={{ flex:1, position:'relative', height:56, display:'flex', alignItems:'center' }}>
+                                                                <div style={{ height:46, width:`${Math.max(barPct,5)}%`, background:fill, borderRadius:3, display:'flex', alignItems:'center', paddingLeft:14, boxSizing:'border-box', overflow:'hidden' }}>
+                                                                    <span style={{ fontSize:20, fontWeight:700, color:'#fbf8f3', fontFeatureSettings:'"tnum"', letterSpacing:-0.5, fontFamily:T4.sans }}>{row.count}</span>
+                                                                    <span style={{ fontSize:11, color:'rgba(251,248,243,0.75)', marginLeft:8, fontWeight:500, fontFamily:T4.sans }}>{row.pctOfTotal}% of total</span>
+                                                                </div>
+                                                                {row.drop > 0 && (
+                                                                    <div style={{ marginLeft:10, padding:'3px 9px', borderRadius:3, background:'rgba(156,58,46,0.10)', border:'1px solid rgba(156,58,46,0.25)', fontSize:11, fontWeight:600, color:T4.danger, fontFeatureSettings:'"tnum"', fontFamily:T4.sans, whiteSpace:'nowrap' }}>
+                                                                        −{row.drop} dropped
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
-                                                        <span style={{ fontSize:'0.6875rem', color:'#8a8378', width:'28px', textAlign:'right', flexShrink:0 }}>{pct}%</span>
+                                                    );
+                                                })}
+                                            </div>
+                                            {/* Footer strip */}
+                                            <div style={{ marginTop:18, padding:'12px 16px', background:T4.surface2, borderRadius:T4.r, display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:20 }}>
+                                                {[
+                                                    { k:'Overall conversion', v:`${(agg4.convRate*100).toFixed(1)}%`, sub:`${agg4.converted} of ${total4} leads` },
+                                                    { k:'Marked dead',        v:agg4.dead,                              sub:agg4.dead===0?'no losses recorded':`${Math.round((agg4.dead/total4)*100)}% leak` },
+                                                    { k:'Unassigned',         v:agg4.unassigned,                        sub:agg4.unassigned===0?'all routed':'need routing' },
+                                                    { k:'Stale > 7 days',     v:agg4.stale,                             sub:"haven’t been touched" },
+                                                ].map(s => (
+                                                    <div key={s.k}>
+                                                        <div style={eb4(T4.inkMuted)}>{s.k}</div>
+                                                        <div style={{ fontSize:18, fontWeight:700, color:T4.ink, fontFeatureSettings:'"tnum"', lineHeight:1.1, marginTop:2, fontFamily:T4.sans }}>{s.v}</div>
+                                                        <div style={{ fontSize:11, color:T4.inkMuted, marginTop:2, fontFamily:T4.sans }}>{s.sub}</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </Panel4>
+                                    );
+                                })()}
+
+                                {/* ──── BY SOURCE | SCORE DISTRIBUTION ──── */}
+                                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+
+                                    {/* V1BySource */}
+                                    <Panel4 p="18px 20px 20px">
+                                        <SecHdr4 title="By source" sub={`${agg4.sources.length} channels, ${total4} leads`}/>
+                                        {agg4.sources.length === 0
+                                            ? <div style={{ color:T4.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T4.sans }}>No source data.</div>
+                                            : (() => {
+                                                const maxSrc = Math.max(...agg4.sources.map(s=>s.count), 1);
+                                                return (
+                                                    <div style={{ display:'flex', flexDirection:'column', gap:7, marginTop:6 }}>
+                                                        {agg4.sources.map((s, i) => (
+                                                            <div key={s.name} style={{ display:'grid', gridTemplateColumns:'120px 1fr 28px', alignItems:'center', gap:12 }}>
+                                                                <span style={{ fontSize:12, color:T4.ink, fontFamily:T4.sans }}>{s.name}</span>
+                                                                <HBar4 value={s.count} max={maxSrc} color={SOURCE_RAMP4[i]||SOURCE_RAMP4[SOURCE_RAMP4.length-1]} height={8}/>
+                                                                <span style={{ fontSize:12, color:T4.inkMid, textAlign:'right', fontFeatureSettings:'"tnum"', fontWeight:600, fontFamily:T4.sans }}>{s.count}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            })()
+                                        }
+                                    </Panel4>
+
+                                    {/* V1ScoreDist */}
+                                    <Panel4 p="18px 20px 20px">
+                                        <SecHdr4 title="Score distribution" sub="Intent bands across all leads"/>
+                                        <div style={{ display:'flex', flexDirection:'column', gap:12, marginTop:10 }}>
+                                            {[
+                                                { label:'Cold (0–39)',   count:agg4.cold,  color:SCORE_BAND_COLORS4.Cold },
+                                                { label:'Cool (40–49)',  count:agg4.cool,  color:SCORE_BAND_COLORS4.Cool },
+                                                { label:'Warm (50–69)',  count:agg4.warm,  color:SCORE_BAND_COLORS4.Warm },
+                                                { label:'Hot (70–100)',  count:agg4.hot,   color:SCORE_BAND_COLORS4.Hot  },
+                                            ].map(b => {
+                                                const maxB = Math.max(agg4.cold, agg4.cool, agg4.warm, agg4.hot, 1);
+                                                return (
+                                                    <div key={b.label}>
+                                                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                                                            <span style={{ fontSize:12, color:T4.ink, fontFamily:T4.sans }}>{b.label}</span>
+                                                            <span style={{ fontSize:12, color:T4.inkMid, fontFeatureSettings:'"tnum"', fontWeight:600, fontFamily:T4.sans }}>{b.count} leads</span>
+                                                        </div>
+                                                        <HBar4 value={b.count} max={maxB} color={b.color} height={6}/>
                                                     </div>
                                                 );
                                             })}
                                         </div>
-                                    </div>
-
-                                    {/* Source Breakdown */}
-                                    <div style={cardStyle}>
-                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e6ddd0' }}>
-                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#2a2622', textTransform:'uppercase', letterSpacing:'0.05em' }}>📡 By Source</span>
-                                        </div>
-                                        <div style={{ padding:'1rem' }}>
-                                            {sourceData.length === 0
-                                                ? <div style={{ color:'#8a8378', fontSize:'0.8125rem', textAlign:'center', padding:'1rem' }}>No leads yet.</div>
-                                                : sourceData.map(([src, cnt], idx) => {
-                                                    const colors = ['#3a5a7a','#5a4a7a','#3a5a7a','#4d6b3d','#b87333','#9c3a2e','#8a5a5a'];
-                                                    return (
-                                                        <div key={src} style={{ display:'flex', alignItems:'center', gap:'0.625rem', marginBottom:'0.625rem' }}>
-                                                            <span style={{ fontSize:'0.75rem', color:'#5a544c', width:'90px', flexShrink:0, fontWeight:'600', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{src}</span>
-                                                            <div style={{ flex:1, height:'6px', background:'#f5efe3', borderRadius:'3px', overflow:'hidden' }}>
-                                                                <div style={{ height:'100%', width:Math.round(cnt/maxSource*100)+'%', background:colors[idx%colors.length], borderRadius:'3px', transition:'width 0.5s ease' }}></div>
-                                                            </div>
-                                                            <span style={{ fontSize:'0.6875rem', fontWeight:'700', color:'#2a2622', width:'20px', textAlign:'right', flexShrink:0 }}>{cnt}</span>
-                                                        </div>
-                                                    );
-                                                })
-                                            }
-                                        </div>
-                                    </div>
+                                    </Panel4>
                                 </div>
 
-                                {/* Row 3: Rep Performance + Score Distribution */}
-                                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem' }}>
-
-                                    {/* Rep Performance */}
-                                    <div style={cardStyle}>
-                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e6ddd0' }}>
-                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#2a2622', textTransform:'uppercase', letterSpacing:'0.05em' }}>👤 Rep Lead Performance</span>
-                                        </div>
-                                        <div style={{ overflowX:'auto' }}>
-                                            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8125rem' }}>
-                                                <thead><tr>
-                                                    {['Rep','Assigned','Converted','Rate','Est. ARR'].map(h => (
-                                                        <th key={h} style={{ padding:'0.5rem 0.75rem', background:'#fbf8f3', borderBottom:'1px solid #e6ddd0', fontSize:'0.6rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.06em', textAlign:['Assigned','Converted','Rate','Est. ARR'].includes(h)?'right':'left', whiteSpace:'nowrap' }}>{h}</th>
+                                {/* ──── V3 SOURCE ROI ──── */}
+                                <Panel4 p="20px 22px 22px">
+                                    <SecHdr4
+                                        title="Source ROI"
+                                        sub="Volume · average lead score · conversion rate · est. pipeline"
+                                        right={<span style={{ fontSize:11, color:T4.inkMuted, fontStyle:'italic', fontFamily:T4.sans }}>Sorted by pipeline value</span>}
+                                    />
+                                    {agg4.sources.length === 0
+                                        ? <div style={{ color:T4.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T4.sans, marginTop:8 }}>No source data.</div>
+                                        : (() => {
+                                            const sortedSrc = [...agg4.sources].sort((a,b) => b.rev - a.rev);
+                                            const maxCnt = Math.max(...sortedSrc.map(s=>s.count), 1);
+                                            const maxRev = Math.max(...sortedSrc.map(s=>s.rev), 1);
+                                            return (
+                                                <div style={{ marginTop:8 }}>
+                                                    <div style={{ display:'grid', gridTemplateColumns:'1.2fr 1.1fr 0.7fr 0.6fr 1.1fr', padding:'8px 0', borderBottom:`1px solid ${T4.border}` }}>
+                                                        {['Source','Volume','Avg score','Conv','Est. pipeline'].map((h,i)=>(
+                                                            <div key={h} style={{ ...eb4(T4.inkMuted), textAlign:i>=2?'right':'left' }}>{h}</div>
+                                                        ))}
+                                                    </div>
+                                                    {sortedSrc.map((s, i, arr) => (
+                                                        <div key={s.name} style={{ display:'grid', gridTemplateColumns:'1.2fr 1.1fr 0.7fr 0.6fr 1.1fr', padding:'11px 0', borderBottom:i===arr.length-1?'none':`1px solid ${T4.surface2}`, alignItems:'center' }}>
+                                                            <div style={{ fontSize:12.5, color:T4.ink, fontWeight:600, fontFamily:T4.sans }}>{s.name}</div>
+                                                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                                                <HBar4 value={s.count} max={maxCnt} color={SOURCE_RAMP4[i]||SOURCE_RAMP4[SOURCE_RAMP4.length-1]} height={6}/>
+                                                                <span style={{ fontSize:11.5, color:T4.inkMid, fontFeatureSettings:'"tnum"', minWidth:16, textAlign:'right', fontWeight:600, fontFamily:T4.sans }}>{s.count}</span>
+                                                            </div>
+                                                            <div style={{ textAlign:'right', fontFeatureSettings:'"tnum"' }}>
+                                                                <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:2, background:`rgba(122,90,60,${Math.min(0.22,s.avgScore/300)})`, color:T4.ink, fontWeight:600, fontSize:12, fontFamily:T4.sans }}>{s.avgScore}</span>
+                                                            </div>
+                                                            <div style={{ textAlign:'right', fontFeatureSettings:'"tnum"', fontWeight:700, color:s.convRate>0?T4.ok:T4.inkMuted, fontFamily:T4.sans }}>
+                                                                {s.convRate>0 ? Math.round(s.convRate*100)+'%' : '—'}
+                                                            </div>
+                                                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                                                <HBar4 value={s.rev} max={maxRev} color={T4.goldInk} height={4}/>
+                                                                <span style={{ fontSize:12.5, color:T4.ink, fontWeight:700, fontFeatureSettings:'"tnum"', minWidth:44, textAlign:'right', fontFamily:T4.sans }}>{fmtM4(s.rev)}</span>
+                                                            </div>
+                                                        </div>
                                                     ))}
-                                                </tr></thead>
-                                                <tbody>
-                                                    {repRows.length === 0
-                                                        ? <tr><td colSpan={5} style={{ textAlign:'center', padding:'1rem', color:'#8a8378', fontSize:'0.8125rem' }}>No leads yet.</td></tr>
-                                                        : repRows.map((r,i) => (
-                                                            <tr key={r.rep} style={{ background: i%2===0?'#fff':'#fbf8f3' }}>
-                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f5efe3', fontWeight:'600', color: r.rep==='Unassigned'?'#9c3a2e':'#2a2622' }}>{r.rep}</td>
-                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f5efe3', textAlign:'right', color:'#5a544c' }}>{r.assigned}</td>
-                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f5efe3', textAlign:'right', color:'#4d6b3d', fontWeight:'700' }}>{r.converted}</td>
-                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f5efe3', textAlign:'right', fontWeight:'700', color: r.rate>=25?'#4d6b3d':r.rate>=15?'#b87333':'#9c3a2e' }}>{r.rep==='Unassigned'?'—':r.rate.toFixed(0)+'%'}</td>
-                                                                <td style={{ padding:'0.5rem 0.75rem', borderBottom:'1px solid #f5efe3', textAlign:'right', fontWeight:'700', color:'#3a5a7a' }}>{r.estARR>0?'$'+(r.estARR>=1000000?((r.estARR/1000000).toFixed(1)+'M'):(r.estARR>=1000?(Math.round(r.estARR/1000)+'K'):r.estARR)):'—'}</td>
-                                                            </tr>
-                                                        ))
-                                                    }
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-
-                                    {/* Score Distribution */}
-                                    <div style={cardStyle}>
-                                        <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e6ddd0' }}>
-                                            <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#2a2622', textTransform:'uppercase', letterSpacing:'0.05em' }}>📊 Score Distribution</span>
-                                        </div>
-                                        <div style={{ padding:'1.25rem' }}>
-                                            {scoreBuckets.map(b => (
-                                                <div key={b.label} style={{ marginBottom:'0.875rem' }}>
-                                                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.3rem' }}>
-                                                        <span style={{ fontSize:'0.75rem', fontWeight:'600', color:'#5a544c' }}>{b.label}</span>
-                                                        <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#2a2622' }}>{b.count} leads</span>
-                                                    </div>
-                                                    <div style={{ height:'8px', background:'#f5efe3', borderRadius:'4px', overflow:'hidden' }}>
-                                                        <div style={{ height:'100%', width: allLeads.length>0?Math.round(b.count/allLeads.length*100)+'%':'0%', background:b.color, borderRadius:'4px', transition:'width 0.5s ease' }}></div>
-                                                    </div>
                                                 </div>
+                                            );
+                                        })()
+                                    }
+                                </Panel4>
+
+                                {/* ──── V1 REP TABLE ──── */}
+                                <Panel4 p="18px 20px 20px">
+                                    <SecHdr4 title="Rep lead performance" sub="Assigned · converted · rate · est. ARR"/>
+                                    <div style={{ marginTop:4 }}>
+                                        <div style={{ display:'grid', gridTemplateColumns:'1.2fr 0.6fr 0.7fr 0.6fr 0.8fr', padding:'8px 0', borderBottom:`1px solid ${T4.border}` }}>
+                                            {['Rep','Assigned','Converted','Rate','Est. ARR'].map((h,i)=>(
+                                                <div key={h} style={{ ...eb4(T4.inkMuted), textAlign:i===0?'left':'right' }}>{h}</div>
                                             ))}
-                                            <div style={{ marginTop:'1rem', padding:'0.75rem', background:'#fbf8f3', borderRadius:'8px', border:'1px solid #e6ddd0', display:'flex', justifyContent:'space-around', textAlign:'center' }}>
-                                                <div>
-                                                    <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.2rem' }}>Avg Score</div>
-                                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color: avgScore>=70?'#9c3a2e':avgScore>=40?'#b87333':'#5a7a8a' }}>{avgScore}</div>
-                                                </div>
-                                                <div>
-                                                    <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.2rem' }}>Hot %</div>
-                                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color:'#9c3a2e' }}>{allLeads.length>0?Math.round(hotLeads.length/allLeads.length*100):0}%</div>
-                                                </div>
-                                                <div>
-                                                    <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.2rem' }}>Unassigned</div>
-                                                    <div style={{ fontSize:'1.25rem', fontWeight:'800', color:'#9c3a2e' }}>{allLeads.filter(l=>!l.assignedTo).length}</div>
-                                                </div>
-                                            </div>
                                         </div>
-                                    </div>
-                                </div>
-
-                                {/* Row 4: Monthly Trend */}
-                                <div style={cardStyle}>
-                                    <div style={{ padding:'0.75rem 1rem', borderBottom:'1px solid #e6ddd0' }}>
-                                        <span style={{ fontSize:'0.75rem', fontWeight:'800', color:'#2a2622', textTransform:'uppercase', letterSpacing:'0.05em' }}>📅 Lead Trend — Last 6 Months</span>
-                                    </div>
-                                    <div style={{ padding:'1.25rem' }}>
-                                        {allLeads.length === 0
-                                            ? <div style={{ textAlign:'center', color:'#8a8378', fontSize:'0.8125rem', padding:'1rem' }}>No leads yet.</div>
-                                            : (
-                                            <div>
-                                                <div style={{ display:'flex', gap:'0.75rem', alignItems:'flex-end', height:'80px', marginBottom:'0.5rem' }}>
-                                                    {monthlyTrend.map((m,i) => (
-                                                        <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:'3px', height:'100%', justifyContent:'flex-end' }}>
-                                                            {m.created > 0 && <div style={{ fontSize:'0.5625rem', fontWeight:'700', color:'#5a544c' }}>{m.created}</div>}
-                                                            <div style={{ width:'100%', display:'flex', alignItems:'flex-end', gap:'2px', height:Math.max(Math.round(m.created/maxTrend*70),2)+'px' }}>
-                                                                <div style={{ flex:1, height:'100%', background:'linear-gradient(to top,#3a5a7a,#5a4a7a)', borderRadius:'3px 3px 0 0', opacity:0.85 }}></div>
-                                                                {m.converted > 0 && <div style={{ flex:1, height:Math.max(Math.round(m.converted/maxTrend*70),4)+'px', background:'#4d6b3d', borderRadius:'3px 3px 0 0' }}></div>}
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                        {agg4.reps.slice(0,10).map((r, i, arr) => {
+                                            const isUnassigned = r.rep === 'Unassigned';
+                                            return (
+                                                <div key={r.rep} style={{ display:'grid', gridTemplateColumns:'1.2fr 0.6fr 0.7fr 0.6fr 0.8fr', padding:'9px 0', borderBottom:i===arr.length-1?'none':`1px solid ${T4.surface2}`, alignItems:'center' }}>
+                                                    <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                                                        {isUnassigned && <span style={{ width:6, height:6, background:T4.danger, borderRadius:'50%', flexShrink:0 }}/>}
+                                                        <span style={{ fontSize:12.5, color:isUnassigned?T4.danger:T4.ink, fontWeight:isUnassigned?700:600, fontFamily:T4.sans }}>{r.rep}</span>
+                                                    </div>
+                                                    <div style={{ textAlign:'right', fontSize:12.5, fontFeatureSettings:'"tnum"', color:T4.ink, fontFamily:T4.sans }}>{r.assigned}</div>
+                                                    <div style={{ textAlign:'right', fontSize:12.5, fontFeatureSettings:'"tnum"', color:r.converted?T4.ok:T4.inkMuted, fontFamily:T4.sans }}>{r.converted}</div>
+                                                    <div style={{ textAlign:'right', fontSize:12.5, fontFeatureSettings:'"tnum"', color:T4.inkMid, fontFamily:T4.sans }}>
+                                                        {r.assigned && !isUnassigned ? (r.rate ? Math.round(r.rate*100)+'%' : '—') : '—'}
+                                                    </div>
+                                                    <div style={{ textAlign:'right', fontSize:12.5, fontFeatureSettings:'"tnum"', color:T4.ink, fontWeight:600, fontFamily:T4.sans }}>{fmtM4(r.rev)}</div>
                                                 </div>
-                                                <div style={{ display:'flex', gap:'0.75rem', borderTop:'1px solid #f5efe3', paddingTop:'0.375rem' }}>
-                                                    {monthlyTrend.map((m,i) => (
-                                                        <div key={i} style={{ flex:1, textAlign:'center', fontSize:'0.6rem', color:'#8a8378', fontWeight:'600' }}>{m.label}</div>
-                                                    ))}
-                                                </div>
-                                                <div style={{ display:'flex', gap:'1.25rem', justifyContent:'center', marginTop:'0.75rem' }}>
-                                                    <span style={{ fontSize:'0.6875rem', color:'#8a8378', display:'flex', alignItems:'center', gap:'0.375rem' }}><span style={{ width:'10px', height:'10px', background:'linear-gradient(#3a5a7a,#5a4a7a)', borderRadius:'2px', display:'inline-block' }}></span>Created</span>
-                                                    <span style={{ fontSize:'0.6875rem', color:'#8a8378', display:'flex', alignItems:'center', gap:'0.375rem' }}><span style={{ width:'10px', height:'10px', background:'#4d6b3d', borderRadius:'2px', display:'inline-block' }}></span>Converted</span>
-                                                </div>
-                                            </div>
-                                        )}
+                                            );
+                                        })}
                                     </div>
-                                </div>
+                                </Panel4>
 
                             </div>
                             );
