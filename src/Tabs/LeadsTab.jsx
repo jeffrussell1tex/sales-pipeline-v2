@@ -1,503 +1,670 @@
-import React from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
-import LeadForm from '../components/LeadForm';
 
-export default function LeadsTab() {
-    const {
-        leads, setLeads,
-        setEditingOpp, setShowModal,
-        setShowLeadImportModal,
-        contacts,
-        settings, currentUser, canSeeAll, softDelete, showConfirm,
-        addAudit,
-        setUndoToast,
-        isMobile,
-    } = useApp();
-    const [leadDragging, setLeadDragging] = React.useState(null); // { leadId, fromStage }
-    const [leadDragOver, setLeadDragOver] = React.useState(null); // stage name
-    const stageColors = { 'New':'#8a8378','Contacted':'#3a5a7a','Qualified':'#5a4a7a','Working':'#b87333','Converted':'#4d6b3d','Dead':'#9c3a2e' };
-    const scoreBg = s => s >= 70 ? 'rgba(156,58,46,0.08)' : s >= 40 ? 'rgba(184,115,51,0.1)' : 'rgba(58,90,122,0.1)';
-    const scoreColor = s => s >= 70 ? '#9c3a2e' : s >= 40 ? '#b87333' : '#3a5a7a';
-    const statusStyle = { New:{bg:'rgba(58,90,122,0.06)',color:'#3a5a7a'}, Contacted:{bg:'rgba(77,107,61,0.07)',color:'#4d6b3d'}, Qualified:{bg:'rgba(90,74,122,0.06)',color:'#5a4a7a'}, Working:{bg:'rgba(184,115,51,0.06)',color:'#b87333'}, Converted:{bg:'rgba(77,107,61,0.15)',color:'#4d6b3d'}, Dead:{bg:'#f5efe3',color:'#8a8378'} };
+// ── Design tokens ────────────────────────────────────────────
+const T = {
+    bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
+    border: '#e6ddd0', borderStrong: '#d4c8b4',
+    ink: '#2a2622', inkMid: '#5a544c', inkMuted: '#8a8378',
+    gold: '#c8b99a', goldInk: '#7a6a48',
+    danger: '#9c3a2e', warn: '#b87333', ok: '#4d6b3d', info: '#3a5a7a',
+    sans: '"Plus Jakarta Sans", system-ui, sans-serif',
+    serif: 'Georgia, serif',
+    r: 3,
+};
 
-    const visibleLeads = canSeeAll
-        ? leads
-        : leads.filter(l => !l.assignedTo || l.assignedTo === currentUser);
+// ── Status + source palettes ─────────────────────────────────
+const STATUS_STYLES = {
+    'New':       { dot:'#b0a088', bg:'rgba(176,160,136,0.12)', ink:'#5a544c' },
+    'Contacted': { dot:'#c8a978', bg:'rgba(200,169,120,0.15)', ink:'#7a5a3c' },
+    'Working':   { dot:'#b87333', bg:'rgba(184,115,51,0.14)',  ink:'#8a4f1c' },
+    'Qualified': { dot:'#7a5a3c', bg:'rgba(122,90,60,0.14)',   ink:'#5a3e24' },
+    'Converted': { dot:'#4d6b3d', bg:'rgba(77,107,61,0.14)',   ink:'#3a5530' },
+    'Dead':      { dot:'#9c3a2e', bg:'rgba(156,58,46,0.10)',   ink:'#7a2a22' },
+};
 
-    const reps = (settings.users || []).filter(u => u.role === 'Rep' || u.role === 'User');
-    const allReps = (settings.users || []).filter(u => u.name);
+const SOURCE_COLORS = {
+    'LinkedIn': '#3a5a7a', 'Referral': '#7a5a3c', 'Trade Show': '#b87333',
+    'Cold Outreach': '#5a544c', 'Webinar': '#4d6b3d',
+    'Partner Referral': '#b0a088', 'Website': '#9aa89a',
+};
 
-    const [leadFilter, setLeadFilter] = React.useState('all');
-    const [leadView, setLeadView] = React.useState('list'); // 'list' | 'kanban' | 'funnel'
-    const [leadFunnelExpanded, setLeadFunnelExpanded] = React.useState(null);
-    const [selectedLeads, setSelectedLeads] = React.useState([]);
-    const [assignTarget, setAssignTarget] = React.useState('');
-    const [newLead, setNewLead] = React.useState(null);
-    const [editingLead, setEditingLead] = React.useState(null);
+const SCORE_COLORS = { hot:'#b85a35', warm:'#c89a6b', cool:'#9aa89a', cold:'#c9c0b0' };
+const scoreBand = (s) => s >= 70 ? 'hot' : s >= 50 ? 'warm' : s >= 30 ? 'cool' : 'cold';
 
-    const filtered = visibleLeads.filter(l => {
-        if (leadFilter === 'all') return true;
-        if (leadFilter === 'hot') return (l.score || 0) >= 70;
-        if (leadFilter === 'unassigned') return !l.assignedTo;
-        return l.status === leadFilter;
-    });
+// ── Field normaliser — real DB schema → design fields ────────
+const norm = (l) => ({
+    id:       l.id,
+    first:    l.firstName  || (l.name||'').split(' ')[0] || '',
+    last:     l.lastName   || (l.name||'').split(' ').slice(1).join(' ') || '',
+    company:  l.company    || l.accountName || '',
+    title:    l.title      || l.jobTitle    || '',
+    source:   l.source     || l.leadSource  || '',
+    status:   l.status     || 'New',
+    score:    parseFloat(l.score || l.leadScore) || 0,
+    rev:      parseFloat(l.estimatedARR || l.rev || l.arr) || 0,
+    assignee: l.assignedTo || l.assignee    || null,
+    notes:    l.notes      || '',
+    createdAt: l.createdAt || l.created_at  || null,
+    lastTouch: l.lastActivity || l.lastTouch || null,
+    raw:      l,
+});
 
-    const counts = {
-        all: visibleLeads.length,
-        hot: visibleLeads.filter(l => (l.score||0) >= 70).length,
-        New: visibleLeads.filter(l => l.status === 'New').length,
-        Working: visibleLeads.filter(l => l.status === 'Working').length,
-        unassigned: canSeeAll ? visibleLeads.filter(l => !l.assignedTo).length : 0,
-        Converted: visibleLeads.filter(l => l.status === 'Converted').length,
-    };
+const fmtRev = (n) => n >= 1000000 ? '$'+(n/1000000).toFixed(1)+'M' : n >= 1000 ? '$'+Math.round(n/1000)+'K' : n > 0 ? '$'+n : '—';
 
-    const totalARR = visibleLeads.reduce((s, l) => s + (parseFloat(l.estimatedARR) || 0), 0);
-    const convRate = visibleLeads.length ? Math.round((counts.Converted / visibleLeads.length) * 100) : 0;
+const relAge = (iso) => {
+    if (!iso) return null;
+    const d = Math.floor((Date.now() - new Date(iso+'T12:00:00').getTime()) / 86400000);
+    if (d === 0) return 'today';
+    if (d === 1) return '1d';
+    if (d < 30)  return d + 'd';
+    if (d < 365) return Math.round(d/30) + 'mo';
+    return Math.round(d/365) + 'yr';
+};
 
-    const saveLead = async (lead) => {
-        const isNew = !lead.id;
-        const saved = isNew
-            ? { ...lead, id: 'lead_' + Date.now(), createdAt: new Date().toISOString(), status: lead.status || 'New' }
-            : lead;
-        setLeads(prev => isNew ? [...prev, saved] : prev.map(l => l.id === saved.id ? saved : l));
-        await dbFetch('/.netlify/functions/leads', { method: isNew ? 'POST' : 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(saved) }).catch(console.error);
-        setNewLead(null); setEditingLead(null);
-    };
+// ── Avatar ───────────────────────────────────────────────────
+const AV_PALETTE = ['#9c6b4a','#7a5a3c','#5a6e5a','#6b5a7a','#8a5a5a','#5a7a8a','#7a6b5a','#4a6b5a'];
+const avBg = (name) => { let h=0; for (const c of (name||'')) h=(h*31+c.charCodeAt(0))|0; return AV_PALETTE[Math.abs(h)%AV_PALETTE.length]; };
+const Av = ({ name, size=28 }) => {
+    const init = (name||'').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+    return <div style={{ width:size, height:size, borderRadius:'50%', background:avBg(name), color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:Math.round(size*0.35), fontWeight:700, flexShrink:0 }}>{init}</div>;
+};
 
-    const deleteLead = (id) => {
-        const lead = leads.find(l => l.id === id);
-        if (!lead) return;
-        showConfirm('Are you sure you want to delete this lead?', () => {
-            const snapshot = [...leads];
-            setLeads(prev => prev.filter(l => l.id !== id));
-            dbFetch('/.netlify/functions/leads?id=' + id, { method: 'DELETE' }).catch(console.error);
-            softDelete(
-                `Lead "${[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || 'Unnamed'}"`,
-                () => {},
-                () => {
-                    setLeads(snapshot);
-                    setUndoToast(null);
-                    // Re-insert the deleted lead back to the DB
-                    dbFetch('/.netlify/functions/leads', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(lead),
-                    }).catch(err => console.error('Failed to restore lead to DB:', err));
-                }
-            );
-        });
-    };
-
-    const handleLeadDrop = (toStage) => {
-        if (!leadDragging || leadDragging.fromStage === toStage) {
-            setLeadDragging(null); setLeadDragOver(null); return;
-        }
-        const updated = leads.map(l =>
-            l.id === leadDragging.leadId ? { ...l, status: toStage } : l
-        );
-        setLeads(updated);
-        const lead = updated.find(l => l.id === leadDragging.leadId);
-        if (lead) dbFetch('/.netlify/functions/leads', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(lead) }).catch(console.error);
-        setLeadDragging(null); setLeadDragOver(null);
-    };
-
-    const convertLead = (lead) => {
-        const updated = { ...lead, status: 'Converted', convertedAt: new Date().toISOString() };
-        saveLead(updated);
-        const prefill = {
-            account: lead.company || '',
-            opportunityName: [lead.firstName, lead.lastName].filter(Boolean).join(' ') + (lead.company ? ' - ' + lead.company : ''),
-            salesRep: lead.assignedTo || currentUser || '',
-            arr: lead.estimatedARR || 0,
-            stage: 'Qualification',
-            contacts: [lead.firstName, lead.lastName].filter(Boolean).join(' '),
-            notes: lead.notes || '',
-        };
-        setEditingOpp(prefill);
-        setShowModal(true);
-    };
-
-    const bulkAssign = () => {
-        if (!assignTarget || selectedLeads.length === 0) return;
-        const updated = leads.map(l => selectedLeads.includes(l.id) ? { ...l, assignedTo: assignTarget } : l);
-        setLeads(updated);
-        updated.filter(l => selectedLeads.includes(l.id)).forEach(l =>
-            dbFetch('/.netlify/functions/leads', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(l) }).catch(console.error)
-        );
-        setSelectedLeads([]); setAssignTarget('');
-    };
-
-    const repColors = ['#3b82f6','#4d6b3d','#b87333','#9c3a2e','#5a4a7a','#8a5a5a'];
-    const repLoad = allReps.filter(u => u.name).map(u => ({
-        name: u.name,
-        count: visibleLeads.filter(l => l.assignedTo === u.name).length
-    })).filter(r => r.count > 0 || canSeeAll).slice(0, 8);
-    const maxLoad = Math.max(...repLoad.map(r => r.count), 1);
-
+// ── Shared lead primitives ────────────────────────────────────
+const LeadScore = ({ score, size='md' }) => {
+    const band = scoreBand(score);
+    const color = SCORE_COLORS[band];
+    const w = size==='sm' ? 30 : size==='lg' ? 42 : 36;
+    const h = size==='sm' ? 22 : size==='lg' ? 30 : 26;
+    const fs = size==='sm' ? 11 : size==='lg' ? 15 : 13;
     return (
-        <div className="tab-page">
-            {(newLead !== null) && <LeadForm lead={newLead} onSave={saveLead} onClose={() => setNewLead(null)} canSeeAll={canSeeAll} allReps={allReps} />}
-            {editingLead && <LeadForm lead={editingLead} onSave={saveLead} onClose={() => setEditingLead(null)} canSeeAll={canSeeAll} allReps={allReps} />}
+        <div style={{ width:w, height:h, borderRadius:T.r, background: band==='hot' ? color : 'transparent', border: band==='hot' ? 'none' : `1.5px solid ${color}`, color: band==='hot' ? '#fbf8f3' : T.ink, display:'flex', alignItems:'center', justifyContent:'center', fontSize:fs, fontWeight:700, flexShrink:0 }}>
+            {score || 0}
+        </div>
+    );
+};
 
-            {/* ── Page header — V1 serif italic ── */}
-            <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:12, fontFamily:'"Plus Jakarta Sans", system-ui, sans-serif' }}>
-                <div>
-                    <div style={{ fontSize:28, fontFamily:'Georgia, serif', fontStyle:'italic', fontWeight:300, letterSpacing:-0.8, color:'#2a2622', lineHeight:1, marginBottom:5 }}>Leads</div>
-                    <div style={{ fontSize:12, color:'#8a8378' }}>
-                        <span style={{ fontWeight:600, color:'#2a2622' }}>{visibleLeads.length}</span> leads
-                        {counts.hot > 0 && <><span style={{ margin:'0 6px', color:'#e6ddd0' }}>·</span><span style={{ color:'#9c3a2e', fontWeight:600 }}>{counts.hot} hot</span></>}
-                        {counts.unassigned > 0 && canSeeAll && <><span style={{ margin:'0 6px', color:'#e6ddd0' }}>·</span><span style={{ color:'#b87333', fontWeight:600 }}>{counts.unassigned} unassigned</span></>}
+const LeadStatusPill = ({ status }) => {
+    const s = STATUS_STYLES[status] || STATUS_STYLES['New'];
+    return (
+        <div style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 9px', background:s.bg, color:s.ink, fontSize:11, fontWeight:600, borderRadius:999, whiteSpace:'nowrap' }}>
+            <div style={{ width:5, height:5, borderRadius:'50%', background:s.dot }}/>
+            {status}
+        </div>
+    );
+};
+
+const LeadSourceChip = ({ source }) => (
+    <div style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:11.5, color:T.inkMid, fontWeight:500 }}>
+        <div style={{ width:5, height:5, borderRadius:'50%', background:SOURCE_COLORS[source]||'#8a8378' }}/>
+        {source || '—'}
+    </div>
+);
+
+const LeadAssignee = ({ name, onClick }) => {
+    if (!name) return (
+        <button onClick={e => { e.stopPropagation(); onClick && onClick(); }} style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', background:T.surface, border:`1px dashed ${T.borderStrong}`, color:T.goldInk, fontSize:11, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+            + Assign
+        </button>
+    );
+    return (
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <Av name={name} size={22}/>
+            <span style={{ fontSize:12, color:T.inkMid, fontWeight:500 }}>{name.split(' ')[0]}</span>
+        </div>
+    );
+};
+
+// ── Right rail panels ─────────────────────────────────────────
+const DistributePanel = ({ leads, repNames }) => {
+    const unassigned = leads.filter(l => !l.assignee).length;
+    const loadByRep = repNames.map(name => ({ name, count: leads.filter(l => l.assignee === name).length }))
+        .sort((a,b) => a.count - b.count).slice(0, 8);
+    const maxLoad = Math.max(...loadByRep.map(r => r.count), 1);
+    return (
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderLeft:`3px solid ${T.gold}`, borderRadius:T.r, padding:'12px 14px' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:T.ink, textTransform:'uppercase', letterSpacing:0.8, fontFamily:T.sans }}>Distribute Leads</div>
+                <span style={{ fontSize:10, color:T.inkMuted, fontWeight:600, fontFamily:T.sans }}>{unassigned} unassigned</span>
+            </div>
+            {loadByRep.map(r => (
+                <div key={r.name} style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0' }}>
+                    <Av name={r.name} size={22}/>
+                    <div style={{ fontSize:11.5, color:T.ink, flex:1, fontWeight:500, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</div>
+                    <div style={{ width:44, height:4, background:T.surface2, borderRadius:2, overflow:'hidden' }}>
+                        <div style={{ height:'100%', width:(r.count/maxLoad*100)+'%', background:T.goldInk }}/>
                     </div>
+                    <div style={{ fontSize:11, color:T.inkMid, fontWeight:600, width:12, textAlign:'right', fontFamily:T.sans }}>{r.count}</div>
                 </div>
-                <div style={{ display:'flex', gap:8 }}>
-                    {canSeeAll && <button onClick={() => setShowLeadImportModal(true)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:'1px solid #e6ddd0', color:'#5a544c', fontSize:12, fontWeight:400, borderRadius:3, cursor:'pointer', fontFamily:'inherit' }}>Import</button>}
-                    <button onClick={() => setNewLead({})} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 12px', background:'#2a2622', border:'none', color:'#fbf8f3', fontSize:12, fontWeight:600, borderRadius:3, cursor:'pointer', fontFamily:'inherit' }}>+ New lead</button>
+            ))}
+            <button style={{ marginTop:10, width:'100%', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                Auto-assign all
+            </button>
+        </div>
+    );
+};
+
+const LeadSourcesPanel = ({ leads }) => {
+    const sourceMap = {};
+    leads.forEach(l => { if (l.source) sourceMap[l.source] = (sourceMap[l.source]||0) + 1; });
+    const sources = Object.entries(sourceMap).sort((a,b)=>b[1]-a[1]).map(([name,count]) => ({
+        name, count, pct: Math.round(count/leads.length*100), color: SOURCE_COLORS[name]||'#8a8378',
+    }));
+    return (
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'12px 14px' }}>
+            <div style={{ fontSize:11, fontWeight:700, color:T.ink, textTransform:'uppercase', letterSpacing:0.8, marginBottom:10, fontFamily:T.sans }}>Lead Sources</div>
+            {sources.map(s => (
+                <div key={s.name} style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 0' }}>
+                    <div style={{ width:5, height:5, borderRadius:'50%', background:s.color, flexShrink:0 }}/>
+                    <div style={{ fontSize:11.5, color:T.inkMid, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:T.sans }}>{s.name}</div>
+                    <div style={{ width:50, height:3, background:T.surface2, borderRadius:2, overflow:'hidden' }}>
+                        <div style={{ height:'100%', width:s.pct+'%', background:s.color }}/>
+                    </div>
+                    <div style={{ fontSize:11, color:T.inkMid, fontWeight:600, width:30, textAlign:'right', fontFamily:T.sans }}>{s.pct}%</div>
+                </div>
+            ))}
+            {sources.length === 0 && <div style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>No leads yet.</div>}
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────
+// TRIAGE VIEW (V1)
+// ─────────────────────────────────────────────────────────────
+const TriageCard = ({ lead, accent, onClick }) => {
+    const [hov, setHov] = useState(false);
+    return (
+        <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+            onClick={onClick}
+            style={{ flex:'0 0 260px', background:T.surface, border:`1px solid ${hov ? T.borderStrong : T.border}`, borderLeft:`3px solid ${accent}`, borderRadius:T.r, padding:'10px 12px', cursor:'pointer', transition:'all 120ms', transform: hov ? 'translateY(-1px)' : 'none' }}>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:8, marginBottom:8 }}>
+                <LeadScore score={lead.score} size="sm"/>
+                <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', fontFamily:T.sans }}>{lead.first} {lead.last}</div>
+                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', fontFamily:T.sans }}>{lead.company}</div>
                 </div>
             </div>
-            {/* ── Filter chips row ── */}
-            <div style={{ display:'flex', alignItems:'center', borderBottom:'1px solid #e6ddd0', marginBottom:0 }}>
-                <div style={{ display:'flex', overflowX:'auto' }}>
-                    {[
-                        { key:'all',     label:'All',        count: counts.all },
-                        { key:'hot',     label:'🔥 Hot',     count: counts.hot },
-                        { key:'New',     label:'New',        count: counts.New },
-                        { key:'Working', label:'Working',    count: counts.Working },
-                        ...(canSeeAll ? [{ key:'unassigned', label:'Unassigned', count: counts.unassigned }] : []),
-                    ].map(f => (
-                        <button key={f.key} onClick={() => setLeadFilter(f.key)} style={{
-                            padding: '0.5rem 1.25rem',
-                            border: 'none',
-                            borderBottom: leadFilter === f.key ? '2px solid #2a2622' : '2px solid transparent',
-                            background: 'transparent',
-                            color: leadFilter === f.key ? '#2a2622' : '#8a8378',
-                            fontWeight: leadFilter === f.key ? '600' : '400',
-                            fontSize: '0.875rem',
-                            cursor: 'pointer',
-                            fontFamily: 'inherit',
-                            transition: 'all 0.15s',
-                            whiteSpace: 'nowrap',
-                        }}>
-                            {f.label}
-                            <span style={{ marginLeft:'0.3rem', fontSize:'0.75rem', opacity:0.6 }}>{f.count}</span>
-                        </button>
-                    ))}
-                </div>
-
+            <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:8, borderTop:`1px solid ${T.border}` }}>
+                <LeadSourceChip source={lead.source}/>
+                <div style={{ flex:1 }}/>
+                <div style={{ fontSize:12, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{fmtRev(lead.rev)}</div>
             </div>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8 }}>
+                <LeadAssignee name={lead.assignee}/>
+                <div style={{ flex:1 }}/>
+                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
+                    {lead.lastTouch ? relAge(lead.lastTouch) + ' ago' : 'not yet touched'}
+                </span>
+            </div>
+        </div>
+    );
+};
 
-            <div className="table-container">
-            {/* KPI ROW */}
-            <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(3,1fr)' : 'repeat(5,1fr)', gap:'0.75rem', padding:'1rem 1.25rem 0' }}>
-                {[
-                    { label:'Total Leads', value: visibleLeads.length, sub: counts.New + ' new', accent:'#3a5a7a' },
-                    { label:'Hot Leads', value: counts.hot, sub:'Score 70+', accent:'#9c3a2e' },
-                    { label: canSeeAll ? 'Unassigned' : 'My Leads', value: canSeeAll ? counts.unassigned : visibleLeads.length, sub: canSeeAll ? 'Need distribution' : 'Assigned to you', accent:'#b87333' },
-                    { label:'Converted', value: counts.Converted, sub: convRate + '% rate', accent:'#4d6b3d' },
-                    { label:'Est. Pipeline', value: '$' + (totalARR >= 1000000 ? (totalARR/1000000).toFixed(1)+'M' : Math.round(totalARR/1000)+'K'), sub:'from leads', accent:'#c8b99a' },
-                ].map(kpi => (
-                    <div key={kpi.label} style={{ background:'#fbf8f3', border:'1px solid #e6ddd0', borderLeft:'3px solid '+kpi.accent, borderRadius:'10px', padding:'0.875rem 1rem' }}>
-                        <div style={{ fontSize:'0.6rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:'0.3rem' }}>{kpi.label}</div>
-                        <div style={{ fontSize:'1.4rem', fontWeight:'800', color:'#2a2622', lineHeight:1 }}>{kpi.value}</div>
-                        <div style={{ fontSize:'0.6875rem', color:'#8a8378', marginTop:'0.2rem' }}>{kpi.sub}</div>
+const TriageLane = ({ title, subtitle, leads, accent, icon, onOpenLead }) => {
+    if (leads.length === 0) return null;
+    return (
+        <div style={{ marginBottom:18 }}>
+            <div style={{ display:'flex', alignItems:'flex-end', gap:10, padding:'0 0 8px' }}>
+                <div style={{ width:3, height:22, background:accent, borderRadius:1.5 }}/>
+                <div style={{ flex:1 }}>
+                    <div style={{ display:'flex', alignItems:'baseline', gap:8 }}>
+                        <div style={{ fontSize:15, fontFamily:T.serif, fontStyle:'italic', color:T.ink, lineHeight:1 }}>{title}</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, fontWeight:500, fontFamily:T.sans }}>{leads.length}</div>
                     </div>
+                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>
+                </div>
+                <span style={{ fontSize:11, color:T.inkMid, fontWeight:500, cursor:'pointer', display:'flex', alignItems:'center', gap:4, fontFamily:T.sans }}>
+                    See all
+                </span>
+            </div>
+            <div style={{ display:'flex', gap:10, overflow:'auto', paddingBottom:4 }}>
+                {leads.map(l => (
+                    <TriageCard key={l.id} lead={l} accent={accent} onClick={() => onOpenLead && onOpenLead(l.id)}/>
                 ))}
             </div>
+        </div>
+    );
+};
 
-            {/* MAIN LAYOUT */}
-            <div style={{ display:'grid', gridTemplateColumns: canSeeAll && !isMobile ? '1fr 300px' : '1fr', gap:'1rem', padding:'1rem 1.25rem' }}>
+const TriageView = ({ leads, repNames, onOpenLead, setLeads, showConfirm }) => {
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [selected,     setSelected    ] = useState({});
+    const [search,       setSearch      ] = useState('');
 
-                {/* LEFT: always-visible card wrapping toolbar + view content */}
-                <div>
-                    <div style={{ background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'12px', overflow:'hidden' }}>
+    const hot          = leads.filter(l => l.score >= 70 && l.status !== 'Converted' && l.status !== 'Dead');
+    const newUnassigned = leads.filter(l => l.status === 'New' && !l.assignee);
+    const working      = leads.filter(l => l.status === 'Working');
 
+    const filters = [
+        { k:'all',       l:'All',        c:leads.length },
+        { k:'hot',       l:'Hot',        c:leads.filter(l=>l.score>=70).length, dot:SCORE_COLORS.hot },
+        { k:'new',       l:'New',        c:leads.filter(l=>l.status==='New').length, dot:STATUS_STYLES.New.dot },
+        { k:'working',   l:'Working',    c:leads.filter(l=>l.status==='Working').length, dot:STATUS_STYLES.Working.dot },
+        { k:'unassigned',l:'Unassigned', c:leads.filter(l=>!l.assignee).length, dot:T.goldInk },
+    ];
 
-                        {/* VIEW TOGGLE ROW — underline sub-tabs per style guide */}
-                        <div style={{ display:'flex', alignItems:'center', borderBottom:'1px solid #e6ddd0' }}>
-                            {[
-                                {v:'list',   label:'List'},
-                                {v:'kanban', label:'Kanban'},
-                                {v:'funnel', label:'Funnel'},
-                            ].map(({v,label}) => {
-                                const active = leadView === v;
-                                return (
-                                    <button key={v} onClick={() => setLeadView(v)} style={{ padding:'8px 16px', border:'none', borderBottom: active ? '2px solid #2a2622' : '2px solid transparent', background:'transparent', color: active ? '#2a2622' : '#8a8378', fontSize:12, fontWeight: active ? 600 : 400, cursor:'pointer', fontFamily:'inherit', transition:'all 120ms', whiteSpace:'nowrap', marginBottom:-1 }}>
-                                        {label}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                        <div style={{ display:'flex', alignItems:'center', padding:'0.375rem 1rem', borderBottom:'1px solid #e6ddd0' }}>
-                            <div style={{ display:'flex', background:'#f5efe3', borderRadius:'6px', padding:'2px', gap:'2px' }}>
-                                {[{v:'funnel',label:'🔻 Funnel'},{v:'kanban',label:'⬛ Kanban'},{v:'list',label:'☰ List'}].map(({v,label}) => (
-                                    <button key={v} onClick={() => setLeadView(v)}
-                                        style={{ padding:'3px 8px', borderRadius:'4px', border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:'0.6875rem', fontWeight:'700', transition:'all 0.15s',
-                                            background: leadView===v ? '#fff' : 'transparent',
-                                            color: leadView===v ? '#2a2622' : '#8a8378',
-                                            boxShadow: leadView===v ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
-                                        {label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+    const matchesFilter = (l) => {
+        if (statusFilter === 'hot')       return l.score >= 70;
+        if (statusFilter === 'new')       return l.status === 'New';
+        if (statusFilter === 'working')   return l.status === 'Working';
+        if (statusFilter === 'unassigned')return !l.assignee;
+        return true;
+    };
 
-                        {/* LIST VIEW */}
-                        {leadView === 'list' && (
-                        <div>
-                            {/* Desktop table */}
-                            <div className="leads-desktop-table">
-                                {/* Bulk select bar */}
-                                {canSeeAll && selectedLeads.length > 0 && (
-                                    <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.5rem 1rem', background:'rgba(58,90,122,0.06)', borderBottom:'1px solid #d4c8b4' }}>
-                                        <span style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#3a5a7a' }}>{selectedLeads.length} selected</span>
-                                        <div style={{ width:'1px', height:'16px', background:'#d4c8b4' }}></div>
-                                        <span style={{ fontSize:'0.75rem', color:'#8a8378', fontWeight:'600' }}>Assign to:</span>
-                                        <select value={assignTarget} onChange={e => setAssignTarget(e.target.value)} style={{ fontSize:'0.75rem', border:'1px solid #d4c8b4', borderRadius:'6px', padding:'0.2rem 0.5rem', background:'#fbf8f3', color:'#2a2622', fontFamily:'inherit' }}>
-                                            <option value="">— pick rep —</option>
-                                            {allReps.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
-                                        </select>
-                                        <button onClick={bulkAssign} style={{ padding:'0.25rem 0.625rem', border:'none', borderRadius:'6px', background:'#2a2622', color:'#fbf8f3', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', borderRadius:'3px' }}>Assign</button>
-                                        <button onClick={() => { setSelectedLeads([]); setAssignTarget(''); }} style={{ marginLeft:'auto', background:'none', border:'none', color:'#8a8378', fontSize:'0.75rem', cursor:'pointer', fontWeight:'600', fontFamily:'inherit' }}>Clear ✕</button>
-                                    </div>
-                                )}
-                                <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                                <table style={{ width:'100%', borderCollapse:'collapse', minWidth: '600px' }}>
-                                    <thead>
-                                        <tr style={{ background:'#fbf8f3', borderBottom:'1px solid #e6ddd0' }}>
-                                            {canSeeAll && <th style={{ padding:'0.5rem 0.75rem', textAlign:'left', fontSize:'0.625rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.05em', width:'32px' }}><input type="checkbox" onChange={e => setSelectedLeads(e.target.checked ? filtered.map(l => l.id) : [])} checked={selectedLeads.length === filtered.length && filtered.length > 0} /></th>}
-                                            {['Score','Name / Company','Source','Status', ...(canSeeAll?['Assigned To']:[]),'Est. Revenue','Actions'].map(h => (
-                                                <th key={h} style={{ padding:'0.5rem 0.75rem', textAlign:'left', fontSize:'0.625rem', fontWeight:'700', color:'#8a8378', textTransform:'uppercase', letterSpacing:'0.05em' }}>{h}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filtered.length === 0 ? (
-                                            <tr><td colSpan={canSeeAll ? 8 : 6} style={{ padding:'2rem', textAlign:'center', color:'#8a8378', fontSize:'0.875rem' }}>No leads found</td></tr>
-                                        ) : filtered.map((lead, li) => {
-                                            const isUnassigned = canSeeAll && !lead.assignedTo;
-                                            return (
-                                                <tr key={lead.id}
-                                                    style={{ background: isUnassigned && canSeeAll ? 'rgba(184,115,51,0.06)' : li % 2 === 0 ? '#ffffff' : '#fbf8f3', borderBottom:'1px solid #f5efe3', transition:'background 0.1s' }}
-                                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(58,90,122,0.06)'}
-                                                    onMouseLeave={e => e.currentTarget.style.background = isUnassigned && canSeeAll ? 'rgba(184,115,51,0.06)' : li % 2 === 0 ? '#ffffff' : '#fbf8f3'}>
-                                                    {canSeeAll && (
-                                                        <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f5efe3' }}>
-                                                            <input type="checkbox" checked={selectedLeads.includes(lead.id)} onChange={e => setSelectedLeads(prev => e.target.checked ? [...prev, lead.id] : prev.filter(id => id !== lead.id))} />
-                                                        </td>
-                                                    )}
-                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f5efe3' }}>
-                                                        <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:scoreBg(lead.score||0), color:scoreColor(lead.score||0), display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'800' }}>{lead.score||0}</div>
-                                                    </td>
-                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f5efe3' }}>
-                                                        <div style={{ fontWeight:'600', color:'#2a2622', fontSize:'0.8125rem' }}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || '—'}</div>
-                                                        <div style={{ fontSize:'0.75rem', color:'#8a8378' }}>{lead.company || '—'}</div>
-                                                    </td>
-                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f5efe3' }}>
-                                                        <span style={{ padding:'0.1rem 0.4rem', borderRadius:'4px', fontSize:'0.6rem', fontWeight:'700', background:'#f5efe3', color:'#8a8378' }}>{lead.source || '—'}</span>
-                                                    </td>
-                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f5efe3' }}>
-                                                        <span style={{ padding:'0.15rem 0.5rem', borderRadius:'999px', fontSize:'0.625rem', fontWeight:'700', background:(statusStyle[lead.status||'New']||statusStyle.New).bg, color:(statusStyle[lead.status||'New']||statusStyle.New).color }}>{lead.status||'New'}</span>
-                                                    </td>
-                                                    {canSeeAll && (
-                                                        <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f5efe3' }}>
-                                                            {lead.assignedTo ? (
-                                                                <div style={{ display:'flex', alignItems:'center', gap:'0.375rem' }}>
-                                                                    <div style={{ width:'22px', height:'22px', borderRadius:'50%', background:'#3a5a7a', color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.5rem', fontWeight:'700', flexShrink:0 }}>{lead.assignedTo.slice(0,2).toUpperCase()}</div>
-                                                                    <span style={{ fontSize:'0.75rem', color:'#5a544c' }}>{lead.assignedTo}</span>
-                                                                </div>
-                                                            ) : (
-                                                                <button onClick={() => setEditingLead(lead)} style={{ padding:'0.15rem 0.5rem', border:'1px solid #b87333', borderRadius:'4px', background:'none', color:'#b87333', fontSize:'0.625rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>⚡ Assign</button>
-                                                            )}
-                                                        </td>
-                                                    )}
-                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f5efe3', fontStyle: lead.estimatedARR ? 'normal' : 'italic', color: lead.estimatedARR ? '#2a2622' : '#8a8378', fontSize:'0.8125rem', fontWeight: lead.estimatedARR ? '600' : '400' }}>
-                                                        {lead.estimatedARR ? '$' + (parseFloat(lead.estimatedARR) >= 1000 ? Math.round(parseFloat(lead.estimatedARR)/1000)+'K' : parseFloat(lead.estimatedARR).toLocaleString()) : '—'}
-                                                    </td>
-                                                    <td style={{ padding:'0.625rem 0.75rem', borderBottom:'1px solid #f5efe3', fontSize:'0.6875rem' }}>
-                                                        <div style={{ display:'flex', gap:'4px' }}>
-                                                            <button onClick={() => setEditingLead(lead)} style={{ padding:'4px 10px', borderRadius:'999px', border:'0.5px solid #8a8378', background:'transparent', color:'#5a544c', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>Edit</button>
-                                                            {lead.status !== 'Converted' && (
-                                                                <button onClick={() => convertLead(lead)} style={{ padding:'4px 10px', borderRadius:'999px', border:'0.5px solid rgba(77,107,61,0.3)', background:'transparent', color:'#4d6b3d', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>→ Opp</button>
-                                                            )}
-                                                            <button onClick={() => deleteLead(lead.id)} style={{ padding:'4px 10px', borderRadius:'999px', border:'0.5px solid rgba(156,58,46,0.3)', background:'transparent', color:'#9c3a2e', fontWeight:'500', fontSize:'0.6875rem', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>Delete</button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                                </div>{/* overflow wrapper */}
-                            </div>
-                        </div>
-                        )}
+    const allForTable = useMemo(() => {
+        let list = leads.filter(matchesFilter);
+        if (search.trim()) {
+            const q = search.toLowerCase();
+            list = list.filter(l => (l.first+' '+l.last+' '+l.company+' '+l.title).toLowerCase().includes(q));
+        }
+        return list.sort((a,b) => b.score - a.score);
+    }, [leads, statusFilter, search]);
 
-                        {/* KANBAN VIEW */}
-                        {leadView === 'kanban' && (
-                        <div style={{ padding:'0.75rem' }}>
-                            <div style={{ display:'flex', flexWrap:'wrap', gap:'0.625rem' }}>
-                                {Object.entries(stageColors).map(([stage, color]) => {
-                                    const colLeads = filtered.filter(l => (l.status || 'New') === stage);
-                                    return (
-                                        <div key={stage}
-                                            onDragOver={e => { e.preventDefault(); setLeadDragOver(stage); }}
-                                            onDragLeave={() => setLeadDragOver(null)}
-                                            onDrop={() => handleLeadDrop(stage)}
-                                            style={{ width:'190px', flexShrink:0, flexGrow:1, minWidth:'160px', maxWidth:'220px', background: leadDragOver === stage ? 'rgba(58,90,122,0.06)' : '#fbf8f3', border: leadDragOver === stage ? '1px solid #3a5a7a' : '1px solid #e6ddd0', borderRadius:'10px', overflow:'hidden', transition:'all 0.15s' }}>
-                                            <div style={{ padding:'0.5rem 0.75rem', borderTop:'3px solid '+color, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                                                <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#5a544c', textTransform:'uppercase', letterSpacing:'0.04em' }}>{stage}</span>
-                                                <span style={{ fontSize:'0.6rem', fontWeight:'700', background:'#e6ddd0', color:'#8a8378', borderRadius:'10px', padding:'0.1rem 0.35rem' }}>{colLeads.length}</span>
-                                            </div>
-                                            <div style={{ padding:'0.5rem', display:'flex', flexDirection:'column', gap:'0.375rem', minHeight:'60px' }}>
-                                                {colLeads.map(lead => (
-                                                    <div key={lead.id}
-                                                        draggable
-                                                        onDragStart={() => setLeadDragging({ leadId: lead.id, fromStage: stage })}
-                                                        onDragEnd={() => { setLeadDragging(null); setLeadDragOver(null); }}
-                                                        style={{ background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'6px', padding:'0.5rem 0.625rem', transition:'all 0.1s', cursor:'grab', opacity: leadDragging?.leadId === lead.id ? 0.5 : 1 }}
-                                                        onMouseEnter={e => { e.currentTarget.style.borderColor='#3a5a7a'; e.currentTarget.style.boxShadow='0 2px 8px rgba(37,99,235,0.1)'; }}
-                                                        onMouseLeave={e => { e.currentTarget.style.borderColor='#e6ddd0'; e.currentTarget.style.boxShadow='none'; }}>
-                                                        <div style={{ fontSize:'0.75rem', fontWeight:'600', color:'#2a2622', marginBottom:'0.15rem', cursor:'pointer' }} onClick={() => setEditingLead(lead)}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || '—'}</div>
-                                                        <div style={{ fontSize:'0.625rem', color:'#8a8378', marginBottom:'0.25rem' }}>{lead.company || '—'}</div>
-                                                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'0.25rem' }}>
-                                                            <span style={{ fontSize:'0.6rem', background:'#f5efe3', color:'#8a8378', padding:'0.1rem 0.3rem', borderRadius:'3px', fontWeight:'600' }}>{lead.source || '—'}</span>
-                                                            <div style={{ width:'20px', height:'20px', borderRadius:'50%', background:scoreBg(lead.score||0), color:scoreColor(lead.score||0), display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.5rem', fontWeight:'800' }}>{lead.score||0}</div>
-                                                        </div>
-                                                        {canSeeAll && lead.assignedTo && <div style={{ fontSize:'0.6rem', color:'#8a8378', marginBottom:'0.2rem' }}>{lead.assignedTo}</div>}
-                                                        <div style={{ display:'flex', gap:'0.25rem', marginTop:'0.25rem' }}>
-                                                            <button className="action-btn" onClick={() => setEditingLead(lead)} style={{ flex:1, padding:'0.15rem 0', fontSize:'0.6rem', textAlign:'center' }}>Edit</button>
-                                                            {lead.status !== 'Converted' && <button className="action-btn" onClick={() => convertLead(lead)} style={{ flex:1, padding:'0.15rem 0', fontSize:'0.6rem', textAlign:'center', color:'#4d6b3d', borderColor:'rgba(77,107,61,0.3)' }}>→ Opp</button>}
-                                                            <button className="action-btn delete" onClick={() => deleteLead(lead.id)} style={{ flex:1, padding:'0.15rem 0', fontSize:'0.6rem', textAlign:'center' }}>Del</button>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                                {colLeads.length === 0 && <div style={{ fontSize:'0.6875rem', color:'#d4c8b4', textAlign:'center', padding:'0.75rem 0', fontStyle:'italic' }}>Empty</div>}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                        )}
+    const selCount = Object.values(selected).filter(Boolean).length;
+    const totalRev = leads.reduce((s,l)=>s+l.rev,0);
 
-                        {/* FUNNEL VIEW */}
-                        {leadView === 'funnel' && (
-                        <div style={{ padding:'0.75rem 1rem' }}>
-                            {Object.entries(stageColors).map(([stage, color]) => {
-                                const stageLeads = filtered.filter(l => (l.status || 'New') === stage);
-                                const pct = filtered.length > 0 ? Math.round((stageLeads.length / filtered.length) * 100) : 0;
-                                const isExp = leadFunnelExpanded === stage;
-                                return (
-                                    <div key={stage} style={{ marginBottom:'0.5rem' }}>
-                                        <div onClick={() => setLeadFunnelExpanded(isExp ? null : stage)}
-                                            style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.5rem 0.75rem', borderRadius:'8px', background:'#fbf8f3', border:'1px solid #e6ddd0', cursor:'pointer', transition:'all 0.15s' }}
-                                            onMouseEnter={e => e.currentTarget.style.background='#f5efe3'}
-                                            onMouseLeave={e => e.currentTarget.style.background='#fbf8f3'}>
-                                            <div style={{ width:'10px', height:'10px', borderRadius:'50%', background:color, flexShrink:0 }} />
-                                            <span style={{ fontSize:'0.8125rem', fontWeight:'700', color:'#2a2622', width:'90px', flexShrink:0 }}>{stage}</span>
-                                            <div style={{ flex:1, height:'10px', background:'#e6ddd0', borderRadius:'5px', overflow:'hidden' }}>
-                                                <div style={{ height:'100%', width:pct+'%', background:color, borderRadius:'5px', transition:'width 0.4s ease' }} />
-                                            </div>
-                                            <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#5a544c', minWidth:'28px', textAlign:'right' }}>{stageLeads.length}</span>
-                                            <span style={{ fontSize:'0.6875rem', color:'#8a8378', minWidth:'32px', textAlign:'right' }}>{pct}%</span>
-                                            <span style={{ fontSize:'0.75rem', color:'#8a8378', transition:'transform 0.2s', display:'inline-block', transform: isExp ? 'rotate(180deg)' : 'none' }}>▼</span>
-                                        </div>
-                                        {isExp && stageLeads.length > 0 && (
-                                            <div style={{ marginTop:'3px', marginLeft:'1rem', display:'flex', flexDirection:'column', gap:'3px' }}>
-                                                {stageLeads.map(lead => (
-                                                    <div key={lead.id}
-                                                        style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.75rem', background:'#fbf8f3', border:'1px solid #f5efe3', borderRadius:'6px', fontSize:'0.75rem', color:'#2a2622' }}
-                                                        onMouseEnter={e => e.currentTarget.style.background='#fbf8f3'}
-                                                        onMouseLeave={e => e.currentTarget.style.background='#fff'}>
-                                                        <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:color, flexShrink:0 }} />
-                                                        <span style={{ fontWeight:'600', cursor:'pointer', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} onClick={() => setEditingLead(lead)}>{[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.company || '—'}</span>
-                                                        {lead.company && <span style={{ color:'#8a8378', flexShrink:0 }}>· {lead.company}</span>}
-                                                        {lead.assignedTo && <span style={{ color:'#8a8378', fontSize:'0.6875rem', flexShrink:0 }}>{lead.assignedTo}</span>}
-                                                        <div style={{ display:'flex', gap:'3px', flexShrink:0, marginLeft:'auto' }}>
-                                                            <button onClick={() => setEditingLead(lead)} style={{ padding:'2px 7px', borderRadius:'999px', border:'0.5px solid #8a8378', background:'transparent', color:'#5a544c', fontWeight:'500', fontSize:'0.6rem', cursor:'pointer', fontFamily:'inherit' }}>Edit</button>
-                                                            {lead.status !== 'Converted' && <button onClick={() => convertLead(lead)} style={{ padding:'2px 7px', borderRadius:'999px', border:'0.5px solid rgba(77,107,61,0.3)', background:'transparent', color:'#4d6b3d', fontWeight:'500', fontSize:'0.6rem', cursor:'pointer', fontFamily:'inherit' }}>→ Opp</button>}
-                                                            <button onClick={() => deleteLead(lead.id)} style={{ padding:'2px 7px', borderRadius:'999px', border:'0.5px solid rgba(156,58,46,0.3)', background:'transparent', color:'#9c3a2e', fontWeight:500, fontSize:'0.6rem', cursor:'pointer', fontFamily:'inherit' }}>Del</button>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        )}
+    return (
+        <div style={{ flex:1, minHeight:0, overflow:'hidden', display:'flex', flexDirection:'column' }}>
+            {/* Filter bar */}
+            <div style={{ padding:'0 0 14px', display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+                {filters.map(chip => {
+                    const active = statusFilter === chip.k;
+                    return (
+                        <button key={chip.k} onClick={() => setStatusFilter(chip.k)} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', border:`1px solid ${active ? T.ink : T.border}`, background: active ? T.ink : T.surface, color: active ? T.surface : T.ink, fontSize:11.5, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                            {chip.dot && <div style={{ width:6, height:6, borderRadius:'50%', background:chip.dot }}/>}
+                            {chip.l}
+                            <span style={{ background: active ? 'rgba(255,255,255,0.18)' : T.surface2, padding:'1px 6px', borderRadius:8, fontSize:10, fontWeight:600, color: active ? T.surface : T.inkMuted }}>{chip.c}</span>
+                        </button>
+                    );
+                })}
+                <div style={{ flex:1 }}/>
+                {/* Search */}
+                <div style={{ display:'flex', alignItems:'center', gap:6, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'4px 10px', width:240 }}>
+                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search leads…" style={{ border:'none', outline:'none', background:'transparent', fontSize:12, color:T.ink, fontFamily:T.sans, flex:1 }}/>
+                    {search && <button onClick={() => setSearch('')} style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:14, padding:0 }}>×</button>}
+                </div>
+            </div>
 
-                    </div>{/* end always-visible card */}
-                </div>{/* end LEFT panel */}
+            {/* Body */}
+            <div style={{ flex:1, minHeight:0, overflow:'hidden', display:'flex', gap:14 }}>
+                {/* Main */}
+                <div style={{ flex:1, minWidth:0, overflow:'auto' }}>
+                    {/* Triage lanes — only when filter is 'all' and no search */}
+                    {statusFilter === 'all' && !search.trim() && (
+                        <>
+                            <TriageLane title="Call today" subtitle="Score 70+ — highest-intent leads in play" leads={hot} accent={SCORE_COLORS.hot} icon="flame" onOpenLead={onOpenLead}/>
+                            <TriageLane title="Needs first touch" subtitle="New leads not yet assigned" leads={newUnassigned} accent={T.goldInk} icon="sparkle" onOpenLead={onOpenLead}/>
+                            <TriageLane title="Working" subtitle="Active conversations — keep the ball moving" leads={working} accent={STATUS_STYLES.Working.dot} icon="trending" onOpenLead={onOpenLead}/>
+                        </>
+                    )}
 
-                {/* RIGHT PANEL — managers/admins only */}
-                {canSeeAll && (
-                    <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem' }}>
-
-                        {/* DISTRIBUTE */}
-                        <div style={{ background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'12px', overflow:'hidden' }}>
-                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.625rem 1rem', borderBottom:'1px solid #e6ddd0' }}>
-                                <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#2a2622', textTransform:'uppercase', letterSpacing:'0.06em' }}>⚡ Distribute Leads</span>
-                                {counts.unassigned > 0 && <span style={{ fontSize:'0.6875rem', color:'#9c3a2e', fontWeight:'700', background:'rgba(156,58,46,0.08)', padding:'0.1rem 0.4rem', borderRadius:'4px' }}>{counts.unassigned} unassigned</span>}
-                            </div>
-                            {repLoad.length === 0 && <div style={{ padding:'1rem', fontSize:'0.8125rem', color:'#8a8378', textAlign:'center' }}>No reps configured</div>}
-                            {repLoad.map((rep, idx) => (
-                                <div key={rep.name} style={{ display:'flex', alignItems:'center', gap:'0.625rem', padding:'0.5rem 1rem', borderBottom:'1px solid #f5efe3' }}>
-                                    <div style={{ width:'28px', height:'28px', borderRadius:'50%', background:repColors[idx % repColors.length], display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.6875rem', fontWeight:'800', color:'#fff', flexShrink:0 }}>{rep.name.slice(0,2).toUpperCase()}</div>
-                                    <div style={{ flex:1, minWidth:0 }}>
-                                        <div style={{ fontSize:'0.8125rem', fontWeight:'600', color:'#2a2622' }}>{rep.name}</div>
-                                        <div style={{ height:'4px', background:'#f5efe3', borderRadius:'2px', marginTop:'0.25rem' }}>
-                                            <div style={{ height:'4px', borderRadius:'2px', background:'linear-gradient(to right,#3a5a7a,#5a4a7a)', width: Math.round((rep.count / maxLoad) * 100) + '%', transition:'width 0.3s' }}></div>
-                                        </div>
-                                    </div>
-                                    <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#3a5a7a', background:'rgba(58,90,122,0.06)', padding:'0.1rem 0.4rem', borderRadius:'4px', flexShrink:0 }}>{rep.count}</span>
+                    {/* Full table */}
+                    <div style={{ marginTop: statusFilter === 'all' && !search.trim() ? 10 : 0 }}>
+                        <div style={{ display:'flex', alignItems:'flex-end', gap:10, padding:'0 0 8px' }}>
+                            <div style={{ width:3, height:22, background:T.inkMuted, borderRadius:1.5 }}/>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:15, fontFamily:T.serif, fontStyle:'italic', color:T.ink, lineHeight:1 }}>
+                                    All leads <span style={{ fontSize:11, color:T.inkMuted, fontWeight:500, fontFamily:T.sans, fontStyle:'normal', marginLeft:6 }}>{allForTable.length}</span>
                                 </div>
-                            ))}
-                            <div style={{ padding:'0.75rem 1rem', borderTop:'1px solid #f5efe3', display:'flex', gap:'0.5rem' }}>
-                                <button onClick={() => {
-                                    const unassigned = leads.filter(l => !l.assignedTo && l.status !== 'Converted' && l.status !== 'Dead');
-                                    if (unassigned.length === 0 || repLoad.length === 0) return;
-                                    const updated = [...leads];
-                                    unassigned.forEach((lead, i) => {
-                                        const rep = repLoad[i % repLoad.length];
-                                        const idx = updated.findIndex(l => l.id === lead.id);
-                                        if (idx >= 0) updated[idx] = { ...updated[idx], assignedTo: rep.name };
-                                    });
-                                    setLeads(updated);
-                                    updated.filter(l => !leads.find(ol => ol.id === l.id && ol.assignedTo === l.assignedTo)).forEach(l => dbFetch('/.netlify/functions/leads', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(l) }).catch(console.error));
-                                }} style={{ flex:1, padding:'0.4rem 0', border:'none', borderRadius:'6px', background:'#2a2622', color:'#fbf8f3', fontSize:'0.6875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>⚡ Auto-assign All</button>
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>Sorted by score · highest first</div>
                             </div>
                         </div>
 
-                        {/* SOURCE BREAKDOWN */}
-                        <div style={{ background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'12px', overflow:'hidden' }}>
-                            <div style={{ padding:'0.625rem 1rem', borderBottom:'1px solid #e6ddd0' }}>
-                                <span style={{ fontSize:'0.6875rem', fontWeight:'800', color:'#2a2622', textTransform:'uppercase', letterSpacing:'0.06em' }}>Lead Sources</span>
+                        {selCount > 0 && (
+                            <div style={{ marginBottom:8, padding:'8px 14px', background:T.ink, color:T.surface, borderRadius:T.r, display:'flex', alignItems:'center', gap:12, fontSize:12, fontFamily:T.sans }}>
+                                <span style={{ fontWeight:600 }}>{selCount} selected</span>
+                                <span style={{ opacity:0.5 }}>·</span>
+                                <span style={{ cursor:'pointer' }}>Assign</span>
+                                <span style={{ opacity:0.5 }}>·</span>
+                                <span style={{ cursor:'pointer' }}>Change status</span>
+                                <span style={{ opacity:0.5 }}>·</span>
+                                <span style={{ cursor:'pointer' }}>Convert to opportunity</span>
+                                <div style={{ flex:1 }}/>
+                                <span style={{ opacity:0.6, cursor:'pointer', fontSize:11 }} onClick={() => setSelected({})}>Clear</span>
                             </div>
-                            {(() => {
-                                const sourceCounts = {};
-                                visibleLeads.forEach(l => { const s = l.source || 'Other'; sourceCounts[s] = (sourceCounts[s]||0) + 1; });
-                                const total = visibleLeads.length || 1;
-                                const srcColors = ['#3a5a7a','#5a4a7a','#3a5a7a','#b87333','#4d6b3d','#9c3a2e','#8a8378'];
-                                return Object.entries(sourceCounts).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([src, cnt], i) => (
-                                    <div key={src} style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 1rem' }}>
-                                        <div style={{ width:'8px', height:'8px', borderRadius:'50%', background:srcColors[i%srcColors.length], flexShrink:0 }}></div>
-                                        <span style={{ fontSize:'0.75rem', color:'#5a544c', flex:1 }}>{src}</span>
-                                        <div style={{ flex:2, height:'4px', background:'#f5efe3', borderRadius:'2px' }}>
-                                            <div style={{ height:'4px', borderRadius:'2px', background:srcColors[i%srcColors.length], width:Math.round((cnt/total)*100)+'%' }}></div>
+                        )}
+
+                        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, overflow:'hidden' }}>
+                            {/* Column headers */}
+                            <div style={{ display:'grid', gridTemplateColumns:'26px 50px 2fr 1fr 110px 1fr 90px 70px', gap:10, padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, alignItems:'center', fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
+                                <div/><div>Score</div><div>Name · Company</div><div>Source</div><div>Status</div><div>Assignee</div><div style={{ textAlign:'right' }}>Est. ARR</div><div/>
+                            </div>
+
+                            {allForTable.length === 0 ? (
+                                <div style={{ padding:'3rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                                    {search ? `No leads match "${search}".` : 'No leads in this filter.'}
+                                </div>
+                            ) : allForTable.map(l => {
+                                const isSel = !!selected[l.id];
+                                return (
+                                    <div key={l.id}
+                                        onClick={() => onOpenLead && onOpenLead(l.id)}
+                                        style={{ display:'grid', gridTemplateColumns:'26px 50px 2fr 1fr 110px 1fr 90px 70px', gap:10, padding:'10px 14px', borderBottom:`1px solid ${T.border}`, alignItems:'center', cursor:'pointer', background: isSel ? 'rgba(200,185,154,0.12)' : 'transparent', transition:'background 100ms' }}
+                                        onMouseEnter={e => { if (!isSel) e.currentTarget.style.background='rgba(200,185,154,0.06)'; }}
+                                        onMouseLeave={e => { if (!isSel) e.currentTarget.style.background=isSel?'rgba(200,185,154,0.12)':'transparent'; }}>
+                                        <div onClick={e => { e.stopPropagation(); setSelected(s => ({ ...s, [l.id]:!s[l.id] })); }}
+                                            style={{ width:16, height:16, borderRadius:3, border:`1.5px solid ${isSel ? T.ink : T.borderStrong}`, background: isSel ? T.ink : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
+                                            {isSel && <span style={{ color:T.surface, fontSize:9, fontWeight:800 }}>✓</span>}
                                         </div>
-                                        <span style={{ fontSize:'0.75rem', fontWeight:'700', color:'#2a2622' }}>{Math.round((cnt/total)*100)}%</span>
+                                        <LeadScore score={l.score}/>
+                                        <div style={{ minWidth:0 }}>
+                                            <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{l.first} {l.last}</div>
+                                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{l.company} {l.title && <span style={{ opacity:0.5 }}>· {l.title}</span>}</div>
+                                        </div>
+                                        <LeadSourceChip source={l.source}/>
+                                        <LeadStatusPill status={l.status}/>
+                                        <LeadAssignee name={l.assignee}/>
+                                        <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{fmtRev(l.rev)}</div>
+                                        <div style={{ display:'flex', gap:4, justifyContent:'flex-end' }}>
+                                            <button onClick={e => { e.stopPropagation(); }} title="Convert to opportunity" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:26, height:26, background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMid, cursor:'pointer', fontFamily:T.sans, fontSize:11 }}>↗</button>
+                                            <button onClick={e => { e.stopPropagation(); }} title="More" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:26, height:26, background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMid, cursor:'pointer' }}>···</button>
+                                        </div>
                                     </div>
-                                ));
-                            })()}
-                            {visibleLeads.length === 0 && <div style={{ padding:'1rem', fontSize:'0.8125rem', color:'#8a8378', textAlign:'center' }}>No lead data yet</div>}
+                                );
+                            })}
                         </div>
+                    </div>
+                </div>
 
+                {/* Right rail */}
+                <div style={{ width:260, flexShrink:0, display:'flex', flexDirection:'column', gap:12, overflow:'auto' }}>
+                    <DistributePanel leads={leads} repNames={repNames}/>
+                    <LeadSourcesPanel leads={leads}/>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────
+// COCKPIT VIEW (V3) — split list + detail
+// ─────────────────────────────────────────────────────────────
+const CockpitListRow = ({ lead, active, onClick }) => (
+    <div onClick={onClick}
+        style={{ display:'grid', gridTemplateColumns:'38px 1fr auto', gap:10, padding:'10px 12px', borderLeft:`3px solid ${active ? SCORE_COLORS[scoreBand(lead.score)] : 'transparent'}`, background: active ? T.surface2 : 'transparent', borderBottom:`1px solid ${T.border}`, alignItems:'center', cursor:'pointer' }}
+        onMouseEnter={e => { if (!active) e.currentTarget.style.background='rgba(200,185,154,0.06)'; }}
+        onMouseLeave={e => { if (!active) e.currentTarget.style.background=active?T.surface2:'transparent'; }}>
+        <LeadScore score={lead.score} size="sm"/>
+        <div style={{ minWidth:0 }}>
+            <div style={{ fontSize:13, fontWeight: active ? 700 : 600, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', fontFamily:T.sans }}>{lead.first} {lead.last}</div>
+            <div style={{ fontSize:11, color:T.inkMuted, marginTop:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', fontFamily:T.sans }}>{lead.company}</div>
+        </div>
+        <LeadStatusPill status={lead.status}/>
+    </div>
+);
+
+const CockpitDetail = ({ lead, onSave, saving }) => {
+    if (!lead) return (
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, height:'100%', display:'flex', alignItems:'center', justifyContent:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+            Select a lead from the list
+        </div>
+    );
+
+    const nextAction = lead.status === 'New' && !lead.assignee ? 'Assign to a rep'
+        : lead.status === 'New'       ? 'Send first-touch email'
+        : lead.status === 'Contacted' ? 'Schedule qualification call'
+        : lead.status === 'Working'   ? 'Check in — keep the ball moving'
+        : lead.status === 'Qualified' ? 'Convert to opportunity'
+        : lead.status === 'Converted' ? 'Handoff complete — review opp'
+        : 'Archive this lead';
+
+    const timeline = [
+        { label:'Lead created', time: lead.createdAt ? relAge(lead.createdAt)+' ago' : '—', icon:'✦' },
+        lead.source && { label:`Came from ${lead.source}`, time: lead.createdAt ? relAge(lead.createdAt)+' ago' : '—', icon:'●' },
+        lead.assignee && { label:`Assigned to ${lead.assignee}`, time:'—', icon:'◎' },
+        lead.lastTouch && { label:'Last outreach', time: relAge(lead.lastTouch)+' ago', icon:'✉' },
+    ].filter(Boolean);
+
+    return (
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, height:'100%', overflow:'auto', display:'flex', flexDirection:'column' }}>
+            {/* Hero */}
+            <div style={{ padding:'18px 22px 16px', borderBottom:`1px solid ${T.border}`, background:T.surface2 }}>
+                <div style={{ display:'flex', alignItems:'flex-start', gap:14 }}>
+                    <LeadScore score={lead.score} size="lg"/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:'flex', alignItems:'baseline', gap:10, flexWrap:'wrap' }}>
+                            <div style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:300, fontSize:24, color:T.ink, letterSpacing:-0.4, lineHeight:1 }}>{lead.first} {lead.last}</div>
+                            <LeadStatusPill status={lead.status}/>
+                        </div>
+                        <div style={{ fontSize:12.5, color:T.inkMid, marginTop:5, fontFamily:T.sans }}>
+                            {lead.title} {lead.title && lead.company && <span style={{ color:T.inkMuted }}> at </span>} <strong style={{ fontWeight:600 }}>{lead.company}</strong>
+                        </div>
+                        <div style={{ display:'flex', gap:14, marginTop:10, alignItems:'center', flexWrap:'wrap' }}>
+                            <LeadSourceChip source={lead.source}/>
+                            {lead.rev > 0 && <>
+                                <span style={{ opacity:0.4, color:T.inkMuted }}>·</span>
+                                <div style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>
+                                    <span style={{ color:T.inkMuted }}>Est. ARR</span>{' '}
+                                    <strong style={{ fontWeight:600 }}>{fmtRev(lead.rev)}</strong>
+                                </div>
+                            </>}
+                            {lead.createdAt && <>
+                                <span style={{ opacity:0.4, color:T.inkMuted }}>·</span>
+                                <div style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>
+                                    <span style={{ color:T.inkMuted }}>Created</span> {relAge(lead.createdAt)} ago
+                                </div>
+                            </>}
+                        </div>
+                    </div>
+                </div>
+                <div style={{ display:'flex', gap:6, marginTop:12, flexWrap:'wrap' }}>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>↗ Convert to opportunity</button>
+                    {['Email','Call','Schedule'].map(a => (
+                        <button key={a} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>{a}</button>
+                    ))}
+                    <div style={{ flex:1 }}/>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>···</button>
+                </div>
+            </div>
+
+            {/* Next action */}
+            <div style={{ padding:'14px 22px', borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ fontSize:11, fontWeight:700, color:T.goldInk, textTransform:'uppercase', letterSpacing:0.8, marginBottom:6, fontFamily:T.sans }}>Recommended next action</div>
+                <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'rgba(200,185,154,0.15)', border:`1px solid ${T.gold}`, borderRadius:T.r }}>
+                    <div style={{ flex:1, fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{nextAction}</div>
+                    <button style={{ background:T.ink, color:T.surface, border:'none', borderRadius:T.r, padding:'5px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Do it</button>
+                </div>
+            </div>
+
+            {/* Assignee */}
+            <div style={{ padding:'14px 22px', borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, marginBottom:6, fontFamily:T.sans }}>Assigned to</div>
+                {lead.assignee ? (
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                        <Av name={lead.assignee} size={32}/>
+                        <div style={{ flex:1 }}>
+                            <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{lead.assignee}</div>
+                            <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>AE · owner{lead.createdAt ? ' since '+relAge(lead.createdAt)+' ago' : ''}</div>
+                        </div>
+                        <button style={{ padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Reassign</button>
+                    </div>
+                ) : (
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                        <div style={{ width:32, height:32, borderRadius:'50%', border:`1px dashed ${T.borderStrong}`, color:T.goldInk, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>+</div>
+                        <div style={{ flex:1, fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Not yet assigned</div>
+                        <button style={{ padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Assign now</button>
                     </div>
                 )}
             </div>
-            </div>{/* end table-container */}
+
+            {/* Notes */}
+            {lead.notes && (
+                <div style={{ padding:'14px 22px', borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, marginBottom:6, fontFamily:T.sans }}>Notes</div>
+                    <div style={{ fontSize:12.5, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans }}>{lead.notes}</div>
+                </div>
+            )}
+
+            {/* Activity timeline */}
+            <div style={{ padding:'14px 22px' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, marginBottom:10, fontFamily:T.sans }}>Activity</div>
+                <div style={{ position:'relative', paddingLeft:18 }}>
+                    <div style={{ position:'absolute', left:6, top:6, bottom:6, width:1, background:T.border }}/>
+                    {timeline.map((t, i) => (
+                        <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:10, marginBottom:10, position:'relative' }}>
+                            <div style={{ position:'absolute', left:-18, top:2, width:13, height:13, borderRadius:'50%', background:T.surface, border:`1.5px solid ${T.borderStrong}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:7, color:T.inkMid }}>
+                                {t.icon}
+                            </div>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:12.5, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{t.label}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{t.time}</div>
+                            </div>
+                        </div>
+                    ))}
+                    {timeline.length === 0 && <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No activity yet.</div>}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const CockpitView = ({ leads, onClose }) => {
+    const sorted = useMemo(() => [...leads].sort((a,b) => b.score - a.score), [leads]);
+    const [filter,     setFilter    ] = useState('all');
+    const [selectedId, setSelectedId] = useState(() => sorted[0]?.id || null);
+
+    const filterDefs = [
+        { k:'all',       l:'All',        c:leads.length },
+        { k:'hot',       l:'Hot',        c:leads.filter(l=>l.score>=70).length, dot:SCORE_COLORS.hot },
+        { k:'new',       l:'New',        c:leads.filter(l=>l.status==='New').length, dot:STATUS_STYLES.New.dot },
+        { k:'unassigned',l:'Unassigned', c:leads.filter(l=>!l.assignee).length, dot:T.goldInk },
+    ];
+
+    const filtered = sorted.filter(l => {
+        if (filter === 'hot')       return l.score >= 70;
+        if (filter === 'new')       return l.status === 'New';
+        if (filter === 'unassigned')return !l.assignee;
+        return true;
+    });
+
+    const selected = leads.find(l => l.id === selectedId) || sorted[0] || null;
+
+    return (
+        <div style={{ flex:1, minHeight:0, display:'flex', gap:12 }}>
+            {/* Left list */}
+            <div style={{ width:300, flexShrink:0, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+                <div style={{ padding:'10px 12px', borderBottom:`1px solid ${T.border}`, background:T.surface2 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'4px 10px', marginBottom:8 }}>
+                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                        <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>Search leads…</span>
+                    </div>
+                    <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                        {filterDefs.map(f => {
+                            const active = filter === f.k;
+                            return (
+                                <button key={f.k} onClick={() => setFilter(f.k)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 8px', border:`1px solid ${active ? T.ink : T.border}`, background: active ? T.ink : T.surface, color: active ? T.surface : T.ink, fontSize:11, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                                    {f.dot && <div style={{ width:5, height:5, borderRadius:'50%', background:f.dot }}/>}
+                                    {f.l}
+                                    <span style={{ background: active ? 'rgba(255,255,255,0.18)' : T.surface2, padding:'0 5px', borderRadius:6, fontSize:10, fontWeight:600, color: active ? T.surface : T.inkMuted }}>{f.c}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+                <div style={{ flex:1, overflow:'auto' }}>
+                    {filtered.length === 0 ? (
+                        <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No leads match.</div>
+                    ) : filtered.map(l => (
+                        <CockpitListRow key={l.id} lead={l} active={l.id === selectedId} onClick={() => setSelectedId(l.id)}/>
+                    ))}
+                </div>
+            </div>
+
+            {/* Detail pane */}
+            <div style={{ flex:1, minWidth:0 }}>
+                <CockpitDetail lead={selected}/>
+            </div>
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────
+// Main export
+// ─────────────────────────────────────────────────────────────
+export default function LeadsTab() {
+    const {
+        leads: rawLeads, setLeads,
+        settings, currentUser, userRole,
+        showConfirm, exportToCSV,
+    } = useApp();
+
+    const [tab, setTab] = useState(() => {
+        try { return localStorage.getItem('tab:leads:subTab') || 'triage'; } catch { return 'triage'; }
+    });
+
+    const setTabPersist = useCallback((t) => {
+        setTab(t);
+        try { localStorage.setItem('tab:leads:subTab', t); } catch {}
+    }, []);
+
+    // Normalise real DB leads to design field names
+    const leads = useMemo(() => (rawLeads || []).map(norm), [rawLeads]);
+
+    // Rep names from settings for the Distribute panel
+    const repNames = useMemo(() =>
+        (settings?.users || []).filter(u => u.name && u.userType !== 'ReadOnly').map(u => u.name).sort(),
+    [settings]);
+
+    const openInCockpit = useCallback((id) => {
+        setTabPersist('cockpit');
+        // cockpit will auto-select the passed id via its own state management
+    }, [setTabPersist]);
+
+    const totalRev = leads.reduce((s,l) => s + l.rev, 0);
+    const hotCount = leads.filter(l => l.score >= 70).length;
+    const unassigned = leads.filter(l => !l.assignee).length;
+
+    const subtitle = tab === 'triage'
+        ? `${leads.length} leads · ${hotCount} hot · ${unassigned} unassigned · est. pipeline ${fmtRev(totalRev)}`
+        : `Work one lead at a time — next-best action, timeline, assignment`;
+
+    return (
+        <div className="tab-page" style={{ fontFamily:T.sans, display:'flex', flexDirection:'column', height:'100%' }}>
+            {/* Page header */}
+            <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:0 }}>
+                <div>
+                    <div style={{ fontSize:28, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, letterSpacing:-0.8, color:T.ink, lineHeight:1, marginBottom:5 }}>Leads</div>
+                    <div style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>{subtitle}</div>
+                </div>
+                <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>↗ Import</button>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>+ New lead</button>
+                </div>
+            </div>
+
+            {/* Sub-tab strip */}
+            <div style={{ display:'flex', alignItems:'flex-end', gap:0, borderBottom:`1px solid ${T.border}`, marginBottom:14, marginTop:12 }}>
+                {[
+                    { k:'triage',  label:'Triage',  sub:'Scan and dispatch' },
+                    { k:'cockpit', label:'Cockpit', sub:'Focused work' },
+                ].map(t => {
+                    const active = tab === t.k;
+                    return (
+                        <button key={t.k} onClick={() => setTabPersist(t.k)} style={{ position:'relative', padding:'10px 18px 11px', background:'transparent', border:'none', cursor:'pointer', fontFamily:T.sans, textAlign:'left', borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent', marginBottom:-1, transition:'border-color 120ms' }}>
+                            <div style={{ fontSize:14, fontWeight: active ? 700 : 500, color: active ? T.ink : T.inkMid, letterSpacing:-0.1, fontFamily:T.sans }}>{t.label}</div>
+                            <div style={{ fontSize:10.5, color: active ? T.inkMid : T.inkMuted, marginTop:1, fontWeight:500, letterSpacing:0.3, fontFamily:T.sans }}>{t.sub}</div>
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Tab body */}
+            <div style={{ flex:1, minHeight:0, overflow:'hidden', display:'flex', flexDirection:'column' }}>
+                {tab === 'triage' && (
+                    <TriageView
+                        leads={leads}
+                        repNames={repNames}
+                        onOpenLead={openInCockpit}
+                        setLeads={setLeads}
+                        showConfirm={showConfirm}
+                    />
+                )}
+                {tab === 'cockpit' && (
+                    <CockpitView leads={leads}/>
+                )}
+            </div>
         </div>
     );
 }
