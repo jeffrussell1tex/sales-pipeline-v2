@@ -1343,19 +1343,20 @@ ${bodyHtml}
                                     },
                                   ];
                                   const compareLabel2 = reportCompareTo==='previous_quarter'?'vs prev. quarter':reportCompareTo==='previous_year'?'vs prev. year':null;
+                                  const hasComparison = compareLabel2 && comparedOpps && comparedOpps.length > 0;
                                   return (
-                                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+                                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, margin:'0 8px' }}>
                                       {kpis.map(k=>(
                                         <div key={k.label} style={{
                                           background:T2.surface,
                                           border:`1px solid ${T2.border}`,
                                           borderRadius:T2.r,
-                                          padding:'14px 18px 14px 18px',
+                                          padding:'14px 18px',
                                         }}>
                                           <div style={eb2(T2.inkMuted)}>{k.label}</div>
                                           <div style={{ fontSize:26, fontWeight:700, color:T2.ink, letterSpacing:-0.5, lineHeight:1.1, marginTop:4, fontFamily:T2.sans }}>{k.value}</div>
-                                          <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:5, flexWrap:'wrap' }}>
-                                            {k.delta ? (
+                                          <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:5 }}>
+                                            {hasComparison && k.delta ? (
                                               <>
                                                 <span style={{
                                                   fontSize:11, fontWeight:700,
@@ -1369,11 +1370,9 @@ ${bodyHtml}
                                                         fill={k.delta.good ? T2.ok : T2.danger}/>
                                                     </svg>
                                                   )}
-                                                  {k.delta.neutral ? '' : (k.delta.good ? '+' : '')}{k.delta.rawPct.toFixed(1)}%
+                                                  {k.delta.neutral ? '' : (k.delta.good ? '+' : '')}{Math.abs(k.delta.rawPct).toFixed(1)}%
                                                 </span>
-                                                <span style={{ fontSize:11, color:T2.inkMuted, fontFamily:T2.sans }}>
-                                                  {compareLabel2 || k.sub}
-                                                </span>
+                                                <span style={{ fontSize:11, color:T2.inkMuted, fontFamily:T2.sans }}>{compareLabel2}</span>
                                               </>
                                             ) : (
                                               <span style={{ fontSize:11, color:T2.inkMuted, fontFamily:T2.sans }}>{k.sub}</span>
