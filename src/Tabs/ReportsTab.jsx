@@ -423,7 +423,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 const cardStyle = { background: '#fbf8f3', borderRadius: '4px', padding: '1.25rem', border: '1px solid #e6ddd0' };
                 const labelStyle = { fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', textTransform: 'uppercase', letterSpacing: '0.6', marginBottom: '0.25rem', fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' };
                 const valueStyle = { fontSize: '1.5rem', fontWeight: '700', color: '#2a2622', fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' };
-                const printBtnStyle = { background: '#e8e3da', border: '1px solid #ddd8cf', borderRadius: '8px', padding: '0.4rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', color: '#78716c', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 };
+                const printBtnStyle = { background: '#fbf8f3', border: '1px solid #e6ddd0', borderRadius: '6px', padding: '0.3rem 0.875rem', fontSize: '0.75rem', fontWeight: '500', color: '#2a2622', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' };
 
                 const printSection = (title, bodyHtml) => {
                     const d = new Date();
@@ -675,7 +675,7 @@ ${bodyHtml}
 
                 const ReportBtn = ({ title, contentFn }) => (
                     <button onClick={() => generateReport(title, contentFn)}
-                        style={{ display:'flex', alignItems:'center', gap:'0.375rem', background:'#e8e3da', border:'1px solid #ddd8cf', borderRadius:'8px', padding:'0.4rem 0.875rem', fontSize:'0.75rem', fontWeight:'500', color:'#78716c', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', flexShrink:0 }}>↗ Export</button>
+                        style={{ display:'inline-flex', alignItems:'center', gap:'0.3rem', background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'6px', padding:'0.3rem 0.875rem', fontSize:'0.75rem', fontWeight:'500', color:'#2a2622', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap', flexShrink:0 }}>↗ Export</button>
                 );
 
                 return (
@@ -697,7 +697,6 @@ ${bodyHtml}
                               { key:'revenue',     label:'Revenue',              sub:'What did we close?' },
                               { key:'activity',    label:'Activity',             sub:'What are reps doing?' },
                               ...(leadsEnabled ? [{ key:'leads', label:'Leads', sub:'Top of funnel' }] : []),
-                              { key:'actions',     label:'Actions',              sub:'Recommendation log' },
                               { key:'custom',      label:'Custom',               sub:'Your saved views' },
                             ].map(({ key, label, sub }) => (
                               <button key={key} onClick={() => setReportSubTabPersisted(key)} style={{
@@ -855,13 +854,12 @@ ${bodyHtml}
                             {/* Right: Customize (custom tab) + Export — styled as app ghost button */}
                             {reportSubTab === 'custom' && (
                               <button onClick={() => document.dispatchEvent(new CustomEvent('accelerep:openCustomize'))}
-                                className="btn btn-secondary"
-                                style={{ display:'inline-flex', alignItems:'center', gap:'0.375rem' }}>
+                                style={{ display:'inline-flex', alignItems:'center', gap:'0.375rem', background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'6px', padding:'0.3rem 0.875rem', fontSize:'0.75rem', fontWeight:'500', color:'#2a2622', cursor:'pointer', fontFamily:'inherit' }}>
                                 ⚙️ Customize
                               </button>
                             )}
-                            <button className="btn btn-secondary"
-                              style={{ display:'inline-flex', alignItems:'center', gap:'0.375rem' }}
+                            <button className=""
+                              style={{ display:'inline-flex', alignItems:'center', gap:'0.3rem', background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'6px', padding:'0.3rem 0.875rem', fontSize:'0.75rem', fontWeight:'500', color:'#2a2622', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}
                               onClick={()=>{
                                 const lbl={pipeline:'Pipeline & Forecast',performance:'Performance',revenue:'Revenue',activity:'Activity',leads:'Leads',actions:'Actions'}[reportSubTab]||'Report';
                                 const win=window.open('','_blank','width=900,height=700');
@@ -1632,51 +1630,6 @@ ${bodyHtml}
                                   )}
                                 </PanelB>
 
-                              </div>
-                            );
-                          })()}
-
-                          {/* Coaching Red Flags */}
-                          {canSeeAll&&(()=>{
-                            const WB=45,AB=7,SD=14;
-                            const rCF=[...new Set(reportsOpps.map(o=>o.salesRep||o.assignedTo).filter(Boolean))].sort();
-                            const aF=[];
-                            rCF.forEach(rep=>{
-                              const rO=reportsOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
-                              const rW=rO.filter(o=>o.stage==='Closed Won');
-                              const rL=rO.filter(o=>o.stage==='Closed Lost');
-                              const rP=rO.filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost');
-                              const cl=rW.length+rL.length;
-                              const wr=cl>0?Math.round(rW.length/cl*100):null;
-                              const rA=(activities||[]).filter(a=>a.salesRep===rep||a.author===rep);
-                              const la=rA.sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0]?.date||null;
-                              const ds=la?Math.floor((new Date()-new Date(la+'T12:00:00'))/86400000):null;
-                              const st=rP.filter(o=>{const la2=(activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];const ds2=la2?.date?Math.floor((new Date()-new Date(la2.date+'T12:00:00'))/86400000):null;return ds2!==null&&ds2>=SD;});
-                              const fl=[];
-                              if(wr!==null&&wr<WB&&cl>=3)fl.push({t:'warning',s:wr+'% win rate vs '+WB+'% benchmark ('+cl+' closed deals)'});
-                              if(ds!==null&&ds>=AB*2)fl.push({t:'danger',s:ds+'d since last activity — above '+AB+'d ideal'});
-                              else if(ds!==null&&ds>=AB)fl.push({t:'warning',s:ds+'d since last activity (ideal is '+AB+'d)'});
-                              else if(ds===null)fl.push({t:'warning',s:'No activities logged in this period'});
-                              if(st.length>0)fl.push({t:'danger',s:st.length+' deal'+(st.length>1?'s':'')+' with no activity in 14+ days: '+st.slice(0,2).map(o=>o.opportunityName||o.account).join(', ')+(st.length>2?' +'+(st.length-2)+' more':'')});
-                              if(rP.length===0&&rW.length===0)fl.push({t:'info',s:'No open or closed deals in this period'});
-                              if(fl.length>0)aF.push({rep,fl});
-                            });
-                            const FC={danger:{bg:'rgba(156,58,46,0.08)',border:'rgba(156,58,46,0.3)',text:'#9c3a2e',dot:'#9c3a2e'},warning:{bg:'rgba(184,115,51,0.1)',border:'#c8b99a',text:'#7a6a48',dot:'#b87333'},info:{bg:'rgba(58,90,122,0.08)',border:'#d4c8b4',text:'#3a5a7a',dot:'#3a5a7a'}};
-                            return(
-                              <div style={cardStyle}>
-                                <div style={{fontWeight:'700',fontSize:'0.9375rem',color:'#2a2622',marginBottom:'1rem'}}>&#128681; Coaching Red Flags <span style={{fontSize:'0.6875rem',fontWeight:'400',color:'#8a8378',marginLeft:'6px'}}>Managers only</span></div>
-                                {aF.length===0?(<div style={{fontSize:'0.8125rem',color:'#2e4a24',background:'rgba(77,107,61,0.07)',border:'1px solid rgba(77,107,61,0.3)',borderRadius:'8px',padding:'12px 14px'}}>No coaching concerns detected for this period.</div>):(
-                                  <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
-                                    {aF.map(({rep,fl})=>(
-                                      <div key={rep} style={{border:'1px solid #e6ddd0',borderRadius:'8px',overflow:'hidden'}}>
-                                        <div style={{padding:'7px 14px',background:'#fbf8f3',borderBottom:'1px solid #e6ddd0',fontWeight:'700',fontSize:'0.8125rem',color:'#2a2622'}}>{rep} <span style={{fontWeight:'400',color:'#8a8378',fontSize:'0.6875rem'}}>{fl.length} flag{fl.length>1?'s':''}</span></div>
-                                        <div style={{padding:'8px 14px',display:'flex',flexDirection:'column',gap:'5px'}}>
-                                          {fl.map((f,fi)=>{const c=FC[f.t]||FC.info;return(<div key={fi} style={{display:'flex',alignItems:'flex-start',gap:'8px',padding:'6px 10px',background:c.bg,border:'0.5px solid '+c.border,borderRadius:'6px'}}><div style={{width:'7px',height:'7px',borderRadius:'50%',background:c.dot,flexShrink:0,marginTop:'4px'}}/><div style={{fontSize:'0.8125rem',color:c.text,lineHeight:1.5}}>{f.s}</div></div>);})}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
                               </div>
                             );
                           })()}

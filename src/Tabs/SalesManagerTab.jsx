@@ -502,6 +502,89 @@ export default function SalesManagerTab() {
                 ))}
             </div>
 
+            {/* ── Coaching Red Flags ─────────────────────────────────────
+                Computed from repStats (buildRepStats) which uses live
+                opportunities and activities scoped to visibleReps.
+                Benchmarks: win rate < 45%, last activity > 7d, stuck deals > 14d.
+            ────────────────────────────────────────────────────────────── */}
+            {(() => {
+                const WB = 45, AB = 7, SD = 14;
+                const FC = {
+                    danger:  { bg:'rgba(156,58,46,0.08)',  border:'rgba(156,58,46,0.3)',  text:T.danger, dot:T.danger },
+                    warning: { bg:'rgba(184,115,51,0.10)', border:T.gold,                 text:T.warn,   dot:T.warn   },
+                    info:    { bg:'rgba(58,90,122,0.08)',  border:T.borderStrong,         text:T.info,   dot:T.info   },
+                };
+
+                const flagged = repStats.map(rs => {
+                    const fl = [];
+                    const rWon  = rs.wonOpps;
+                    const rLost = (opportunities||[]).filter(o => (o.salesRep===rs.rep.name||o.assignedTo===rs.rep.name) && o.stage==='Closed Lost');
+                    const cl    = rWon.length + rLost.length;
+                    const wr    = cl > 0 ? Math.round(rWon.length / cl * 100) : null;
+
+                    if (wr !== null && wr < WB && cl >= 3)
+                        fl.push({ t:'warning', s:`${wr}% win rate vs ${WB}% benchmark (${cl} closed deals)` });
+
+                    if (rs.daysSinceAct !== null && rs.daysSinceAct >= AB * 2)
+                        fl.push({ t:'danger',  s:`${rs.daysSinceAct}d since last activity — above ${AB}d ideal` });
+                    else if (rs.daysSinceAct !== null && rs.daysSinceAct >= AB)
+                        fl.push({ t:'warning', s:`${rs.daysSinceAct}d since last activity (ideal is ${AB}d)` });
+                    else if (rs.daysSinceAct === null)
+                        fl.push({ t:'warning', s:'No activities logged in this period' });
+
+                    if (rs.stuck > 0)
+                        fl.push({ t:'danger',  s:`${rs.stuck} deal${rs.stuck>1?'s':''} stuck in stage 14+ days` });
+
+                    if (rs.activeOpps.length === 0 && rWon.length === 0)
+                        fl.push({ t:'info',    s:'No open or closed deals in this period' });
+
+                    return fl.length > 0 ? { name:rs.rep.name, fl } : null;
+                }).filter(Boolean);
+
+                return (
+                    <div style={{ ...card }}>
+                        <div style={{ ...cardHdr }}>
+                            <span style={{ fontSize:14, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, color:T.ink }}>
+                                🚩 Coaching red flags
+                            </span>
+                            <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
+                                {flagged.length} rep{flagged.length!==1?'s':''} flagged
+                            </span>
+                        </div>
+                        <div style={{ padding:'8px 16px 12px' }}>
+                            {flagged.length === 0 ? (
+                                <div style={{ fontSize:13, color:T.ok, fontWeight:600, padding:'8px 0' }}>
+                                    No coaching concerns detected — team is healthy ✓
+                                </div>
+                            ) : (
+                                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                                    {flagged.map(({ name, fl }) => (
+                                        <div key={name} style={{ border:`1px solid ${T.border}`, borderRadius:T.r+1, overflow:'hidden' }}>
+                                            <div style={{ padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:8 }}>
+                                                <Avatar name={name} size={20} />
+                                                <span style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{name}</span>
+                                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans, marginLeft:4 }}>{fl.length} flag{fl.length>1?'s':''}</span>
+                                            </div>
+                                            <div style={{ padding:'8px 14px', display:'flex', flexDirection:'column', gap:5 }}>
+                                                {fl.map((f, fi) => {
+                                                    const c = FC[f.t] || FC.info;
+                                                    return (
+                                                        <div key={fi} style={{ display:'flex', alignItems:'flex-start', gap:8, padding:'6px 10px', background:c.bg, border:`0.5px solid ${c.border}`, borderRadius:T.r }}>
+                                                            <div style={{ width:7, height:7, borderRadius:'50%', background:c.dot, flexShrink:0, marginTop:4 }} />
+                                                            <div style={{ fontSize:12, color:c.text, lineHeight:1.5, fontFamily:T.sans }}>{f.s}</div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
+
             {/* Recent coaching */}
             {coachingNotes.length > 0 && (
                 <div style={card}>
