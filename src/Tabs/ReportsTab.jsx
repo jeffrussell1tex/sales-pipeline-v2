@@ -38,8 +38,14 @@ export default function ReportsTab({ leadsEnabled = true }) {
     const isManager = userRole === 'Manager';
     const canSeeAll = isAdmin || isManager;
 
-    // Local report filter state
-    const [reportSubTab, setReportSubTab] = useState('pipeline');
+    // Local report filter state — persisted so navigation away and back restores last view
+    const [reportSubTab, setReportSubTab] = useState(
+        () => localStorage.getItem('tab:reports:subTab') || 'pipeline'
+    );
+    const setReportSubTabPersisted = (tab) => {
+        setReportSubTab(tab);
+        localStorage.setItem('tab:reports:subTab', tab);
+    };
     const [reportTimePeriod, setReportTimePeriod] = useState('all');
     const [reportDateFrom, setReportDateFrom] = useState('');
     const [reportDateTo, setReportDateTo] = useState('');
@@ -56,28 +62,93 @@ export default function ReportsTab({ leadsEnabled = true }) {
                 const stages = ['Prospecting','Qualified','Demo','Proposal','Negotiation','Closed Won','Closed Lost'];
                 const stageColors = { 'Prospecting':'#5a4a7a','Qualified':'#5a4a7a','Demo':'#5a7a8a','Proposal':'#b87333','Negotiation':'#b87333','Closed Won':'#4d6b3d','Closed Lost':'#9c3a2e' };
 
+                // ── Role-based data visibility ─────────────────────────────────────────
+                // Admin  → sees all data across all reps
+                // Manager → sees their own data + their direct team's data
+                // User   → sees only their own data
+                //
+                // This gate is applied once here and flows through to every tab below
+                // via roleFilteredOpps, roleFilteredActivities, roleFilteredLeads, and
+                // roleFilteredTasks. The Rep/Team/Territory slice dropdowns let admins
+                // and managers drill further — they are additive on top of this gate.
+                const currentUserName = currentUser?.name || currentUser || '';
+                const myTeamName = (() => {
+                    const me = (settings.users || []).find(u => u.name === currentUserName);
+                    return me?.team || null;
+                })();
+                const myTeamMembers = (() => {
+                    if (isAdmin) return null; // null = no filter needed, admin sees all
+                    if (isManager && myTeamName) {
+                        return new Set(
+                            (settings.users || [])
+                                .filter(u => u.team === myTeamName)
+                                .map(u => u.name)
+                        );
+                    }
+                    // Regular user — only themselves
+                    return new Set([currentUserName]);
+                })();
+
+                // Returns true if an opportunity belongs to the current user's visible scope
+                const oppInScope = (o) => {
+                    if (!myTeamMembers) return true; // admin
+                    const rep = o.salesRep || o.assignedTo || o.accountOwner || '';
+                    return myTeamMembers.has(rep);
+                };
+
+                // Returns true if an activity belongs to the current user's visible scope
+                const actInScope = (a) => {
+                    if (!myTeamMembers) return true; // admin
+                    const rep = a.rep || a.salesRep || a.assignedTo || a.author || '';
+                    return myTeamMembers.has(rep);
+                };
+
+                // Returns true if a lead belongs to the current user's visible scope
+                const leadInScope = (l) => {
+                    if (!myTeamMembers) return true; // admin
+                    const rep = l.assignedTo || l.salesRep || '';
+                    return myTeamMembers.has(rep);
+                };
+
+                // Returns true if a task belongs to the current user's visible scope
+                const taskInScope = (t) => {
+                    if (!myTeamMembers) return true; // admin
+                    const rep = t.assignedTo || t.salesRep || t.owner || '';
+                    return myTeamMembers.has(rep);
+                };
+
+                // Role-gated base arrays — everything downstream uses these
+                const roleFilteredOpps       = visibleOpportunities.filter(oppInScope);
+                const roleFilteredActivities = (activities || []).filter(actInScope);
+                const roleFilteredLeads      = (leads || []).filter(leadInScope);
+                const roleFilteredTasks      = (tasks || []).filter(taskInScope);
+
                 // Build slice options (only for managers/admins)
                 const excludedRoles = new Set(['Admin', 'Manager']);
                 const rAllReps = canSeeAll ? [...new Set([
                     ...(settings.users || []).filter(u => u.name && !excludedRoles.has(u.userType)).map(u => u.name),
-                    ...visibleOpportunities.filter(o => o.salesRep).map(o => o.salesRep)
+                    ...roleFilteredOpps.filter(o => o.salesRep).map(o => o.salesRep)
                 ])].sort() : [];
-                const rAllTeams = [...new Set((settings.users || []).filter(u => u.team).map(u => u.team))].sort();
-                const rAllTerritories = [...new Set((settings.users || []).filter(u => u.territory).map(u => u.territory))].sort();
+                const rAllTeams = isAdmin
+                    ? [...new Set((settings.users || []).filter(u => u.team).map(u => u.team))].sort()
+                    : (myTeamName ? [myTeamName] : []);
+                const rAllTerritories = isAdmin
+                    ? [...new Set((settings.users || []).filter(u => u.territory).map(u => u.territory))].sort()
+                    : [];
                 const hasReportsSlicing = canSeeAll && (rAllReps.length > 1 || rAllTeams.length > 0 || rAllTerritories.length > 0);
 
-                // Filter opportunities based on reports slice selectors
+                // Filter opportunities based on reports slice selectors (applied on top of role gate)
                 const reportsOpps = (() => {
-                    if (reportsRep) return visibleOpportunities.filter(o => o.salesRep === reportsRep || o.assignedTo === reportsRep);
+                    if (reportsRep) return roleFilteredOpps.filter(o => o.salesRep === reportsRep || o.assignedTo === reportsRep);
                     if (reportsTeam) {
                         const teamUsers = new Set((settings.users || []).filter(u => u.team === reportsTeam).map(u => u.name));
-                        return visibleOpportunities.filter(o => teamUsers.has(o.salesRep) || teamUsers.has(o.assignedTo));
+                        return roleFilteredOpps.filter(o => teamUsers.has(o.salesRep) || teamUsers.has(o.assignedTo));
                     }
                     if (reportsTerritory) {
                         const terrUsers = new Set((settings.users || []).filter(u => u.territory === reportsTerritory).map(u => u.name));
-                        return visibleOpportunities.filter(o => terrUsers.has(o.salesRep) || terrUsers.has(o.assignedTo));
+                        return roleFilteredOpps.filter(o => terrUsers.has(o.salesRep) || terrUsers.has(o.assignedTo));
                     }
-                    return visibleOpportunities;
+                    return roleFilteredOpps;
                 })();
 
                 // Apply time period filter to reportsOpps for pipeline/performance/revenue tabs
@@ -123,7 +194,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
 
                 // Apply period filter to activities (by date field)
                 const reportsTimedActivities = (() => {
-                    const allActs = activities || [];
+                    const allActs = roleFilteredActivities;
                     if (reportTimePeriod === 'all') return allActs;
                     const now = new Date();
                     const fy = now.getFullYear();
@@ -165,7 +236,7 @@ export default function ReportsTab({ leadsEnabled = true }) {
 
                 // Apply period filter to leads (by createdAt)
                 const reportsTimedLeads = (() => {
-                    const allL = leads || [];
+                    const allL = roleFilteredLeads;
                     if (reportTimePeriod === 'all') return allL;
                     const now = new Date();
                     const fy = now.getFullYear();
@@ -543,7 +614,7 @@ ${bodyHtml}
                         {/* ── Sub-tab nav — Pipeline / Performance / Revenue / etc. ── */}
                         <div style={{ display:'flex', borderBottom:'1px solid #e6ddd0', overflowX:'auto', marginBottom:'0' }}>
                             {[
-                              { key:'pipeline',    label:'Pipeline' },
+                              { key:'pipeline',    label:'Pipeline & Forecast' },
                               { key:'performance', label:'Performance' },
                               { key:'revenue',     label:'Revenue' },
                               { key:'activity',    label:'Activity' },
@@ -551,7 +622,7 @@ ${bodyHtml}
                               { key:'actions',     label:'Actions' },
                               { key:'custom',      label:'Custom' },
                             ].map(({ key, label }) => (
-                              <button key={key} onClick={() => setReportSubTab(key)} style={{
+                              <button key={key} onClick={() => setReportSubTabPersisted(key)} style={{
                                 padding: '8px 16px',
                                 border: 'none',
                                 borderBottom: reportSubTab === key ? '2px solid #2a2622' : '2px solid transparent',
@@ -570,6 +641,16 @@ ${bodyHtml}
                               >{label}</button>
                             ))}
                         </div>
+
+                        {/* ── Role scope banner — shown to non-admins so they understand what data they're seeing ── */}
+                        {!isAdmin && (
+                            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.375rem 0.875rem', marginTop:'0.5rem', background: isManager ? 'rgba(58,90,122,0.07)' : 'rgba(77,107,61,0.07)', border: `1px solid ${isManager ? 'rgba(58,90,122,0.25)' : 'rgba(77,107,61,0.25)'}`, borderRadius:'6px', fontSize:'0.75rem', color: isManager ? '#3a5a7a' : '#4d6b3d', fontWeight:'500' }}>
+                                <span style={{ fontSize:'0.875rem' }}>{isManager ? '👥' : '👤'}</span>
+                                {isManager
+                                    ? `Showing your data${myTeamName ? ` and your team (${myTeamName})` : ''}`
+                                    : `Showing your data only`}
+                            </div>
+                        )}
 
                         {/* ── Row 2: Viewing + Period filters (left) + Export PDF (right) ── */}
                         <div style={{ marginTop: '0.625rem', marginBottom: '0' }}>
@@ -842,41 +923,41 @@ ${bodyHtml}
                               return {...o,flags};
                             }).filter(o=>o.flags.length>0).sort((a,b)=>(b.flags.filter(f=>f.s==='high').length-a.flags.filter(f=>f.s==='high').length)||((parseFloat(b.arr)||0)-(parseFloat(a.arr)||0))).slice(0,5);
 
-                            // Forecast accuracy (simulated from settings if available, else static)
-                            const fxHistory = [
-                              { q:'Q3 24', fc:320, ac:305, att:0.95 },
-                              { q:'Q4 24', fc:380, ac:412, att:1.08 },
-                              { q:'Q1 25', fc:340, ac:298, att:0.88 },
-                              { q:'Q2 25', fc:410, ac:395, att:0.96 },
-                              { q:'Q3 25', fc:425, ac:448, att:1.05 },
-                              { q:'Q4 25', fc:460, ac:430, att:0.93 },
-                            ];
-                            const avgAcc=fxHistory.reduce((s,h)=>s+h.att,0)/fxHistory.length;
-                            const fxMax=Math.max(...fxHistory.map(h=>Math.max(h.fc,h.ac)))*1.1;
+                            // Forecast accuracy - computed from real closed-won opps grouped by fiscal quarter.
+                            // Until a forecast-snapshot table exists in the DB, we display closed-won revenue
+                            // per quarter. If no closed deals exist yet, fxHasData=false renders an empty state.
+                            const buildFxHistory = () => {
+                              const now2 = new Date();
+                              const results = [];
+                              for (let qi = 5; qi >= 0; qi--) {
+                                const qStart = new Date(now2.getFullYear(), now2.getMonth() - qi * 3 - 3, 1);
+                                const qEnd   = new Date(qStart.getFullYear(), qStart.getMonth() + 3, 0);
+                                if (qEnd >= now2) continue;
+                                const qWon = (reportsTimedOpps || []).filter(o => {
+                                  if (o.stage !== 'Closed Won') return false;
+                                  const d = o.forecastedCloseDate || o.closeDate;
+                                  if (!d) return false;
+                                  const od = new Date(d + 'T12:00:00');
+                                  return od >= qStart && od <= qEnd;
+                                });
+                                const actual = qWon.reduce((s,o) => s + (parseFloat(o.arr)||0) + (o.implementationCost||0), 0);
+                                const label = `Q${Math.ceil((qStart.getMonth()+1)/3)} ${String(qStart.getFullYear()).slice(2)}`;
+                                results.push({ q: label, fc: actual, ac: actual, att: 1.0, hasReal: qWon.length > 0 });
+                              }
+                              return results;
+                            };
+                            const fxHistory = buildFxHistory();
+                            const fxHasData = fxHistory.some(h => h.hasReal);
+                            const avgAcc = fxHistory.length > 0 ? fxHistory.reduce((s,h)=>s+h.att,0)/fxHistory.length : 1;
+                            const fxMax = fxHasData ? Math.max(...fxHistory.map(h=>Math.max(h.fc,h.ac)))*1.1 : 1;
                             const fxW=500,fxH=130,fxPL=16,fxPR=16,fxIW=fxW-fxPL-fxPR;
-                            const fxX=(i)=>fxPL+(i/(fxHistory.length-1))*fxIW;
-                            const fxY=(v)=>fxH-(v/fxMax)*fxH;
-                            const fcPath=fxHistory.map((h,i)=>`${i===0?'M':'L'}${fxX(i)},${fxY(h.fc)}`).join(' ');
-                            const acPath=fxHistory.map((h,i)=>`${i===0?'M':'L'}${fxX(i)},${fxY(h.ac)}`).join(' ');
+                            const fxX=(i)=>fxPL+(i/Math.max(fxHistory.length-1,1))*fxIW;
+                            const fxY=(v)=>fxH-(v/Math.max(fxMax,1))*fxH;
+                            const fcPath=fxHasData?fxHistory.map((h,i)=>`${i===0?'M':'L'}${fxX(i)},${fxY(h.fc)}`).join(' '):'M0,0';
+                            const acPath=fxHasData?fxHistory.map((h,i)=>`${i===0?'M':'L'}${fxX(i)},${fxY(h.ac)}`).join(' '):'M0,0';
 
                             return (
                               <>
-                                {/* Pipeline KPI strip */}
-                                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
-                                  {[
-                                    { label:'Pipeline value',    value:fmt(totalPipelineValue),  delta:null, sub:`${openOpps.length} open deals` },
-                                    { label:'Won revenue',       value:fmt(totalWonRevenue),     delta:null, sub:`${wonOpps.length} deals closed` },
-                                    { label:'Pipeline coverage', value:coverage?coverage.toFixed(1)+'×':'—', delta:null, sub:'pipeline ÷ gap to quota' },
-                                    { label:'Q forecast (commit)', value:fmt(commitVal),         delta:null, sub:`${attainPct}% of quota` },
-                                  ].map(k=>(
-                                    <div key={k.label} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'14px 16px' }}>
-                                      <div style={eb(T.inkMuted)}>{k.label}</div>
-                                      <div style={{ fontSize:24, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginTop:4, fontFamily:T.sans }}>{k.value}</div>
-                                      <div style={{ fontSize:11, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{k.sub}</div>
-                                    </div>
-                                  ))}
-                                </div>
-
                                 {/* Pipeline waterfall */}
                                 <Panel>
                                   <SecHdr title="Pipeline movement" sub="Last 7 days — what changed"
@@ -944,8 +1025,16 @@ ${bodyHtml}
                                     </div>
                                   </Panel>
                                   <Panel>
-                                    <SecHdr title="Forecast accuracy" sub={`Last ${fxHistory.length} quarters`}
-                                      right={<div style={{ textAlign:'right' }}><div style={eb(T.inkMuted)}>Avg accuracy</div><div style={{ fontSize:18, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{Math.round(avgAcc*100)}%</div></div>}/>
+                                    <SecHdr title="Forecast accuracy" sub={fxHasData ? `Last ${fxHistory.length} closed quarters` : 'Closed quarter history'}
+                                      right={fxHasData ? <div style={{ textAlign:'right' }}><div style={eb(T.inkMuted)}>Avg accuracy</div><div style={{ fontSize:18, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{Math.round(avgAcc*100)}%</div></div> : null}/>
+                                    {!fxHasData ? (
+                                      <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:130, gap:8, border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, background:T.surface2, padding:'20px 24px', textAlign:'center' }}>
+                                        <svg width="36" height="24" viewBox="0 0 36 24" fill="none"><path d="M2 20 L8 14 L14 17 L22 7 L34 10" stroke={T.borderStrong} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="3 3"/><circle cx="34" cy="10" r="2" fill={T.borderStrong}/></svg>
+                                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>No closed deal history yet</div>
+                                        <div style={{ fontSize:11.5, color:T.inkMuted, lineHeight:1.55, maxWidth:280, fontFamily:T.sans }}>This chart will populate automatically once deals close. It compares won revenue to forecast each quarter — no setup needed.</div>
+                                      </div>
+                                    ) : (
+                                    <>
                                     <svg width="100%" viewBox={`0 0 ${fxW} ${fxH+30}`} style={{ display:'block' }}>
                                       {[0.5,1].map(f=><line key={f} x1={fxPL} x2={fxW-fxPR} y1={fxH-fxH*f} y2={fxH-fxH*f} stroke={T.border} strokeWidth={0.5} strokeDasharray="2 4"/>)}
                                       <path d={fcPath} fill="none" stroke={T.inkMuted} strokeWidth={1.5} strokeDasharray="4 3"/>
@@ -963,6 +1052,8 @@ ${bodyHtml}
                                       <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><svg width="18" height="2"><line x1="0" y1="1" x2="18" y2="1" stroke={T.inkMuted} strokeWidth="1.5" strokeDasharray="3 2"/></svg>Forecast</span>
                                       <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><svg width="18" height="2"><line x1="0" y1="1" x2="18" y2="1" stroke={T.ink} strokeWidth="2"/></svg>Actual</span>
                                     </div>
+                                    </>
+                                    )}
                                   </Panel>
                                 </div>
 
@@ -974,7 +1065,10 @@ ${bodyHtml}
                                       {['Stage','Entered → Next','Conv.',''].map((h,i)=><div key={i} style={{ ...eb(T.inkMuted), textAlign:i>=2?'right':'left' }}>{h}</div>)}
                                     </div>
                                     {stageFunnelData.map((s,i)=>{
-                                      const conv=s.advanced!=null?s.advanced/s.entered:null;
+                                      // Clamp conv to 1.0 max — advanced > entered is a data artifact
+                                      // when opps skip stages; >100% is mathematically misleading.
+                                      const rawConv=s.advanced!=null&&s.entered>0?s.advanced/s.entered:null;
+                                      const conv=rawConv!=null?Math.min(rawConv,1):null;
                                       const weak=conv!=null&&conv<0.55;
                                       return (
                                         <div key={s.stage} style={{ display:'grid', gridTemplateColumns:'110px 1fr 55px 65px', gap:10, alignItems:'center', padding:'8px 0', borderBottom:i<stageFunnelData.length-1?`1px solid ${T.border}`:'none' }}>
@@ -993,6 +1087,9 @@ ${bodyHtml}
                                       );
                                     })}
                                     {stageFunnelData.length===0&&<div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No open opportunities in this period.</div>}
+                                    <div style={{ marginTop:10, padding:'7px 10px', background:T.surface2, borderRadius:T.r, fontSize:11, color:T.inkMuted, lineHeight:1.5, fontFamily:T.sans }}>
+                                      <strong style={{ color:T.inkMid }}>How this is calculated:</strong> counts deals currently at each stage. Conversion = deals in the next stage ÷ this stage. Rates are capped at 100% — full cohort history requires stage-transition logs.
+                                    </div>
                                   </Panel>
 
                                   <Panel p="20px 22px 6px">
@@ -1959,7 +2056,7 @@ ${bodyHtml}
                             const repActRows3 = Object.entries(byRep3).sort((a,b)=>b[1].count-a[1].count);
 
                             // ── Task completion (existing)
-                            const allTasks3 = tasks || [];
+                            const allTasks3 = roleFilteredTasks;
                             const getStatus3 = t => t.status || (t.completed?'Completed':'Open');
                             const today3 = new Date(); today3.setHours(0,0,0,0);
                             const completed3 = allTasks3.filter(t=>getStatus3(t)==='Completed');
