@@ -1,3234 +1,599 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../AppContext';
-import { useAuth } from '@clerk/clerk-react';
 import { dbFetch } from '../utils/storage';
-import PipelinesSettingsPanel from '../components/modals/PipelinesSettingsPanel';
-import TeamBuilder from './TeamBuilder';
-import TerritoriesSettings from './TerritoriesSettings';
-import VerticalsSettings from './VerticalsSettings';
 
-// ── Price Book Panel ──────────────────────────────────────────────────────────
-// Extracted as a proper component to comply with React rules of hooks
-function PriceBookPanel({ goBackToMenu, showConfirm }) {
-    const { products, handleSaveProduct, handleDeleteProduct, productModalSaving, settings } = useApp();
-    const [showProductForm, setShowProductForm] = React.useState(false);
-    const [editingProduct, setEditingProduct] = React.useState(null);
-    const [productForm, setProductForm] = React.useState({ name: '', sku: '', description: '', productType: 'one_time', listPrice: '', minPrice: '', unit: 'flat', category: '', active: true, customPrice: false });
-    const [productSaveError, setProductSaveError] = React.useState(null);
-    const [pbSearch, setPbSearch] = React.useState('');
-    const [pbTypeFilter, setPbTypeFilter] = React.useState('all');
+// ── Design tokens ────────────────────────────────────────────
+const T = {
+    bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
+    border: '#e6ddd0', borderStrong: '#d4c8b4',
+    ink: '#2a2622', inkMid: '#5a544c', inkMuted: '#8a8378',
+    gold: '#c8b99a', goldInk: '#7a6a48',
+    danger: '#9c3a2e', warn: '#b87333', ok: '#4d6b3d', info: '#3a5a7a',
+    sans: '"Plus Jakarta Sans", system-ui, sans-serif',
+    serif: 'Georgia, serif',
+    r: 3,
+};
 
-    // Read options from settings (admin-configurable) with safe fallbacks
-    const pbCfg = settings?.priceBookConfig || {};
-    const unitOptions     = (pbCfg.units      || ['flat', 'month', 'year', 'user', 'hour', 'day']);
-    const typeOptions     = (pbCfg.types      || ['recurring', 'one_time', 'service']);
-    const categoryOptions = [...new Set([
-        ...(pbCfg.categories || ['Platform', 'Add-ons', 'Services', 'Hardware']),
-        ...(products || []).map(p => p.category).filter(Boolean),
-    ])].sort();
+const eb = (color) => ({ fontSize: 11, fontWeight: 700, color: color || T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans });
 
-    const pbInputStyle = { width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' };
-    const pbLabelStyle = { display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' };
+// ── Category colours ─────────────────────────────────────────
+const CATEGORY_TINT = {
+    'Profile & Account': { bg: '#f0f4ea', fg: '#4d6b3d' },
+    'Company':           { bg: '#ede7db', fg: '#7a6a48' },
+    'Sales process':     { bg: '#ece7f2', fg: '#5e4e7a' },
+    'Quoting':           { bg: '#f0ece1', fg: '#8a6a3a' },
+    'People & Teams':    { bg: '#e6eef0', fg: '#3a5a6a' },
+    'Integrations':      { bg: '#eaf0e6', fg: '#4d6b3d' },
+    'Security':          { bg: '#f4ebe4', fg: '#9c5a3a' },
+    'Data':              { bg: '#ede7db', fg: '#7a6a48' },
+};
 
-    const openNewProduct = () => {
-        setEditingProduct(null);
-        setProductForm({ name: '', sku: '', description: '', productType: 'one_time', listPrice: '', minPrice: '', unit: 'flat', category: '', active: true, customPrice: false });
-        setProductSaveError(null);
-        setShowProductForm(true);
-    };
-    const openEditProduct = (p) => {
-        setEditingProduct(p);
-        setProductForm({ name: p.name || '', sku: p.sku || '', description: p.description || '', productType: p.productType || 'one_time', listPrice: p.listPrice || '', minPrice: p.minPrice || '', unit: p.unit || 'flat', category: p.category || '', active: p.active !== false, customPrice: p.customPrice === true });
-        setProductSaveError(null);
-        setShowProductForm(true);
-    };
-    const saveProduct = async () => {
-        setProductSaveError(null);
-        if (!productForm.name.trim()) { setProductSaveError('Product name is required.'); return; }
-        if (!productForm.customPrice && (!productForm.listPrice || isNaN(Number(productForm.listPrice)))) { setProductSaveError('A valid list price is required (or enable Custom Price).'); return; }
-        const result = await handleSaveProduct(productForm, editingProduct);
-        if (result) { setShowProductForm(false); setEditingProduct(null); }
-        else setProductSaveError('Failed to save product. Please try again.');
-    };
-
-    const typeLabel = { recurring: 'Recurring', one_time: 'One-time', service: 'Service' };
-    const typeBadge = { recurring: { bg: '#e0e7ff', color: '#3730a3' }, one_time: { bg: '#dcfce7', color: '#166534' }, service: { bg: '#fef3c7', color: '#92400e' } };
-
-    const filtered = [...(products || [])].filter(p => {
-        if (pbTypeFilter !== 'all' && p.productType !== pbTypeFilter) return false;
-        if (pbSearch && !p.name.toLowerCase().includes(pbSearch.toLowerCase()) && !(p.sku || '').toLowerCase().includes(pbSearch.toLowerCase()) && !(p.category || '').toLowerCase().includes(pbSearch.toLowerCase())) return false;
-        return true;
-    }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-
+// ── Status chip ───────────────────────────────────────────────
+const STATUS_STYLES = {
+    ok:        { bg: 'rgba(77,107,61,0.10)',   fg: '#4d6b3d', icon: '✓' },
+    connected: { bg: 'rgba(77,107,61,0.10)',   fg: '#4d6b3d', icon: '●' },
+    partial:   { bg: 'rgba(184,115,51,0.10)',  fg: '#b87333', icon: '◐' },
+    warning:   { bg: 'rgba(156,58,46,0.10)',   fg: '#9c3a2e', icon: '⚠' },
+    none:      { bg: 'rgba(138,131,120,0.12)', fg: '#5a544c', icon: '○' },
+    linked:    { bg: 'rgba(58,90,122,0.10)',   fg: '#3a5a7a', icon: '↗' },
+    fail:      { bg: 'rgba(156,58,46,0.10)',   fg: '#9c3a2e', icon: '✕' },
+};
+const StatusChip = ({ status, detail, small }) => {
+    const s = STATUS_STYLES[status] || STATUS_STYLES.ok;
     return (
-        <div className="table-container">
-            <div className="table-header">
-                <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
-                <h2>PRICE BOOK</h2>
+        <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding: small ? '1px 6px' : '2px 8px', background:s.bg, color:s.fg, borderRadius:T.r, fontSize: small ? 10.5 : 11, fontWeight:600, letterSpacing:0.2, whiteSpace:'nowrap', fontFamily:T.sans }}>
+            <span style={{ fontSize: small ? 9 : 10 }}>{s.icon}</span>
+            {detail || status}
+        </span>
+    );
+};
+
+// ── NEW badge ────────────────────────────────────────────────
+const NewBadge = () => (
+    <span style={{ display:'inline-block', padding:'1px 5px', fontSize:9, fontWeight:700, letterSpacing:0.6, color:'#7a6a48', background:'rgba(200,185,154,0.25)', border:'1px solid rgba(200,185,154,0.5)', borderRadius:2, verticalAlign:'middle', fontFamily:T.sans }}>NEW</span>
+);
+
+// ── Setting icon tile ────────────────────────────────────────
+const SettingIcon = ({ category, size = 34 }) => {
+    const t = CATEGORY_TINT[category] || { bg: '#eee', fg: '#555' };
+    return (
+        <div style={{ width:size, height:size, background:t.bg, borderRadius:6, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <div style={{ width:14, height:14, background:t.fg, borderRadius:2, opacity:0.85 }}/>
+        </div>
+    );
+};
+
+// ── Avatar ───────────────────────────────────────────────────
+const avatarBg = (name) => {
+    const p = ['#9c6b4a','#7a5a3c','#5a6e5a','#6b5a7a','#8a5a5a','#5a7a8a','#7a6b5a','#4a6b5a'];
+    let h = 0; for (const c of (name||'')) h = (h * 31 + c.charCodeAt(0)) | 0;
+    return p[Math.abs(h) % p.length];
+};
+const Avatar = ({ name, size = 28 }) => {
+    const initials = (name||'').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+    return (
+        <div style={{ width:size, height:size, borderRadius:'50%', background:avatarBg(name), color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:size*0.33, fontWeight:700, flexShrink:0 }}>{initials}</div>
+    );
+};
+
+// ── Toggle (visual only) ──────────────────────────────────────
+const RToggle = ({ on, onChange }) => (
+    <div onClick={() => onChange && onChange(!on)} style={{ width:28, height:16, borderRadius:10, padding:2, flexShrink:0, background: on ? T.ink : '#d4c8b4', transition:'background 120ms', cursor:'pointer' }}>
+        <div style={{ width:12, height:12, borderRadius:'50%', background:'#fbf8f3', transform: on ? 'translateX(12px)' : 'translateX(0)', transition:'transform 120ms' }}/>
+    </div>
+);
+
+// ── Checkbox ─────────────────────────────────────────────────
+const RCheck = ({ on, onChange }) => (
+    <div style={{ display:'flex', justifyContent:'center' }}>
+        <div onClick={() => onChange && onChange(!on)} style={{ width:16, height:16, borderRadius:3, border:`1.5px solid ${on ? T.ink : '#d4c8b4'}`, background: on ? T.ink : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, color:'#fbf8f3', fontWeight:700, cursor:'pointer' }}>
+            {on ? '✓' : ''}
+        </div>
+    </div>
+);
+
+// ── Ring (quota/health gauge) ─────────────────────────────────
+const Ring = ({ value=0, max=100, size=72, stroke=7, color='#4d6b3d', trackColor }) => {
+    const r = (size - stroke) / 2;
+    const c = 2 * Math.PI * r;
+    const pct = Math.max(0, Math.min(1, value / max));
+    return (
+        <div style={{ position:'relative', width:size, height:size, flexShrink:0 }}>
+            <svg width={size} height={size}>
+                <circle cx={size/2} cy={size/2} r={r} stroke={trackColor || T.border} strokeWidth={stroke} fill="none"/>
+                <circle cx={size/2} cy={size/2} r={r} stroke={color} strokeWidth={stroke} fill="none" strokeDasharray={c} strokeDashoffset={c*(1-pct)} strokeLinecap="round" transform={`rotate(-90 ${size/2} ${size/2})`}/>
+            </svg>
+            <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:Math.round(size*0.22), fontWeight:700, color:T.ink, fontFamily:T.sans }}>
+                {Math.round(pct*100)}%
+            </div>
+        </div>
+    );
+};
+
+// ── Category chip ─────────────────────────────────────────────
+const CategoryChip = ({ category }) => {
+    const t = CATEGORY_TINT[category] || { bg:'#eee', fg:'#555' };
+    return (
+        <span style={{ display:'inline-block', padding:'2px 7px', background:t.bg, color:t.fg, borderRadius:T.r, fontSize:10.5, fontWeight:600, letterSpacing:0.2, fontFamily:T.sans }}>{category}</span>
+    );
+};
+
+// ── SETTINGS_ITEMS ─────────────────────────────────────────────
+// Static catalogue matching the design's settings-shared.jsx
+const SETTINGS_ITEMS = [
+    // Personal
+    { id:'my-calendar',      scope:'personal', category:'Profile & Account', name:'Calendar sync',              desc:'Connect Google or Outlook to sync meetings and availability', status:'connected', statusDetail:'Google · connected', updatedBy:'You', updatedAt:'3 days ago',   isNew:false },
+    { id:'my-notifications', scope:'personal', category:'Profile & Account', name:'Notifications',              desc:'Email, in-app, and push for mentions, approvals, quote opens', status:'partial',   statusDetail:'5 of 12 channels on', updatedBy:'You', updatedAt:'2 weeks ago', isNew:true  },
+    { id:'my-signature',     scope:'personal', category:'Profile & Account', name:'Email signature & templates', desc:'Signature block and your saved email templates',               status:'ok',        statusDetail:'3 templates · signature set', updatedBy:'You', updatedAt:'1 month ago', isNew:true },
+    { id:'my-api',           scope:'personal', category:'Profile & Account', name:'My API tokens',              desc:'Personal access tokens for API calls',                         status:'none',      statusDetail:'No tokens', updatedBy:'—', updatedAt:'—',                     isNew:false },
+    // Company
+    { id:'company-profile',  scope:'workspace', category:'Company', name:'Company profile',        desc:'Logo, address, phone, and default quote header',              status:'ok',      statusDetail:'Complete',                    updatedBy:'Admin', updatedAt:'2 months ago' },
+    { id:'fiscal-year',      scope:'workspace', category:'Company', name:'Fiscal year',            desc:'Quarter starts and fiscal year alignment',                    status:'ok',      statusDetail:'Q1 starts Feb 1',             updatedBy:'Admin', updatedAt:'11 months ago' },
+    { id:'company-calendar', scope:'workspace', category:'Company', name:'Company calendar',       desc:'Shared org-wide holidays and events',                         status:'ok',      statusDetail:'12 holidays · 2026',          updatedBy:'Admin', updatedAt:'2 months ago' },
+    // Sales process
+    { id:'pipelines',        scope:'workspace', category:'Sales process', name:'Pipelines',       desc:'Manage multiple pipelines and their stages',                  status:'ok',      statusDetail:'3 pipelines · 28 stages',     updatedBy:'Admin', updatedAt:'3 weeks ago' },
+    { id:'funnel-stages',    scope:'workspace', category:'Sales process', name:'Funnel stages',   desc:'Stage names and default win probability',                     status:'ok',      statusDetail:'8 stages',                    updatedBy:'Admin', updatedAt:'3 weeks ago' },
+    { id:'custom-fields',    scope:'workspace', category:'Sales process', name:'Custom fields',   desc:'Custom fields on Accounts, Contacts, Leads, Opportunities',   status:'ok',      statusDetail:'18 custom fields',            updatedBy:'Admin', updatedAt:'5 days ago', isNew:true },
+    { id:'kpi-settings',     scope:'workspace', category:'Sales process', name:'KPI thresholds',  desc:'Thresholds, colors, and sparkline ranges for dashboards',     status:'ok',      statusDetail:'12 KPIs configured',          updatedBy:'Admin', updatedAt:'1 month ago' },
+    { id:'pain-points',      scope:'workspace', category:'Sales process', name:'Pain points library', desc:'Reusable customer pain point templates',                  status:'ok',      statusDetail:'23 pain points',              updatedBy:'Admin', updatedAt:'2 weeks ago' },
+    { id:'customer-types',   scope:'workspace', category:'Sales process', name:'Customer types',  desc:'Account classification tags (SMB, Mid-market, Enterprise…)', status:'ok',      statusDetail:'5 tiers',                     updatedBy:'Admin', updatedAt:'6 months ago' },
+    { id:'industries',       scope:'workspace', category:'Sales process', name:'Industries',      desc:'Primary and sub-industry taxonomy',                           status:'ok',      statusDetail:'14 industries · 47 sub-types', updatedBy:'Admin', updatedAt:'4 months ago' },
+    // Quoting
+    { id:'price-book',       scope:'workspace', category:'Quoting', name:'Price book',            desc:'Product catalog for quotes — edit in Quotes tab',             status:'linked',  statusDetail:'15 products · 3 bundles',     updatedBy:'Admin', updatedAt:'1 week ago',   link:true },
+    { id:'approval-tiers',   scope:'workspace', category:'Quoting', name:'Approval tiers',        desc:'Discount thresholds that trigger manager or VP approval',     status:'ok',      statusDetail:'3 tiers',                     updatedBy:'Admin', updatedAt:'2 months ago' },
+    { id:'quote-templates',  scope:'workspace', category:'Quoting', name:'Quote templates & branding', desc:'Templates, PDF header, terms, signature blocks',         status:'ok',      statusDetail:'4 templates',                 updatedBy:'Admin', updatedAt:'1 month ago' },
+    // People & Teams
+    { id:'users',            scope:'workspace', category:'People & Teams', name:'Users',           desc:'Invite, deactivate, and assign roles & permissions',         status:'ok',      statusDetail:'users · pending invites',      updatedBy:'Admin', updatedAt:'yesterday' },
+    { id:'teams',            scope:'workspace', category:'People & Teams', name:'Teams & managers', desc:'Team structure, managers, and reporting hierarchy',          status:'ok',      statusDetail:'teams · managers',             updatedBy:'Admin', updatedAt:'2 weeks ago' },
+    { id:'territories',      scope:'workspace', category:'People & Teams', name:'Territories',     desc:'Sales territory definitions and rep assignments',             status:'ok',      statusDetail:'8 territories',               updatedBy:'Admin', updatedAt:'3 months ago' },
+    { id:'roles',            scope:'workspace', category:'People & Teams', name:'Roles & permissions', desc:'Custom roles with granular object-level permissions',    status:'ok',      statusDetail:'5 roles',                     updatedBy:'Admin', updatedAt:'2 months ago' },
+    // Integrations
+    { id:'apps',             scope:'workspace', category:'Integrations', name:'Connected apps',    desc:'Slack, Gmail, Outlook, Zoom, Docusign, LinkedIn',             status:'partial', statusDetail:'3 of 6 connected',            updatedBy:'Admin', updatedAt:'1 week ago',  isNew:true },
+    { id:'api-keys',         scope:'workspace', category:'Integrations', name:'API keys',          desc:'Workspace REST API credentials',                              status:'ok',      statusDetail:'3 active keys',               updatedBy:'Admin', updatedAt:'2 months ago' },
+    { id:'webhooks',         scope:'workspace', category:'Integrations', name:'Webhooks',          desc:'Subscribe to CRM events and push to endpoints',               status:'partial', statusDetail:'4 endpoints · 1 failing',     updatedBy:'Admin', updatedAt:'1 week ago',  attention:true },
+    { id:'automations',      scope:'workspace', category:'Integrations', name:'Automations',       desc:'Rules, triggers, and scheduled jobs',                         status:'ok',      statusDetail:'12 active · 3 paused',        updatedBy:'Admin', updatedAt:'4 days ago',  isNew:true },
+    // Security
+    { id:'sso',              scope:'workspace', category:'Security', name:'Single sign-on (SSO)',  desc:'SAML 2.0 / OIDC identity provider',                           status:'warning', statusDetail:'Not configured',              updatedBy:'—', updatedAt:'—',           attention:true, isNew:true },
+    { id:'mfa',              scope:'workspace', category:'Security', name:'Multi-factor auth',     desc:'Enforce MFA for all users',                                   status:'partial', statusDetail:'Optional · not all enrolled', updatedBy:'Admin', updatedAt:'3 months ago', attention:true, isNew:true },
+    { id:'session',          scope:'workspace', category:'Security', name:'Session policy',        desc:'Idle timeout, device trust, IP allowlist',                    status:'ok',      statusDetail:'8h timeout · no IP rules',    updatedBy:'Admin', updatedAt:'3 months ago' },
+    { id:'field-visibility', scope:'workspace', category:'Security', name:'Field-level visibility', desc:'Role-based access control for individual fields',            status:'ok',      statusDetail:'6 rules',                     updatedBy:'Admin', updatedAt:'2 months ago' },
+    { id:'audit-log',        scope:'workspace', category:'Security', name:'Audit log',             desc:'Change history across all records and settings',               status:'ok',      statusDetail:'Last 30 days · 2,418 events', updatedBy:'System', updatedAt:'just now' },
+    // Data
+    { id:'import',           scope:'workspace', category:'Data', name:'Import',                    desc:'CSV import for accounts, contacts, leads, opportunities',     status:'ok',      statusDetail:'Last: 812 rows',              updatedBy:'Admin', updatedAt:'3 days ago',  isNew:true },
+    { id:'export',           scope:'workspace', category:'Data', name:'Export',                    desc:'Scheduled and ad-hoc exports; GDPR data requests',            status:'ok',      statusDetail:'Weekly export · Mondays',     updatedBy:'Admin', updatedAt:'3 months ago', isNew:true },
+    { id:'backup',           scope:'workspace', category:'Data', name:'Backup & restore',           desc:'Automated daily backups and point-in-time restore',           status:'ok',      statusDetail:'Daily · last: 03:14 UTC',     updatedBy:'System', updatedAt:'4 hours ago' },
+    { id:'features',         scope:'workspace', category:'Data', name:'Features & AI',              desc:'Enable app features and AI (deal scoring, writing assist)',   status:'ok',      statusDetail:'14 of 18 on · AI enabled',    updatedBy:'Admin', updatedAt:'1 month ago' },
+];
+
+const WORKSPACE_TABS = ['All', 'Company', 'Sales process', 'Quoting', 'People & Teams', 'Integrations', 'Security', 'Data'];
+
+// ─────────────────────────────────────────────────────────────
+// Personal prefs detail panels
+// ─────────────────────────────────────────────────────────────
+const PersonalCalendar = ({ settings }) => {
+    const calConnected = settings.googleCalendarConnected || settings.calendarConnected || false;
+    const [toggles, setToggles] = useState({ twoWay:true, autoLog:true, availability:true, privacyMode:false });
+    return (
+        <div>
+            <div style={{ ...eb(T.inkMuted), marginBottom:10 }}>CONNECTED CALENDAR</div>
+            <div style={{ padding:14, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r, display:'flex', alignItems:'center', gap:12, marginBottom:18 }}>
+                <div style={{ width:40, height:40, background:'#fff', border:`1px solid ${T.border}`, borderRadius:T.r, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, color:'#4285f4' }}>G</div>
+                <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>Google Calendar</div>
+                    <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>{calConnected ? 'Connected · syncing' : 'Not connected'}</div>
+                </div>
+                <StatusChip status={calConnected ? 'connected' : 'none'} detail={calConnected ? 'Connected' : 'Not connected'}/>
+                <button style={{ padding:'5px 10px', fontSize:11, fontWeight:600, background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                    {calConnected ? 'Disconnect' : 'Connect'}
+                </button>
+            </div>
+            <div style={{ ...eb(T.inkMuted), marginBottom:10 }}>SYNC OPTIONS</div>
+            {[
+                { key:'twoWay',       label:'Two-way event sync',                   sub:'Changes in Accelerep push to Google, and vice versa.' },
+                { key:'autoLog',      label:'Auto-log meetings to opportunities',    sub:'Detects attendees and attaches to matching deals.' },
+                { key:'availability', label:'Show availability on booking links',    sub:'Your calendar busy blocks hide those slots.' },
+                { key:'privacyMode',  label:'Pull in free/busy only (no event titles)', sub:"Privacy mode — Accelerep can't read event details." },
+            ].map((c, i) => (
+                <div key={c.key} style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 0', borderBottom: i < 3 ? `1px dashed ${T.border}` : 'none' }}>
+                    <RToggle on={toggles[c.key]} onChange={v => setToggles(p => ({ ...p, [c.key]: v }))}/>
+                    <div style={{ flex:1 }}>
+                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{c.label}</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{c.sub}</div>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+const PersonalNotifications = ({ settings, setSettings }) => {
+    const prefs = settings.notificationPreferences || {};
+    const channels = [
+        { key:'mentions',  name:'@Mentions in comments',       email:true, push:true, inapp:true },
+        { key:'approvals', name:'Quote approval requests',      email:true, push:false, inapp:true },
+        { key:'quoteOpen', name:'Quote viewed by customer',     email:true, push:false, inapp:true },
+        { key:'leads',     name:'New lead assigned',            email:false, push:true, inapp:true },
+        { key:'tasks',     name:'Task due soon',                email:false, push:true, inapp:true },
+        { key:'digest',    name:'Daily digest',                 email:true, push:false, inapp:false },
+    ];
+    const [local, setLocal] = useState(() => {
+        const out = {};
+        channels.forEach(c => { out[c.key] = { email: prefs[c.key]?.email ?? c.email, push: prefs[c.key]?.push ?? c.push, inapp: prefs[c.key]?.inapp ?? c.inapp }; });
+        return out;
+    });
+    const toggle = (key, field) => setLocal(p => ({ ...p, [key]: { ...p[key], [field]: !p[key][field] } }));
+    return (
+        <div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 60px 60px 60px', gap:8, ...eb(T.inkMuted), marginBottom:10 }}>
+                <span>EVENT</span><span style={{ textAlign:'center' }}>EMAIL</span><span style={{ textAlign:'center' }}>PUSH</span><span style={{ textAlign:'center' }}>IN-APP</span>
+            </div>
+            {channels.map((c, i) => (
+                <div key={c.key} style={{ display:'grid', gridTemplateColumns:'1fr 60px 60px 60px', gap:8, padding:'10px 0', borderBottom: i < channels.length-1 ? `1px dashed ${T.border}` : 'none', alignItems:'center' }}>
+                    <span style={{ fontSize:12.5, color:T.ink, fontFamily:T.sans }}>{c.name}</span>
+                    <RCheck on={local[c.key]?.email} onChange={() => toggle(c.key, 'email')}/>
+                    <RCheck on={local[c.key]?.push}  onChange={() => toggle(c.key, 'push')}/>
+                    <RCheck on={local[c.key]?.inapp} onChange={() => toggle(c.key, 'inapp')}/>
+                </div>
+            ))}
+            <div style={{ marginTop:16, padding:12, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11.5, color:T.inkMid, fontFamily:T.sans }}>
+                Quiet hours: <strong>mute push 7pm – 8am</strong> (your local time).{' '}
+                <span style={{ color:T.info, fontWeight:600, cursor:'pointer' }}>Edit →</span>
+            </div>
+            <div style={{ marginTop:14, display:'flex', justifyContent:'flex-end' }}>
+                <button onClick={() => {
+                    const updated = { ...settings, notificationPreferences: local };
+                    setSettings(updated);
+                    dbFetch('/.netlify/functions/settings', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(updated) }).catch(console.error);
+                }} style={{ padding:'7px 14px', fontSize:12, fontWeight:600, background:T.ink, color:T.surface, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                    Save preferences
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const PersonalSignature = ({ currentUser }) => {
+    const templates = [
+        { name:'Intro — cold outreach', uses:42, open:38 },
+        { name:'Follow-up · no response', uses:28, open:24 },
+        { name:'Quote sent · check-in', uses:12, open:67 },
+    ];
+    return (
+        <div>
+            <div style={{ ...eb(T.inkMuted), marginBottom:10 }}>EMAIL SIGNATURE</div>
+            <div style={{ padding:16, border:`1px solid ${T.border}`, borderRadius:T.r, background:T.bg, marginBottom:14, fontFamily:T.sans }}>
+                <div style={{ fontSize:13, color:T.ink, marginBottom:6, fontWeight:600 }}>{currentUser}</div>
+                <div style={{ fontSize:12, color:T.inkMid, marginBottom:2 }}>Account Executive · Accelerep</div>
+                <div style={{ fontSize:12, color:T.inkMid, marginBottom:8 }}>Accelerep · {(currentUser||'').toLowerCase().replace(' ','.')}@accelerep.com</div>
+                <div style={{ fontSize:11, color:T.inkMuted, fontStyle:'italic' }}>"The best way to predict revenue is to make it happen."</div>
+            </div>
+            <div style={{ display:'flex', gap:8, marginBottom:22 }}>
+                <button style={{ padding:'7px 14px', fontSize:12, fontWeight:600, background:T.ink, color:T.surface, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Edit signature</button>
+                <button style={{ padding:'7px 14px', fontSize:12, fontWeight:600, background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Append to all sent mail</button>
+            </div>
+            <div style={{ ...eb(T.inkMuted), marginBottom:10 }}>YOUR EMAIL TEMPLATES · {templates.length}</div>
+            {templates.map((t, i) => (
+                <div key={t.name} style={{ display:'grid', gridTemplateColumns:'1fr 100px 100px 60px', gap:12, padding:'10px 0', borderBottom: i < templates.length-1 ? `1px dashed ${T.border}` : 'none', alignItems:'center' }}>
+                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{t.name}</div>
+                    <div style={{ fontSize:11.5, color:T.inkMid, fontFamily:T.sans }}>{t.uses} uses</div>
+                    <div style={{ fontSize:11.5, color:T.inkMid, fontFamily:T.sans }}>{t.open}% open rate</div>
+                    <div style={{ fontSize:11.5, color:T.info, fontWeight:600, textAlign:'right', cursor:'pointer', fontFamily:T.sans }}>Edit →</div>
+                </div>
+            ))}
+            <button style={{ marginTop:14, padding:'7px 12px', fontSize:12, fontWeight:600, width:'100%', background:'transparent', color:T.inkMid, border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
+        </div>
+    );
+};
+
+const PersonalApiTokens = () => (
+    <div>
+        <div style={{ ...eb(T.inkMuted), marginBottom:10 }}>PERSONAL API TOKENS</div>
+        <div style={{ padding:24, background:T.bg, border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, textAlign:'center' }}>
+            <div style={{ fontSize:13, color:T.inkMid, marginBottom:10, fontFamily:T.sans }}>No tokens yet. Create one to call the Accelerep API on your behalf.</div>
+            <button style={{ padding:'8px 16px', fontSize:12, fontWeight:600, background:T.ink, color:T.surface, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>+ Generate token</button>
+        </div>
+        <div style={{ marginTop:14, fontSize:11.5, color:T.inkMuted, lineHeight:1.55, fontFamily:T.sans }}>
+            Personal tokens carry <strong>your</strong> permissions. For server-to-server keys, ask your admin about workspace API keys in Settings → Integrations.
+        </div>
+    </div>
+);
+
+// ─────────────────────────────────────────────────────────────
+// V2 Card for the workspace admin grid
+// ─────────────────────────────────────────────────────────────
+const V2Card = ({ item, onOpen, settings }) => {
+    const [hov, setHov] = useState(false);
+    // Enrich live data where we have it
+    let statusDetail = item.statusDetail;
+    if (item.id === 'users'  && settings?.users)   statusDetail = `${(settings.users||[]).filter(u=>u.name).length} users`;
+    if (item.id === 'teams'  && settings?.users)   statusDetail = `${[...new Set((settings.users||[]).filter(u=>u.team).map(u=>u.team))].length} teams`;
+    if (item.id === 'pipelines' && settings?.pipelines) statusDetail = `${(settings.pipelines||[]).length} pipeline${(settings.pipelines||[]).length!==1?'s':''}`;
+    if (item.id === 'funnel-stages' && settings?.funnelStages) statusDetail = `${(settings.funnelStages||[]).length} stages`;
+    if (item.id === 'custom-fields' && settings?.customFields) statusDetail = `${(settings.customFields||[]).length} custom fields`;
+    return (
+        <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+            onClick={() => onOpen && onOpen(item)}
+            style={{ background:T.surface, border:`1px solid ${hov ? T.borderStrong : T.border}`, borderRadius:6, padding:14, cursor:'pointer', position:'relative', boxShadow: hov ? '0 2px 0 rgba(0,0,0,0.02)' : 'none', transition:'border-color 120ms, box-shadow 120ms' }}>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:12, marginBottom:10 }}>
+                <SettingIcon category={item.category} size={34}/>
+                <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2, flexWrap:'wrap' }}>
+                        <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{item.name}</div>
+                        {item.isNew && <NewBadge/>}
+                        {item.link && <span style={{ fontSize:11, color:T.info }}>↗</span>}
+                    </div>
+                    <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.45, fontFamily:T.sans }}>{item.desc}</div>
+                </div>
+            </div>
+            <div style={{ padding:'8px 10px', background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r, marginBottom:10, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <StatusChip status={item.status} detail={statusDetail} small/>
+                {item.attention && <span style={{ fontSize:10, color:T.danger, fontWeight:700, fontFamily:T.sans }}>Needs attention</span>}
+            </div>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:10.5, color:T.inkMuted, fontFamily:T.sans }}>
+                <span>{item.updatedBy === '—' ? 'Never changed' : `Edited ${item.updatedAt} by ${(item.updatedBy||'').split(' ')[0]}`}</span>
+                <span style={{ color:T.info, fontWeight:600 }}>{item.link ? 'Open in Quotes →' : 'Open →'}</span>
+            </div>
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────
+// PERSONAL VIEW — for non-admin/manager users
+// ─────────────────────────────────────────────────────────────
+const PersonalView = ({ settings, setSettings, currentUser, isAdmin }) => {
+    const items = SETTINGS_ITEMS.filter(i => i.scope === 'personal');
+    const [active, setActive] = useState(items[0]);
+    return (
+        <div style={{ display:'grid', gridTemplateColumns:'260px 1fr', gap:24, padding:'0 0 40px' }}>
+            {/* Side rail */}
+            <div style={{ paddingTop:4 }}>
+                <div style={{ ...eb(T.inkMuted), marginBottom:10 }}>MY ACCOUNT</div>
+                {items.map(it => (
+                    <div key={it.id} onClick={() => setActive(it)} style={{ padding:'10px 12px', borderRadius:T.r+1, cursor:'pointer', display:'flex', alignItems:'center', gap:10, background: active?.id === it.id ? T.surface : 'transparent', border: active?.id === it.id ? `1px solid ${T.border}` : '1px solid transparent', marginBottom:4, transition:'background 80ms' }}>
+                        <SettingIcon category={it.category} size={28}/>
+                        <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, display:'flex', alignItems:'center', gap:5, fontFamily:T.sans }}>
+                                {it.name} {it.isNew && <NewBadge/>}
+                            </div>
+                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{it.statusDetail}</div>
+                        </div>
+                    </div>
+                ))}
+                {isAdmin && (
+                    <>
+                        <div style={{ height:1, background:T.border, margin:'14px 0 10px' }}/>
+                        <div style={{ ...eb(T.inkMuted), marginBottom:8 }}>WORKSPACE</div>
+                        <div style={{ padding:'10px 12px', borderRadius:T.r+1, display:'flex', alignItems:'center', gap:10, border:`1px dashed ${T.borderStrong}`, cursor:'pointer' }}
+                            onClick={() => document.dispatchEvent(new CustomEvent('accelerep:settings:showAdmin'))}>
+                            <div style={{ width:28, height:28, borderRadius:T.r+1, background:T.ink, color:T.gold, fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center' }}>A</div>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:12, fontWeight:600, color:T.ink, fontFamily:T.sans }}>Admin settings →</div>
+                                <div style={{ fontSize:10.5, color:T.inkMuted, fontFamily:T.sans }}>Opens the workspace console</div>
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
 
-            {/* Product form modal */}
-            {showProductForm && (
+            {/* Detail panel */}
+            {active && (
+                <div>
+                    <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:20, fontWeight:700, color:T.ink, marginBottom:4, fontFamily:T.sans }}>{active.name}</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>{active.desc}</div>
+                    </div>
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:20 }}>
+                        {active.id === 'my-calendar'      && <PersonalCalendar settings={settings}/>}
+                        {active.id === 'my-notifications' && <PersonalNotifications settings={settings} setSettings={setSettings}/>}
+                        {active.id === 'my-signature'     && <PersonalSignature currentUser={currentUser}/>}
+                        {active.id === 'my-api'           && <PersonalApiTokens/>}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────
+// ADMIN WORKSPACE VIEW
+// ─────────────────────────────────────────────────────────────
+const AdminView = ({ settings, setSettings, currentUser }) => {
+    const [scope, setScope] = useState('workspace');
+    const [tab,   setTab  ] = useState('All');
+    const [search, setSearch] = useState('');
+
+    const tabs = scope === 'workspace' ? WORKSPACE_TABS : ['All', 'Profile & Account'];
+    const scopeItems = SETTINGS_ITEMS.filter(i => i.scope === scope);
+    const filteredByTab = tab === 'All' ? scopeItems : scopeItems.filter(i => i.category === tab);
+    const items = search.trim()
+        ? scopeItems.filter(i => (i.name + ' ' + i.desc + ' ' + i.category).toLowerCase().includes(search.toLowerCase()))
+        : filteredByTab;
+
+    // Workspace health — from real data + static checks
+    const users = settings?.users || [];
+    const pipelines = settings?.pipelines || [];
+    const funnelStages = settings?.funnelStages || [];
+    const calConnected = settings?.googleCalendarConnected || false;
+    const attentionItems = SETTINGS_ITEMS.filter(i => i.attention);
+    const healthChecks = [
+        { label:'SSO configured',          ok: false                       },
+        { label:'MFA enforced',            ok: false                       },
+        { label:'Webhooks all healthy',    ok: !attentionItems.some(i=>i.id==='webhooks') },
+        { label:'Backups running',         ok: true                        },
+        { label:'Default pipeline set',    ok: pipelines.length > 0       },
+        { label:'Team members assigned',   ok: users.filter(u=>u.team).length === users.filter(u=>u.name).length },
+        { label:'Session policy set',      ok: true                        },
+        { label:'Quote branding configured', ok: true                      },
+    ];
+    const healthOk = healthChecks.filter(h => h.ok).length;
+    const healthPct = Math.round((healthOk / healthChecks.length) * 100);
+
+    // Recently changed feed (static + real user count)
+    const recentFeed = [
+        { who: currentUser || 'Admin', what:'Invited new users', when:'recently' },
+        { who: currentUser || 'Admin', what:'Updated pipeline stages', when:'this week' },
+        { who: currentUser || 'Admin', what:'Edited price book', when:'last week' },
+        { who: 'System',               what:'Ran automated backup', when:'4 hours ago' },
+    ];
+
+    // Group items by category
+    const grouped = {};
+    for (const it of items) (grouped[it.category] ||= []).push(it);
+
+    return (
+        <div>
+            {/* Scope switch + search row */}
+            <div style={{ display:'flex', alignItems:'center', gap:14, padding:'4px 0 14px', flexWrap:'wrap' }}>
+                <div style={{ display:'inline-flex', padding:3, background:T.surface, border:`1px solid ${T.border}`, borderRadius:20 }}>
+                    {['workspace','personal'].map(s => (
+                        <div key={s} onClick={() => { setScope(s); setTab('All'); }} style={{ padding:'5px 14px', fontSize:12.5, fontWeight:600, borderRadius:20, cursor:'pointer', color: scope===s ? '#fbf8f3' : T.inkMid, background: scope===s ? T.ink : 'transparent', transition:'background 120ms', fontFamily:T.sans }}>
+                            {s === 'workspace' ? 'Workspace' : 'Personal'}
+                        </div>
+                    ))}
+                </div>
+                <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>
+                    {scope === 'workspace' ? 'Admin settings · affects all users' : 'Only you'}
+                </span>
+                <div style={{ flex:1 }}/>
+                {/* Search */}
+                <div style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, width:300, fontFamily:T.sans }}>
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search settings…" style={{ flex:1, border:'none', outline:'none', background:'transparent', fontSize:13, color:T.ink, fontFamily:T.sans }}/>
+                    {search && <button onClick={() => setSearch('')} style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:14, padding:0 }}>×</button>}
+                    <span style={{ fontSize:10, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', padding:'1px 5px', background:T.surface2, borderRadius:2, border:`1px solid ${T.border}` }}>⌘.</span>
+                </div>
+            </div>
+
+            {/* Health + attention + recent strip — workspace only, no search */}
+            {scope === 'workspace' && !search.trim() && (
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1.1fr', gap:14, marginBottom:18 }}>
+                    {/* Health ring */}
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:16, display:'flex', alignItems:'center', gap:14 }}>
+                        <Ring value={healthPct} size={72} stroke={7} color={T.ok} trackColor={T.border}/>
+                        <div style={{ flex:1 }}>
+                            <div style={{ ...eb(T.ok), marginBottom:4 }}>WORKSPACE HEALTH</div>
+                            <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:4, fontFamily:T.sans }}>{healthOk} of {healthChecks.length} checks passing</div>
+                            <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans }}>Set up SSO and enforce MFA to reach 90%+ — standard for multi-rep workspaces.</div>
+                        </div>
+                    </div>
+                    {/* Needs attention */}
+                    <div style={{ background:'rgba(156,58,46,0.04)', border:'1px solid rgba(156,58,46,0.2)', borderRadius:6, padding:16 }}>
+                        <div style={{ ...eb('#9c3a2e'), marginBottom:10, display:'flex', alignItems:'center', gap:6 }}>
+                            <span>⚠</span> NEEDS ATTENTION
+                        </div>
+                        {attentionItems.slice(0,3).map((it, i) => (
+                            <div key={it.id} style={{ padding:'8px 0', borderBottom: i < Math.min(attentionItems.length,3)-1 ? `1px dashed rgba(156,58,46,0.15)` : 'none', display:'flex', alignItems:'center', gap:10 }}>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{it.name}</div>
+                                    <div style={{ fontSize:11, color:T.inkMid, marginTop:1, fontFamily:T.sans }}>{it.statusDetail}</div>
+                                </div>
+                                <button style={{ padding:'4px 10px', fontSize:11, fontWeight:600, background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Fix</button>
+                            </div>
+                        ))}
+                        {attentionItems.length === 0 && <div style={{ fontSize:12, color:T.ok, fontFamily:T.sans }}>All checks passing ✓</div>}
+                    </div>
+                    {/* Recently changed */}
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:16 }}>
+                        <div style={{ ...eb(T.inkMuted), marginBottom:10, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                            <span>RECENTLY CHANGED</span>
+                            <span style={{ fontSize:10.5, color:T.info, cursor:'pointer', fontWeight:600, letterSpacing:0, textTransform:'none', fontFamily:T.sans }}>View audit log →</span>
+                        </div>
+                        {recentFeed.slice(0,4).map((r, i) => (
+                            <div key={i} style={{ padding:'6px 0', borderBottom: i < 3 ? `1px dashed ${T.border}` : 'none', display:'flex', alignItems:'center', gap:10 }}>
+                                <Avatar name={r.who} size={22}/>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:12, color:T.ink, lineHeight:1.3, fontFamily:T.sans }}><strong>{(r.who||'').split(' ')[0]}</strong> {r.what.toLowerCase()}</div>
+                                    <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{r.when}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Personal view if scope = personal */}
+            {scope === 'personal' && (
+                <PersonalView settings={settings} setSettings={setSettings} currentUser={currentUser} isAdmin={true}/>
+            )}
+
+            {/* Workspace: category tabs + card grid */}
+            {scope === 'workspace' && (
                 <>
-                    <div onClick={() => setShowProductForm(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000 }} />
-                    <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: '#fff', border: '1px solid #e5e2db', borderRadius: '12px', boxShadow: '0 12px 40px rgba(0,0,0,0.15)', zIndex: 1001, width: '100%', maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto' }}>
-                        <div style={{ background: '#1c1917', color: '#f5f1eb', padding: '1rem 1.5rem', borderRadius: '12px 12px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontWeight: '600', fontSize: '0.9375rem' }}>{editingProduct ? 'Edit Product' : 'New Product'}</span>
-                            <button onClick={() => setShowProductForm(false)} style={{ background: 'none', border: 'none', color: '#a8a29e', fontSize: '1.25rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
-                        </div>
-                        <div style={{ padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            {productSaveError && <div style={{ background: '#fee2e2', border: '1px solid #fecaca', borderRadius: '8px', padding: '0.625rem 0.875rem', fontSize: '0.8125rem', color: '#dc2626' }}>{productSaveError}</div>}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <div style={{ gridColumn: '1/-1' }}>
-                                    <label style={pbLabelStyle}>Product Name *</label>
-                                    <input style={pbInputStyle} value={productForm.name} onChange={e => setProductForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Platform — Enterprise" />
-                                </div>
-                                <div>
-                                    <label style={pbLabelStyle}>SKU</label>
-                                    <input style={pbInputStyle} value={productForm.sku} onChange={e => setProductForm(p => ({ ...p, sku: e.target.value }))} placeholder="e.g. PLT-ENT-001" />
-                                </div>
-                                <div>
-                                    <label style={pbLabelStyle}>Category</label>
-                                    <select style={pbInputStyle} value={productForm.category} onChange={e => setProductForm(p => ({ ...p, category: e.target.value }))}>
-                                        <option value="">— Select —</option>
-                                        {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label style={pbLabelStyle}>Type *</label>
-                                    <select style={pbInputStyle} value={productForm.productType} onChange={e => setProductForm(p => ({ ...p, productType: e.target.value }))}>
-                                        {typeOptions.map(t => (
-                                            <option key={t} value={t}>{typeLabel[t] || t}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label style={pbLabelStyle}>Unit</label>
-                                    <select style={pbInputStyle} value={productForm.unit} onChange={e => setProductForm(p => ({ ...p, unit: e.target.value }))}>
-                                        {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label style={pbLabelStyle}>List Price *</label>
-                                    {productForm.customPrice ? (
-                                        <div style={{ ...pbInputStyle, color: '#94a3b8', fontStyle: 'italic', display: 'flex', alignItems: 'center' }}>
-                                            Rep enters price on quote
-                                        </div>
-                                    ) : (
-                                        <input style={pbInputStyle} type="number" min="0" step="0.01" value={productForm.listPrice} onChange={e => setProductForm(p => ({ ...p, listPrice: e.target.value }))} placeholder="0.00" />
-                                    )}
-                                </div>
-                                <div>
-                                    <label style={pbLabelStyle}>Min Price (floor)</label>
-                                    <input style={pbInputStyle} type="number" min="0" step="0.01" value={productForm.minPrice} onChange={e => setProductForm(p => ({ ...p, minPrice: e.target.value }))} placeholder="0.00" disabled={productForm.customPrice} style={{ ...pbInputStyle, opacity: productForm.customPrice ? 0.5 : 1 }} />
-                                </div>
-                                <div style={{ gridColumn: '1/-1' }}>
-                                    <label style={pbLabelStyle}>Description</label>
-                                    <textarea style={{ ...pbInputStyle, minHeight: '72px', resize: 'vertical' }} value={productForm.description} onChange={e => setProductForm(p => ({ ...p, description: e.target.value }))} placeholder="Optional product description shown on quotes" />
-                                </div>
-                                <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                    <button
-                                        onClick={() => setProductForm(p => ({ ...p, active: !p.active }))}
-                                        style={{ width: '40px', height: '22px', borderRadius: '999px', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', background: productForm.active ? '#2563eb' : '#e2e8f0', border: 'none', padding: 0, flexShrink: 0 }}>
-                                        <div style={{ position: 'absolute', width: '16px', height: '16px', background: '#fff', borderRadius: '50%', top: '3px', transition: 'left 0.2s', left: productForm.active ? '21px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-                                    </button>
-                                    <span style={{ fontSize: '0.8125rem', color: '#57534e', fontWeight: '500' }}>Active — visible in quote builder catalog</span>
-                                </div>
-                                <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'flex-start', gap: '0.75rem', background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.75rem 1rem' }}>
-                                    <button
-                                        onClick={() => setProductForm(p => ({ ...p, customPrice: !p.customPrice, listPrice: !p.customPrice ? '' : p.listPrice }))}
-                                        style={{ width: '40px', height: '22px', borderRadius: '999px', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', background: productForm.customPrice ? '#2563eb' : '#e2e8f0', border: 'none', padding: 0, flexShrink: 0, marginTop: '1px' }}>
-                                        <div style={{ position: 'absolute', width: '16px', height: '16px', background: '#fff', borderRadius: '50%', top: '3px', transition: 'left 0.2s', left: productForm.customPrice ? '21px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-                                    </button>
-                                    <div>
-                                        <div style={{ fontSize: '0.8125rem', color: '#1c1917', fontWeight: '600' }}>Custom Price (Variable)</div>
-                                        <div style={{ fontSize: '0.75rem', color: '#78716c', marginTop: '2px' }}>When enabled, sales reps enter the price directly on the quote. Ideal for services that vary by project.</div>
+                    <div style={{ borderBottom:`1px solid ${T.border}`, display:'flex', gap:26, overflowX:'auto', marginBottom:18 }}>
+                        {tabs.map(t => (
+                            <div key={t} onClick={() => setTab(t)} style={{ fontSize:13, fontWeight: t===tab ? 600 : 400, color: t===tab ? T.info : T.inkMid, borderBottom: t===tab ? `2px solid ${T.info}` : '2px solid transparent', paddingBottom:10, cursor:'pointer', whiteSpace:'nowrap', fontFamily:T.sans, transition:'color 120ms, border-color 120ms' }}>
+                                {t}
+                                {t !== 'All' && (
+                                    <span style={{ marginLeft:6, fontSize:10.5, color:T.inkMuted, fontWeight:500, fontFamily:T.sans }}>
+                                        {SETTINGS_ITEMS.filter(i => i.scope==='workspace' && i.category===t).length}
+                                    </span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    <div>
+                        {search.trim() && <div style={{ fontSize:13, color:T.inkMid, marginBottom:14, fontFamily:T.sans }}>{items.length} results for <strong>{search}</strong></div>}
+                        {Object.entries(grouped).map(([cat, list]) => (
+                            <div key={cat} style={{ marginBottom:24 }}>
+                                {(tab === 'All' || search.trim()) && (
+                                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+                                        <CategoryChip category={cat}/>
+                                        <span style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>{list.length} setting{list.length===1?'':'s'}</span>
                                     </div>
+                                )}
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
+                                    {list.map(it => <V2Card key={it.id} item={it} settings={settings}/>)}
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid #f0ece4', paddingTop: '1rem' }}>
-                                <button className="btn btn-secondary" onClick={() => setShowProductForm(false)}>Cancel</button>
-                                <button className="btn" onClick={saveProduct} disabled={productModalSaving}>{productModalSaving ? 'Saving…' : editingProduct ? 'Save Changes' : 'Add Product'}</button>
+                        ))}
+                        {Object.keys(grouped).length === 0 && (
+                            <div style={{ padding:'3rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                                {search ? `No settings match "${search}".` : 'No settings in this category.'}
                             </div>
-                        </div>
+                        )}
                     </div>
                 </>
             )}
-
-            {/* Toolbar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1.25rem', borderBottom: '1px solid #f0ece4', flexWrap: 'wrap' }}>
-                <input
-                    value={pbSearch} onChange={e => setPbSearch(e.target.value)}
-                    placeholder="Search products…"
-                    style={{ background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.375rem 0.75rem', fontSize: '0.8125rem', fontFamily: 'inherit', color: '#1c1917', width: '200px', outline: 'none' }}
-                />
-                {['all', 'recurring', 'one_time', 'service'].map(t => (
-                    <button key={t} onClick={() => setPbTypeFilter(t)}
-                        style={{ padding: '0.3rem 0.75rem', borderRadius: '8px', border: '1px solid', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit', background: pbTypeFilter === t ? '#1c1917' : '#e8e3da', color: pbTypeFilter === t ? '#f5f1eb' : '#78716c', borderColor: pbTypeFilter === t ? '#1c1917' : '#ddd8cf', transition: 'all 0.15s' }}>
-                        {t === 'all' ? 'All' : t === 'one_time' ? 'One-time' : t === 'recurring' ? 'Recurring' : 'Services'}
-                    </button>
-                ))}
-                <button className="btn" style={{ marginLeft: 'auto' }} onClick={openNewProduct}>+ Add Product</button>
-            </div>
-
-            {/* Products table */}
-            {filtered.length === 0 ? (
-                <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>
-                    {(products || []).length === 0 ? 'No products yet. Add your first product to start building quotes.' : 'No products match your search.'}
-                </div>
-            ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
-                    <thead>
-                        <tr>
-                            {['Product', 'SKU', 'Category', 'Type', 'List Price', 'Min Price', 'Unit', 'Status', ''].map(h => (
-                                <th key={h} style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', padding: '0.625rem 1rem', textAlign: 'left', borderBottom: '1px solid #f0ece4', whiteSpace: 'nowrap' }}>{h}</th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filtered.map(p => (
-                            <tr key={p.id} style={{ borderBottom: '1px solid #f8f7f5' }} onMouseEnter={e => e.currentTarget.style.background = '#fafaf9'} onMouseLeave={e => e.currentTarget.style.background = ''}>
-                                <td style={{ padding: '0.75rem 1rem' }}>
-                                    <div style={{ fontWeight: '600', color: '#1c1917', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                                        {p.name}
-                                        {p.customPrice && <span style={{ fontSize: '0.5625rem', fontWeight: '700', background: '#f3e8ff', color: '#6b21a8', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Custom</span>}
-                                    </div>
-                                    {p.description && <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>{p.description.slice(0, 60)}{p.description.length > 60 ? '…' : ''}</div>}
-                                </td>
-                                <td style={{ padding: '0.75rem 1rem', color: '#94a3b8', fontFamily: 'monospace', fontSize: '0.75rem' }}>{p.sku || '—'}</td>
-                                <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{p.category || '—'}</td>
-                                <td style={{ padding: '0.75rem 1rem' }}>
-                                    <span style={{ padding: '2px 8px', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700', background: (typeBadge[p.productType] || typeBadge.one_time).bg, color: (typeBadge[p.productType] || typeBadge.one_time).color }}>
-                                        {typeLabel[p.productType] || p.productType}
-                                    </span>
-                                </td>
-                                <td style={{ padding: '0.75rem 1rem', fontWeight: '600', color: p.customPrice ? '#7c3aed' : '#1c1917', fontStyle: p.customPrice ? 'italic' : 'normal' }}>
-                                    {p.customPrice ? 'Rep enters price' : '$' + Number(p.listPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </td>
-                                <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{p.minPrice && !p.customPrice ? '$' + Number(p.minPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
-                                <td style={{ padding: '0.75rem 1rem', color: '#64748b' }}>{p.unit || 'flat'}</td>
-                                <td style={{ padding: '0.75rem 1rem' }}>
-                                    <span style={{ fontSize: '0.75rem', fontWeight: '600', color: p.active !== false ? '#16a34a' : '#94a3b8' }}>{p.active !== false ? '● Active' : '○ Inactive'}</span>
-                                </td>
-                                <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
-                                    <button className="btn btn-secondary" style={{ marginRight: '0.5rem', padding: '0.25rem 0.625rem', fontSize: '0.75rem' }} onClick={() => openEditProduct(p)}>Edit</button>
-                                    <button onClick={() => handleDeleteProduct(p.id, showConfirm)} style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: '0.8125rem', cursor: 'pointer', fontWeight: '600', fontFamily: 'inherit' }}>Deactivate</button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            )}
-
-            <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid #f0ece4', background: '#fafaf9', display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.75rem', color: '#94a3b8' }}>
-                <span>{(products || []).filter(p => p.active !== false).length} active product{(products || []).filter(p => p.active !== false).length !== 1 ? 's' : ''}</span>
-                <span>·</span>
-                <span>{(products || []).filter(p => p.productType === 'recurring').length} recurring</span>
-                <span>·</span>
-                <span>{(products || []).filter(p => p.productType === 'one_time').length} one-time</span>
-                <span>·</span>
-                <span>{(products || []).filter(p => p.productType === 'service').length} services</span>
-            </div>
         </div>
     );
-}
-
-// ── Price Book Config Panel ────────────────────────────────────────────────────
-// Admin-only: manage units, types, and categories for the price book
-// Hoisted outside PriceBookConfigPanel so React never remounts it on re-render,
-// which would kill input focus on every keystroke.
-const pbInputStyle = {
-    flex: 1, padding: '0.45rem 0.75rem', border: '1px solid #e5e2db',
-    borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit',
-    background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box',
 };
 
-function PbSectionCard({ title, description, itemKey, pbCfg, value, setValue, onAdd, onRemove, labelMap }) {
-    return (
-        <div style={{ background: '#fff', border: '1px solid #ddd8cf', borderRadius: '12px', overflow: 'hidden', marginBottom: '1rem' }}>
-            <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f0ece4', background: '#fafaf9' }}>
-                <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917' }}>{title}</div>
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>{description}</div>
-            </div>
-            <div style={{ padding: '1rem 1.25rem' }}>
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.875rem' }}>
-                    <input
-                        value={value}
-                        onChange={e => setValue(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') onAdd(itemKey, value, setValue); }}
-                        placeholder={`Add new ${title.toLowerCase()} option…`}
-                        style={pbInputStyle}
-                    />
-                    <button onClick={() => onAdd(itemKey, value, setValue)}
-                        style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.45rem 1rem', fontSize: '0.75rem', fontWeight: '500', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                        + Add
-                    </button>
-                </div>
-                {(pbCfg[itemKey] || []).length === 0 ? (
-                    <div style={{ fontSize: '0.8125rem', color: '#94a3b8', fontStyle: 'italic', padding: '0.5rem 0' }}>No options yet.</div>
-                ) : (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        {(pbCfg[itemKey] || []).map((item, idx) => (
-                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.3rem 0.625rem', fontSize: '0.8125rem', color: '#1c1917' }}>
-                                <span>{labelMap ? (labelMap[item] || item) : item}</span>
-                                <button onClick={() => onRemove(itemKey, idx)}
-                                    style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.875rem', lineHeight: 1, padding: '0 0.125rem', fontFamily: 'inherit' }}>×</button>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-
-const DEFAULT_PB_CFG = {
-    units:      ['flat', 'month', 'year', 'user', 'hour', 'day'],
-    types:      ['recurring', 'one_time', 'service'],
-    categories: ['Platform', 'Add-ons', 'Services', 'Hardware'],
-};
-
-function PriceBookConfigPanel({ settings, setSettings, goBackToMenu }) {
-    const [newUnit,     setNewUnit]     = React.useState('');
-    const [newType,     setNewType]     = React.useState('');
-    const [newCategory, setNewCategory] = React.useState('');
-
-    // Always read pbCfg from live settings prop — never from a stale closure.
-    const pbCfg = settings.priceBookConfig || DEFAULT_PB_CFG;
-
-    const addItem = (key, value, setter) => {
-        const v = value.trim();
-        if (!v) return;
-        // Read current list from latest settings prop, not a captured snapshot.
-        const current = (settings.priceBookConfig || DEFAULT_PB_CFG)[key] || [];
-        if (current.map(x => x.toLowerCase()).includes(v.toLowerCase())) return;
-        const updated = [...current, v];
-        // Update via functional form so we always spread the freshest prev state.
-        setSettings(prev => ({
-            ...prev,
-            priceBookConfig: { ...(prev.priceBookConfig || DEFAULT_PB_CFG), [key]: updated },
-        }));
-        setter('');
-    };
-
-    const removeItem = (key, idx) => {
-        const current = (settings.priceBookConfig || DEFAULT_PB_CFG)[key] || [];
-        const updated = current.filter((_, i) => i !== idx);
-        setSettings(prev => ({
-            ...prev,
-            priceBookConfig: { ...(prev.priceBookConfig || DEFAULT_PB_CFG), [key]: updated },
-        }));
-    };
-
-    return (
-        <div className="table-container">
-            <div className="table-header">
-                <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
-                <h2>PRICE BOOK CONFIG</h2>
-            </div>
-            <div style={{ padding: '1.25rem 1.5rem' }}>
-                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8125rem', color: '#1e40af' }}>
-                    ℹ️ These options populate the dropdowns when admins add or edit products in the Price Book. Changes are saved automatically.
-                </div>
-
-                <PbSectionCard
-                    title="Units"
-                    description="Billing unit options shown on each product (e.g. /month, /year, flat fee)."
-                    itemKey="units"
-                    pbCfg={pbCfg}
-                    value={newUnit}
-                    setValue={setNewUnit}
-                    onAdd={addItem}
-                    onRemove={removeItem}
-                />
-
-                <PbSectionCard
-                    title="Types"
-                    description="Product type classifications. Controls how the quote builder calculates ARR vs one-time value."
-                    itemKey="types"
-                    pbCfg={pbCfg}
-                    value={newType}
-                    setValue={setNewType}
-                    onAdd={addItem}
-                    onRemove={removeItem}
-                    labelMap={{ recurring: 'Recurring', one_time: 'One-time', service: 'Service' }}
-                />
-
-                <PbSectionCard
-                    title="Categories"
-                    description="Product categories used to group items in the quote builder catalog panel."
-                    itemKey="categories"
-                    pbCfg={pbCfg}
-                    value={newCategory}
-                    setValue={setNewCategory}
-                    onAdd={addItem}
-                    onRemove={removeItem}
-                />
-            </div>
-        </div>
-    );
-}
-
-// ── BYOK API Key Section ─────────────────────────────────────────────────────
-// Must be a proper component so React hooks are valid
-function ByokKeySection({ settings, setSettings }) {
-    const [byokKey, setByokKey] = React.useState(settings.anthropicApiKey || '');
-    const [byokVisible, setByokVisible] = React.useState(false);
-    const [byokSaving, setByokSaving] = React.useState(false);
-    const [byokError, setByokError] = React.useState(null);
-    const [byokSaved, setByokSaved] = React.useState(false);
-    const hasKey = !!(settings.anthropicApiKey);
-
-    const saveByokKey = async () => {
-        setByokSaving(true);
-        setByokError(null);
-        setByokSaved(false);
-        try {
-            const res = await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ anthropicApiKey: byokKey.trim() || null }),
-            });
-            if (!res.ok) {
-                const d = await res.json().catch(() => ({}));
-                setByokError(d.error || 'Failed to save key.');
-            } else {
-                setSettings(prev => ({ ...prev, anthropicApiKey: byokKey.trim() || null }));
-                setByokSaved(true);
-                setTimeout(() => setByokSaved(false), 3000);
-            }
-        } catch (err) {
-            setByokError('Network error — please try again.');
-        } finally {
-            setByokSaving(false);
-        }
-    };
-
-    const removeKey = async () => {
-        setByokKey('');
-        setByokSaving(true);
-        setByokError(null);
-        try {
-            const res = await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ anthropicApiKey: null }),
-            });
-            if (!res.ok) {
-                const d = await res.json().catch(() => ({}));
-                setByokError(d.error || 'Failed to remove key.');
-            } else {
-                setSettings(prev => ({ ...prev, anthropicApiKey: null }));
-            }
-        } catch (err) {
-            setByokError('Network error — please try again.');
-        } finally {
-            setByokSaving(false);
-        }
-    };
-
-    return (
-        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
-            {/* Header */}
-            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                <div>
-                    <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        🔑 Bring Your Own API Key
-                        {hasKey && (
-                            <span style={{ fontSize: '0.625rem', fontWeight: '700', background: '#d1fae5', color: '#065f46', padding: '1px 8px', borderRadius: '999px' }}>USING YOUR KEY</span>
-                        )}
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px' }}>
-                        {hasKey
-                            ? 'AI scoring is using your Anthropic API key. Usage costs go directly to your account.'
-                            : 'Add your own Anthropic API key for direct cost visibility and to keep deal data out of shared billing.'
-                        }
-                    </div>
-                </div>
-            </div>
-            {/* Key input */}
-            <div style={{ padding: '1rem 1.25rem' }}>
-                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Anthropic API Key</div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <div style={{ flex: 1, position: 'relative' }}>
-                        <input
-                            type={byokVisible ? 'text' : 'password'}
-                            value={byokKey}
-                            onChange={e => setByokKey(e.target.value)}
-                            placeholder="sk-ant-api03-..."
-                            style={{
-                                width: '100%', padding: '0.5rem 2.5rem 0.5rem 0.75rem',
-                                border: '1px solid #d1d5db', borderRadius: '6px',
-                                fontSize: '0.8125rem', fontFamily: 'monospace',
-                                outline: 'none', boxSizing: 'border-box',
-                                background: '#f8fafc',
-                            }}
-                        />
-                        <button
-                            onClick={() => setByokVisible(v => !v)}
-                            style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', color: '#94a3b8', padding: '2px' }}
-                            title={byokVisible ? 'Hide key' : 'Show key'}
-                        >
-                            {byokVisible ? '🙈' : '👁️'}
-                        </button>
-                    </div>
-                    <button
-                        onClick={saveByokKey}
-                        disabled={byokSaving || byokKey.trim() === (settings.anthropicApiKey || '')}
-                        style={{
-                            padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer',
-                            background: byokSaved ? '#10b981' : '#1c1917', color: '#f5f1eb',
-                            fontSize: '0.8125rem', fontWeight: '700', fontFamily: 'inherit',
-                            opacity: (byokSaving || byokKey.trim() === (settings.anthropicApiKey || '')) ? 0.5 : 1,
-                            minWidth: '64px', transition: 'background 0.2s',
-                        }}
-                    >
-                        {byokSaving ? '…' : byokSaved ? '✓ Saved' : 'Save'}
-                    </button>
-                    {hasKey && (
-                        <button
-                            onClick={removeKey}
-                            disabled={byokSaving}
-                            style={{ padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #fecaca', cursor: 'pointer', background: 'transparent', color: '#dc2626', fontSize: '0.8125rem', fontWeight: '600', fontFamily: 'inherit' }}
-                        >
-                            Remove
-                        </button>
-                    )}
-                </div>
-                {byokError && (
-                    <div style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '6px' }}>{byokError}</div>
-                )}
-                <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '8px', lineHeight: 1.5 }}>
-                    Your key is encrypted with AES-256 before being stored. It is never logged or exposed in responses.
-                    Get your key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>console.anthropic.com</a>.
-                </div>
-            </div>
-        </div>
-    );
-}
-
+// ─────────────────────────────────────────────────────────────
+// Main export
+// ─────────────────────────────────────────────────────────────
 export default function SettingsTab() {
     const {
         settings, setSettings,
-        opportunities,
-        accounts,
-        contacts,
-        tasks,
-        activities,
-        leads,
-        users,
-        currentUser,
-        userRole,
-        exportToCSV,
-        exportingCSV, setExportingCSV,
-        showConfirm,
-        softDelete,
-        addAudit,
-        handleUpdateFiscalYearStart,
-        handleSaveUser,
-        setUndoToast,
-        allPipelines,
-        activePipeline,
-        setActiveTab,
-        activePipelineId, setActivePipelineId,
-        setShowUserModal, setEditingUser,
-        setCsvImportType, setShowCsvImportModal,
-        isMobile,
+        currentUser, userRole,
     } = useApp();
 
-    const isAdmin = userRole === 'Admin';
+    const isAdmin   = userRole === 'Admin';
     const isManager = userRole === 'Manager';
-
-    // Clerk auth — needed to pass userId/orgId to the OAuth start redirect
-    const { userId, orgId } = useAuth();
-
-    if (!isAdmin) return null;
-
-    // Local state
-    const [settingsTab, setSettingsTab] = useState(() => localStorage.getItem('tab:settings:subTab') || 'team');
-    const [settingsView, setSettingsView] = useState('menu');
-    const [savedToast, setSavedToast] = useState(false);
-    const [settingsSnapshot, setSettingsSnapshot] = useState(null);
-    const [auditEntries, setAuditEntries] = useState([]);
-    const [auditLoading, setAuditLoading] = useState(false);
-    const [newPainPointInput, setNewPainPointInput] = useState('');
-    const [newCtInput, setNewCtInput] = useState('');
-    const [newProductInput, setNewProductInput] = useState('');
-    const [newVerticalMarketInput, setNewVerticalMarketInput] = useState('');
-    const [exportingBackup, setExportingBackup] = useState(false);
-    const [restoringBackup, setRestoringBackup] = useState(false);
-    const [expandedIndustry, setExpandedIndustry] = useState(null);
-    const [auditSearch, setAuditSearch] = useState('');
-    const [auditEntityFilter, setAuditEntityFilter] = useState('all');
-    const [auditActionFilter, setAuditActionFilter] = useState('all');
-    const [newSubIndustryInput, setNewSubIndustryInput] = useState('');
-
-    // Calendar connections state
-    const [userCalConnections, setUserCalConnections] = useState([]);
-    const [orgCalConnections, setOrgCalConnections] = useState([]);
-    const [calConnectionsLoading, setCalConnectionsLoading] = useState(false);
-    const [calDisconnecting, setCalDisconnecting] = useState(null); // { id, scope }
-    const [calConnectResult, setCalConnectResult] = useState(null); // 'success' | 'error' | null
-
-    // API Keys state
-    const [apiKeysList, setApiKeysList] = useState([]);
-    const [apiKeysLoading, setApiKeysLoading] = useState(false);
-    const [apiKeyNewName, setApiKeyNewName] = useState('');
-    const [apiKeyGenerating, setApiKeyGenerating] = useState(false);
-    const [apiKeyRevealed, setApiKeyRevealed] = useState(null); // { id, key } — shown once after generation
-    const [apiKeyError, setApiKeyError] = useState(null);
-    const [apiKeyRevoking, setApiKeyRevoking] = useState(null); // id being revoked
-
-    // Webhooks state
-    const [webhooksList, setWebhooksList] = useState([]);
-    const [webhooksLoading, setWebhooksLoading] = useState(false);
-    const [webhookForm, setWebhookForm] = useState({ name: '', targetUrl: '', eventTypes: [] });
-    const [webhookSaving, setWebhookSaving] = useState(false);
-    const [webhookError, setWebhookError] = useState(null);
-    const [webhookRevealed, setWebhookRevealed] = useState(null); // { id, secret } — shown once after creation
-    const [webhookDeleting, setWebhookDeleting] = useState(null); // id being deleted
-    const [webhookToggling, setWebhookToggling] = useState(null); // id being toggled
-    const [showWebhookForm, setShowWebhookForm] = useState(false);
-
-    // Fetch audit log when view changes to audit-log
-    useEffect(() => {
-        if (settingsView !== 'audit-log' || settingsTab !== 'security') return;
-        setAuditLoading(true);
-        dbFetch('/.netlify/functions/audit-log')
-            .then(r => r.json())
-            .then(data => {
-                const normalized = (data.entries || []).map(e => ({
-                    id:     e.id,
-                    ts:     e.timestamp,
-                    user:   e.userName || 'Unknown',
-                    action: e.action,
-                    entity: e.entityType,
-                    label:  e.entityName || '',
-                    detail: e.detail || '',
-                }));
-                setAuditEntries(normalized);
-            })
-            .catch(err => console.error('Failed to load audit log:', err))
-            .finally(() => setAuditLoading(false));
-    }, [settingsView]);
-
-    // Load calendar connections when on a calendar view
-    useEffect(() => {
-        if (settingsView !== 'my-calendar' && settingsView !== 'company-calendar') return;
-        setCalConnectionsLoading(true);
-        dbFetch('/.netlify/functions/calendar-connections')
-            .then(r => r.json())
-            .then(data => {
-                setUserCalConnections(data.userConnections || []);
-                setOrgCalConnections(data.orgConnections || []);
-            })
-            .catch(err => console.error('Failed to load calendar connections:', err))
-            .finally(() => setCalConnectionsLoading(false));
-    }, [settingsView]);
-
-    // Load API keys when api-keys view is active
-    useEffect(() => {
-        if (settingsView !== 'api-keys') return;
-        setApiKeysLoading(true);
-        setApiKeyError(null);
-        dbFetch('/.netlify/functions/api-keys')
-            .then(r => r.json())
-            .then(data => setApiKeysList(data.keys || []))
-            .catch(() => setApiKeyError('Failed to load API keys.'))
-            .finally(() => setApiKeysLoading(false));
-    }, [settingsView]);
-
-    // Load webhooks when webhooks view is active
-    useEffect(() => {
-        if (settingsView !== 'webhooks') return;
-        setWebhooksLoading(true);
-        setWebhookError(null);
-        dbFetch('/.netlify/functions/webhooks')
-            .then(r => r.json())
-            .then(data => setWebhooksList(data.webhooks || []))
-            .catch(() => setWebhookError('Failed to load webhooks.'))
-            .finally(() => setWebhooksLoading(false));
-    }, [settingsView]);
-
-    // Detect OAuth callback result from URL params on mount
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const result = params.get('calconnect');
-        if (result === 'success' || result === 'error') {
-            setCalConnectResult(result);
-            setSettingsTab('calendar');
-            localStorage.setItem('tab:settings:subTab', 'calendar');
-            const url = new URL(window.location.href);
-            url.searchParams.delete('calconnect');
-            url.searchParams.delete('tab');
-            url.searchParams.delete('subtab');
-            window.history.replaceState({}, '', url.toString());
-            setTimeout(() => setCalConnectResult(null), 5000);
-        }
-    }, []);
-
-    // Disconnect a calendar connection
-    const handleCalDisconnect = async (id, scope) => {
-        setCalDisconnecting({ id, scope });
-        try {
-            const res = await dbFetch(`/.netlify/functions/calendar-connections?id=${id}&scope=${scope}`, { method: 'DELETE' });
-            if (res.ok) {
-                if (scope === 'user') setUserCalConnections(prev => prev.filter(c => c.id !== id));
-                else setOrgCalConnections(prev => prev.filter(c => c.id !== id));
-            }
-        } catch (err) {
-            console.error('Failed to disconnect calendar:', err);
-        } finally {
-            setCalDisconnecting(null);
-        }
-    };
-
-    // Initiate OAuth connect flow — redirects browser to provider consent screen
-    const handleCalConnect = (provider, scope) => {
-        if (!userId || !orgId) return;
-        window.location.href = `/.netlify/functions/calendar-oauth-start?provider=${provider}&scope=${scope}&userId=${userId}&orgId=${orgId}&userRole=${userRole || 'User'}`;
-    };
-
-    // UI handlers
-    const handleAddUser = () => { setEditingUser(null); setShowUserModal(true); };
-    const handleEditUser = (user) => { setEditingUser(user); setShowUserModal(true); };
-
-    // ── Invite user state ──────────────────────────────────────────────────────
-    const [showInviteModal, setShowInviteModal] = React.useState(false);
-    const [inviteForm, setInviteForm] = React.useState({ name: '', email: '', role: 'User', team: '', territory: '' });
-    const [inviteSending, setInviteSending] = React.useState(false);
-    const [inviteResult, setInviteResult] = React.useState(null); // { type: 'success'|'error', message }
-
-    const handleSendInvite = async () => {
-        if (!inviteForm.name.trim() || !inviteForm.email.trim()) {
-            setInviteResult({ type: 'error', message: 'Name and email are required.' });
-            return;
-        }
-        setInviteSending(true);
-        setInviteResult(null);
-        try {
-            const res = await dbFetch('/.netlify/functions/invite-user', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(inviteForm),
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                setInviteResult({ type: 'error', message: data.error || 'Failed to send invitation.' });
-            } else {
-                setInviteResult({ type: 'success', message: data.message });
-                setInviteForm({ name: '', email: '', role: 'User', team: '', territory: '' });
-            }
-        } catch {
-            setInviteResult({ type: 'error', message: 'Network error — please try again.' });
-        } finally {
-            setInviteSending(false);
-        }
-    };
-    const handleDeleteUser = (userId) => {
-        const user = (settings.users || []).find(u => u.id === userId);
-        if (!user) return;
-        const userName = user.name || user.email || userId;
-        showConfirm(`Are you sure you want to delete "${userName}"? This cannot be undone.`, async () => {
-            // Snapshot the users list for undo
-            const snapshot = (settings.users || []).slice();
-            // Optimistic removal from settings
-            setSettings(prev => ({ ...prev, users: (prev.users || []).filter(u => u.id !== userId) }));
-            await dbFetch('/.netlify/functions/users?id=' + userId, { method: 'DELETE' }).catch(console.error);
-            softDelete(
-                `User "${userName}"`,
-                () => {},
-                () => {
-                    setSettings(prev => ({ ...prev, users: snapshot }));
-                    setUndoToast(null);
-                }
-            );
-        });
-    };
-
-
-    const goToView = (view) => {
-        setSettingsSnapshot(JSON.parse(JSON.stringify(settings)));
-        setSettingsView(view);
-        setSavedToast(false);
-    };
-
-    const goBackToMenu = () => {
-        setSettingsSnapshot(null);
-        setSettingsView('menu');
-    };
-
-    const handleSaveView = () => {
-        setSettingsSnapshot(null);
-        setSavedToast(true);
-        setTimeout(() => setSavedToast(false), 2500);
-        setSettingsView('menu');
-    };
-
-    const handleCancelView = () => {
-        if (settingsSnapshot) setSettings(settingsSnapshot);
-        setSettingsSnapshot(null);
-        setSavedToast(false);
-        setSettingsView('menu');
-    };
-
-    const SaveCancelBar = () => (
-        <div style={{ display:'flex', gap:'0.75rem', padding:'1rem 1.5rem', borderTop:'1px solid #e2e8f0', background:'#f8fafc', marginTop:'1rem' }}>
-            <button onClick={handleSaveView}
-                style={{ padding:'0.5rem 1.5rem', background:'#1c1917', color:'#f5f1eb', border:'none', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
-                Save changes
-            </button>
-            <button onClick={handleCancelView}
-                style={{ padding:'0.5rem 1.25rem', background:'transparent', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'7px', fontSize:'0.875rem', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
-                Cancel
-            </button>
-        </div>
-    );
-
-    // Sub-tab switcher
-    const switchTab = (tab) => {
-        setSettingsTab(tab);
-        setSettingsView('menu');
-        localStorage.setItem('tab:settings:subTab', tab);
-    };
-
-    // Sub-tab style
-    const subTabStyle = (tab) => ({
-        padding: '0.5rem 1.25rem',
-        border: 'none',
-        borderBottom: settingsTab === tab ? '2px solid #2563eb' : '2px solid transparent',
-        background: 'transparent',
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-        fontSize: '0.875rem',
-        color: settingsTab === tab ? '#2563eb' : '#64748b',
-        fontWeight: settingsTab === tab ? '700' : '500',
-        transition: 'all 0.15s',
-        whiteSpace: 'nowrap',
-    });
+    const canAdmin  = isAdmin || isManager;
 
     return (
-
-                <div className="tab-page">
-                    <div className="tab-page-header">
-                        <div className="tab-page-header-bar"></div>
-                        <div>
-                            <h2>Settings</h2>
-                        </div>
+        <div className="tab-page" style={{ fontFamily:T.sans }}>
+            {/* Page header */}
+            <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16 }}>
+                <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+                    <div style={{ fontSize:26, fontWeight:700, color:T.ink, letterSpacing:-0.3, fontFamily:T.sans }}>
+                        {canAdmin ? 'Settings' : 'My account'}
                     </div>
-
-                    {/* ── Sub-tabs ── */}
-                    <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '0.25rem', gap: '0' }}>
-                        <button style={subTabStyle('calendar')}      onClick={() => switchTab('calendar')}>Calendar</button>
-                        <button style={subTabStyle('configuration')} onClick={() => switchTab('configuration')}>Configuration</button>
-                        <button style={subTabStyle('integrations')}  onClick={() => switchTab('integrations')}>Integrations</button>
-                        <button style={subTabStyle('security')}      onClick={() => switchTab('security')}>Security &amp; Data</button>
-                        <button style={subTabStyle('team')}          onClick={() => switchTab('team')}>Team</button>
+                    <div style={{ fontSize:13, color:T.inkMid, marginTop:4, fontFamily:T.sans }}>
+                        {canAdmin
+                            ? 'Workspace admin console · manage users, pipelines, security, and integrations'
+                            : 'Your personal preferences · not shared with your team'}
                     </div>
-
-                <>
-                    {savedToast && (
-                        <div style={{ position:'fixed', bottom:'2rem', left:'50%', transform:'translateX(-50%)', background:'#1e293b', color:'#fff', padding:'0.625rem 1.5rem', borderRadius:'8px', fontSize:'0.875rem', fontWeight:'600', zIndex:9999, display:'flex', alignItems:'center', gap:'8px', boxShadow:'0 4px 16px rgba(0,0,0,0.18)' }}>
-                            <span style={{ color:'#4ade80' }}>✓</span> Settings saved
-                        </div>
-                    )}
-                    {settingsView === 'menu' && (
-                        <div className="table-container">
-                            <div className="table-header">
-                                <h2>SETTINGS</h2>
-                            </div>
-                            <div style={{ padding: '1.5rem' }}>
-                                <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', maxWidth: isMobile ? '100%' : '560px' }}>
-                                    {[
-                                        ...(settingsTab === 'calendar' ? [
-                                        { group: 'Calendar' },
-                                        { view: 'my-calendar',      icon: '📅', title: 'My Calendar',        desc: 'Connect your personal calendar' },
-                                        { view: 'company-calendar', icon: '🗓️', title: 'Company Calendar',   desc: 'Shared org-wide calendar (Admin)' },
-                                        ] : []),
-                                        ...(settingsTab === 'team' ? [
-                                        { group: 'Team' },
-                                        { view: 'users',          icon: '👥', title: 'Manage Users',       desc: 'Roles & permissions' },
-                                        { view: 'team-builder',   icon: '🏗️', title: 'Team Builder',       desc: 'Teams & managers' },
-                                        { view: 'territories',    icon: '📍', title: 'Territories',         desc: 'Sales territory definitions' },
-                                        ] : []),
-                                        ...(settingsTab === 'configuration' ? [
-                                        { group: 'Configuration' },
-                                        { view: 'vertical-markets', icon: '🏢', title: 'Industries',        desc: 'Primary & sub-industry types' },
-                                        { view: 'verticals',      icon: '🏭', title: 'Verticals',           desc: 'Sales vertical assignments' },
-                                        { view: 'funnel-stages',  icon: '🔻', title: 'Funnel Stages',       desc: 'Stages & win probability' },
-                                        { view: 'pipelines',      icon: '🔀', title: 'Pipelines',           desc: 'Multiple pipeline management' },
-                                        { view: 'kpi-settings',   icon: '📊', title: 'KPI Settings',        desc: 'Thresholds, colors & sparklines' },
-                                        { view: 'fiscal-year',    icon: '📅', title: 'Fiscal Year',         desc: 'Quarter & fiscal year start' },
-                                        { view: 'logo',           icon: '🖼️', title: 'Company Profile',      desc: 'Logo, address, phone & quote header' },
-                                        { view: 'pain-points',    icon: '⚠️', title: 'Pain Points Library', desc: 'Customer pain point templates' },
-                                        { view: 'customer-types', icon: '🏷️', title: 'Customer Types',       desc: 'Account classification tags (Admin only)' },
-                                        { view: 'price-book',     icon: '💲', title: 'Price Book',           desc: 'Manage the product catalog for quoting' },
-                                        { view: 'price-book-config', icon: '⚙️', title: 'Price Book Config',  desc: 'Manage units, types & categories for quoting' },
-                                        ] : []),
-                                        ...(settingsTab === 'security' ? [
-                                        { group: 'Security & Data' },
-                                        { view: 'features',       icon: '🧩', title: 'Features',             desc: 'Enable or disable app features' },
-                                        { view: 'ai-features',    icon: '🤖', title: 'AI Features',          desc: 'Deal scoring & data privacy controls' },
-                                        { view: 'field-visibility', icon: '🔒', title: 'Field Visibility',  desc: 'Role-based field access control' },
-                                        { view: 'data-management', icon: '💾', title: 'Data Management',    desc: 'Backup & restore' },
-                                        { view: 'audit-log',      icon: '📋', title: 'Audit Log',           desc: 'Change history across all records' },
-                                        ] : []),
-                                        ...(settingsTab === 'integrations' ? [
-                                        { group: 'Integrations' },
-                                        { view: 'api-keys',       icon: '🔑', title: 'API Keys',             desc: 'Generate & manage REST API credentials' },
-                                        { view: 'webhooks',       icon: '🔗', title: 'Webhooks',             desc: 'Subscribe to CRM events & push to endpoints' },
-                                        ] : []),
-                                    ].map((item, idx, arr) => {
-                                        if (item.group) return (() => {
-                                                const gc = { 'Calendar': { bg:'#f0fdf4', border:'#bbf7d0', color:'#15803d', dot:'#16a34a' }, 'Team': { bg:'#eff6ff', border:'#bfdbfe', color:'#1d4ed8', dot:'#2563eb' }, 'Configuration': { bg:'#f5f3ff', border:'#ddd6fe', color:'#6d28d9', dot:'#7c3aed' }, 'Security & Data': { bg:'#fff7ed', border:'#fed7aa', color:'#c2410c', dot:'#ea580c' }, 'Integrations': { bg:'#f0fdf4', border:'#bbf7d0', color:'#15803d', dot:'#16a34a' } }[item.group] || { bg:'#f8fafc', border:'#e2e8f0', color:'#64748b', dot:'#94a3b8' };
-                                                return (
-                                                    <div key={item.group} style={{ display:'flex', alignItems:'center', gap:'6px', padding: '6px 16px 5px', fontSize: '0.625rem', fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', color: gc.color, background: gc.bg, borderBottom: '0.5px solid ' + gc.border, borderTop: idx > 0 ? '0.5px solid ' + gc.border : 'none' }}>
-                                                        <div style={{ width:'6px', height:'6px', borderRadius:'50%', background: gc.dot, flexShrink:0 }} />
-                                                        {item.group}
-                                                    </div>
-                                                );
-                                            })();
-                                        const isLast = idx === arr.length - 1 || arr[idx + 1]?.group;
-                                        return (
-                                            <div key={item.view}
-                                                onClick={() => goToView(item.view)}
-                                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 16px 9px 24px', borderBottom: isLast ? 'none' : '0.5px solid #f1f5f9', cursor: 'pointer', transition: 'background 0.1s' }}
-                                                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                            >
-                                                <div style={{ width: '24px', height: '24px', borderRadius: '5px', background: ['users','team-builder','territories'].includes(item.view) ? '#dbeafe' : ['vertical-markets','verticals','funnel-stages','pipelines','kpi-settings','fiscal-year','logo','pain-points','customer-types','price-book','price-book-config'].includes(item.view) ? '#ede9fe' : ['api-keys','webhooks','my-calendar','company-calendar'].includes(item.view) ? '#dcfce7' : '#ffedd5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>{item.icon}</div>
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{item.title}</div>
-                                                    {item.desc && <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>{item.desc}</div>}
-                                                </div>
-                                                <span style={{ fontSize: '0.875rem', color: '#cbd5e1', flexShrink: 0 }}>›</span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-
-                    {settingsView === 'price-book' && <PriceBookPanel goBackToMenu={goBackToMenu} showConfirm={showConfirm} />}
-
-                    {settingsView === 'price-book-config' && <PriceBookConfigPanel settings={settings} setSettings={setSettings} goBackToMenu={goBackToMenu} />}
-
-                    {settingsView === 'field-visibility' && (() => {
-                        const roles = ['Admin', 'Manager', 'User', 'ReadOnly'];
-                        const roleLabels = { Admin: 'Admin', Manager: 'Manager', User: 'Sales Rep', ReadOnly: 'Read-Only' };
-                        const fields = [
-                            { key: 'arr',           label: 'Revenue ($)',          desc: 'Revenue amount on the deal' },
-                            { key: 'implCost',      label: 'Implementation Cost',  desc: 'Implementation / services cost' },
-                            { key: 'probability',   label: 'Probability %',        desc: 'Close probability (stage default or rep override)' },
-                            { key: 'weightedValue', label: 'Weighted Value',        desc: 'Calculated weighted pipeline value' },
-                            { key: 'dealAge',       label: 'Deal Age',             desc: 'Days since opportunity was created' },
-                            { key: 'timeInStage',   label: 'Time in Stage',        desc: 'Days in current stage' },
-                            { key: 'activities',    label: 'Activities',           desc: 'Activity count and recency' },
-                            { key: 'notes',         label: 'Notes / Description',  desc: 'Deal background and context notes' },
-                            { key: 'nextSteps',     label: 'Next Steps',           desc: 'Next action items' },
-                            { key: 'closeDate',     label: 'Close Date',           desc: 'Forecasted close date' },
-                        ];
-                        const fv = settings.fieldVisibility || {};
-                        const toggle = (fieldKey, role) => {
-                            const current = (fv[fieldKey] && fv[fieldKey][role] !== undefined) ? fv[fieldKey][role] : true;
-                            const updated = {
-                                ...fv,
-                                [fieldKey]: { ...(fv[fieldKey] || { Admin: true, Manager: true, User: true, ReadOnly: true }), [role]: !current }
-                            };
-                            // Always keep Admin visible (Admin always sees everything)
-                            if (fieldKey && updated[fieldKey]) updated[fieldKey].Admin = true;
-                            setSettings(s => ({ ...s, fieldVisibility: updated }));
-                        };
-                        const isVisible = (fieldKey, role) => {
-                            if (role === 'Admin') return true; // Admin always sees all
-                            return !fv[fieldKey] || fv[fieldKey][role] !== false;
-                        };
-                        return (
-                            <div className="table-container">
-                                <div className="table-header">
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
-                                        <h2>FIELD VISIBILITY</h2>
-                                    </div>
-                                    <span style={{ fontSize: '0.8125rem', color: '#64748b' }}>Admins always see all fields</span>
-                                </div>
-                                <div style={{ padding: '1.5rem' }}>
-                                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8125rem', color: '#1e40af' }}>
-                                        ℹ️ Toggle a field off for a role to hide it from the pipeline table and the opportunity form for users with that role.
-                                    </div>
-                                    <div style={{ overflowX: 'auto' }}>
-                                        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', minWidth: '500px' }}>
-                                            <thead>
-                                                <tr style={{ background: '#f8fafc' }}>
-                                                    <th style={{ textAlign: 'left', padding: '0.625rem 0.875rem', fontWeight: '700', color: '#64748b', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '2px solid #e2e8f0', width: '220px' }}>Field</th>
-                                                    {roles.map(role => (
-                                                        <th key={role} style={{ textAlign: 'center', padding: '0.625rem 1rem', fontWeight: '700', color: '#64748b', fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '2px solid #e2e8f0' }}>
-                                                            {roleLabels[role]}
-                                                            {role === 'Admin' && <div style={{ fontSize: '0.5625rem', color: '#94a3b8', fontWeight: '400', marginTop: '0.125rem', textTransform: 'none' }}>always on</div>}
-                                                        </th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {fields.map((field, i) => (
-                                                    <tr key={field.key} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
-                                                        <td style={{ padding: '0.75rem 0.875rem' }}>
-                                                            <div style={{ fontWeight: '600', color: '#1e293b' }}>{field.label}</div>
-                                                            <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '0.125rem' }}>{field.desc}</div>
-                                                        </td>
-                                                        {roles.map(role => {
-                                                            const visible = isVisible(field.key, role);
-                                                            const locked = role === 'Admin';
-                                                            return (
-                                                                <td key={role} style={{ textAlign: 'center', padding: '0.75rem 1rem' }}>
-                                                                    <button
-                                                                        type="button"
-                                                                        disabled={locked}
-                                                                        onClick={() => !locked && toggle(field.key, role)}
-                                                                        title={locked ? 'Admins always see all fields' : (visible ? 'Click to hide from ' + roleLabels[role] : 'Click to show to ' + roleLabels[role])}
-                                                                        style={{
-                                                                            width: '42px', height: '24px', borderRadius: '12px', border: 'none', cursor: locked ? 'not-allowed' : 'pointer',
-                                                                            background: visible ? '#2563eb' : '#e2e8f0',
-                                                                            position: 'relative', transition: 'background 0.2s', outline: 'none',
-                                                                            opacity: locked ? 0.5 : 1
-                                                                        }}>
-                                                                        <span style={{
-                                                                            position: 'absolute', top: '3px', left: visible ? '21px' : '3px',
-                                                                            width: '18px', height: '18px', borderRadius: '50%', background: '#fff',
-                                                                            transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
-                                                                        }} />
-                                                                    </button>
-                                                                </td>
-                                                            );
-                                                        })}
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                </div>
             </div>
-                                    </div>
-                                </div>
-                                <SaveCancelBar />
-                        </div>
-                        );
-                    })()}
 
-                    {settingsView === 'audit-log' && (() => {
-                        const actionColor = { create: '#10b981', update: '#3b82f6', delete: '#ef4444' };
-                        const actionLabel = { create: '+ Created', update: '✎ Updated', delete: '🗑 Deleted' };
-                        const entityIcon = { opportunity: '🤝', account: '🏢', contact: '👤', task: '✅' };
-                        const auditLog = auditEntries;
-                        const filtered = auditLog.filter(e => {
-                            if (auditEntityFilter !== 'all' && e.entity !== auditEntityFilter) return false;
-                            if (auditActionFilter !== 'all' && e.action !== auditActionFilter) return false;
-                            if (auditSearch) {
-                                const q = auditSearch.toLowerCase();
-                                return (e.label||'').toLowerCase().includes(q) || (e.detail||'').toLowerCase().includes(q) || (e.user||'').toLowerCase().includes(q);
-                            }
-                            return true;
-                        });
-                        return (
-                            <div className="table-container">
-                                <div className="table-header">
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                        <button className="btn btn-secondary" onClick={goBackToMenu}>← Back</button>
-                                        <h2>AUDIT LOG</h2>
-                                    </div>
-                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                        <input value={auditSearch} onChange={e => setAuditSearch(e.target.value)} placeholder="Search…"
-                                            style={{ padding: '0.375rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8125rem', width: '160px' }} />
-                                        <select value={auditEntityFilter} onChange={e => setAuditEntityFilter(e.target.value)}
-                                            style={{ padding: '0.375rem 0.625rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8125rem', background: '#fff' }}>
-                                            <option value="all">All types</option>
-                                            <option value="opportunity">Opportunities</option>
-                                            <option value="account">Accounts</option>
-                                            <option value="contact">Contacts</option>
-                                            <option value="task">Tasks</option>
-                                        </select>
-                                        <select value={auditActionFilter} onChange={e => setAuditActionFilter(e.target.value)}
-                                            style={{ padding: '0.375rem 0.625rem', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8125rem', background: '#fff' }}>
-                                            <option value="all">All actions</option>
-                                            <option value="create">Created</option>
-                                            <option value="update">Updated</option>
-                                            <option value="delete">Deleted</option>
-                                        </select>
-                                        {auditLog.length > 0 && (
-                                            <button className="btn btn-secondary" disabled={exportingCSV === 'audit'} onClick={() => {
-                                                const rows = [['Time','User','Action','Type','Record','Detail']];
-                                                auditLog.forEach(e => rows.push([new Date(e.ts).toLocaleString(), e.user, e.action, e.entity, e.label, e.detail]));
-                                                exportToCSV('audit-log-' + new Date().toISOString().slice(0,10) + '.csv',
-                                                    rows[0], rows.slice(1), 'audit');
-                                            }}>{exportingCSV === 'audit' ? '⏳ Exporting…' : '📤 Export'}</button>
-                                        )}
-                                    </div>
-                                </div>
-                                <div style={{ padding: '1rem 1.5rem' }}>
-                                    {auditLoading ? (
-                                        <div style={{ textAlign: 'center', padding: '4rem 2rem', color: '#94a3b8' }}>
-                                            <div style={{ fontSize: '1rem' }}>Loading audit log…</div>
-                                        </div>
-                                    ) : auditLog.length === 0 ? (
-                                        <div style={{ textAlign: 'center', padding: '4rem 2rem', color: '#94a3b8' }}>
-                                            <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📋</div>
-                                            <div style={{ fontWeight: '600', fontSize: '1rem', marginBottom: '0.375rem', color: '#64748b' }}>No activity recorded yet</div>
-                                            <div style={{ fontSize: '0.875rem' }}>Changes to opportunities, accounts, contacts, and tasks will appear here</div>
-                                        </div>
-                                    ) : filtered.length === 0 ? (
-                                        <div style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8', fontSize: '0.875rem' }}>No entries match your filters</div>
-                                    ) : (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-                                            {filtered.map((entry, i) => (
-                                                <div key={entry.id} style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr auto' : '150px 110px 90px 100px 1fr auto', gap: '0.75rem', alignItems: 'center',
-                                                    padding: '0.625rem 0.75rem', background: i % 2 === 0 ? '#fff' : '#f8fafc',
-                                                    borderBottom: '1px solid #f1f5f9', fontSize: '0.8125rem' }}>
-                                                    <div style={{ color: '#64748b', fontSize: '0.75rem' }}>
-                                                        {new Date(entry.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}{' '}
-                                                        <span style={{ color: '#94a3b8' }}>{new Date(entry.ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
-                                                    </div>
-                                                    <div style={{ fontWeight: '600', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.user}</div>
-                                                    <div>
-                                                        <span style={{ background: (actionColor[entry.action] || '#94a3b8') + '18', color: actionColor[entry.action] || '#94a3b8',
-                                                            padding: '0.125rem 0.5rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700', whiteSpace: 'nowrap' }}>
-                                                            {actionLabel[entry.action] || entry.action}
-                                                        </span>
-                                                    </div>
-                                                    <div style={{ color: '#64748b', fontSize: '0.75rem' }}>
-                                                        {entityIcon[entry.entity] || '•'} {entry.entity}
-                                                    </div>
-                                                    <div style={{ fontWeight: '600', color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={entry.label}>{entry.label}</div>
-                                                    <div style={{ color: '#64748b', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>{entry.detail}</div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                                {auditLog.length > 0 && (
-                                    <div style={{ padding: '0.625rem 1.5rem', borderTop: '1px solid #f1f5f9', color: '#94a3b8', fontSize: '0.75rem' }}>
-                                        Showing {filtered.length} of {auditLog.length} entries (last 500 saved)
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })()}
-
-                    {settingsView === 'fiscal-year' && (
-                        <div className="table-container">
-                            <div className="table-header">
-                                <button 
-                                    className="btn btn-secondary" 
-                                    onClick={goBackToMenu}
-                                    style={{ marginRight: '1rem' }}
-                                >
-                                    ← Back
-                                </button>
-                                <h2>FISCAL YEAR SETTINGS</h2>
-                            </div>
-                            <div style={{ padding: '1.5rem' }}>
-                                <div className="form-group" style={{ maxWidth: isMobile ? '100%' : '400px' }}>
-                                    <label style={{ 
-                                        color: '#64748b', 
-                                        fontSize: '0.875rem', 
-                                        fontWeight: '600', 
-                                        marginBottom: '0.5rem',
-                                        display: 'block'
-                                    }}>
-                                        Fiscal Year Start Month
-                                    </label>
-                                    <select
-                                        value={settings.fiscalYearStart}
-                                        onChange={(e) => handleUpdateFiscalYearStart(e.target.value)}
-                                        style={{
-                                            background: '#f8f9fa',
-                                            border: '1px solid #e2e8f0',
-                                            borderRadius: '6px',
-                                            padding: '0.625rem 0.75rem',
-                                            color: '#1e293b',
-                                            fontSize: '0.875rem',
-                                            width: '100%'
-                                        }}
-                                    >
-                                        <option value="1">January</option>
-                                        <option value="2">February</option>
-                                        <option value="3">March</option>
-                                        <option value="4">April</option>
-                                        <option value="5">May</option>
-                                        <option value="6">June</option>
-                                        <option value="7">July</option>
-                                        <option value="8">August</option>
-                                        <option value="9">September</option>
-                                        <option value="10">October</option>
-                                        <option value="11">November</option>
-                                        <option value="12">December</option>
-                                    </select>
-                                    <div style={{ 
-                                        marginTop: '0.75rem', 
-                                        color: '#64748b', 
-                                        fontSize: '0.8125rem' 
-                                    }}>
-                                        Current setting: Fiscal year starts in <strong>{['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][settings.fiscalYearStart]}</strong>
-                                        <br />
-                                        Quarters are calculated as 3-month periods starting from this month.
-                                    </div>
-                                </div>
-                            </div>
-                        
-                            <SaveCancelBar />
-                        </div>
-                    )}
-
-                    {settingsView === 'logo' && (
-                        <div className="table-container">
-                            <div className="table-header">
-                                <button 
-                                    className="btn btn-secondary" 
-                                    onClick={goBackToMenu}
-                                    style={{ marginRight: '1rem' }}
-                                >
-                                    ← Back
-                                </button>
-                                <h2>COMPANY PROFILE</h2>
-                            </div>
-                            <div style={{ padding: '1.5rem' }}>
-                                <div style={{ maxWidth: isMobile ? '100%' : '600px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-                                    {/* ── Logo upload ── */}
-                                    <div>
-                                        <h3 style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917', marginBottom: '0.75rem', marginTop: 0 }}>Company Logo</h3>
-                                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' }}>Upload Logo</label>
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            onChange={(e) => {
-                                                const file = e.target.files[0];
-                                                if (file) {
-                                                    const reader = new FileReader();
-                                                    reader.onloadend = () => {
-                                                        setSettings(prev => ({ ...prev, logoUrl: reader.result }));
-                                                    };
-                                                    reader.readAsDataURL(file);
-                                                }
-                                            }}
-                                            style={{ background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.5rem 0.75rem', color: '#1c1917', fontSize: '0.875rem', width: '100%', cursor: 'pointer', boxSizing: 'border-box' }}
-                                        />
-                                        <div style={{ marginTop: '0.5rem', color: '#78716c', fontSize: '0.8125rem' }}>
-                                            Appears in the top-left corner of the app and on generated PDF quotes.
-                                        </div>
-                                        {settings.logoUrl && (
-                                            <div style={{ marginTop: '1rem' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                                    <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#57534e' }}>Logo Preview</span>
-                                                    <button
-                                                        onClick={() => setSettings(prev => ({ ...prev, logoUrl: '' }))}
-                                                        style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600', fontFamily: 'inherit', padding: '0.25rem 0.5rem', borderRadius: '4px' }}
-                                                        onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; }}
-                                                        onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-                                                    >Remove Logo</button>
-                                                </div>
-                                                <div style={{ padding: '1rem', background: '#f0ece4', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80px', border: '1px solid #e5e2db' }}>
-                                                    <img 
-                                                        src={settings.logoUrl} 
-                                                        alt="Logo Preview" 
-                                                        style={{ maxHeight: '64px', maxWidth: '100%', objectFit: 'contain' }}
-                                                        onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }}
-                                                    />
-                                                    <div style={{ display: 'none', color: '#dc2626', fontSize: '0.8125rem' }}>Failed to load image.</div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* ── Address ── */}
-                                    <div>
-                                        <h3 style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1c1917', marginBottom: '0.75rem', marginTop: 0 }}>Contact Information <span style={{ fontSize: '0.75rem', fontWeight: '400', color: '#94a3b8' }}>— printed on PDF quotes</span></h3>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-                                            <div>
-                                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' }}>Street Address</label>
-                                                <input
-                                                    type="text"
-                                                    value={(settings.companyProfile || {}).address || ''}
-                                                    onChange={e => setSettings(prev => ({ ...prev, companyProfile: { ...(prev.companyProfile || {}), address: e.target.value } }))}
-                                                    placeholder="123 Main St, Suite 100, Houston TX 77001"
-                                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' }}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' }}>Phone Number</label>
-                                                <input
-                                                    type="tel"
-                                                    value={(settings.companyProfile || {}).phone || ''}
-                                                    onChange={e => setSettings(prev => ({ ...prev, companyProfile: { ...(prev.companyProfile || {}), phone: e.target.value } }))}
-                                                    placeholder="(555) 000-0000"
-                                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' }}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' }}>PDF Quote Footer Notes <span style={{ fontWeight: '400', color: '#94a3b8' }}>— e.g. payment terms, legal disclaimers</span></label>
-                                                <textarea
-                                                    value={(settings.companyProfile || {}).notes || ''}
-                                                    onChange={e => setSettings(prev => ({ ...prev, companyProfile: { ...(prev.companyProfile || {}), notes: e.target.value } }))}
-                                                    placeholder="All prices in USD. Net 30 payment terms. Quote valid for 30 days..."
-                                                    rows={3}
-                                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* ── PDF preview strip ── */}
-                                    {((settings.companyProfile || {}).address || (settings.companyProfile || {}).phone || (settings.companyProfile || {}).notes) && (
-                                        <div style={{ background: '#1c1917', borderRadius: '8px', padding: '0.875rem 1rem', display: 'flex', alignItems: 'flex-start', gap: '0.875rem' }}>
-                                            {settings.logoUrl && (
-                                                <img src={settings.logoUrl} alt="Logo" style={{ height: '36px', objectFit: 'contain', flexShrink: 0, opacity: 0.9 }} />
-                                            )}
-                                            <div>
-                                                <div style={{ fontSize: '0.625rem', fontWeight: '700', color: '#c8b99a', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>PDF Quote Header Preview</div>
-                                                {(settings.companyProfile || {}).address && <div style={{ fontSize: '0.75rem', color: '#f5f1eb' }}>📍 {settings.companyProfile.address}</div>}
-                                                {(settings.companyProfile || {}).phone && <div style={{ fontSize: '0.75rem', color: '#f5f1eb' }}>📞 {settings.companyProfile.phone}</div>}
-                                                {(settings.companyProfile || {}).notes && <div style={{ fontSize: '0.6875rem', color: '#a8a29e', marginTop: '0.25rem', fontStyle: 'italic' }}>{settings.companyProfile.notes}</div>}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        
-                            <SaveCancelBar />
-                        </div>
-                    )}
-
-
-
-                    {settingsView === 'users' && (
-                        <div className="table-container">
-                            <div className="table-header">
-                                <button 
-                                    className="btn btn-secondary" 
-                                    onClick={goBackToMenu}
-                                    style={{ marginRight: '1rem' }}
-                                >
-                                    ← Back
-                                </button>
-                                <h2>MANAGE USERS</h2>
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <button className="btn btn-secondary" onClick={() => { setInviteResult(null); setShowInviteModal(true); }}>📧 Invite User</button>
-                                    <button className="btn" onClick={handleAddUser}>+ ADD USER</button>
-                                </div>
-                            </div>
-                            <div style={{ padding: '1.5rem' }}>
-                                {(settings.users || []).length === 0 ? (
-                                    <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
-                                        No users yet. Click "+ ADD USER" to create one.
-                                    </div>
-                                ) : (
-                                    <div style={{ display: 'grid', gap: '1rem' }}>
-                                        {(settings.users || []).map(user => (
-                                            <div key={user.id} style={{
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'flex-start',
-                                                padding: '1rem',
-                                                border: '1px solid #e2e8f0',
-                                                borderRadius: '8px',
-                                                background: '#ffffff'
-                                            }}>
-                                                <div style={{ flex: 1 }}>
-                                                    <div style={{ 
-                                                        fontWeight: '700', 
-                                                        fontSize: '1rem',
-                                                        color: '#1e293b',
-                                                        marginBottom: '0.25rem',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '0.5rem'
-                                                    }}>
-                                                        {user.name}
-                                                        {(user.id || '').startsWith('pending_') && (
-                                                            <span style={{ fontSize: '0.625rem', fontWeight: '700', padding: '0.125rem 0.5rem', borderRadius: '10px', background: '#fef9c3', color: '#854d0e', border: '1px solid #fde047', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                                                                Pending
-                                                            </span>
-                                                        )}
-                                                        <span style={{
-                                                            fontSize: '0.6875rem',
-                                                            fontWeight: '600',
-                                                            padding: '0.125rem 0.5rem',
-                                                            borderRadius: '10px',
-                                                            background: (user.userType || 'User') === 'Admin' ? '#eff6ff' : (user.userType || 'User') === 'Manager' ? '#ecfdf5' : (user.userType || 'User') === 'ReadOnly' ? '#f1f5f9' : '#f1f3f5',
-                                                            color: (user.userType || 'User') === 'Admin' ? '#2563eb' : (user.userType || 'User') === 'Manager' ? '#059669' : (user.userType || 'User') === 'ReadOnly' ? '#94a3b8' : '#64748b',
-                                                            border: (user.userType || 'User') === 'Admin' ? '1px solid #bfdbfe' : (user.userType || 'User') === 'Manager' ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
-                                                            textTransform: 'uppercase',
-                                                            letterSpacing: '0.03em'
-                                                        }}>
-                                                            {(user.userType || 'User') === 'User' ? 'Sales Rep' : (user.userType || 'User') === 'ReadOnly' ? 'Read-Only' : user.userType || 'Sales Rep'}
-                                                        </span>
-                                                    </div>
-                                                    <div style={{ 
-                                                        color: '#64748b',
-                                                        fontSize: '0.875rem'
-                                                    }}>
-                                                        {user.email}
-                                                        {user.role && <span> • {user.role}</span>}
-                                                    </div>
-                                                    {(user.territory || user.team) && (
-                                                        <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginTop: '0.375rem' }}>
-                                                            {user.territory && (
-                                                                <span style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '0.1rem 0.5rem', borderRadius: '999px', fontSize: '0.625rem', fontWeight: '700' }}>
-                                                                    📍 {user.territory}
-                                                                </span>
-                                                            )}
-                                                            {user.team && (
-                                                                <span style={{ background: '#ede9fe', color: '#5b21b6', border: '1px solid #ddd6fe', padding: '0.1rem 0.5rem', borderRadius: '999px', fontSize: '0.625rem', fontWeight: '700' }}>
-                                                                    👥 {user.team}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                    {(user.workPhone || user.cellPhone) && (
-                                                        <div style={{ 
-                                                            color: '#64748b',
-                                                            fontSize: '0.8125rem',
-                                                            marginTop: '0.25rem'
-                                                        }}>
-                                                            {user.workPhone && <span>Work: {user.workPhone}</span>}
-                                                            {user.workPhone && user.cellPhone && <span> • </span>}
-                                                            {user.cellPhone && <span>Cell: {user.cellPhone}</span>}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <div className="action-buttons">
-                                                    {userRole === 'Admin' && user.email && (
-                                                        <button className="action-btn" onClick={() => {
-                                                            setInviteForm({ name: user.name, email: user.email, role: user.userType || user.role || 'User', team: user.team || '', territory: user.territory || '' });
-                                                            setInviteResult(null);
-                                                            setShowInviteModal(true);
-                                                        }}>📧 Invite</button>
-                                                    )}
-                                                    <button className="action-btn" onClick={() => handleEditUser(user)}>Edit</button>
-                                                    <button className="action-btn delete" onClick={() => handleDeleteUser(user.id)}>Delete</button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                            <SaveCancelBar />
-                        </div>
-                    )}
-
-                    {settingsView === 'team-builder' && (
-                        <TeamBuilder
-                            onBack={goBackToMenu}
-                            onSave={handleSaveView}
-                            onCancel={handleCancelView}
-                        />
-                    )}
-                    {settingsView === 'territories' && (
-                        <TerritoriesSettings
-                            onBack={goBackToMenu}
-                            onSave={handleSaveView}
-                            onCancel={handleCancelView}
-                        />
-                    )}
-                    {settingsView === 'verticals' && (
-                        <VerticalsSettings
-                            onBack={goBackToMenu}
-                            onSave={handleSaveView}
-                            onCancel={handleCancelView}
-                        />
-                    )}
-
-                    {settingsView === 'pain-points' && (
-                        <div className="table-container">
-                            <div className="table-header">
-                                <button 
-                                    className="btn btn-secondary" 
-                                    onClick={goBackToMenu}
-                                    style={{ marginRight: '1rem' }}
-                                >
-                                    ← Back
-                                </button>
-                                <h2>PAIN POINTS LIBRARY</h2>
-                            </div>
-                            <div style={{ padding: '1.5rem' }}>
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>
-                                        Add New Pain Point
-                                    </h3>
-                                    <div style={{ display: 'flex', gap: '0.5rem', maxWidth: isMobile ? '100%' : '500px' }}>
-                                        <input
-                                            type="text"
-                                            value={newPainPointInput}
-                                            onChange={(e) => setNewPainPointInput(e.target.value)}
-                                            placeholder="Enter new pain point..."
-                                            style={{ flex: 1, background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.5rem 0.75rem', color: '#1c1917', fontSize: '0.875rem', fontFamily: 'inherit', outline: 'none' }}
-                                            onKeyPress={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    const value = newPainPointInput.trim();
-                                                    if (value && !(settings.painPoints || []).includes(value)) {
-                                                        setSettings(prev => ({
-                                                            ...prev,
-                                                            painPoints: [...(prev.painPoints || []), value].sort((a, b) => a.localeCompare(b))
-                                                        }));
-                                                        setNewPainPointInput('');
-                                                    }
-                                                }
-                                            }}
-                                        />
-                                        <button
-                                            className="btn"
-                                            onClick={() => {
-                                                const value = newPainPointInput.trim();
-                                                if (value && !(settings.painPoints || []).includes(value)) {
-                                                    setSettings(prev => ({
-                                                        ...prev,
-                                                        painPoints: [...(prev.painPoints || []), value].sort((a, b) => a.localeCompare(b))
-                                                    }));
-                                                    setNewPainPointInput('');
-                                                }
-                                            }}
-                                        >
-                                            + ADD
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '0.75rem' }}>
-                                        Pain Points ({(settings.painPoints || []).length}) <span style={{ fontSize: '0.75rem', fontWeight: '400', color: '#94a3b8' }}>— sorted A–Z</span>
-                                    </h3>
-                                    {(settings.painPoints || []).length === 0 ? (
-                                        <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b', background: '#f0ece4', borderRadius: '8px' }}>
-                                            No pain points yet. Add one above to get started.
-                                        </div>
-                                    ) : (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0', border: '1px solid #e5e2db', borderRadius: '8px', overflow: 'hidden' }}>
-                                            {[...(settings.painPoints || [])].sort((a, b) => a.localeCompare(b)).map((painPoint, idx, arr) => (
-                                                <div key={painPoint} style={{
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                                    padding: '0.625rem 0.875rem',
-                                                    borderBottom: idx < arr.length - 1 ? '1px solid #f0ece4' : 'none',
-                                                    background: idx % 2 === 0 ? '#ffffff' : '#fafaf9',
-                                                }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                                                        <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#c8b99a', minWidth: '20px', textAlign: 'right' }}>{idx + 1}</span>
-                                                        <span style={{ fontSize: '0.875rem', fontWeight: '500', color: '#1c1917' }}>{painPoint}</span>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => {
-                                                            showConfirm(`Remove "${painPoint}" from pain points library?`, () => {
-                                                                setSettings(prev => ({
-                                                                    ...prev,
-                                                                    painPoints: (prev.painPoints || []).filter(p => p !== painPoint)
-                                                                }));
-                                                            });
-                                                        }}
-                                                        style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '1rem', padding: '0.125rem 0.375rem', lineHeight: 1, borderRadius: '4px', fontFamily: 'inherit' }}
-                                                        onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; }}
-                                                        onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-                                                    >
-                                                        ×
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        
-                            <SaveCancelBar />
-                        </div>
-                    )}
-
-                    {/* ── Customer Types (admin-only) ── */}
-                    {settingsView === 'customer-types' && (
-                        !isAdmin ? (
-                            <div className="table-container">
-                                <div className="table-header"><button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button><h2>CUSTOMER TYPES</h2></div>
-                                <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>Admin access required to manage customer types.</div>
-                            </div>
-                        ) : (() => {
-                            const allCt = [...(settings.customerTypes || [])].sort((a, b) => a.localeCompare(b));
-                            return (
-                                <div className="table-container">
-                                    <div className="table-header">
-                                        <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
-                                        <h2>CUSTOMER TYPES</h2>
-                                    </div>
-                                    <div style={{ padding: '1.5rem' }}>
-                                        <p style={{ fontSize: '0.875rem', color: '#78716c', marginBottom: '1.25rem', marginTop: 0 }}>
-                                            Define the classification tags that appear in the Customer Type field on account records. Only admins can manage this list.
-                                        </p>
-                                        <div style={{ marginBottom: '1.5rem' }}>
-                                            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' }}>Add New Type</label>
-                                            <div style={{ display: 'flex', gap: '0.5rem', maxWidth: isMobile ? '100%' : '420px' }}>
-                                                <input
-                                                    type="text"
-                                                    value={newCtInput}
-                                                    onChange={e => setNewCtInput(e.target.value)}
-                                                    placeholder="e.g. Prospect, Partner, Enterprise..."
-                                                    style={{ flex: 1, background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.5rem 0.75rem', color: '#1c1917', fontSize: '0.875rem', fontFamily: 'inherit', outline: 'none' }}
-                                                    onKeyPress={e => {
-                                                        if (e.key === 'Enter') {
-                                                            const v = newCtInput.trim();
-                                                            if (v && !(settings.customerTypes || []).includes(v)) {
-                                                                setSettings(prev => ({ ...prev, customerTypes: [...(prev.customerTypes || []), v] }));
-                                                                setNewCtInput('');
-                                                            }
-                                                        }
-                                                    }}
-                                                />
-                                                <button
-                                                    className="btn"
-                                                    onClick={() => {
-                                                        const v = newCtInput.trim();
-                                                        if (v && !(settings.customerTypes || []).includes(v)) {
-                                                            setSettings(prev => ({ ...prev, customerTypes: [...(prev.customerTypes || []), v] }));
-                                                            setNewCtInput('');
-                                                        }
-                                                    }}
-                                                >+ ADD</button>
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '0.75rem' }}>
-                                                Defined Types ({allCt.length}) <span style={{ fontSize: '0.75rem', fontWeight: '400', color: '#94a3b8' }}>— sorted A–Z</span>
-                                            </h3>
-                                            {allCt.length === 0 ? (
-                                                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b', background: '#f0ece4', borderRadius: '8px', fontSize: '0.875rem' }}>
-                                                    No customer types defined yet. Add one above.
-                                                </div>
-                                            ) : (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid #e5e2db', borderRadius: '8px', overflow: 'hidden' }}>
-                                                    {allCt.map((ct, idx, arr) => (
-                                                        <div key={ct} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0.875rem', borderBottom: idx < arr.length - 1 ? '1px solid #f0ece4' : 'none', background: idx % 2 === 0 ? '#ffffff' : '#fafaf9' }}>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                                                                <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#c8b99a', minWidth: '20px', textAlign: 'right' }}>{idx + 1}</span>
-                                                                <span style={{ display: 'inline-block', background: '#1c1917', color: '#f5f1eb', borderRadius: '4px', padding: '0.2rem 0.625rem', fontSize: '0.75rem', fontWeight: '600' }}>{ct}</span>
-                                                            </div>
-                                                            <button
-                                                                onClick={() => showConfirm(`Remove "${ct}" from customer types?`, () => {
-                                                                    setSettings(prev => ({ ...prev, customerTypes: (prev.customerTypes || []).filter(t => t !== ct) }));
-                                                                })}
-                                                                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '1rem', padding: '0.125rem 0.375rem', lineHeight: 1, borderRadius: '4px', fontFamily: 'inherit' }}
-                                                                onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; }}
-                                                                onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-                                                            >×</button>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <SaveCancelBar />
-                                </div>
-                            );
-                        })()
-                    )}
-
-
-
-                    {settingsView === 'vertical-markets' && (
-                        <div className="table-container">
-                            <div className="table-header">
-                                <button 
-                                    className="btn btn-secondary" 
-                                    onClick={goBackToMenu}
-                                    style={{ marginRight: '1rem' }}
-                                >
-                                    ← Back
-                                </button>
-                                <h2>INDUSTRIES</h2>
-                            </div>
-                            <div style={{ padding: '1.5rem' }}>
-                                {(() => {
-                                    const rawList = settings.verticalMarkets || [];
-                                    const industries = rawList.map(m => typeof m === 'string' ? { name: m, subs: [] } : m);
-                                    const saveIndustries = (updated) => setSettings(prev => ({ ...prev, verticalMarkets: updated }));
-                                    return (
-                                        <>
-                                        <div style={{ marginBottom: '2rem' }}>
-                                            <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>Add Primary Industry</h3>
-                                            <div style={{ display: 'flex', gap: '0.5rem', maxWidth: isMobile ? '100%' : '500px' }}>
-                                                <input type="text" value={newVerticalMarketInput} onChange={e => setNewVerticalMarketInput(e.target.value)} placeholder="e.g. Oil & Gas, Manufacturing..."
-                                                    style={{ flex: 1, background: '#f8f9fa', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.625rem 0.75rem', color: '#1e293b', fontSize: '0.875rem' }}
-                                                    onKeyPress={e => { if (e.key === 'Enter') { const v = newVerticalMarketInput.trim(); if (v && !industries.some(i => i.name.toLowerCase() === v.toLowerCase())) { saveIndustries([...industries, { name: v, subs: [] }]); setNewVerticalMarketInput(''); } } }} />
-                                                <button className="btn" onClick={() => { const v = newVerticalMarketInput.trim(); if (v && !industries.some(i => i.name.toLowerCase() === v.toLowerCase())) { saveIndustries([...industries, { name: v, subs: [] }]); setNewVerticalMarketInput(''); } }}>+ Add</button>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>Industries ({industries.length})</h3>
-                                            {industries.length === 0 ? (
-                                                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b', background: '#f1f3f5', borderRadius: '8px' }}>No industries yet. Add one above to get started.</div>
-                                            ) : (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                    {[...industries].sort((a, b) => a.name.localeCompare(b.name)).map((industry) => {
-                                                        const realIdx = industries.findIndex(i => i.name === industry.name);
-                                                        const isExpanded = expandedIndustry === industry.name;
-                                                        return (
-                                                            <div key={industry.name} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center', padding: '0.625rem 1rem', gap: '0.5rem' }}>
-                                                                    <button onClick={() => setExpandedIndustry(isExpanded ? null : industry.name)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: '#2563eb', padding: '0', width: '16px', flexShrink: 0 }}>{isExpanded ? '▼' : '▶'}</button>
-                                                                    <span style={{ fontWeight: '600', fontSize: '0.875rem', flex: 1 }}>{industry.name}</span>
-                                                                    {industry.subs.length > 0 && <span style={{ fontSize: '0.6875rem', color: '#94a3b8', background: '#f1f5f9', padding: '1px 6px', borderRadius: '999px' }}>{industry.subs.length} sub{industry.subs.length > 1 ? 's' : ''}</span>}
-                                                                    <button onClick={() => setExpandedIndustry(isExpanded ? null : industry.name)} style={{ fontSize: '0.6875rem', fontWeight: '600', color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer', fontFamily: 'inherit' }}>+ Sub</button>
-                                                                    <button onClick={() => showConfirm(`Remove "${industry.name}" and all its sub-industries?`, () => { saveIndustries(industries.filter((_, i) => i !== realIdx)); if (expandedIndustry === industry.name) setExpandedIndustry(null); })} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '1rem', padding: '0 0 0 4px', lineHeight: 1 }}>×</button>
-                                                                </div>
-                                                                {isExpanded && (
-                                                                    <div style={{ borderTop: '1px solid #f1f5f9', background: '#f8fafc', padding: '0.625rem 1rem 0.625rem 2.5rem' }}>
-                                                                        {industry.subs.length > 0 && (
-                                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '0.5rem' }}>
-                                                                                {industry.subs.map((sub, si) => (
-                                                                                    <div key={si} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8125rem' }}>
-                                                                                        <span style={{ color: '#94a3b8' }}>↳</span>
-                                                                                        <span style={{ flex: 1, color: '#475569' }}>{sub}</span>
-                                                                                        <button onClick={() => { const updated = industries.map((ind, i) => i === realIdx ? { ...ind, subs: ind.subs.filter((_, j) => j !== si) } : ind); saveIndustries(updated); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.875rem', padding: '0', lineHeight: 1 }}>×</button>
-                                                                                    </div>
-                                                                                ))}
-                                                                            </div>
-                                                                        )}
-                                                                        <div style={{ display: 'flex', gap: '0.375rem' }}>
-                                                                            <input type="text" value={newSubIndustryInput} onChange={e => setNewSubIndustryInput(e.target.value)} placeholder={`Add sub-industry under ${industry.name}...`}
-                                                                                style={{ flex: 1, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '5px', padding: '0.375rem 0.625rem', fontSize: '0.8125rem', color: '#1e293b' }}
-                                                                                onKeyPress={e => { if (e.key === 'Enter') { const v = newSubIndustryInput.trim(); if (v && !industry.subs.includes(v)) { saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind)); setNewSubIndustryInput(''); } } }} />
-                                                                            <button onClick={() => { const v = newSubIndustryInput.trim(); if (v && !industry.subs.includes(v)) { saveIndustries(industries.map((ind, i) => i === realIdx ? { ...ind, subs: [...ind.subs, v] } : ind)); setNewSubIndustryInput(''); } }} style={{ padding: '0.375rem 0.75rem', background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '5px', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Add</button>
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
-                                        </div>
-                                        </>
-                                    );
-                                })()}
-                            </div>
-                        
-                            <SaveCancelBar />
-</div>
-                    )}
-
-                    {settingsView === 'funnel-stages' && (
-                        <div className="table-container">
-                            <div className="table-header">
-                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
-                                <h2>SALES FUNNEL STAGES</h2>
-                            </div>
-                            <div style={{ padding: '1.5rem', maxWidth: isMobile ? '100%' : '650px' }}>
-                                <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
-                                    Configure your sales funnel stages and their win probability weightings. These weightings are used to calculate weighted pipeline values in analytics and forecasting.
-                                </p>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem', marginBottom: '1rem' }}>
-                                    <thead>
-                                        <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
-                                            <th style={{ padding: '0.625rem 0.5rem', textAlign: 'left', fontWeight: '700', color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase' }}>Stage Name</th>
-                                            <th style={{ padding: '0.625rem 0.5rem', textAlign: 'center', fontWeight: '700', color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', width: '120px' }}>Win Probability %</th>
-                                            <th style={{ padding: '0.625rem 0.5rem', textAlign: 'center', fontWeight: '700', color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', width: '60px' }}>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {(settings.funnelStages || []).map((stage, idx) => (
-                                            <tr key={idx} style={{ borderBottom: '1px solid #f1f3f5' }}>
-                                                <td style={{ padding: '0.5rem' }}>
-                                                    <input type="text" value={stage.name} onChange={e => {
-                                                        const updated = [...(settings.funnelStages || [])];
-                                                        updated[idx] = { ...updated[idx], name: e.target.value };
-                                                        setSettings(prev => ({ ...prev, funnelStages: updated }));
-                                                    }} style={{ width: '100%', padding: '0.5rem 0.625rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.875rem', fontFamily: 'inherit' }} />
-                                                </td>
-                                                <td style={{ padding: '0.5rem', textAlign: 'center' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', justifyContent: 'center' }}>
-                                                        <input type="number" min="0" max="100" value={stage.weight} onChange={e => {
-                                                            const updated = [...(settings.funnelStages || [])];
-                                                            updated[idx] = { ...updated[idx], weight: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) };
-                                                            setSettings(prev => ({ ...prev, funnelStages: updated }));
-                                                        }} style={{ width: '65px', padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '0.875rem', textAlign: 'center', fontFamily: 'inherit' }} />
-                                                        <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>%</span>
-                                                    </div>
-                                                </td>
-                                                <td style={{ padding: '0.5rem', textAlign: 'center' }}>
-                                                    {(settings.funnelStages || []).length > 2 && (
-                                                        <button onClick={() => setSettings(prev => ({ ...prev, funnelStages: (prev.funnelStages || []).filter((_, i) => i !== idx) }))}
-                                                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.125rem', padding: '0 0.25rem' }}>×</button>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                                <button onClick={() => setSettings(prev => ({ ...prev, funnelStages: [...(prev.funnelStages || []), { name: '', weight: 0 }] }))}
-                                    style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px', padding: '0.5rem 1rem', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: '600', color: '#2563eb', fontFamily: 'inherit' }}>
-                                    + Add Stage
-                                </button>
-                                <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                    <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Funnel Preview</div>
-                                    {(settings.funnelStages || []).filter(s => s.name.trim()).map((stage, idx, arr) => {
-                                        const widthPct = 100 - (idx * (60 / Math.max(arr.length - 1, 1)));
-                                        const colors = ['#6366f1', '#818cf8', '#a78bfa', '#c084fc', '#3b82f6', '#2563eb', '#10b981', '#ef4444'];
-                                        return (
-                                            <div key={idx} style={{ display: 'flex', alignItems: 'center', marginBottom: '0.25rem' }}>
-                                                <div style={{
-                                                    width: widthPct + '%', margin: '0 auto', padding: '0.375rem 0.75rem',
-                                                    background: colors[idx % colors.length] + '18', border: '1px solid ' + colors[idx % colors.length] + '40',
-                                                    borderRadius: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                                    fontSize: '0.75rem', color: '#1e293b'
-                                                }}>
-                                                    <span style={{ fontWeight: '600' }}>{stage.name}</span>
-                                                    <span style={{ color: '#64748b' }}>{stage.weight}%</span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        
-                            <SaveCancelBar />
-</div>
-                    )}
-
-                    {settingsView === 'pipelines' && (
-                        <PipelinesSettingsPanel
-                            settings={settings}
-                            setSettings={setSettings}
-                            opportunities={opportunities}
-                            activePipelineId={activePipelineId}
-                            setActivePipelineId={setActivePipelineId}
-                            onBack={goBackToMenu}
-                            onSave={handleSaveView}
-                            onCancel={handleCancelView}
-                        />
-                    )}
-
-                    {settingsView === 'kpi-settings' && (
-                        <div className="table-container">
-                            <div className="table-header">
-                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
-                                <h2>KPI SETTINGS</h2>
-                            </div>
-                            <div style={{ padding: '1.5rem' }}>
-                                <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-                                    Configure your KPI cards. Set color indicators and tolerance thresholds to visually track performance.
-                                </p>
-
-                                {/* KPI Trend Mode */}
-                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
-                                    <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1e293b', marginBottom: '0.375rem' }}>Sparkline Trend Mode</div>
-                                    <div style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '1rem' }}>Controls what the sparklines on KPI cards visualize.</div>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                        {[
-                                            { value: 'stage-distribution', label: 'Stage Distribution', desc: 'Revenue/count across funnel stages' },
-                                            { value: 'month-over-month', label: 'Month over Month', desc: 'Last 6 months of close dates' },
-                                            { value: 'quarter-over-quarter', label: 'Quarter over Quarter', desc: 'Last 4 quarters' },
-                                            { value: 'year-to-date', label: 'Year to Date', desc: 'Monthly buckets since Jan 1' },
-                                            { value: 'year-over-year', label: 'Year over Year', desc: 'This year vs last year delta' },
-                                        ].map(opt => {
-                                            const active = (settings.kpiTrendMode || 'stage-distribution') === opt.value;
-                                            return (
-                                                <div key={opt.value} onClick={() => setSettings(prev => ({ ...prev, kpiTrendMode: opt.value }))}
-                                                    style={{ padding: '0.625rem 1rem', borderRadius: '8px', border: active ? '2px solid #2563eb' : '1px solid #e2e8f0', background: active ? '#eff6ff' : '#fff', cursor: 'pointer', minWidth: '160px', transition: 'all 0.15s' }}>
-                                                    <div style={{ fontWeight: '600', fontSize: '0.8125rem', color: active ? '#2563eb' : '#1e293b' }}>{opt.label}</div>
-                                                    <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '2px' }}>{opt.desc}</div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                {(settings.kpiConfig || []).map((kpi, kIdx) => {
-                                    const colorOptions = [
-                                        { value: 'primary', label: 'Blue', swatch: '#2563eb' },
-                                        { value: 'success', label: 'Green', swatch: '#16a34a' },
-                                        { value: 'warning', label: 'Amber', swatch: '#f59e0b' },
-                                        { value: 'info', label: 'Indigo', swatch: '#6366f1' },
-                                        { value: 'neutral', label: 'Gray', swatch: '#475569' }
-                                    ];
-
-                                    // KPIs that support quota-relative thresholds
-                                    const QUOTA_RELATIVE_IDS = ['totalPipelineARR', 'nextQForecast', 'quota'];
-                                    const supportsQuotaPct = QUOTA_RELATIVE_IDS.includes(kpi.id);
-                                    const isQuotaPct = supportsQuotaPct && kpi.thresholdType === 'percent_of_quota';
-
-                                    return (
-                                        <div key={kpi.id} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1.25rem', marginBottom: '1rem', background: '#ffffff' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                    <input type="text" value={kpi.name}
-                                                        onChange={e => {
-                                                            const updated = [...(settings.kpiConfig || [])];
-                                                            updated[kIdx] = { ...updated[kIdx], name: e.target.value };
-                                                            setSettings(prev => ({ ...prev, kpiConfig: updated }));
-                                                        }}
-                                                        style={{ fontWeight: '700', fontSize: '1rem', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '0.375rem 0.75rem', fontFamily: 'inherit', width: '280px' }}
-                                                    />
-                                                    <div style={{ display: 'flex', gap: '0.25rem' }}>
-                                                        {colorOptions.map(co => (
-                                                            <div key={co.value}
-                                                                onClick={() => {
-                                                                    const updated = [...(settings.kpiConfig || [])];
-                                                                    updated[kIdx] = { ...updated[kIdx], color: co.value };
-                                                                    setSettings(prev => ({ ...prev, kpiConfig: updated }));
-                                                                }}
-                                                                title={co.label}
-                                                                style={{
-                                                                    width: '22px', height: '22px', borderRadius: '50%', background: co.swatch,
-                                                                    cursor: 'pointer', border: kpi.color === co.value ? '3px solid #1e293b' : '2px solid #e2e8f0',
-                                                                    transition: 'all 0.15s'
-                                                                }}
-                                                            />
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                                <button onClick={() => {
-                                                    const updated = (settings.kpiConfig || []).filter((_, i) => i !== kIdx);
-                                                    setSettings(prev => ({ ...prev, kpiConfig: updated }));
-                                                }}
-                                                    style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '6px', padding: '0.375rem 0.75rem', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: '600', fontFamily: 'inherit' }}
-                                                >Delete</button>
-                                            </div>
-
-                                            {/* ── Threshold type toggle (quota-relative KPIs only) ── */}
-                                            {supportsQuotaPct && (
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', padding: '0.625rem 0.875rem', background: isQuotaPct ? '#eff6ff' : '#f8fafc', border: `1px solid ${isQuotaPct ? '#bfdbfe' : '#e2e8f0'}`, borderRadius: '8px', transition: 'all 0.2s' }}>
-                                                    <div
-                                                        onClick={() => {
-                                                            const updated = [...(settings.kpiConfig || [])];
-                                                            const next = isQuotaPct ? 'value' : 'percent_of_quota';
-                                                            updated[kIdx] = { ...updated[kIdx], thresholdType: next };
-                                                            setSettings(prev => ({ ...prev, kpiConfig: updated }));
-                                                        }}
-                                                        style={{ width: '36px', height: '20px', borderRadius: '999px', background: isQuotaPct ? '#2563eb' : '#d6d3ce', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background 0.2s' }}
-                                                    >
-                                                        <div style={{ position: 'absolute', width: '14px', height: '14px', background: '#fff', borderRadius: '50%', top: '3px', left: isQuotaPct ? '19px' : '3px', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-                                                    </div>
-                                                    <div>
-                                                        <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: isQuotaPct ? '#2563eb' : '#57534e' }}>
-                                                            {isQuotaPct ? '% of Assigned Quota' : 'Fixed Dollar Value'}
-                                                        </div>
-                                                        <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '1px' }}>
-                                                            {isQuotaPct
-                                                                ? 'Thresholds are calculated as a percentage of each rep\'s annual quota'
-                                                                : 'Toggle to use quota-relative thresholds instead of fixed amounts'}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Tolerances */}
-                                            <div style={{ background: '#f8fafc', borderRadius: '6px', padding: '0.75rem', border: '1px solid #f1f3f5' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                                    <div>
-                                                        <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Tolerance Thresholds</span>
-                                                        {isQuotaPct && (
-                                                            <span style={{ marginLeft: '0.5rem', fontSize: '0.6875rem', fontWeight: '600', color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '0.1rem 0.4rem' }}>% of quota</span>
-                                                        )}
-                                                    </div>
-                                                    <button onClick={() => {
-                                                        const updated = [...(settings.kpiConfig || [])];
-                                                        const tols = [...(updated[kIdx].tolerances || [])];
-                                                        tols.push({ label: 'New Level', min: isQuotaPct ? 100 : 0, color: '#64748b' });
-                                                        updated[kIdx] = { ...updated[kIdx], tolerances: tols };
-                                                        setSettings(prev => ({ ...prev, kpiConfig: updated }));
-                                                    }}
-                                                        style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '4px', padding: '0.25rem 0.625rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '600', fontFamily: 'inherit' }}
-                                                    >+ Add</button>
-                                                </div>
-                                                {(!kpi.tolerances || kpi.tolerances.length === 0) ? (
-                                                    <div style={{ textAlign: 'center', padding: '0.75rem', color: '#94a3b8', fontSize: '0.8125rem' }}>No tolerances set. Add thresholds to show color indicators.</div>
-                                                ) : (
-                                                    <div style={{ display: 'grid', gap: '0.5rem' }}>
-                                                        {(kpi.tolerances || []).map((tol, tIdx) => (
-                                                            <div key={tIdx} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#ffffff', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                                                <input type="color" value={tol.color || '#64748b'}
-                                                                    onChange={e => {
-                                                                        const updated = [...(settings.kpiConfig || [])];
-                                                                        const tols = [...(updated[kIdx].tolerances || [])];
-                                                                        tols[tIdx] = { ...tols[tIdx], color: e.target.value };
-                                                                        updated[kIdx] = { ...updated[kIdx], tolerances: tols };
-                                                                        setSettings(prev => ({ ...prev, kpiConfig: updated }));
-                                                                    }}
-                                                                    style={{ width: '32px', height: '28px', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: 0 }}
-                                                                />
-                                                                <input type="text" value={tol.label || ''} placeholder="Label"
-                                                                    onChange={e => {
-                                                                        const updated = [...(settings.kpiConfig || [])];
-                                                                        const tols = [...(updated[kIdx].tolerances || [])];
-                                                                        tols[tIdx] = { ...tols[tIdx], label: e.target.value };
-                                                                        updated[kIdx] = { ...updated[kIdx], tolerances: tols };
-                                                                        setSettings(prev => ({ ...prev, kpiConfig: updated }));
-                                                                    }}
-                                                                    style={{ flex: 1, border: '1px solid #e2e8f0', borderRadius: '4px', padding: '0.3rem 0.5rem', fontSize: '0.8125rem', fontFamily: 'inherit' }}
-                                                                />
-                                                                <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600', whiteSpace: 'nowrap' }}>≥</span>
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                                                    <input
-                                                                        key={`tol-min-${kIdx}-${tIdx}`}
-                                                                        type="number"
-                                                                        defaultValue={tol.min}
-                                                                        placeholder={isQuotaPct ? '% of quota' : 'Min value'}
-                                                                        onBlur={e => {
-                                                                            const coerced = parseFloat(e.target.value);
-                                                                            const updated = [...(settings.kpiConfig || [])];
-                                                                            const tols = [...(updated[kIdx].tolerances || [])];
-                                                                            tols[tIdx] = { ...tols[tIdx], min: isNaN(coerced) ? 0 : coerced };
-                                                                            updated[kIdx] = { ...updated[kIdx], tolerances: tols };
-                                                                            setSettings(prev => ({ ...prev, kpiConfig: updated }));
-                                                                        }}
-                                                                        style={{ width: isQuotaPct ? '72px' : '100px', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '0.3rem 0.5rem', fontSize: '0.8125rem', fontFamily: 'inherit' }}
-                                                                    />
-                                                                    {isQuotaPct && (
-                                                                        <span style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#2563eb', whiteSpace: 'nowrap' }}>%</span>
-                                                                    )}
-                                                                </div>
-                                                                <button onClick={() => {
-                                                                    const updated = [...(settings.kpiConfig || [])];
-                                                                    const tols = [...(updated[kIdx].tolerances || [])].filter((_, i) => i !== tIdx);
-                                                                    updated[kIdx] = { ...updated[kIdx], tolerances: tols };
-                                                                    setSettings(prev => ({ ...prev, kpiConfig: updated }));
-                                                                }}
-                                                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem', fontWeight: '700', padding: '0 0.25rem' }}
-                                                                >×</button>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-
-                                <button onClick={() => {
-                                    const kpiConfig = [...(settings.kpiConfig || [])];
-                                    kpiConfig.push({
-                                        id: 'kpi_' + Date.now(),
-                                        name: 'New KPI',
-                                        color: 'primary',
-                                        tolerances: [
-                                            { label: 'Good', min: 100, color: '#16a34a' },
-                                            { label: 'Warning', min: 50, color: '#f59e0b' },
-                                            { label: 'Critical', min: 0, color: '#ef4444' }
-                                        ]
-                                    });
-                                    setSettings(prev => ({ ...prev, kpiConfig }));
-                                }}
-                                    style={{ width: '100%', padding: '1rem', border: '2px dashed #d1d5db', borderRadius: '8px', background: '#f8fafc', cursor: 'pointer', fontSize: '0.9375rem', fontWeight: '600', color: '#64748b', fontFamily: 'inherit', transition: 'all 0.2s' }}
-                                    onMouseEnter={e => { e.target.style.borderColor = '#2563eb'; e.target.style.color = '#2563eb'; }}
-                                    onMouseLeave={e => { e.target.style.borderColor = '#d1d5db'; e.target.style.color = '#64748b'; }}
-                                >+ Add New KPI</button>
-                            </div>
-                        
-                            <SaveCancelBar />
-</div>
-                    )}
-
-                    {settingsView === 'features' && (
-                        <div className="table-container">
-                            <div className="table-header">
-                                <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
-                                <h2>FEATURES</h2>
-                            </div>
-                            <div style={{ padding: '1.5rem', maxWidth: isMobile ? '100%' : '560px' }}>
-                                <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1.5rem', lineHeight: '1.6' }}>
-                                    Enable or disable features for your organization. Disabled features are hidden from the navigation and reports.
-                                </p>
-                                {/* Leads toggle */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', marginBottom: '0.75rem' }}>
-                                    <div>
-                                        <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1e293b', marginBottom: '0.25rem' }}>Leads</div>
-                                        <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>Show the Leads tab and leads-related reports. Disable for teams that manage leads outside the app.</div>
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1.5rem', flexShrink: 0 }}>
-                                        <button
-                                            onClick={() => {
-                                                const next = !(settings.leadsEnabled !== false);
-                                                setSettings(prev => ({ ...prev, leadsEnabled: next }));
-                                                dbFetch('/.netlify/functions/settings', {
-                                                    method: 'PUT',
-                                                    body: JSON.stringify({ leadsEnabled: next }),
-                                                }).catch(err => console.error('Failed to save leadsEnabled:', err));
-                                            }}
-                                            style={{ width: '44px', height: '24px', borderRadius: '999px', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', background: settings.leadsEnabled !== false ? '#2563eb' : '#e2e8f0', border: 'none', padding: 0, flexShrink: 0 }}>
-                                            <div style={{ position: 'absolute', width: '18px', height: '18px', background: '#fff', borderRadius: '50%', top: '3px', transition: 'left 0.2s', left: settings.leadsEnabled !== false ? '23px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-                                        </button>
-                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: settings.leadsEnabled !== false ? '#2563eb' : '#94a3b8', minWidth: '28px' }}>
-                                            {settings.leadsEnabled !== false ? 'On' : 'Off'}
-                                        </span>
-                                    </div>
-                                </div>
-                                {/* Quotes toggle */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', marginBottom: '0.75rem' }}>
-                                    <div>
-                                        <div style={{ fontWeight: '700', fontSize: '0.9375rem', color: '#1e293b', marginBottom: '0.25rem' }}>Quotes</div>
-                                        <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>Enable the Quotes tab — price book, CPQ-style quote builder, versioning, approvals, and revenue sync to opportunities.</div>
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1.5rem', flexShrink: 0 }}>
-                                        <button
-                                            onClick={() => {
-                                                const next = !(settings.quotesEnabled === true);
-                                                setSettings(prev => ({ ...prev, quotesEnabled: next }));
-                                                dbFetch('/.netlify/functions/settings', {
-                                                    method: 'PUT',
-                                                    body: JSON.stringify({ quotesEnabled: next }),
-                                                }).catch(err => console.error('Failed to save quotesEnabled:', err));
-                                            }}
-                                            style={{ width: '44px', height: '24px', borderRadius: '999px', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', background: settings.quotesEnabled === true ? '#2563eb' : '#e2e8f0', border: 'none', padding: 0, flexShrink: 0 }}>
-                                            <div style={{ position: 'absolute', width: '18px', height: '18px', background: '#fff', borderRadius: '50%', top: '3px', transition: 'left 0.2s', left: settings.quotesEnabled === true ? '23px' : '3px', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-                                        </button>
-                                        <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: settings.quotesEnabled === true ? '#2563eb' : '#94a3b8', minWidth: '28px' }}>
-                                            {settings.quotesEnabled === true ? 'On' : 'Off'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                            <SaveCancelBar />
-                        </div>
-                    )}
-
-                    {settingsView === 'ai-features' && (
-                        <div className="table-container">
-                            <div className="table-header">
-                                <button className="btn" onClick={goBackToMenu}>← Back</button>
-                                <h2>AI FEATURES</h2>
-                            </div>
-                            <div style={{ padding: '1.5rem', maxWidth: isMobile ? '100%' : '560px' }}>
-
-                                {/* Privacy notice */}
-                                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                                    <div style={{ fontSize: '1.25rem', flexShrink: 0, lineHeight: 1 }}>🔒</div>
-                                    <div>
-                                        <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#c2410c', marginBottom: '4px' }}>Data privacy notice</div>
-                                        <div style={{ fontSize: '0.75rem', color: '#92400e', lineHeight: 1.6 }}>
-                                            When AI deal scoring is enabled, deal data (account name, stage, Revenue, activity summaries, and contact names) is sent to Anthropic's API to generate scores. No data is stored by Anthropic beyond the request. Disable this feature if your organization has data residency or confidentiality requirements that prevent sending deal data to third-party AI services.
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* AI Scoring toggle */}
-                                <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '1.5rem' }}>
-                                    <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                                        <div>
-                                            <div style={{ fontSize: '0.875rem', fontWeight: '700', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <span>🤖</span> AI deal scoring
-                                                {(settings.aiScoringEnabled) && (
-                                                    <span style={{ fontSize: '0.625rem', fontWeight: '700', background: '#d1fae5', color: '#065f46', padding: '1px 8px', borderRadius: '999px' }}>ENABLED</span>
-                                                )}
-                                            </div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '3px' }}>
-                                                Score deals with Claude AI — get a health score, headline, signals, and a recommended next action per deal.
-                                            </div>
-                                        </div>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flexShrink: 0 }}>
-                                            <div
-                                                onClick={() => setSettings(prev => ({
-                                                    ...prev,
-                                                    aiScoringEnabled: !prev.aiScoringEnabled
-                                                }))}
-                                                style={{
-                                                    width: '44px', height: '24px', borderRadius: '12px', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0,
-                                                    background: settings.aiScoringEnabled ? '#2563eb' : '#e2e8f0',
-                                                    position: 'relative',
-                                                }}>
-                                                <div style={{
-                                                    position: 'absolute', top: '3px', width: '18px', height: '18px', borderRadius: '50%', background: '#fff',
-                                                    transition: 'left 0.2s', left: settings.aiScoringEnabled ? '23px' : '3px',
-                                                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                                                }} />
-                                            </div>
-                                            <span style={{ fontSize: '0.75rem', color: '#64748b', userSelect: 'none' }}>
-                                                {settings.aiScoringEnabled ? 'On' : 'Off'}
-                                            </span>
-                                        </label>
-                                    </div>
-
-                                    {/* What data is sent */}
-                                    <div style={{ padding: '0.875rem 1.25rem' }}>
-                                        <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Data sent to AI per scoring request</div>
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                                            {[
-                                                ['Deal name & account', true],
-                                                ['Stage & Revenue', true],
-                                                ['Activity summaries', true],
-                                                ['Contact names', true],
-                                                ['Notes (first 200 chars)', true],
-                                                ['Passwords or API keys', false],
-                                            ].map(([label, sent]) => (
-                                                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: sent ? '#475569' : '#94a3b8' }}>
-                                                    <span style={{ color: sent ? '#2563eb' : '#cbd5e1', flexShrink: 0 }}>{sent ? '●' : '○'}</span>
-                                                    {label}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Score freshness */}
-                                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
-                                    <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#1e293b', marginBottom: '6px' }}>How scoring works</div>
-                                    <ul style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: 1.8, margin: 0, paddingLeft: '1.25rem' }}>
-                                        <li>Scores are generated on demand — reps click "Score this deal" inside the deal modal</li>
-                                        <li>Each score is cached for 24 hours to minimize API usage</li>
-                                        <li>Reps can force a refresh at any time</li>
-                                        <li>Scores are powered by Claude Haiku (fast and cost-efficient)</li>
-                                        <li>Without a custom key, API costs are billed to the shared <code style={{ fontSize: '0.6875rem', background: '#f1f5f9', padding: '1px 5px', borderRadius: '3px' }}>ANTHROPIC_API_KEY</code> in Netlify</li>
-                                    </ul>
-                                </div>
-
-                                {/* BYOK — Bring Your Own API Key */}
-                                <ByokKeySection settings={settings} setSettings={setSettings} />
-                            </div>
-                        
-                            <SaveCancelBar />
-</div>
-                    )}
-
-                    {settingsView === 'data-management' && (
-                        <div className="table-container">
-                            <div className="table-header">
-                                <button 
-                                    className="btn btn-secondary" 
-                                    onClick={goBackToMenu}
-                                    style={{ marginRight: '1rem' }}
-                                >
-                                    ← Back
-                                </button>
-                                <h2>DATA MANAGEMENT</h2>
-                            </div>
-                            <div style={{ padding: '1.5rem' }}>
-                                {/* Data Summary */}
-                                <div style={{ 
-                                    marginBottom: '2rem', 
-                                    padding: '1.25rem', 
-                                    background: '#f1f3f5', 
-                                    borderRadius: '8px',
-                                    border: '1px solid #e2e8f0'
-                                }}>
-                                    <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem' }}>
-                                        Current Data Summary
-                                    </h3>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
-                                        <div style={{ textAlign: 'center', padding: '0.75rem', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#2563eb' }}>{opportunities.length}</div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>Opportunities</div>
-                                        </div>
-                                        <div style={{ textAlign: 'center', padding: '0.75rem', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#10b981' }}>{accounts.length}</div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>Accounts</div>
-                                        </div>
-                                        <div style={{ textAlign: 'center', padding: '0.75rem', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#f59e0b' }}>{contacts.length}</div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>Contacts</div>
-                                        </div>
-                                        <div style={{ textAlign: 'center', padding: '0.75rem', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#3b82f6' }}>{tasks.length}</div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>Tasks</div>
-                                        </div>
-                                        <div style={{ textAlign: 'center', padding: '0.75rem', background: '#ffffff', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e293b' }}>{activities.length}</div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600' }}>Activities</div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Export Section */}
-                                <div style={{ 
-                                    marginBottom: '2rem', 
-                                    padding: '1.5rem', 
-                                    border: '1px solid #e2e8f0', 
-                                    borderRadius: '8px',
-                                    background: '#ffffff'
-                                }}>
-                                    <h3 style={{ fontSize: '1.125rem', fontWeight: '700', marginBottom: '0.5rem' }}>
-                                        📤 Export / Back Up Data
-                                    </h3>
-                                    <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
-                                        Download a complete backup of all your data as a JSON file. This includes opportunities, accounts, contacts, tasks, activities, and settings.
-                                    </p>
-                                    <button
-                                        className="btn"
-                                        disabled={exportingBackup}
-                                        onClick={() => {
-                                            setExportingBackup(true);
-                                            try {
-                                                const exportData = {
-                                                    exportVersion: '1.0',
-                                                    exportDate: new Date().toISOString(),
-                                                    appName: 'Sales Pipeline Tracker',
-                                                    data: {
-                                                        opportunities,
-                                                        accounts,
-                                                        contacts,
-                                                        tasks,
-                                                        activities,
-                                                        leads,
-                                                        settings
-                                                    }
-                                                };
-                                                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-                                                const url = URL.createObjectURL(blob);
-                                                const a = document.createElement('a');
-                                                a.href = url;
-                                                const dateStr = [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-');
-                                                a.download = `sales-pipeline-backup-${dateStr}.json`;
-                                                document.body.appendChild(a);
-                                                a.click();
-                                                document.body.removeChild(a);
-                                                URL.revokeObjectURL(url);
-                                            } finally {
-                                                setTimeout(() => setExportingBackup(false), 1500);
-                                            }
-                                        }}
-                                        style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem', opacity: exportingBackup ? 0.7 : 1 }}
-                                    >
-                                        {exportingBackup ? '⏳ Preparing Backup…' : '💾 Download Full Backup'}
-                                    </button>
-                                </div>
-
-                                {/* Import Section */}
-                                <div style={{ 
-                                    marginBottom: '2rem', 
-                                    padding: '1.5rem', 
-                                    border: '1px solid #e2e8f0', 
-                                    borderRadius: '8px',
-                                    background: '#ffffff'
-                                }}>
-                                    <h3 style={{ fontSize: '1.125rem', fontWeight: '700', marginBottom: '0.5rem' }}>
-                                        📥 Import / Restore Data
-                                    </h3>
-                                    <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-                                        Restore your data from a previously exported backup file. This will <strong>replace</strong> all current data with the backup contents.
-                                    </p>
-                                    <div style={{ 
-                                        padding: '0.75rem 1rem', 
-                                        background: '#fef3c7', 
-                                        border: '1px solid #fcd34d', 
-                                        borderRadius: '6px', 
-                                        marginBottom: '1.25rem',
-                                        fontSize: '0.8125rem',
-                                        color: '#92400e'
-                                    }}>
-                                        ⚠️ <strong>Warning:</strong> Importing a backup will overwrite all existing data. Consider exporting a backup of your current data first.
-                                    </div>
-                                    <input
-                                        type="file"
-                                        accept=".json"
-                                        id="backup-file-input"
-                                        style={{ display: 'none' }}
-                                        onChange={(e) => {
-                                            const file = e.target.files[0];
-                                            if (!file) return;
-                                            
-                                            const reader = new FileReader();
-                                            reader.onload = (event) => {
-                                                try {
-                                                    const importData = JSON.parse(event.target.result);
-                                                    
-                                                    // Validate structure
-                                                    if (!importData.data || !importData.appName) {
-                                                        alert('Invalid backup file. Please select a valid Sales Pipeline Tracker backup file.');
-                                                        return;
-                                                    }
-                                                    
-                                                    const d = importData.data;
-                                                    const counts = [
-                                                        d.opportunities ? `${d.opportunities.length} opportunities` : null,
-                                                        d.accounts ? `${d.accounts.length} accounts` : null,
-                                                        d.contacts ? `${d.contacts.length} contacts` : null,
-                                                        d.leads ? `${d.leads.length} leads` : null,
-                                                        d.tasks ? `${d.tasks.length} tasks` : null,
-                                                        d.activities ? `${d.activities.length} activities` : null
-                                                    ].filter(Boolean).join(', ');
-                                                    
-                                                    const exportDate = importData.exportDate 
-                                                        ? new Date(importData.exportDate).toLocaleString() 
-                                                        : 'Unknown date';
-                                                    
-                                                    showConfirm(`Restore backup from ${exportDate}?\n\nThis file contains: ${counts}\n\nThis will REPLACE all current data.`, () => {
-                                                        // Sync restored data to DB: clear each table first, then insert
-                                                        const syncToDb = async () => {
-                                                            setRestoringBackup(true);
-                                                            try {
-                                                                const endpoints = [
-                                                                    { key: 'opportunities', url: '/.netlify/functions/opportunities' },
-                                                                    { key: 'accounts', url: '/.netlify/functions/accounts' },
-                                                                    { key: 'contacts', url: '/.netlify/functions/contacts' },
-                                                                    { key: 'leads', url: '/.netlify/functions/leads' },
-                                                                    { key: 'tasks', url: '/.netlify/functions/tasks' },
-                                                                    { key: 'activities', url: '/.netlify/functions/activities' },
-                                                                ];
-                                                                // Step 1: Clear all tables
-                                                                for (const { url } of endpoints) {
-                                                                    await dbFetch(`${url}?clear=true`, { method: 'DELETE' }).catch(() => {});
-                                                                }
-                                                                // Step 2: Insert records per table — use PUT if record has an id (restore preserves IDs)
-                                                                let insertOk = 0, insertFail = 0;
-                                                                for (const { key, url } of endpoints) {
-                                                                    if (!d[key] || d[key].length === 0) continue;
-                                                                    for (const record of d[key]) {
-                                                                        const method = record.id ? 'PUT' : 'POST';
-                                                                        const r = await dbFetch(url, {
-                                                                            method,
-                                                                            headers: { 'Content-Type': 'application/json' },
-                                                                            body: JSON.stringify(record)
-                                                                        }).catch(() => null);
-                                                                        if (r && r.ok) insertOk++;
-                                                                        else { insertFail++; console.error('Restore insert failed', key, r?.status, record.id); }
-                                                                    }
-                                                                }
-                                                                // Step 3: Restore users — propagate team/territory/vertical from
-                                                                // teams.repIds before writing, so user profiles match Team Builder state
-                                                                if (d.settings?.users?.length > 0) {
-                                                                    const teams = d.settings?.teams || [];
-                                                                    // Build repId → team assignment map
-                                                                    const repTeamMap = {};
-                                                                    for (const t of teams) {
-                                                                        const assignment = { team: t.name, territory: t.territory || '', vertical: t.vertical || '' };
-                                                                        for (const rid of (t.repIds || [])) repTeamMap[rid] = assignment;
-                                                                        if (t.managerId) repTeamMap[t.managerId] = assignment;
-                                                                    }
-                                                                    for (const u of d.settings.users) {
-                                                                        // Merge team assignment into user record before saving
-                                                                        const assignment = repTeamMap[u.id] || {};
-                                                                        const enrichedUser = { ...u, ...assignment };
-                                                                        await dbFetch('/.netlify/functions/users', {
-                                                                            method: 'POST',
-                                                                            headers: { 'Content-Type': 'application/json' },
-                                                                            body: JSON.stringify(enrichedUser)
-                                                                        }).catch(() => {});
-                                                                    }
-                                                                }
-                                                                // Step 4: Restore settings (strip users — managed separately)
-                                                                if (d.settings) {
-                                                                    const { users: _u, ...settingsOnly } = d.settings;
-                                                                    await dbFetch('/.netlify/functions/settings', {
-                                                                        method: 'PUT',
-                                                                        headers: { 'Content-Type': 'application/json' },
-                                                                        body: JSON.stringify(settingsOnly)
-                                                                    }).catch(() => {});
-                                                                }
-                                                                if (insertFail > 0) {
-                                                                    alert(`Restore mostly complete: ${insertOk} records restored, ${insertFail} failed. The page will now reload.`);
-                                                                }
-                                                            } catch(e) { console.error('DB sync after restore failed:', e); alert('Restore encountered an error. The page will reload — check your data after.'); }
-                                                            finally { setRestoringBackup(false); }
-                                                        };
-                                                        // After DB sync, reload the page so all React state is fresh from DB
-                                                        syncToDb().then(() => window.location.reload());
-                                                    }, false);
-                                                } catch (err) {
-                                                    alert('Error reading backup file. The file may be corrupted or in an incorrect format.\n\nDetails: ' + err.message);
-                                                }
-                                            };
-                                            reader.readAsText(file);
-                                            // Reset input so same file can be selected again
-                                            e.target.value = '';
-                                        }}
-                                    />
-                                    <button
-                                        className="btn btn-secondary"
-                                        disabled={restoringBackup}
-                                        onClick={() => !restoringBackup && document.getElementById('backup-file-input').click()}
-                                        style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem', opacity: restoringBackup ? 0.7 : 1 }}
-                                    >
-                                        {restoringBackup ? (
-                                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                <span style={{ width: '14px', height: '14px', border: '2px solid #94a3b8', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
-                                                Restoring Data…
-                                            </span>
-                                        ) : '📂 Select Backup File to Restore'}
-                                    </button>
-                                </div>
-
-                                {/* Outlook Email Import Section */}
-                                <div style={{ 
-                                    marginBottom: '2rem', 
-                                    padding: '1.5rem', 
-                                    border: '1px solid #e2e8f0', 
-                                    borderRadius: '8px',
-                                    background: '#ffffff'
-                                }}>
-                                    <h3 style={{ fontSize: '1.125rem', fontWeight: '700', marginBottom: '0.5rem' }}>
-                                        📧 Import Outlook Sent Emails
-                                    </h3>
-                                    <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
-                                        Import emails from your Outlook Sent Items folder (CSV export) and automatically link them to matching contacts as activities.
-                                    </p>
-                                    <button
-                                        className="btn"
-                                        onClick={() => { setShowOutlookImportModal(true); }}
-                                        style={{ padding: '0.75rem 1.5rem', fontSize: '0.9rem' }}
-                                    >
-                                        📧 Import Outlook Emails
-                                    </button>
-                                </div>
-
-                                {/* Clear Data Section */}
-                                <div style={{ 
-                                    padding: '1.5rem', 
-                                    border: '1px solid #ef4444', 
-                                    borderRadius: '8px',
-                                    background: '#fef2f2'
-                                }}>
-                                    <h3 style={{ fontSize: '1.125rem', fontWeight: '700', marginBottom: '0.5rem', color: '#ef4444' }}>
-                                        🗑️ Clear All Data
-                                    </h3>
-                                    <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
-                                        Permanently delete all data and reset the application to its default state. This action cannot be undone.
-                                    </p>
-                                    <button
-                                        className="btn"
-                                        onClick={() => {
-                                            showConfirm('Are you SURE you want to delete ALL data? This cannot be undone.\n\nConsider exporting a backup first.', () => {
-                                                showConfirm('FINAL WARNING: This will permanently erase all opportunities, accounts, contacts, tasks, activities, and settings. Proceed?', async () => {
-                                                    // Clear localStorage
-                                                    try {
-                                                        safeStorage.removeItem('salesOpportunities');
-                                                        safeStorage.removeItem('salesAccounts');
-                                                        safeStorage.removeItem('salesContacts');
-                                                        safeStorage.removeItem('salesTasks');
-                                                        safeStorage.removeItem('salesTaskTypes');
-                                                        safeStorage.removeItem('salesActivities');
-                                                        safeStorage.removeItem('salesSettings');
-                                                    } catch(e) {}
-                                                    // Clear DB — delete from all entity tables
-                                                    const endpoints = [
-                                                        '/.netlify/functions/opportunities',
-                                                        '/.netlify/functions/accounts',
-                                                        '/.netlify/functions/contacts',
-                                                        '/.netlify/functions/tasks',
-                                                        '/.netlify/functions/activities',
-                                                        '/.netlify/functions/leads',
-                                                        '/.netlify/functions/users',
-                                                    ];
-                                                    try {
-                                                        await Promise.all(endpoints.map(url =>
-                                                            dbFetch(`${url}?clear=true`, { method: 'DELETE' }).catch(err =>
-                                                                console.error('Clear failed for', url, err.message)
-                                                            )
-                                                        ));
-                                                        // Reset settings to blank defaults
-                                                        await dbFetch('/.netlify/functions/settings', {
-                                                            method: 'PUT',
-                                                            headers: { 'Content-Type': 'application/json' },
-                                                            body: JSON.stringify({
-                                                                companyName: '',
-                                                                companyLogo: '',
-                                                                fiscalYearStart: '',
-                                                                funnelStages: [],
-                                                                taskTypes: ['Call', 'Meeting', 'Email'],
-                                                                painPoints: [],
-                                                                verticalMarkets: [],
-                                                                fieldVisibility: {},
-                                                                products: [],
-                                                                pipelines: null,
-                                                                teams: null,
-                                                                territories: null,
-                                                                verticals: null,
-                                                                quotaData: null,
-                                                                kpiConfig: null,
-                                                                logoUrl: null,
-                                                                aiScoringEnabled: false,
-                                                            }),
-                                                        }).catch(err => console.error('Settings reset failed:', err.message));
-                                                    } catch(e) {
-                                                        console.error('DB clear error:', e);
-                                                    }
-                                                    // Reload the page — cleanest way to reset all React state
-                                                    window.location.reload();
-                                                });
-                                            });
-                                        }}
-                                        style={{ 
-                                            background: '#ef4444', 
-                                            padding: '0.75rem 1.5rem', 
-                                            fontSize: '0.9rem'
-                                        }}
-                                    >
-                                        🗑️ Clear All Data
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ── Calendar Sub-tab ── */}
-                    {/* ── My Calendar view ──────────────────────────────────────────────── */}
-                    {settingsView === 'my-calendar' && (() => {
-                        const PROVIDERS = [
-                            {
-                                id: 'google', name: 'Google Calendar', desc: 'Connect your Google account', iconBg: '#fef2f2',
-                                icon: (<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M45.5 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h12.1c-.5 2.7-2.1 4.9-4.4 6.4v5.3h7.1c4.2-3.8 6.7-9.5 6.7-15.4z"/><path fill="#34A853" d="M24 46c6.1 0 11.2-2 14.9-5.5l-7.1-5.3c-2 1.3-4.5 2.1-7.8 2.1-6 0-11.1-4-12.9-9.4H3.7v5.5C7.4 41.5 15.1 46 24 46z"/><path fill="#FBBC05" d="M11.1 27.9c-.5-1.3-.7-2.7-.7-4.1s.3-2.8.7-4.1v-5.5H3.7C2 17.4 1 20.6 1 24s1 6.6 2.7 9.4l7.4-5.5z"/><path fill="#EA4335" d="M24 10.6c3.4 0 6.4 1.2 8.8 3.4l6.6-6.6C35.2 3.8 30 1.9 24 1.9 15.1 1.9 7.4 6.5 3.7 13.4l7.4 5.5C13 13.6 18 10.6 24 10.6z"/></svg>),
-                            },
-                            {
-                                id: 'outlook', name: 'Outlook / Microsoft 365', desc: 'Connect your work or personal Outlook', iconBg: '#eff6ff',
-                                icon: (<svg width="20" height="20" viewBox="0 0 48 48"><rect x="2" y="8" width="26" height="32" rx="3" fill="#0078D4"/><rect x="18" y="14" width="28" height="22" rx="3" fill="#50B3FF"/><path fill="#fff" d="M8 18h10v3H8zm0 5h10v3H8zm0 5h7v3H8z"/></svg>),
-                            },
-                            {
-                                id: 'yahoo', name: 'Yahoo Calendar', desc: 'Connect your Yahoo account', iconBg: '#fdf4ff',
-                                icon: (<svg width="20" height="20" viewBox="0 0 48 48"><rect width="48" height="48" rx="8" fill="#6001D2"/><text x="24" y="33" fontSize="22" fontWeight="900" fill="#fff" textAnchor="middle" fontFamily="sans-serif">Y!</text></svg>),
-                            },
-                            {
-                                id: 'apple', name: 'Apple Calendar', desc: 'iCloud calendar support', iconBg: '#f8fafc', comingSoon: true,
-                                icon: (<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#1c1917" d="M34.5 25.6c0-4.8 3.9-7.1 4.1-7.2-2.2-3.2-5.7-3.7-6.9-3.7-2.9-.3-5.8 1.7-7.2 1.7-1.5 0-3.8-1.7-6.2-1.6-3.2.1-6.1 1.9-7.7 4.7-3.3 5.7-.9 14.2 2.4 18.8 1.6 2.3 3.5 4.8 5.9 4.7 2.4-.1 3.3-1.5 6.2-1.5s3.7 1.5 6.2 1.4c2.6 0 4.2-2.3 5.8-4.6 1.8-2.6 2.5-5.2 2.6-5.3-.1 0-5.2-2-5.2-7.4zM29.8 11.4c1.3-1.6 2.2-3.8 2-6-1.9.1-4.2 1.3-5.6 2.9-1.2 1.4-2.3 3.7-2 5.9 2.1.2 4.3-1.1 5.6-2.8z"/></svg>),
-                            },
-                        ];
-                        return (
-                            <div className="table-container">
-                                <div className="table-header">
-                                    <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
-                                    <h2>MY CALENDAR</h2>
-                                </div>
-                                <div style={{ padding: '0.5rem 0' }}>
-                                    {calConnectResult && (
-                                        <div style={{ margin: '0.75rem 1.25rem', padding: '0.75rem 1rem', borderRadius: 8, border: `1px solid ${calConnectResult === 'success' ? '#bbf7d0' : '#fecaca'}`, background: calConnectResult === 'success' ? '#f0fdf4' : '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: calConnectResult === 'success' ? '#15803d' : '#dc2626' }}>
-                                                {calConnectResult === 'success' ? '✓ Calendar connected successfully.' : '✗ Calendar connection failed. Please try again.'}
-                                            </span>
-                                            <button onClick={() => setCalConnectResult(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem' }}>✕</button>
-                                        </div>
-                                    )}
-                                    {calConnectionsLoading ? (
-                                        <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>
-                                    ) : PROVIDERS.map(p => {
-                                        const conn = userCalConnections.find(c => c.provider === p.id) || null;
-                                        const isDisconnecting = calDisconnecting?.id === conn?.id && calDisconnecting?.scope === 'user';
-                                        return (
-                                            <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #f5f2ee' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', opacity: p.comingSoon ? 0.55 : 1 }}>
-                                                    <div style={{ width: 36, height: 36, borderRadius: 8, background: p.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{p.icon}</div>
-                                                    <div>
-                                                        <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1c1917' }}>{p.name}</div>
-                                                        <div style={{ fontSize: '0.75rem', color: conn ? '#16a34a' : '#78716c', marginTop: 1 }}>{conn ? conn.calendarEmail || 'Connected' : p.desc}</div>
-                                                    </div>
-                                                </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexShrink: 0 }}>
-                                                    {p.comingSoon ? (
-                                                        <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#a8a29e', background: '#f0ece4', padding: '0.2rem 0.5rem', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Coming soon</span>
-                                                    ) : conn ? (
-                                                        <>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                                                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#16a34a' }} />
-                                                                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#16a34a' }}>Connected</span>
-                                                            </div>
-                                                            <button className="btn" onClick={() => handleCalDisconnect(conn.id, 'user')} disabled={!!calDisconnecting} style={{ background: '#dc2626', padding: '0.3rem 0.625rem', fontSize: '0.6875rem' }}>
-                                                                {isDisconnecting ? '…' : 'Disconnect'}
-                                                            </button>
-                                                        </>
-                                                    ) : (
-                                                        <button className="btn" onClick={() => handleCalConnect(p.id, 'user')} style={{ fontSize: '0.75rem' }}>Connect</button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        );
-                    })()}
-
-                    {/* ── Company Calendar view ──────────────────────────────────────────── */}
-                    {settingsView === 'company-calendar' && (() => {
-                        const ORG_PROVIDERS = [
-                            {
-                                id: 'google', name: 'Google Workspace', desc: 'Connect a shared Google calendar', iconBg: '#fef2f2',
-                                icon: (<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M45.5 24.5c0-1.4-.1-2.8-.4-4.1H24v7.8h12.1c-.5 2.7-2.1 4.9-4.4 6.4v5.3h7.1c4.2-3.8 6.7-9.5 6.7-15.4z"/><path fill="#34A853" d="M24 46c6.1 0 11.2-2 14.9-5.5l-7.1-5.3c-2 1.3-4.5 2.1-7.8 2.1-6 0-11.1-4-12.9-9.4H3.7v5.5C7.4 41.5 15.1 46 24 46z"/><path fill="#FBBC05" d="M11.1 27.9c-.5-1.3-.7-2.7-.7-4.1s.3-2.8.7-4.1v-5.5H3.7C2 17.4 1 20.6 1 24s1 6.6 2.7 9.4l7.4-5.5z"/><path fill="#EA4335" d="M24 10.6c3.4 0 6.4 1.2 8.8 3.4l6.6-6.6C35.2 3.8 30 1.9 24 1.9 15.1 1.9 7.4 6.5 3.7 13.4l7.4 5.5C13 13.6 18 10.6 24 10.6z"/></svg>),
-                            },
-                            {
-                                id: 'outlook', name: 'Microsoft 365', desc: 'Connect a shared Outlook calendar', iconBg: '#eff6ff',
-                                icon: (<svg width="20" height="20" viewBox="0 0 48 48"><rect x="2" y="8" width="26" height="32" rx="3" fill="#0078D4"/><rect x="18" y="14" width="28" height="22" rx="3" fill="#50B3FF"/><path fill="#fff" d="M8 18h10v3H8zm0 5h10v3H8zm0 5h7v3H8z"/></svg>),
-                            },
-                        ];
-                        return (
-                            <div className="table-container">
-                                <div className="table-header">
-                                    <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
-                                    <h2>COMPANY CALENDAR</h2>
-                                    <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#c8b99a', background: '#1c1917', padding: '0.2rem 0.5rem', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.06em', marginLeft: '0.75rem' }}>Admin</span>
-                                </div>
-                                <div style={{ padding: '0.5rem 0' }}>
-                                    {calConnectResult && (
-                                        <div style={{ margin: '0.75rem 1.25rem', padding: '0.75rem 1rem', borderRadius: 8, border: `1px solid ${calConnectResult === 'success' ? '#bbf7d0' : '#fecaca'}`, background: calConnectResult === 'success' ? '#f0fdf4' : '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <span style={{ fontSize: '0.8125rem', fontWeight: '600', color: calConnectResult === 'success' ? '#15803d' : '#dc2626' }}>
-                                                {calConnectResult === 'success' ? '✓ Calendar connected successfully.' : '✗ Calendar connection failed. Please try again.'}
-                                            </span>
-                                            <button onClick={() => setCalConnectResult(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem' }}>✕</button>
-                                        </div>
-                                    )}
-                                    {calConnectionsLoading ? (
-                                        <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>
-                                    ) : ORG_PROVIDERS.map(p => {
-                                        const conn = orgCalConnections.find(c => c.provider === p.id) || null;
-                                        const isDisconnecting = calDisconnecting?.id === conn?.id && calDisconnecting?.scope === 'org';
-                                        return (
-                                            <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #f5f2ee' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                                    <div style={{ width: 36, height: 36, borderRadius: 8, background: p.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{p.icon}</div>
-                                                    <div>
-                                                        <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1c1917' }}>{p.name}</div>
-                                                        <div style={{ fontSize: '0.75rem', color: conn ? '#16a34a' : '#78716c', marginTop: 1 }}>{conn ? conn.calendarEmail || 'Connected' : p.desc}</div>
-                                                    </div>
-                                                </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexShrink: 0 }}>
-                                                    {conn ? (
-                                                        <>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                                                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#16a34a' }} />
-                                                                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#16a34a' }}>Connected</span>
-                                                            </div>
-                                                            <button className="btn" onClick={() => handleCalDisconnect(conn.id, 'org')} disabled={!!calDisconnecting} style={{ background: '#dc2626', padding: '0.3rem 0.625rem', fontSize: '0.6875rem' }}>
-                                                                {isDisconnecting ? '…' : 'Disconnect'}
-                                                            </button>
-                                                        </>
-                                                    ) : (
-                                                        <button className="btn" onClick={() => handleCalConnect(p.id, 'org')} style={{ fontSize: '0.75rem' }}>Connect</button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                    <div style={{ margin: '0 1.25rem 1rem', padding: '0.75rem 1rem', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8 }}>
-                                        <p style={{ fontSize: '0.75rem', color: '#1d4ed8', lineHeight: 1.5, margin: 0 }}>
-                                            The company calendar is shown to all users. If a user has also connected their personal calendar, both appear together in the calendar view.
-                                        </p>
-                                    </div>
-                                    <div style={{ fontSize: '0.6875rem', color: '#a8a29e', padding: '0 1.25rem 1rem' }}>
-                                        Only Admins can connect or disconnect the company calendar.
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })()}
-
-                    {/* ── API Keys view ─────────────────────────────────────────────────── */}
-                    {settingsView === 'api-keys' && (() => {
-                        const handleGenerateKey = async () => {
-                            if (!apiKeyNewName.trim()) return;
-                            setApiKeyGenerating(true);
-                            setApiKeyError(null);
-                            setApiKeyRevealed(null);
-                            try {
-                                const res = await dbFetch('/.netlify/functions/api-keys', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ name: apiKeyNewName.trim() }),
-                                });
-                                const data = await res.json();
-                                if (!res.ok) { setApiKeyError(data.error || 'Failed to generate key.'); return; }
-                                setApiKeysList(prev => [data.key, ...prev]);
-                                setApiKeyRevealed({ id: data.key.id, key: data.plaintextKey });
-                                setApiKeyNewName('');
-                            } catch { setApiKeyError('Network error. Please try again.'); }
-                            finally { setApiKeyGenerating(false); }
-                        };
-
-                        const handleRevokeKey = async (id) => {
-                            setApiKeyRevoking(id);
-                            try {
-                                const res = await dbFetch(`/.netlify/functions/api-keys?id=${id}`, { method: 'DELETE' });
-                                if (!res.ok) { const d = await res.json(); setApiKeyError(d.error || 'Failed to revoke key.'); return; }
-                                setApiKeysList(prev => prev.map(k => k.id === id ? { ...k, revokedAt: new Date().toISOString() } : k));
-                                if (apiKeyRevealed?.id === id) setApiKeyRevealed(null);
-                            } catch { setApiKeyError('Network error. Please try again.'); }
-                            finally { setApiKeyRevoking(null); }
-                        };
-
-                        const activeKeys  = apiKeysList.filter(k => !k.revokedAt);
-                        const revokedKeys = apiKeysList.filter(k => k.revokedAt);
-
-                        return (
-                            <div className="table-container">
-                                <div className="table-header">
-                                    <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
-                                    <h2>API KEYS</h2>
-                                </div>
-                                <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-
-                                    {/* Info banner */}
-                                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '1rem 1.25rem' }}>
-                                        <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#1d4ed8', marginBottom: '4px' }}>REST API Access</div>
-                                        <div style={{ fontSize: '0.75rem', color: '#1d4ed8', lineHeight: 1.6 }}>
-                                            Use API keys to authenticate requests to the Accelerep public REST API. Keys are read-only and scoped to your organisation.
-                                            Base URL: <code style={{ background: '#dbeafe', padding: '1px 6px', borderRadius: '4px', fontFamily: 'monospace' }}>/.netlify/functions/public-api?resource=opportunities</code>
-                                        </div>
-                                    </div>
-
-                                    {/* Generate new key */}
-                                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
-                                        <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9' }}>
-                                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Generate New Key</div>
-                                        </div>
-                                        <div style={{ padding: '1rem 1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                                            <div style={{ flex: 1, minWidth: '200px' }}>
-                                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' }}>Key Name</label>
-                                                <input
-                                                    type="text"
-                                                    value={apiKeyNewName}
-                                                    onChange={e => setApiKeyNewName(e.target.value)}
-                                                    onKeyDown={e => e.key === 'Enter' && handleGenerateKey()}
-                                                    placeholder="e.g. Tableau Integration"
-                                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' }}
-                                                />
-                                            </div>
-                                            <button
-                                                className="btn"
-                                                onClick={handleGenerateKey}
-                                                disabled={apiKeyGenerating || !apiKeyNewName.trim()}
-                                                style={{ opacity: (!apiKeyNewName.trim() || apiKeyGenerating) ? 0.5 : 1 }}
-                                            >
-                                                {apiKeyGenerating ? 'Generating…' : '+ Generate Key'}
-                                            </button>
-                                        </div>
-                                        {apiKeyError && (
-                                            <div style={{ margin: '0 1.25rem 1rem', padding: '0.5rem 0.75rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '0.75rem', color: '#dc2626' }}>{apiKeyError}</div>
-                                        )}
-                                    </div>
-
-                                    {/* Revealed key — shown once */}
-                                    {apiKeyRevealed && (
-                                        <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '10px', padding: '1rem 1.25rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                                <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#15803d' }}>✓ Key generated — copy it now</div>
-                                                <button onClick={() => setApiKeyRevealed(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem', padding: '0 4px' }}>✕</button>
-                                            </div>
-                                            <div style={{ fontSize: '0.7rem', color: '#15803d', marginBottom: '10px' }}>
-                                                This key will not be shown again. Store it securely.
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                                <code style={{ flex: 1, padding: '0.5rem 0.75rem', background: '#fff', border: '1px solid #86efac', borderRadius: '6px', fontSize: '0.75rem', fontFamily: 'monospace', wordBreak: 'break-all', color: '#1c1917' }}>
-                                                    {apiKeyRevealed.key}
-                                                </code>
-                                                <button
-                                                    className="btn"
-                                                    onClick={() => navigator.clipboard.writeText(apiKeyRevealed.key)}
-                                                    style={{ whiteSpace: 'nowrap', fontSize: '0.75rem' }}
-                                                >
-                                                    Copy
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Active keys list */}
-                                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
-                                        <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Active Keys</div>
-                                            <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#64748b' }}>{activeKeys.length} key{activeKeys.length !== 1 ? 's' : ''}</span>
-                                        </div>
-                                        {apiKeysLoading ? (
-                                            <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>
-                                        ) : activeKeys.length === 0 ? (
-                                            <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>No active API keys. Generate one above.</div>
-                                        ) : activeKeys.map((k, idx) => (
-                                            <div key={k.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.875rem 1.25rem', borderBottom: idx < activeKeys.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{k.name}</div>
-                                                    <div style={{ display: 'flex', gap: '1rem', marginTop: '3px', flexWrap: 'wrap' }}>
-                                                        <code style={{ fontSize: '0.6875rem', color: '#64748b', fontFamily: 'monospace' }}>{k.keyPrefix}••••••••</code>
-                                                        <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>
-                                                            Created {new Date(k.createdAt).toLocaleDateString()}
-                                                        </span>
-                                                        {k.lastUsedAt && (
-                                                            <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>
-                                                                Last used {new Date(k.lastUsedAt).toLocaleDateString()}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                                                    <span style={{ fontSize: '0.625rem', fontWeight: '700', background: '#d1fae5', color: '#065f46', padding: '2px 8px', borderRadius: '999px', textTransform: 'uppercase' }}>read</span>
-                                                    <button
-                                                        onClick={() => handleRevokeKey(k.id)}
-                                                        disabled={apiKeyRevoking === k.id}
-                                                        style={{ padding: '0.3rem 0.75rem', borderRadius: '6px', border: '1px solid #fecaca', background: 'transparent', color: '#dc2626', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', opacity: apiKeyRevoking === k.id ? 0.5 : 1 }}
-                                                    >
-                                                        {apiKeyRevoking === k.id ? '…' : 'Revoke'}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    {/* Revoked keys — collapsed summary */}
-                                    {revokedKeys.length > 0 && (
-                                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
-                                            <div style={{ padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Revoked Keys</div>
-                                                <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>{revokedKeys.length} revoked</span>
-                                            </div>
-                                            {revokedKeys.map((k, idx) => (
-                                                <div key={k.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.625rem 1.25rem', borderTop: '1px solid #f1f5f9', opacity: 0.5 }}>
-                                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                                        <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#94a3b8', textDecoration: 'line-through' }}>{k.name}</div>
-                                                        <code style={{ fontSize: '0.6875rem', color: '#94a3b8', fontFamily: 'monospace' }}>{k.keyPrefix}••••••••</code>
-                                                    </div>
-                                                    <span style={{ fontSize: '0.625rem', fontWeight: '700', background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: '999px', textTransform: 'uppercase', flexShrink: 0 }}>revoked</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {/* API reference quick-start */}
-                                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
-                                        <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9' }}>
-                                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Quick Reference</div>
-                                        </div>
-                                        <div style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                            {[
-                                                { label: 'Opportunities', path: 'opportunities' },
-                                                { label: 'Accounts',      path: 'accounts' },
-                                                { label: 'Contacts',      path: 'contacts' },
-                                                { label: 'Activities',    path: 'activities' },
-                                                { label: 'Leads',         path: 'leads' },
-                                                { label: 'Tasks',         path: 'tasks' },
-                                            ].map(ep => (
-                                                <div key={ep.path} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                                                    <span style={{ fontSize: '0.6875rem', fontWeight: '700', background: '#dbeafe', color: '#1d4ed8', padding: '2px 8px', borderRadius: '4px', fontFamily: 'monospace', flexShrink: 0 }}>GET</span>
-                                                    <code style={{ fontSize: '0.7rem', color: '#475569', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                                                        /.netlify/functions/public-api?resource={ep.path}&page=1&limit=50
-                                                    </code>
-                                                </div>
-                                            ))}
-                                            <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '8px', fontSize: '0.7rem', color: '#64748b', fontFamily: 'monospace', lineHeight: 1.7 }}>
-                                                <div style={{ color: '#94a3b8', marginBottom: '4px' }}># Example cURL</div>
-                                                <div>{'curl -H "Authorization: Bearer spt_live_<your-key>" \\'}</div>
-                                                <div>{'  "https://your-site.netlify.app/.netlify/functions/public-api?resource=opportunities"'}</div>
-                                            </div>
-                                            <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-                                                Rate limit: 300 requests / 15 min per key. Responses include <code style={{ fontFamily: 'monospace' }}>X-RateLimit-Remaining</code> header.
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                </div>
-                            </div>
-                        );
-                    })()}
-
-                    {/* ── Webhooks view ──────────────────────────────────────────────────── */}
-                    {settingsView === 'webhooks' && (() => {
-                        const SUPPORTED_EVENTS = [
-                            { value: 'opportunity.created',      label: 'Opportunity Created' },
-                            { value: 'opportunity.stage_changed',label: 'Opportunity Stage Changed' },
-                            { value: 'opportunity.won',          label: 'Opportunity Won' },
-                            { value: 'opportunity.lost',         label: 'Opportunity Lost' },
-                            { value: 'lead.created',             label: 'Lead Created' },
-                            { value: 'lead.converted',           label: 'Lead Converted' },
-                            { value: 'task.overdue',             label: 'Task Overdue' },
-                            { value: 'task.completed',           label: 'Task Completed' },
-                            { value: 'spiff.claimed',            label: 'SPIFF Claimed' },
-                        ];
-
-                        const toggleEvent = (val) => {
-                            setWebhookForm(prev => ({
-                                ...prev,
-                                eventTypes: prev.eventTypes.includes(val)
-                                    ? prev.eventTypes.filter(e => e !== val)
-                                    : [...prev.eventTypes, val],
-                            }));
-                        };
-
-                        const handleCreateWebhook = async () => {
-                            if (!webhookForm.name.trim() || !webhookForm.targetUrl.trim() || webhookForm.eventTypes.length === 0) {
-                                setWebhookError('Name, target URL, and at least one event are required.');
-                                return;
-                            }
-                            if (!webhookForm.targetUrl.startsWith('https://')) {
-                                setWebhookError('Target URL must use HTTPS.');
-                                return;
-                            }
-                            setWebhookSaving(true);
-                            setWebhookError(null);
-                            setWebhookRevealed(null);
-                            try {
-                                const res = await dbFetch('/.netlify/functions/webhooks', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify(webhookForm),
-                                });
-                                const data = await res.json();
-                                if (!res.ok) { setWebhookError(data.error || 'Failed to create webhook.'); return; }
-                                setWebhooksList(prev => [data.webhook, ...prev]);
-                                setWebhookRevealed({ id: data.webhook.id, secret: data.secret });
-                                setWebhookForm({ name: '', targetUrl: '', eventTypes: [] });
-                                setShowWebhookForm(false);
-                            } catch { setWebhookError('Network error. Please try again.'); }
-                            finally { setWebhookSaving(false); }
-                        };
-
-                        const handleToggleWebhook = async (wh) => {
-                            setWebhookToggling(wh.id);
-                            try {
-                                const res = await dbFetch('/.netlify/functions/webhooks', {
-                                    method: 'PUT',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ id: wh.id, active: !wh.active }),
-                                });
-                                if (!res.ok) return;
-                                setWebhooksList(prev => prev.map(w => w.id === wh.id ? { ...w, active: !w.active } : w));
-                            } catch { /* silent */ }
-                            finally { setWebhookToggling(null); }
-                        };
-
-                        const handleDeleteWebhook = async (id) => {
-                            setWebhookDeleting(id);
-                            try {
-                                const res = await dbFetch(`/.netlify/functions/webhooks?id=${id}`, { method: 'DELETE' });
-                                if (!res.ok) return;
-                                setWebhooksList(prev => prev.filter(w => w.id !== id));
-                                if (webhookRevealed?.id === id) setWebhookRevealed(null);
-                            } catch { /* silent */ }
-                            finally { setWebhookDeleting(null); }
-                        };
-
-                        return (
-                            <div className="table-container">
-                                <div className="table-header">
-                                    <button className="btn btn-secondary" onClick={goBackToMenu} style={{ marginRight: '1rem' }}>← Back</button>
-                                    <h2>WEBHOOKS</h2>
-                                    <button className="btn" onClick={() => { setShowWebhookForm(v => !v); setWebhookError(null); }} style={{ marginLeft: 'auto' }}>
-                                        {showWebhookForm ? 'Cancel' : '+ New Webhook'}
-                                    </button>
-                                </div>
-                                <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-
-                                    {/* Info banner */}
-                                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '1rem 1.25rem' }}>
-                                        <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#1d4ed8', marginBottom: '4px' }}>Event-Driven Webhooks</div>
-                                        <div style={{ fontSize: '0.75rem', color: '#1d4ed8', lineHeight: 1.6 }}>
-                                            Subscribe to CRM events and receive real-time HTTP POST payloads to your endpoint. Each payload is signed with HMAC-SHA256 using your webhook secret so your receiver can verify authenticity.
-                                        </div>
-                                    </div>
-
-                                    {/* New webhook form */}
-                                    {showWebhookForm && (
-                                        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
-                                            <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9' }}>
-                                                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>New Webhook Subscription</div>
-                                            </div>
-                                            <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
-                                                    <div>
-                                                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' }}>Name</label>
-                                                        <input
-                                                            type="text"
-                                                            value={webhookForm.name}
-                                                            onChange={e => setWebhookForm(prev => ({ ...prev, name: e.target.value }))}
-                                                            placeholder="e.g. HubSpot Sync"
-                                                            style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' }}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.375rem' }}>Target URL (HTTPS)</label>
-                                                        <input
-                                                            type="url"
-                                                            value={webhookForm.targetUrl}
-                                                            onChange={e => setWebhookForm(prev => ({ ...prev, targetUrl: e.target.value }))}
-                                                            placeholder="https://your-server.com/webhook"
-                                                            style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box' }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', color: '#57534e', marginBottom: '0.5rem' }}>Events to Subscribe</label>
-                                                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '0.5rem' }}>
-                                                        {SUPPORTED_EVENTS.map(ev => {
-                                                            const checked = webhookForm.eventTypes.includes(ev.value);
-                                                            return (
-                                                                <label key={ev.value} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.5rem 0.75rem', border: `1px solid ${checked ? '#93c5fd' : '#e5e2db'}`, borderRadius: '8px', background: checked ? '#eff6ff' : '#f0ece4', cursor: 'pointer', fontSize: '0.75rem', fontWeight: checked ? '600' : '400', color: checked ? '#1d4ed8' : '#44403c', transition: 'all 0.1s' }}>
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={checked}
-                                                                        onChange={() => toggleEvent(ev.value)}
-                                                                        style={{ accentColor: '#2563eb', width: '14px', height: '14px', flexShrink: 0 }}
-                                                                    />
-                                                                    {ev.label}
-                                                                </label>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                                {webhookError && (
-                                                    <div style={{ padding: '0.5rem 0.75rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '0.75rem', color: '#dc2626' }}>{webhookError}</div>
-                                                )}
-                                                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                                                    <button className="btn" onClick={handleCreateWebhook} disabled={webhookSaving} style={{ opacity: webhookSaving ? 0.5 : 1 }}>
-                                                        {webhookSaving ? 'Creating…' : 'Create Webhook'}
-                                                    </button>
-                                                    <button className="btn btn-secondary" onClick={() => { setShowWebhookForm(false); setWebhookError(null); setWebhookForm({ name: '', targetUrl: '', eventTypes: [] }); }}>
-                                                        Cancel
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Revealed secret — shown once */}
-                                    {webhookRevealed && (
-                                        <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '10px', padding: '1rem 1.25rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                                <div style={{ fontSize: '0.8125rem', fontWeight: '700', color: '#15803d' }}>✓ Webhook created — copy your signing secret</div>
-                                                <button onClick={() => setWebhookRevealed(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1rem', padding: '0 4px' }}>✕</button>
-                                            </div>
-                                            <div style={{ fontSize: '0.7rem', color: '#15803d', marginBottom: '10px' }}>
-                                                This secret will not be shown again. Use it to verify the <code style={{ fontFamily: 'monospace' }}>X-SPT-Signature</code> header on incoming payloads.
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                                <code style={{ flex: 1, padding: '0.5rem 0.75rem', background: '#fff', border: '1px solid #86efac', borderRadius: '6px', fontSize: '0.75rem', fontFamily: 'monospace', wordBreak: 'break-all', color: '#1c1917' }}>
-                                                    {webhookRevealed.secret}
-                                                </code>
-                                                <button className="btn" onClick={() => navigator.clipboard.writeText(webhookRevealed.secret)} style={{ whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
-                                                    Copy
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Webhooks list */}
-                                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
-                                        <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Subscriptions</div>
-                                            <span style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#64748b' }}>{webhooksList.length} webhook{webhooksList.length !== 1 ? 's' : ''}</span>
-                                        </div>
-                                        {webhooksLoading ? (
-                                            <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>
-                                        ) : webhooksList.length === 0 ? (
-                                            <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>No webhooks yet. Click "+ New Webhook" to get started.</div>
-                                        ) : webhooksList.map((wh, idx) => (
-                                            <div key={wh.id} style={{ padding: '1rem 1.25rem', borderBottom: idx < webhooksList.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
-                                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
-                                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                                            <div style={{ fontSize: '0.8125rem', fontWeight: '600', color: '#1e293b' }}>{wh.name}</div>
-                                                            <span style={{ fontSize: '0.625rem', fontWeight: '700', padding: '2px 8px', borderRadius: '999px', textTransform: 'uppercase', background: wh.active ? '#d1fae5' : '#f1f5f9', color: wh.active ? '#065f46' : '#94a3b8' }}>
-                                                                {wh.active ? 'active' : 'paused'}
-                                                            </span>
-                                                            {wh.lastStatus && (
-                                                                <span style={{ fontSize: '0.625rem', fontWeight: '700', padding: '2px 8px', borderRadius: '999px', background: wh.lastStatus >= 200 && wh.lastStatus < 300 ? '#d1fae5' : '#fee2e2', color: wh.lastStatus >= 200 && wh.lastStatus < 300 ? '#065f46' : '#991b1b' }}>
-                                                                    {wh.lastStatus}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <div style={{ fontSize: '0.6875rem', color: '#64748b', fontFamily: 'monospace', marginBottom: '6px', wordBreak: 'break-all' }}>{wh.targetUrl}</div>
-                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                                            {(wh.eventTypes || []).map(ev => (
-                                                                <span key={ev} style={{ fontSize: '0.5625rem', fontWeight: '700', background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                                                    {ev}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                        {wh.lastFiredAt && (
-                                                            <div style={{ fontSize: '0.6875rem', color: '#94a3b8', marginTop: '4px' }}>
-                                                                Last fired {new Date(wh.lastFiredAt).toLocaleString()}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end', flexShrink: 0 }}>
-                                                        <button
-                                                            onClick={() => handleToggleWebhook(wh)}
-                                                            disabled={webhookToggling === wh.id}
-                                                            style={{ padding: '0.3rem 0.75rem', borderRadius: '6px', border: '1px solid #e2e8f0', background: 'transparent', color: '#64748b', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', opacity: webhookToggling === wh.id ? 0.5 : 1 }}
-                                                        >
-                                                            {webhookToggling === wh.id ? '…' : wh.active ? 'Pause' : 'Resume'}
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteWebhook(wh.id)}
-                                                            disabled={webhookDeleting === wh.id}
-                                                            style={{ padding: '0.3rem 0.75rem', borderRadius: '6px', border: '1px solid #fecaca', background: 'transparent', color: '#dc2626', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', opacity: webhookDeleting === wh.id ? 0.5 : 1 }}
-                                                        >
-                                                            {webhookDeleting === wh.id ? '…' : 'Delete'}
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    {/* Signature verification guide */}
-                                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
-                                        <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9' }}>
-                                            <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Verifying Payloads</div>
-                                        </div>
-                                        <div style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: 1.6 }}>
-                                                Every webhook request includes an <code style={{ fontFamily: 'monospace', background: '#f1f5f9', padding: '1px 5px', borderRadius: '3px' }}>X-SPT-Signature</code> header.
-                                                Verify it with HMAC-SHA256 using your webhook secret.
-                                            </div>
-                                            <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '0.875rem 1rem', fontSize: '0.7rem', fontFamily: 'monospace', color: '#475569', lineHeight: 1.8 }}>
-                                                <div style={{ color: '#94a3b8' }}># Node.js verification example</div>
-                                                <div>{'const crypto = require("crypto");'}</div>
-                                                <div>{'const sig = req.headers["x-spt-signature"];'}</div>
-                                                <div>{'const expected = "sha256=" + crypto'}</div>
-                                                <div>{'  .createHmac("sha256", YOUR_SECRET)'}</div>
-                                                <div>{'  .update(JSON.stringify(req.body))'}</div>
-                                                <div>{'  .digest("hex");'}</div>
-                                                <div>{'if (sig !== expected) return res.status(401).send("Invalid signature");'}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                </div>
-                            </div>
-                        );
-                    })()}
-
-            {/* ── Invite User Modal ──────────────────────────────────────────── */}
-            {showInviteModal && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}
-                    onClick={() => setShowInviteModal(false)}>
-                    <div style={{ background: '#fff', borderRadius: '16px', padding: '2rem', maxWidth: '460px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}
-                        onClick={e => e.stopPropagation()}>
-                        <div style={{ fontSize: '1.125rem', fontWeight: '700', color: '#1c1917', marginBottom: '0.25rem' }}>📧 Invite User</div>
-                        <div style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '1.5rem' }}>Send a Clerk invitation email. The user will land with the correct role on first login.</div>
-
-                        {inviteResult && (
-                            <div style={{ background: inviteResult.type === 'success' ? '#f0fdf4' : '#fef2f2', border: `1px solid ${inviteResult.type === 'success' ? '#bbf7d0' : '#fecaca'}`, borderRadius: '8px', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.8125rem', color: inviteResult.type === 'success' ? '#15803d' : '#dc2626' }}>
-                                {inviteResult.message}
-                            </div>
-                        )}
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', color: '#1c1917', marginBottom: '0.375rem' }}>Full Name *</label>
-                                <input value={inviteForm.name} onChange={e => setInviteForm(p => ({ ...p, name: e.target.value }))}
-                                    placeholder="Karen Russell"
-                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', boxSizing: 'border-box' }} />
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', color: '#1c1917', marginBottom: '0.375rem' }}>Email Address *</label>
-                                <input value={inviteForm.email} onChange={e => setInviteForm(p => ({ ...p, email: e.target.value }))}
-                                    placeholder="karen@company.com" type="email"
-                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', boxSizing: 'border-box' }} />
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: '600', color: '#1c1917', marginBottom: '0.375rem' }}>Role *</label>
-                                <select value={inviteForm.role} onChange={e => setInviteForm(p => ({ ...p, role: e.target.value }))}
-                                    style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', boxSizing: 'border-box' }}>
-                                    <option value="User">Sales Rep</option>
-                                    <option value="Manager">Manager</option>
-                                    <option value="Admin">Admin</option>
-                                    <option value="ReadOnly">Read-Only</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-                            <button onClick={() => setShowInviteModal(false)}
-                                style={{ background: '#f0ece4', color: '#78716c', border: '1px solid #e5e2db', borderRadius: '8px', padding: '0.5rem 1.25rem', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
-                                {inviteResult?.type === 'success' ? 'Close' : 'Cancel'}
-                            </button>
-                            {inviteResult?.type !== 'success' && (
-                                <button onClick={handleSendInvite} disabled={inviteSending}
-                                    style={{ background: '#1c1917', color: '#f5f1eb', border: 'none', borderRadius: '8px', padding: '0.5rem 1.5rem', fontSize: '0.875rem', fontWeight: '600', cursor: inviteSending ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: inviteSending ? 0.6 : 1 }}>
-                                    {inviteSending ? 'Sending…' : '📧 Send Invitation'}
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </div>
+            {/* Body — role-gated */}
+            {canAdmin ? (
+                <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser}/>
+            ) : (
+                <PersonalView settings={settings} setSettings={setSettings} currentUser={currentUser} isAdmin={false}/>
             )}
-                </>
-                </div>
-            
+        </div>
     );
 }
