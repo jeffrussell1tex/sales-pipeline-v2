@@ -135,6 +135,7 @@ const SETTINGS_ITEMS = [
     { id:'funnel-stages',    scope:'workspace', category:'Sales process', name:'Funnel stages',   desc:'Stage names and default win probability',                     status:'ok',      statusDetail:'8 stages',                    updatedBy:'Admin', updatedAt:'3 weeks ago' },
     { id:'custom-fields',    scope:'workspace', category:'Sales process', name:'Custom fields',   desc:'Custom fields on Accounts, Contacts, Leads, Opportunities',   status:'ok',      statusDetail:'18 custom fields',            updatedBy:'Admin', updatedAt:'5 days ago', isNew:true },
     { id:'kpi-settings',     scope:'workspace', category:'Sales process', name:'KPI thresholds',  desc:'Thresholds, colors, and sparkline ranges for dashboards',     status:'ok',      statusDetail:'12 KPIs configured',          updatedBy:'Admin', updatedAt:'1 month ago' },
+    { id:'lead-conv-benchmarks', scope:'workspace', category:'Sales process', name:'Lead conversion benchmarks', desc:'Good / average / poor conversion rate targets by lead source', status:'ok', statusDetail:'8 sources configured', updatedBy:'Admin', updatedAt:'today' },
     { id:'pain-points',      scope:'workspace', category:'Sales process', name:'Pain points library', desc:'Reusable customer pain point templates',                  status:'ok',      statusDetail:'23 pain points',              updatedBy:'Admin', updatedAt:'2 weeks ago' },
     { id:'customer-types',   scope:'workspace', category:'Sales process', name:'Customer types',  desc:'Account classification tags (SMB, Mid-market, Enterprise…)', status:'ok',      statusDetail:'5 tiers',                     updatedBy:'Admin', updatedAt:'6 months ago' },
     { id:'industries',       scope:'workspace', category:'Sales process', name:'Industries',      desc:'Primary and sub-industry taxonomy',                           status:'ok',      statusDetail:'14 industries · 47 sub-types', updatedBy:'Admin', updatedAt:'4 months ago' },
@@ -299,6 +300,177 @@ const PersonalApiTokens = () => (
 );
 
 // ─────────────────────────────────────────────────────────────
+// LEAD CONVERSION BENCHMARKS panel
+// ─────────────────────────────────────────────────────────────
+const DEFAULT_LEAD_CONV_BENCHMARKS = [
+    { source: 'Referral / Partner',  good: 30, avg: 15, poor: 15 },
+    { source: 'Inbound',             good: 20, avg: 10, poor: 10 },
+    { source: 'Trade Show',          good: 15, avg:  8, poor:  8 },
+    { source: 'LinkedIn / Social',   good: 10, avg:  5, poor:  5 },
+    { source: 'Cold Outreach',       good:  5, avg:  2, poor:  2 },
+    { source: 'Webinar',             good: 15, avg:  8, poor:  8 },
+    { source: 'Partner Referral',    good: 30, avg: 15, poor: 15 },
+    { source: 'Website',             good: 20, avg: 10, poor: 10 },
+    // Blended / fallback — used for any source not listed above
+    { source: '_default',            good: 20, avg: 10, poor: 10 },
+];
+
+const LeadConvBenchmarks = ({ settings, setSettings }) => {
+    const saved = settings?.leadConvBenchmarks || null;
+    const [rows, setRows] = useState(() =>
+        saved ? JSON.parse(JSON.stringify(saved)) : JSON.parse(JSON.stringify(DEFAULT_LEAD_CONV_BENCHMARKS))
+    );
+    const [saving, setSaving] = useState(false);
+    const [saved2, setSaved2] = useState(false);
+    const [newSource, setNewSource] = useState('');
+
+    const update = (i, field, val) => {
+        setRows(prev => prev.map((r, ri) => ri === i ? { ...r, [field]: val } : r));
+    };
+
+    const addRow = () => {
+        const src = newSource.trim();
+        if (!src) return;
+        if (rows.some(r => r.source.toLowerCase() === src.toLowerCase())) return;
+        setRows(prev => [...prev, { source: src, good: 20, avg: 10, poor: 10 }]);
+        setNewSource('');
+    };
+
+    const removeRow = (i) => {
+        setRows(prev => prev.filter((_, ri) => ri !== i));
+    };
+
+    const handleSave = async () => {
+        setSaving(true);
+        const updated = { ...settings, leadConvBenchmarks: rows };
+        setSettings(updated);
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updated),
+            });
+            setSaved2(true);
+            setTimeout(() => setSaved2(false), 2000);
+        } catch (e) {
+            console.error('Failed to save lead conv benchmarks', e);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const defaultRow = rows.find(r => r.source === '_default');
+    const sourceRows = rows.filter(r => r.source !== '_default');
+
+    const inputSt = { width: 54, padding: '4px 6px', fontSize: 12, border: `1px solid ${T.border}`, borderRadius: T.r, background: T.bg, color: T.ink, fontFamily: T.sans, textAlign: 'right' };
+    const pctLabel = (v) => v + '%';
+
+    return (
+        <div>
+            <div style={{ fontSize: 13, color: T.inkMid, marginBottom: 16, lineHeight: 1.55, fontFamily: T.sans }}>
+                These thresholds drive the colour coding in <strong>Reports → Leads → Source ROI</strong>.
+                Each source shows <span style={{ color: T.ok, fontWeight: 700 }}>green</span> when conversion rate ≥ Good,{' '}
+                <span style={{ color: T.warn, fontWeight: 700 }}>amber</span> when ≥ Poor threshold, and{' '}
+                <span style={{ color: T.danger, fontWeight: 700 }}>red</span> below Poor.
+                The <em>All other sources</em> row is the fallback for any source not listed.
+            </div>
+
+            {/* Column headers */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 32px', gap: 10, padding: '6px 0', borderBottom: `1px solid ${T.border}`, marginBottom: 4 }}>
+                {['Source', 'Good ≥', 'Avg ≥', 'Poor <', ''].map((h, i) => (
+                    <div key={i} style={{ ...eb(T.inkMuted), textAlign: i === 0 ? 'left' : 'right' }}>{h}</div>
+                ))}
+            </div>
+
+            {/* Source rows */}
+            {sourceRows.map((r, i) => (
+                <div key={r.source} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 32px', gap: 10, padding: '9px 0', borderBottom: `1px solid ${T.surface2}`, alignItems: 'center' }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: T.ink, fontFamily: T.sans }}>{r.source}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
+                        <input type="number" min="0" max="100" value={r.good}
+                            onChange={e => update(rows.indexOf(r), 'good', Math.max(0, Math.min(100, parseInt(e.target.value)||0)))}
+                            style={{ ...inputSt, color: T.ok }}/>
+                        <span style={{ fontSize: 11, color: T.inkMuted }}>%</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
+                        <input type="number" min="0" max="100" value={r.avg}
+                            onChange={e => update(rows.indexOf(r), 'avg', Math.max(0, Math.min(100, parseInt(e.target.value)||0)))}
+                            style={{ ...inputSt, color: T.warn }}/>
+                        <span style={{ fontSize: 11, color: T.inkMuted }}>%</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
+                        <input type="number" min="0" max="100" value={r.poor}
+                            onChange={e => update(rows.indexOf(r), 'poor', Math.max(0, Math.min(100, parseInt(e.target.value)||0)))}
+                            style={{ ...inputSt, color: T.danger }}/>
+                        <span style={{ fontSize: 11, color: T.inkMuted }}>%</span>
+                    </div>
+                    <button onClick={() => removeRow(rows.indexOf(r))}
+                        style={{ background: 'none', border: 'none', color: T.inkMuted, fontSize: 16, cursor: 'pointer', padding: 0, lineHeight: 1, fontFamily: T.sans }}>×</button>
+                </div>
+            ))}
+
+            {/* Default fallback row — always shown, source name not editable */}
+            {defaultRow && (
+                <>
+                    <div style={{ padding: '8px 0 4px', fontSize: 11, color: T.inkMuted, fontWeight: 600, letterSpacing: 0.4, fontFamily: T.sans }}>
+                        FALLBACK — ALL OTHER SOURCES
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px 32px', gap: 10, padding: '9px 0', borderBottom: `1px solid ${T.border}`, alignItems: 'center', background: T.surface2, borderRadius: T.r, paddingLeft: 8, paddingRight: 8 }}>
+                        <div style={{ fontSize: 13, fontStyle: 'italic', color: T.inkMid, fontFamily: T.sans }}>All other sources</div>
+                        {['good','avg','poor'].map((field, fi) => (
+                            <div key={field} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
+                                <input type="number" min="0" max="100" value={defaultRow[field]}
+                                    onChange={e => update(rows.indexOf(defaultRow), field, Math.max(0, Math.min(100, parseInt(e.target.value)||0)))}
+                                    style={{ ...inputSt, color: [T.ok, T.warn, T.danger][fi] }}/>
+                                <span style={{ fontSize: 11, color: T.inkMuted }}>%</span>
+                            </div>
+                        ))}
+                        <div/>
+                    </div>
+                </>
+            )}
+
+            {/* Add new source row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
+                <input
+                    value={newSource}
+                    onChange={e => setNewSource(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addRow()}
+                    placeholder="Add a source (e.g. Conference)…"
+                    style={{ flex: 1, padding: '7px 10px', fontSize: 12.5, border: `1px dashed ${T.borderStrong}`, borderRadius: T.r, background: T.bg, color: T.ink, fontFamily: T.sans, outline: 'none' }}
+                />
+                <button onClick={addRow}
+                    style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, background: 'transparent', color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                    + Add source
+                </button>
+            </div>
+
+            {/* Legend */}
+            <div style={{ marginTop: 16, padding: '10px 14px', background: T.bg, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 11.5, color: T.inkMid, lineHeight: 1.6, fontFamily: T.sans }}>
+                <strong style={{ color: T.ink }}>How thresholds work:</strong>{' '}
+                Conv rate ≥ Good → <span style={{ color: T.ok, fontWeight: 700 }}>green</span> ·{' '}
+                ≥ Avg → <span style={{ color: T.warn, fontWeight: 700 }}>amber</span> ·{' '}
+                &lt; Poor → <span style={{ color: T.danger, fontWeight: 700 }}>red</span> ·{' '}
+                0% (no conversions) → muted grey
+            </div>
+
+            {/* Save */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+                {saved2 && <span style={{ fontSize: 12, color: T.ok, fontWeight: 600, fontFamily: T.sans }}>✓ Saved</span>}
+                <button onClick={() => setRows(JSON.parse(JSON.stringify(DEFAULT_LEAD_CONV_BENCHMARKS)))}
+                    style={{ padding: '7px 14px', fontSize: 12, fontWeight: 600, background: 'transparent', color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                    Reset to defaults
+                </button>
+                <button onClick={handleSave} disabled={saving}
+                    style={{ padding: '7px 16px', fontSize: 12, fontWeight: 600, background: saving ? T.borderStrong : T.ink, color: T.surface, border: 'none', borderRadius: T.r, cursor: saving ? 'default' : 'pointer', fontFamily: T.sans }}>
+                    {saving ? 'Saving…' : 'Save benchmarks'}
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────
 // V2 Card for the workspace admin grid
 // ─────────────────────────────────────────────────────────────
 const V2Card = ({ item, onOpen, settings }) => {
@@ -401,6 +573,36 @@ const AdminView = ({ settings, setSettings, currentUser }) => {
     const [scope, setScope] = useState('workspace');
     const [tab,   setTab  ] = useState('All');
     const [search, setSearch] = useState('');
+    const [activeItem, setActiveItem] = useState(null); // detail panel state
+
+    // Detail panels that have real content — others just open the card (no-op for now)
+    const DETAIL_PANELS = {
+        'lead-conv-benchmarks': <LeadConvBenchmarks settings={settings} setSettings={setSettings}/>,
+    };
+
+    if (activeItem) {
+        const panel = DETAIL_PANELS[activeItem.id];
+        return (
+            <div>
+                {/* Back breadcrumb */}
+                <button onClick={() => setActiveItem(null)}
+                    style={{ display:'inline-flex', alignItems:'center', gap:6, background:'none', border:'none', color:T.info, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:'0 0 14px' }}>
+                    ← Back to settings
+                </button>
+                <div style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:20, fontWeight:700, color:T.ink, marginBottom:4, fontFamily:T.sans }}>{activeItem.name}</div>
+                    <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>{activeItem.desc}</div>
+                </div>
+                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:20 }}>
+                    {panel || (
+                        <div style={{ color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                            This setting panel is not yet implemented.
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
 
     const tabs = scope === 'workspace' ? WORKSPACE_TABS : ['All', 'Profile & Account'];
     const scopeItems = SETTINGS_ITEMS.filter(i => i.scope === scope);
@@ -543,7 +745,7 @@ const AdminView = ({ settings, setSettings, currentUser }) => {
                                     </div>
                                 )}
                                 <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
-                                    {list.map(it => <V2Card key={it.id} item={it} settings={settings}/>)}
+                                    {list.map(it => <V2Card key={it.id} item={it} settings={settings} onOpen={DETAIL_PANELS[it.id] ? () => setActiveItem(it) : undefined}/>)}
                                 </div>
                             </div>
                         ))}

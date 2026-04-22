@@ -2259,7 +2259,27 @@ ${bodyHtml}
                                                             <div key={h} style={{ ...eb4(T4.inkMuted), textAlign:i>=2?'right':'left' }}>{h}</div>
                                                         ))}
                                                     </div>
-                                                    {sortedSrc.map((s, i, arr) => (
+                                                    {sortedSrc.map((s, i, arr) => {
+                                                        // Look up benchmark for this source from settings
+                                                        // Falls back to _default row if source not found
+                                                        const benchmarks = settings.leadConvBenchmarks || null;
+                                                        const getBench = (srcName) => {
+                                                            if (!benchmarks) return { good:20, avg:10, poor:10 };
+                                                            const match = benchmarks.find(b =>
+                                                                b.source !== '_default' &&
+                                                                b.source.toLowerCase() === srcName.toLowerCase()
+                                                            );
+                                                            if (match) return match;
+                                                            return benchmarks.find(b => b.source === '_default') || { good:20, avg:10, poor:10 };
+                                                        };
+                                                        const bench = getBench(s.name);
+                                                        const convPct = Math.round(s.convRate * 100);
+                                                        const convColor = s.convRate === 0
+                                                            ? T4.inkMuted
+                                                            : convPct >= bench.good ? T4.ok
+                                                            : convPct >= bench.avg  ? T4.warn
+                                                            : T4.danger;
+                                                        return (
                                                         <div key={s.name} style={{ display:'grid', gridTemplateColumns:'1.2fr 1.1fr 0.7fr 0.6fr 1.1fr', padding:'11px 0', borderBottom:i===arr.length-1?'none':`1px solid ${T4.surface2}`, alignItems:'center' }}>
                                                             <div style={{ fontSize:12.5, color:T4.ink, fontWeight:600, fontFamily:T4.sans }}>{s.name}</div>
                                                             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -2269,15 +2289,16 @@ ${bodyHtml}
                                                             <div style={{ textAlign:'right', fontFeatureSettings:'"tnum"' }}>
                                                                 <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:2, background:`rgba(122,90,60,${Math.min(0.22,s.avgScore/300)})`, color:T4.ink, fontWeight:600, fontSize:12, fontFamily:T4.sans }}>{s.avgScore}</span>
                                                             </div>
-                                                            <div style={{ textAlign:'right', fontFeatureSettings:'"tnum"', fontWeight:700, color:s.convRate>0?T4.ok:T4.inkMuted, fontFamily:T4.sans }}>
-                                                                {s.convRate>0 ? Math.round(s.convRate*100)+'%' : '—'}
+                                                            <div style={{ textAlign:'right', fontFeatureSettings:'"tnum"', fontWeight:700, color:convColor, fontFamily:T4.sans }}>
+                                                                {s.convRate > 0 ? convPct + '%' : '—'}
                                                             </div>
                                                             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                                                                 <HBar4 value={s.rev} max={maxRev} color={T4.goldInk} height={4}/>
                                                                 <span style={{ fontSize:12.5, color:T4.ink, fontWeight:700, fontFeatureSettings:'"tnum"', minWidth:44, textAlign:'right', fontFamily:T4.sans }}>{fmtM4(s.rev)}</span>
                                                             </div>
                                                         </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             );
                                         })()
