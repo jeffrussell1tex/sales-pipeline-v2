@@ -3,7 +3,6 @@ import { useApp } from '../AppContext';
 import ViewingBar, { SliceDropdown } from '../components/ui/ViewingBar';
 import AnalyticsDashboard from '../components/ui/AnalyticsDashboard';
 import { dbFetch } from '../utils/storage';
-import CustomDashboard from '../components/ui/CustomDashboard';
 
 export default function ReportsTab({ leadsEnabled = true }) {
     const {
@@ -696,7 +695,7 @@ ${bodyHtml}
                               { key:'performance', label:'Performance',          sub:'Quota, win rate, velocity' },
                               { key:'activity',    label:'Activity',             sub:'What are reps doing?' },
                               ...(leadsEnabled ? [{ key:'leads', label:'Leads', sub:'Top of funnel' }] : []),
-                              { key:'custom',      label:'Custom',               sub:'Your saved views' },
+                              { key:'custom',      label:'Saved reports',        sub:'Your custom views' },
                             ].map(({ key, label, sub }) => (
                               <button key={key} onClick={() => setReportSubTabPersisted(key)} style={{
                                 padding: '8px 16px 10px',
@@ -850,13 +849,7 @@ ${bodyHtml}
 
                             <div style={{ flex:1 }} />
 
-                            {/* Right: Customize (custom tab) + Export — styled as app ghost button */}
-                            {reportSubTab === 'custom' && (
-                              <button onClick={() => document.dispatchEvent(new CustomEvent('accelerep:openCustomize'))}
-                                style={{ display:'inline-flex', alignItems:'center', gap:'0.375rem', background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'6px', padding:'0.3rem 0.875rem', fontSize:'0.75rem', fontWeight:'500', color:'#2a2622', cursor:'pointer', fontFamily:'inherit' }}>
-                                ⚙️ Customize
-                              </button>
-                            )}
+                            {/* Right: Export */}
                             <button className=""
                               style={{ display:'inline-flex', alignItems:'center', gap:'0.3rem', background:'#fbf8f3', border:'1px solid #e6ddd0', borderRadius:'6px', padding:'0.3rem 0.875rem', fontSize:'0.75rem', fontWeight:'500', color:'#2a2622', cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}
                               onClick={()=>{
@@ -2347,10 +2340,313 @@ ${bodyHtml}
                             />
                         )}
 
-                        {/* ── CUSTOM DASHBOARD ── */}
-                        {reportSubTab === 'custom' && (
-                            <CustomDashboard />
-                        )}
+                        {/* ════════════════════════════════════════════
+                             TAB: SAVED REPORTS
+                            ════════════════════════════════════════════ */}
+                        {reportSubTab === 'custom' && (() => {
+                            // ── Design tokens
+                            const TS = {
+                                surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', borderStrong:'#d4c8b4',
+                                ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378',
+                                gold:'#c8b99a', goldInk:'#7a6a48',
+                                ok:'#4d6b3d', warn:'#b87333', danger:'#9c3a2e',
+                                sans:'"Plus Jakarta Sans",system-ui,sans-serif',
+                                serif:'Georgia,serif', r:3,
+                            };
+                            const ebS = c => ({ fontSize:10, fontWeight:700, color:c||TS.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:TS.sans });
+                            const avBgS = name => { const p=['#9c6b4a','#7a5a3c','#5a6e5a','#6b5a7a','#8a5a5a','#5a7a8a','#7a6b5a','#4a6b5a']; let h=0; for(const c of(name||''))h=(h*31+c.charCodeAt(0))|0; return p[Math.abs(h)%p.length]; };
+                            const AvatarS = ({ name, size=20 }) => { const init=(name||'').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase(); return <div style={{ width:size,height:size,borderRadius:'50%',background:avBgS(name),color:'#fef4e6',display:'flex',alignItems:'center',justifyContent:'center',fontSize:Math.round(size*0.38),fontWeight:700,flexShrink:0 }}>{init}</div>; };
+
+                            // ── Mini preview chart primitives
+                            const MiniBar = ({ data, colors, h=38 }) => {
+                                const max = Math.max(...data.map(Math.abs), 1);
+                                return (
+                                    <div style={{ display:'flex', alignItems:'flex-end', gap:2, height:h }}>
+                                        {data.map((v,i) => (
+                                            <div key={i} style={{ flex:1, height:`${(Math.abs(v)/max)*100}%`, background:(colors&&colors[i])||(v<0?TS.danger:TS.ink), borderRadius:1, minHeight:2 }}/>
+                                        ))}
+                                    </div>
+                                );
+                            };
+                            const MiniBarH = ({ data, colors, h=38 }) => {
+                                const max = Math.max(...data.map(Math.abs), 1);
+                                return (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:2, height:h, justifyContent:'center' }}>
+                                        {data.map((v,i) => (
+                                            <div key={i} style={{ height:Math.max(3,h/data.length-3), width:`${(v/max)*100}%`, background:(colors&&colors[i])||TS.ink, borderRadius:1 }}/>
+                                        ))}
+                                    </div>
+                                );
+                            };
+                            const MiniLineS = ({ data, h=38 }) => {
+                                const w=120, valid=data.filter(v=>v!=null);
+                                const max=Math.max(...valid,1), min=Math.min(...valid,0), range=Math.max(max-min,0.01);
+                                const xF=i=>(i/(data.length-1))*w, yF=v=>h-((v-min)/range)*h;
+                                const path=data.map((v,i)=>`${i===0?'M':'L'}${xF(i)},${yF(v)}`).join(' ');
+                                const area=path+` L${w},${h} L0,${h} Z`;
+                                return (
+                                    <svg width="100%" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display:'block', height:h }}>
+                                        <path d={area} fill={TS.ink} opacity={0.1}/>
+                                        <path d={path} fill="none" stroke={TS.ink} strokeWidth={1.5} strokeLinejoin="round"/>
+                                        <circle cx={xF(data.length-1)} cy={yF(data[data.length-1])} r={2.5} fill={TS.ink}/>
+                                    </svg>
+                                );
+                            };
+                            const MiniStackedS = ({ segments, h=38 }) => {
+                                const total = segments.reduce((s,g)=>s+g.v,0)||1;
+                                return (
+                                    <div style={{ height:h, display:'flex', alignItems:'center' }}>
+                                        <div style={{ height:14, width:'100%', display:'flex', borderRadius:2, overflow:'hidden' }}>
+                                            {segments.map((g,i)=><div key={i} style={{ width:`${(g.v/total)*100}%`, background:g.c }}/>)}
+                                        </div>
+                                    </div>
+                                );
+                            };
+                            const MiniFunnelS = ({ steps, h=38 }) => (
+                                <div style={{ height:h, display:'flex', flexDirection:'column', gap:2, justifyContent:'center' }}>
+                                    {steps.map((s,i)=><div key={i} style={{ height:7, width:`${s*100}%`, background:['#b0a088','#b07a55','#3a5530'][i]||TS.ink, borderRadius:1 }}/>)}
+                                </div>
+                            );
+                            const PreviewS = ({ preview, h=38 }) => {
+                                if(!preview) return null;
+                                if(preview.kind==='bars') return preview.horizontal ? <MiniBarH data={preview.data} colors={preview.colors} h={h}/> : <MiniBar data={preview.data} colors={preview.colors} h={h}/>;
+                                if(preview.kind==='line')    return <MiniLineS data={preview.data} h={h}/>;
+                                if(preview.kind==='stacked') return <MiniStackedS segments={preview.segments} h={h}/>;
+                                if(preview.kind==='funnel')  return <MiniFunnelS steps={preview.steps} h={h}/>;
+                                if(preview.kind==='number')  return (
+                                    <div style={{ height:h, display:'flex', alignItems:'center', gap:6 }}>
+                                        <div style={{ fontSize:24, fontWeight:700, color:TS.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"' }}>{preview.big}</div>
+                                        <div style={{ fontSize:10.5, color:TS.inkMuted, lineHeight:1.2 }}>{preview.sub}</div>
+                                    </div>
+                                );
+                                return null;
+                            };
+
+                            // ── Compute real pinned headline metrics from live data
+                            const fmtS = v => { const n=parseFloat(v)||0; return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1e3?'$'+Math.round(n/1e3)+'K':'$'+Math.round(n); };
+                            const allWon   = reportsOpps.filter(o=>o.stage==='Closed Won');
+                            const allOpen  = reportsOpps.filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost');
+                            const allLost  = reportsOpps.filter(o=>o.stage==='Closed Lost');
+                            const totalQ   = (settings.users||[]).reduce((s,u)=>{
+                                const qm = u.quotaType||'annual';
+                                return s + (qm==='annual'?(u.annualQuota||0):(u.q1Quota||0)+(u.q2Quota||0)+(u.q3Quota||0)+(u.q4Quota||0));
+                            }, 0);
+                            const closedWonRev = allWon.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                            const attainPctS   = totalQ>0 ? Math.round(closedWonRev/totalQ*100) : 0;
+
+                            // Pipeline movement net delta (last 7 days — using createdDate as proxy)
+                            const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
+                            const sevenISO = sevenDaysAgo.toISOString().slice(0,10);
+                            const addedRecent = allOpen.filter(o=>o.createdDate&&o.createdDate>=sevenISO).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                            const netChange = addedRecent; // simplified — newly created open pipeline this week
+
+                            // Stuck deals (no activity in 14+ days)
+                            const stuckDeals = allOpen.filter(o=>{
+                                const lastAct = (activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
+                                const ds = lastAct?.date ? Math.floor((new Date()-new Date(lastAct.date+'T12:00:00'))/86400000) : 999;
+                                return ds >= 14;
+                            });
+                            const stuckARR = stuckDeals.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+
+                            // Closing this month
+                            const now30 = new Date(); now30.setDate(now30.getDate()+30);
+                            const closingMonth = allOpen.filter(o=>{
+                                const cd = o.forecastedCloseDate||o.closeDate||'';
+                                if(!cd) return false;
+                                return cd <= now30.toISOString().slice(0,10);
+                            });
+                            const closingARR = closingMonth.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+
+                            // Pinned cards — built from real data
+                            const pinnedCards = [
+                                {
+                                    id:'p1', name:'Quota pacing', basedOn:'Performance',
+                                    updated: 'live', viewsThisWeek:'-',
+                                    headline: attainPctS+'%', subhead: `of quota · ${fmtS(closedWonRev)} closed`,
+                                    preview: { kind:'line', data: [0, Math.max(0.05,attainPctS*0.003), Math.max(0.1,attainPctS*0.005), Math.max(0.15,attainPctS*0.007), Math.max(0.2,attainPctS*0.008), Math.max(0.25,attainPctS*0.009), attainPctS/100] },
+                                },
+                                {
+                                    id:'p2', name:'Pipeline added this week', basedOn:'Pipeline & Forecast',
+                                    updated: 'live', viewsThisWeek:'-',
+                                    headline: fmtS(netChange), subhead: `${allOpen.filter(o=>o.createdDate&&o.createdDate>=sevenISO).length} new deals · 7d`,
+                                    preview: { kind:'bars', data:[Math.max(10,netChange*0.3), Math.max(10,netChange*0.6), Math.max(10,netChange*0.8), Math.max(10,netChange*0.5), Math.max(10,netChange)] },
+                                },
+                                {
+                                    id:'p3', name:'Stuck deals (14d+ no activity)', basedOn:'Pipeline & Forecast',
+                                    updated: 'live', viewsThisWeek:'-',
+                                    headline: stuckDeals.length+' deals', subhead: fmtS(stuckARR)+' at risk',
+                                    preview: { kind:'number', big:String(stuckDeals.length), sub:fmtS(stuckARR)+' pipeline' },
+                                },
+                                {
+                                    id:'p4', name:'Closing next 30 days', basedOn:'Pipeline & Forecast',
+                                    updated: 'live', viewsThisWeek:'-',
+                                    headline: fmtS(closingARR), subhead: `${closingMonth.length} deals open`,
+                                    preview: { kind:'stacked', segments:[{v:closingARR*0.45,c:TS.ok},{v:closingARR*0.30,c:TS.gold},{v:closingARR*0.25,c:'#b0a088'}] },
+                                },
+                            ];
+
+                            // ── Static personal / shared / template report datasets
+                            // These will be replaced by real saved-reports API data when that endpoint is built.
+                            const personalReports = [
+                                { id:'s5', name:'Lead source ROI', basedOn:'Performance', updated:'—', description:'Closed won ARR by lead source, this quarter', preview:{ kind:'bars', data:[68,42,31,19,12] } },
+                                { id:'s6', name:'Avg days by stage', basedOn:'Pipeline & Forecast', updated:'—', description:'Time in each stage for closed-won deals', preview:{ kind:'bars', data:[6,8,14,11,9,5] } },
+                                { id:'s7', name:'Win / loss reasons', basedOn:'Performance', updated:'—', description:'Closed-lost breakdown by reason and competitor', preview:{ kind:'bars', data:[5,3,2,1] } },
+                                { id:'s8', name:'Activity per rep', basedOn:'Activity', updated:'—', description:'Activities logged per rep, trailing 30 days', preview:{ kind:'number', big: String(reportsTimedActivities.length), sub:'activities total' } },
+                            ];
+                            const sharedReports = [
+                                { id:'sh1', name:'Team quota board', owner: currentUser||'Manager', basedOn:'Performance', updated:'—', followers:0, description:'Full team attainment leaderboard', preview:{ kind:'bars', data:[112,93,79,48,48,21], horizontal:true, colors:['#3a5530','#3a5530','#4d6b3d','#b87333','#b87333','#9c3a2e'] } },
+                                { id:'sh2', name:'Big deal tracker ($50K+)', owner: currentUser||'Manager', basedOn:'Pipeline & Forecast', updated:'—', followers:0, description:'All open deals $50K+, by stage and age', preview:{ kind:'number', big:String(allOpen.filter(o=>(parseFloat(o.arr)||0)>=50000).length), sub:'open deals' } },
+                            ];
+                            const templates = [
+                                { id:'t1', name:'Deal review — weekly', basedOn:'Pipeline & Forecast', icon:'📅', description:'1:1-ready view: commits, at-risk, and new deals since last review' },
+                                { id:'t2', name:'Win / loss analysis',  basedOn:'Performance',          icon:'🎯', description:'Closed deals with reason breakdown, competitor, and cycle length' },
+                                { id:'t3', name:'Rep scorecard',        basedOn:'Performance',          icon:'👤', description:'Single-rep view of all fundamentals — attainment, win rate, cycle' },
+                                { id:'t4', name:'Territory coverage',   basedOn:'Activity',             icon:'🗺️', description:'Activity density by territory / industry / deal size tier' },
+                                { id:'t5', name:'Stage conversion deep-dive', basedOn:'Pipeline & Forecast', icon:'🔽', description:'Funnel with avg days, entered/advanced, drop-off reasons' },
+                                { id:'t6', name:'Forecast vs actual',  basedOn:'Pipeline & Forecast',  icon:'📈', description:'Quarterly forecast accuracy trend with team roll-up' },
+                            ];
+
+                            // ── Search state — filters across all sections
+                            const [srchQ, setSrchQ] = React.useState('');
+                            const matchSrch = name => !srchQ.trim() || name.toLowerCase().includes(srchQ.toLowerCase());
+
+                            // ── Card components
+                            const PinnedCardS = ({ r }) => {
+                                const [hov, setHov] = React.useState(false);
+                                return (
+                                    <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+                                        style={{ background:TS.surface, border:`1px solid ${hov?TS.borderStrong:TS.border}`, borderRadius:TS.r, padding:'14px 16px 12px', display:'flex', flexDirection:'column', gap:8, cursor:'pointer', minHeight:168, transition:'border-color 120ms' }}>
+                                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                            <div style={{ ...ebS(TS.inkMuted), fontSize:9.5 }}>{r.basedOn}</div>
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={TS.goldInk} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 17v4M8 2h8l-1 7 3 3v2H6v-2l3-3-1-7z"/></svg>
+                                        </div>
+                                        <div style={{ fontSize:14.5, fontWeight:600, color:TS.ink, letterSpacing:-0.1, lineHeight:1.25 }}>{r.name}</div>
+                                        <div style={{ display:'flex', alignItems:'baseline', gap:8 }}>
+                                            <div style={{ fontSize:22, fontWeight:700, color:TS.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"' }}>{r.headline}</div>
+                                            <div style={{ fontSize:11, color:TS.inkMuted }}>{r.subhead}</div>
+                                        </div>
+                                        <div style={{ marginTop:'auto' }}><PreviewS preview={r.preview} h={42}/></div>
+                                        <div style={{ display:'flex', alignItems:'center', gap:10, fontSize:10.5, color:TS.inkMuted, paddingTop:8, borderTop:`1px solid ${TS.border}` }}>
+                                            <span style={{ background:'rgba(77,107,61,0.1)', color:TS.ok, fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:2 }}>LIVE</span>
+                                            <span>{r.subhead}</span>
+                                        </div>
+                                    </div>
+                                );
+                            };
+                            const ReportCardS = ({ r, showOwner }) => {
+                                const [hov, setHov] = React.useState(false);
+                                return (
+                                    <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+                                        style={{ background:TS.surface, border:`1px solid ${hov?TS.borderStrong:TS.border}`, borderRadius:TS.r, padding:'12px 14px', display:'flex', flexDirection:'column', gap:8, cursor:'pointer', minHeight:130, transition:'border-color 120ms' }}>
+                                        <div style={{ ...ebS(TS.inkMuted), fontSize:9.5 }}>{r.basedOn}</div>
+                                        <div style={{ fontSize:13.5, fontWeight:600, color:TS.ink, lineHeight:1.3, letterSpacing:-0.1 }}>{r.name}</div>
+                                        <div style={{ fontSize:11.5, color:TS.inkMuted, lineHeight:1.45 }}>{r.description}</div>
+                                        <div style={{ marginTop:'auto' }}><PreviewS preview={r.preview} h={32}/></div>
+                                        <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:10.5, color:TS.inkMuted, paddingTop:6, borderTop:`1px solid ${TS.border}` }}>
+                                            {showOwner && <><AvatarS name={r.owner} size={14}/><span style={{ color:TS.inkMid, fontWeight:500 }}>{r.owner}</span><span style={{ opacity:0.4 }}>·</span></>}
+                                            <span>{r.updated}</span>
+                                            {r.followers!=null && <><span style={{ opacity:0.4 }}>·</span><span>{r.followers} followers</span></>}
+                                        </div>
+                                    </div>
+                                );
+                            };
+                            const TemplateCardS = ({ t }) => {
+                                const [hov, setHov] = React.useState(false);
+                                return (
+                                    <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+                                        style={{ background:hov?TS.surface2:TS.surface, border:`${hov?'1px solid':'1px dashed'} ${TS.borderStrong}`, borderRadius:TS.r, padding:'14px 16px', display:'flex', gap:12, alignItems:'flex-start', cursor:'pointer', transition:'background 120ms' }}>
+                                        <div style={{ width:36, height:36, borderRadius:TS.r, background:TS.surface2, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:18 }}>{t.icon}</div>
+                                        <div style={{ flex:1, minWidth:0 }}>
+                                            <div style={{ ...ebS(TS.inkMuted), fontSize:9.5, marginBottom:3 }}>{t.basedOn}</div>
+                                            <div style={{ fontSize:13.5, fontWeight:600, color:TS.ink, letterSpacing:-0.1 }}>{t.name}</div>
+                                            <div style={{ fontSize:11.5, color:TS.inkMuted, lineHeight:1.45, marginTop:3 }}>{t.description}</div>
+                                        </div>
+                                        <div style={{ fontSize:11, fontWeight:600, color:TS.goldInk, letterSpacing:0.3, textTransform:'uppercase', whiteSpace:'nowrap', paddingTop:2 }}>Start →</div>
+                                    </div>
+                                );
+                            };
+                            const SectionS = ({ title, subtitle, count, children }) => (
+                                <div style={{ marginBottom:28 }}>
+                                    <div style={{ display:'flex', alignItems:'flex-end', gap:10, marginBottom:12 }}>
+                                        <div style={{ flex:1 }}>
+                                            <div style={{ fontSize:16, fontFamily:TS.serif, fontStyle:'italic', fontWeight:400, color:TS.ink, lineHeight:1.1, letterSpacing:-0.2, display:'flex', alignItems:'baseline', gap:10 }}>
+                                                {title}
+                                                <span style={{ fontSize:12, color:TS.inkMuted, fontFamily:TS.sans, fontStyle:'normal', fontWeight:500 }}>{count}</span>
+                                            </div>
+                                            {subtitle && <div style={{ fontSize:11.5, color:TS.inkMuted, marginTop:3, fontFamily:TS.sans }}>{subtitle}</div>}
+                                        </div>
+                                        <div style={{ fontSize:11.5, color:TS.inkMid, cursor:'pointer', fontWeight:500, fontFamily:TS.sans }}>See all →</div>
+                                    </div>
+                                    {children}
+                                </div>
+                            );
+
+                            const filteredPinned   = pinnedCards.filter(r=>matchSrch(r.name));
+                            const filteredPersonal  = personalReports.filter(r=>matchSrch(r.name));
+                            const filteredShared    = sharedReports.filter(r=>matchSrch(r.name));
+                            const filteredTemplates = templates.filter(t=>matchSrch(t.name));
+
+                            return (
+                            <div style={{ display:'flex', flexDirection:'column', gap:0, padding:'1rem 1.25rem 1.5rem' }}>
+
+                                {/* Toolbar */}
+                                <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20, flexWrap:'wrap' }}>
+                                    <div style={{ position:'relative', flex:1, maxWidth:340 }}>
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={TS.inkMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)' }}><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                                        <input value={srchQ} onChange={e=>setSrchQ(e.target.value)}
+                                            placeholder="Search your library…"
+                                            style={{ width:'100%', padding:'7px 10px 7px 30px', border:`1px solid ${TS.border}`, borderRadius:TS.r, background:TS.surface, color:TS.ink, fontSize:12.5, fontFamily:TS.sans, outline:'none', boxSizing:'border-box' }}/>
+                                    </div>
+                                    <div style={{ flex:1 }}/>
+                                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:TS.ink, color:TS.surface, border:'none', borderRadius:TS.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:TS.sans }}>
+                                        + Create report
+                                    </button>
+                                </div>
+
+                                {/* Pinned — live data */}
+                                {filteredPinned.length > 0 && (
+                                    <SectionS title="Pinned" subtitle="Live metrics — updated from your pipeline data" count={`${filteredPinned.length} views`}>
+                                        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
+                                            {filteredPinned.map(r=><PinnedCardS key={r.id} r={r}/>)}
+                                        </div>
+                                    </SectionS>
+                                )}
+
+                                {/* Your reports — static seed */}
+                                {filteredPersonal.length > 0 && (
+                                    <SectionS title="Your reports" subtitle="Reports you've created" count={`${filteredPersonal.length} reports`}>
+                                        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
+                                            {filteredPersonal.map(r=><ReportCardS key={r.id} r={r}/>)}
+                                        </div>
+                                    </SectionS>
+                                )}
+
+                                {/* Shared by team — static seed */}
+                                {filteredShared.length > 0 && (
+                                    <SectionS title="Shared by team" subtitle="Reports your manager and teammates have published" count={`${filteredShared.length} reports`}>
+                                        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
+                                            {filteredShared.map(r=><ReportCardS key={r.id} r={r} showOwner/>)}
+                                        </div>
+                                    </SectionS>
+                                )}
+
+                                {/* Templates — always static */}
+                                {filteredTemplates.length > 0 && (
+                                    <SectionS title="Start from a template" subtitle="Pre-built report layouts you can customize" count={`${filteredTemplates.length} templates`}>
+                                        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
+                                            {filteredTemplates.map(t=><TemplateCardS key={t.id} t={t}/>)}
+                                        </div>
+                                    </SectionS>
+                                )}
+
+                                {filteredPinned.length===0 && filteredPersonal.length===0 && filteredShared.length===0 && filteredTemplates.length===0 && (
+                                    <div style={{ padding:'3rem', textAlign:'center', color:TS.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:TS.sans }}>
+                                        No reports match "{srchQ}"
+                                    </div>
+                                )}
+                            </div>
+                            );
+                        })()}
                         </div>
 
                     </div>
