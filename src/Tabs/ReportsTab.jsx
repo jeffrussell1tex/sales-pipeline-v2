@@ -1481,7 +1481,7 @@ ${bodyHtml}
 
 
                           {/* Why deals are lost + Activity mix */}
-                          {repRows.length > 0 && (() => {
+                          {(() => {
                             const T2b = { surface:'#fbf8f3', surface2:'#f5efe3', border:'#e6ddd0', ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378', ok:'#4d6b3d', warn:'#b87333', danger:'#9c3a2e', gold:'#c8b99a', sans:'"Plus Jakarta Sans",system-ui,sans-serif', serif:'Georgia,serif', r:3 };
                             const eb2b = (c) => ({ fontSize:10, fontWeight:700, color:c||T2b.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T2b.sans });
 
