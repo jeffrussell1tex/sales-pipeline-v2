@@ -12,20 +12,21 @@ export const handler = async (event) => {
     const { userId, orgId, userRole } = auth;
 
     const sanitize = (d) => ({
-        id:           d.id,
-        firstName:    d.firstName    || null,
-        lastName:     d.lastName     || null,
-        company:      d.company      || null,
-        title:        d.title        || null,
-        email:        d.email        || null,
-        phone:        d.phone        || null,
-        source:       d.source       || null,
-        status:       d.status       || 'New',
-        score:        d.score        ?? 50,
-        estimatedARR: d.estimatedARR ?? null,
-        assignedTo:   d.assignedTo   || null,
-        notes:        d.notes        || null,
-        convertedAt:  d.convertedAt  || null,
+        id:             d.id,
+        firstName:      d.firstName    || null,
+        lastName:       d.lastName     || null,
+        company:        d.company      || null,
+        title:          d.title        || null,
+        email:          d.email        || null,
+        phone:          d.phone        || null,
+        source:         d.source       || null,
+        status:         d.status       || 'New',
+        score:          d.score        ?? 50,
+        estimatedARR:   d.estimatedARR ?? null,
+        assignedTo:     d.assignedTo   || null,
+        notes:          d.notes        || null,
+        convertedAt:    d.convertedAt  || null,
+        firstTouchDate: d.firstTouchDate || null,
     });
 
     try {
@@ -69,11 +70,30 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body);
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
 
-            // Fetch existing so we can detect conversion
+            // Fetch existing so we can detect first-time conversion and first touch
             const [existing] = await db.select().from(leads).where(and(eq(leads.id, data.id), eq(leads.orgId, orgId)));
             const wasConverted = existing?.status === 'Converted';
 
             const clean = sanitize(data);
+            const today = new Date().toISOString().slice(0, 10);
+
+            // Auto-set convertedAt the first time status flips to Converted
+            if (!wasConverted && clean.status === 'Converted' && !clean.convertedAt) {
+                clean.convertedAt = today;
+            }
+
+            // Auto-set firstTouchDate once — when the lead is first assigned or
+            // status moves beyond New for the first time. Never overwrite once set.
+            if (!existing?.firstTouchDate && !clean.firstTouchDate) {
+                const isNowTouched = clean.assignedTo || (clean.status && clean.status !== 'New');
+                if (isNowTouched) {
+                    clean.firstTouchDate = today;
+                }
+            } else if (existing?.firstTouchDate && !clean.firstTouchDate) {
+                // Preserve existing value — sanitize may have nulled it if not in payload
+                clean.firstTouchDate = existing.firstTouchDate;
+            }
+
             const { id, ...updateData } = clean;
             const [upserted] = await db.insert(leads).values({ ...clean, orgId })
                 .onConflictDoUpdate({ target: leads.id, set: { ...updateData, updatedAt: new Date() } })
