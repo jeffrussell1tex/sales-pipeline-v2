@@ -2955,6 +2955,253 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         );
     }
 
+
+    // ── Forecast vs Actual template ──
+    if (activeTemplate === 't6') {
+        const T = TS;
+        const serif = T.serif;
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+
+        const PanelD = ({ children, padding='18px 20px', style:s }) => (
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding, ...s }}>{children}</div>
+        );
+        const SecHdrD = ({ title, subtitle, right }) => (
+            <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:12 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.2, lineHeight:1.1 }}>{title}</div>
+                    {subtitle && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>}
+                </div>
+                {right}
+            </div>
+        );
+
+        // ── Fiscal quarter helper
+        const fiscalStart = parseInt(settings.fiscalYearStart)||10;
+        const getOppFiscalQtr = (dateStr) => {
+            if (!dateStr) return null;
+            const d = new Date(dateStr+'T12:00:00');
+            const m = d.getMonth()+1; // 1-12
+            const y = d.getFullYear();
+            // How many months past fiscal start
+            let offset = m - fiscalStart;
+            if (offset < 0) offset += 12;
+            const q = Math.floor(offset/3)+1; // 1-4
+            // Fiscal year label: year when fiscal year ends
+            const fyEnd = m >= fiscalStart ? y+1 : y;
+            return { q, fyEnd, label:`Q${q} FY${String(fyEnd).slice(2)}` };
+        };
+
+        // Per-rep quarterly quota — split annual evenly across 4 quarters
+        const getRepQuarterQuota = (user) => {
+            if (!user) return 0;
+            const qMode = user.quotaType||'annual';
+            if (qMode === 'quarterly') {
+                // Return per-quarter average (we don't know which quarter we're asking about without more context)
+                return ((user.q1Quota||0)+(user.q2Quota||0)+(user.q3Quota||0)+(user.q4Quota||0))/4;
+            }
+            return (user.annualQuota||0)/4;
+        };
+
+        // Visible reps
+        const repsD = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager');
+
+        // All won opps with a close date
+        const wonWithDate = (reportsOpps||[]).filter(o=>o.stage==='Closed Won'&&(o.forecastedCloseDate||o.closeDate));
+
+        // Build last 6 quarters in reverse-chronological order then reverse for display
+        const now = new Date();
+        const quarters = [];
+        let yr = now.getFullYear(), mo = now.getMonth()+1;
+        // Find current fiscal quarter
+        let offset = mo - fiscalStart; if(offset<0) offset+=12;
+        let curQ = Math.floor(offset/3)+1;
+        const fyEnd = mo >= fiscalStart ? yr+1 : yr;
+        // Walk back 5 quarters to get 6 total
+        for (let i=0; i<6; i++) {
+            let q = curQ - i; let fy = fyEnd;
+            while(q<=0){ q+=4; fy--; }
+            // Quarter start/end calendar months
+            const qStartOffset = (q-1)*3;
+            let startM = ((fiscalStart-1+qStartOffset)%12)+1;
+            let startY = startM >= fiscalStart ? fy-1 : fy;
+            let endM = ((startM-1+2)%12)+1; // 3 months later - 1
+            endM = ((startM+2-1)%12)+1;
+            const startDate = new Date(startY, startM-1, 1);
+            const endDate   = new Date(startY, startM+2, 0); // last day of 3rd month
+            const isCurrentQ = i===0;
+            quarters.unshift({ q, fy, label:`Q${q} FY${String(fy).slice(2)}`, startDate, endDate, isCurrentQ });
+        }
+
+        // For each quarter, compute actual (Closed Won) and forecast (team quota)
+        const totalQQuota = repsD.reduce((s,u)=>s+getRepQuarterQuota(u),0);
+
+        const qData = quarters.map(qt => {
+            const won = wonWithDate.filter(o => {
+                const cd = new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00');
+                return cd >= qt.startDate && cd <= qt.endDate;
+            });
+            const actual   = won.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+            const forecast = totalQQuota; // team quarterly quota
+            const accuracy = forecast > 0 ? actual/forecast : null;
+            return { ...qt, actual, forecast, accuracy, wonCount:won.length };
+        });
+
+        const completedQs = qData.filter(q=>!q.isCurrentQ&&q.accuracy!=null);
+        const avgAccuracy = completedQs.length>0 ? completedQs.reduce((s,q)=>s+q.accuracy,0)/completedQs.length : null;
+        const currentQ    = qData[qData.length-1];
+        const maxBarVal   = Math.max(...qData.map(q=>Math.max(q.forecast,q.actual)),1);
+
+        // Accuracy color
+        const accColor = v => v==null?T.inkMuted:v>=0.95&&v<=1.05?T.ok:v<0.9||v>1.1?T.danger:T.warn;
+        const accBg    = v => v==null?'transparent':v>=0.95&&v<=1.05?'rgba(77,107,61,0.10)':v<0.9||v>1.1?'rgba(156,58,46,0.10)':'rgba(184,115,51,0.10)';
+
+        // Per-rep accuracy table
+        const repRows = repsD.map(u => {
+            const repWon = wonWithDate.filter(o=>(o.salesRep||o.assignedTo)===u.name);
+            const qCells = quarters.map(qt => {
+                const won = repWon.filter(o=>{ const cd=new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00'); return cd>=qt.startDate&&cd<=qt.endDate; });
+                const actual   = won.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                const forecast = getRepQuarterQuota(u);
+                return forecast>0 ? actual/forecast : null;
+            });
+            const completedCells = qCells.slice(0,-1).filter(v=>v!=null);
+            const avg = completedCells.length>0 ? completedCells.reduce((s,v)=>s+v,0)/completedCells.length : null;
+            return { name:u.name, cells:qCells, avg };
+        }).filter(r=>r.cells.some(v=>v!=null));
+
+        return (
+            <div style={{ fontFamily:T.sans, color:T.ink }}>
+                {/* Header */}
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ flex:1 }}>
+                        <div style={{ ...ebD(T.goldInk), display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>✦ Template · Pipeline &amp; Forecast</div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:6 }}>Forecast vs actual</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Quarterly forecast accuracy trend with per-rep roll-up. Find the sandbaggers and the over-promisers.</div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
+                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                    </div>
+                </div>
+
+                {/* KPI strip */}
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:14 }}>
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                        <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Avg accuracy (5Q)</div>
+                        <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{avgAccuracy!=null?Math.round(avgAccuracy*100)+'%':'—'}</div>
+                        {avgAccuracy!=null&&<div style={{ fontSize:11, color:T.ok, marginTop:5, fontFamily:T.sans }}>vs prior 5 quarters</div>}
+                    </div>
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                        <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Current quarter forecast</div>
+                        <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(currentQ.forecast)}</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>{currentQ.label} team quota</div>
+                    </div>
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                        <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Booked so far</div>
+                        <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(currentQ.actual)}</div>
+                        {currentQ.forecast>0&&<div style={{ fontSize:11, color:T.ok, marginTop:5, fontFamily:T.sans }}>{Math.round(currentQ.actual/currentQ.forecast*100)}% of forecast · {currentQ.wonCount} deals</div>}
+                    </div>
+                    <div style={{ background:'rgba(156,58,46,0.04)', border:'1px solid rgba(156,58,46,0.2)', borderRadius:T.r+1, padding:'14px 18px' }}>
+                        <div style={{ ...ebD(T.danger), marginBottom:4 }}>At-risk gap</div>
+                        <div style={{ fontSize:28, fontWeight:700, color:T.danger, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(Math.max(0,currentQ.forecast-currentQ.actual))}</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>to hit forecast · {currentQ.label}</div>
+                    </div>
+                </div>
+
+                {/* Bar chart — forecast vs actual by quarter */}
+                <PanelD padding="20px 24px 18px" style={{ marginBottom:14 }}>
+                    <SecHdrD
+                        title="Forecast vs actual — by quarter"
+                        subtitle="Side-by-side bars · dashed outline = in-progress quarter"
+                        right={
+                            <div style={{ display:'flex', alignItems:'center', gap:14, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
+                                <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                                    <span style={{ width:10, height:10, background:T.gold, borderRadius:2 }}/>Forecast
+                                </span>
+                                <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                                    <span style={{ width:10, height:10, background:T.ok, borderRadius:2 }}/>Actual
+                                </span>
+                            </div>
+                        }
+                    />
+                    <div style={{ display:'flex', alignItems:'flex-end', gap:20, height:200, paddingBottom:8, borderBottom:`1px solid ${T.border}`, position:'relative' }}>
+                        {qData.map((q,i) => {
+                            const fH = Math.max(4,(q.forecast/maxBarVal)*160);
+                            const aH = Math.max(4,(q.actual/maxBarVal)*160);
+                            const ac = q.accuracy;
+                            const color = accColor(ac);
+                            return (
+                                <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:6, height:'100%', justifyContent:'flex-end' }}>
+                                    <div style={{ display:'flex', gap:5, alignItems:'flex-end' }}>
+                                        {/* Forecast bar */}
+                                        <div style={{ width:22, height:fH, background:q.isCurrentQ?'transparent':T.gold, border:q.isCurrentQ?`2px dashed ${T.gold}`:'none', borderRadius:'2px 2px 0 0', boxSizing:'border-box' }}/>
+                                        {/* Actual bar */}
+                                        <div style={{ width:22, height:aH, background:q.isCurrentQ?'rgba(77,107,61,0.4)':T.ok, borderRadius:'2px 2px 0 0', position:'relative' }}>
+                                            {q.isCurrentQ&&<div style={{ position:'absolute', top:-18, left:'50%', transform:'translateX(-50%)', fontSize:9, color:T.inkMuted, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', whiteSpace:'nowrap' }}>so far</div>}
+                                        </div>
+                                    </div>
+                                    <div style={{ fontSize:11, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{q.label}</div>
+                                    <div style={{ fontSize:11, fontWeight:700, color:q.isCurrentQ?T.inkMuted:color, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>
+                                        {q.isCurrentQ?'—':ac!=null?Math.round(ac*100)+'%':'—'}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div style={{ display:'flex', gap:20, paddingTop:10, fontSize:11, color:T.inkMid, flexWrap:'wrap', fontFamily:T.sans }}>
+                        <span style={{ ...ebD(T.inkMuted), textTransform:'none', letterSpacing:0 }}>Accuracy target: 95–105%</span>
+                        <span style={{ color:T.ok,     fontWeight:600 }}>● On target</span>
+                        <span style={{ color:T.warn,   fontWeight:600 }}>● Within tolerance</span>
+                        <span style={{ color:T.danger, fontWeight:600 }}>● Miss</span>
+                    </div>
+                </PanelD>
+
+                {/* Per-rep accuracy table */}
+                {repRows.length > 0 && (
+                    <PanelD padding="16px 20px 8px">
+                        <SecHdrD
+                            title="Accuracy by rep"
+                            subtitle="Per-quarter · lower = under-called, higher = over-called"
+                            right={<button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>··· Export</button>}
+                        />
+                        {/* Column headers */}
+                        <div style={{ display:'grid', gridTemplateColumns:`160px repeat(${quarters.length},1fr) 70px`, gap:8, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T.border}` }}>
+                            <div style={ebD(T.inkMuted)}>Rep</div>
+                            {quarters.map(q=><div key={q.label} style={{ ...ebD(T.inkMuted), textAlign:'center' }}>{q.label}</div>)}
+                            <div style={{ ...ebD(T.inkMuted), textAlign:'right' }}>Avg</div>
+                        </div>
+                        {repRows.map((r,ri) => (
+                            <div key={ri} style={{ display:'grid', gridTemplateColumns:`160px repeat(${quarters.length},1fr) 70px`, gap:8, alignItems:'center', padding:'8px 0', borderBottom:ri<repRows.length-1?`1px solid ${T.border}`:'none' }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
+                                    <div style={{ width:20, height:20, borderRadius:'50%', background:'#9c6b4a', color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:700, flexShrink:0 }}>
+                                        {(r.name||'').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
+                                    </div>
+                                    <span style={{ fontSize:13, color:T.ink, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:T.sans }}>{r.name}</span>
+                                </div>
+                                {r.cells.map((v,ci) => (
+                                    <div key={ci} style={{ textAlign:'center', fontSize:12.5, fontWeight:600, color:accColor(v), fontFeatureSettings:'"tnum"', fontFamily:T.sans, padding:'4px 2px', background:accBg(v), borderRadius:2 }}>
+                                        {v==null?'—':Math.round(v*100)+'%'}
+                                    </div>
+                                ))}
+                                <div style={{ textAlign:'right', fontSize:14, fontWeight:700, color:accColor(r.avg), fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>
+                                    {r.avg!=null?Math.round(r.avg*100)+'%':'—'}
+                                </div>
+                            </div>
+                        ))}
+                    </PanelD>
+                )}
+                {repRows.length === 0 && (
+                    <PanelD padding="24px">
+                        <div style={{ textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                            No per-rep data yet. Set quotas for reps in Sales Manager to see accuracy by rep.
+                        </div>
+                    </PanelD>
+                )}
+            </div>
+        );
+    }
+
     return (
         <div style={{ display:'flex', flexDirection:'column', gap:0, padding:'1rem 1.25rem 1.5rem' }}>
             {/* Toolbar */}
