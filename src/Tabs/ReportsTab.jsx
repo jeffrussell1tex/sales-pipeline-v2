@@ -2364,6 +2364,7 @@ ${bodyHtml}
 function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, settings, currentUser }) {
     const [srchQ, setSrchQ] = React.useState('');
     const [activeTemplate, setActiveTemplate] = React.useState(null);
+    const [selectedRepSC, setSelectedRepSC] = React.useState(currentUser||'');
 
     // ── Design tokens
     const TS = {
@@ -3417,8 +3418,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
             </div>
         );
 
-        // ── Rep selector state
-        const [selectedRepSC, setSelectedRepSC] = React.useState(currentUser||'');
+        // ── Rep selector state (declared at component top level)
         const repsListSC = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>u.name);
         // Fall back to currentUser if repsListSC is empty
         const repNameSC = repsListSC.includes(selectedRepSC) ? selectedRepSC : (repsListSC[0]||currentUser||'');
@@ -3666,6 +3666,251 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                         }
                     </PanelD>
                 </div>
+            </div>
+        );
+    }
+
+
+    // ── Territory Coverage template ──
+    if (activeTemplate === 't4') {
+        const T = TS;
+        const serif = T.serif;
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+        const PanelD = ({ children, padding='18px 20px', style:s }) => (
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding, ...s }}>{children}</div>
+        );
+        const SecHdrD = ({ title, subtitle, right }) => (
+            <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:12 }}>
+                <div style={{ flex:1 }}>
+                    <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.2 }}>{title}</div>
+                    {subtitle && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>}
+                </div>
+                {right}
+            </div>
+        );
+        const HBarD = ({ value, max, color=T.gold, height=5 }) => {
+            const pct = max>0 ? Math.min(100,(value/max)*100) : 0;
+            return <div style={{ height, background:T.surface2, borderRadius:height/2, overflow:'hidden', flex:1 }}><div style={{ height:'100%', width:pct+'%', background:color }}/></div>;
+        };
+
+        // ── Build territory → rep map from settings.users
+        const terrMap = {}; // territory → [repName]
+        (settings.users||[]).forEach(u => {
+            if (u.territory && u.name) {
+                terrMap[u.territory] = terrMap[u.territory]||[];
+                terrMap[u.territory].push(u.name);
+            }
+        });
+        const territories = Object.keys(terrMap).sort();
+
+        // ── Rep → territory lookup
+        const repToTerr = {};
+        Object.entries(terrMap).forEach(([terr,reps]) => reps.forEach(r => repToTerr[r]=terr));
+
+        // ── Open opps
+        const openOppsT = (reportsOpps||[]).filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost');
+
+        // Assign each opp to a territory via its salesRep
+        const oppWithTerr = openOppsT.map(o => ({
+            ...o,
+            territory: repToTerr[o.salesRep||o.assignedTo] || null,
+            arr: parseFloat(o.arr)||0,
+        })).filter(o => o.territory);
+
+        // Deal-size tiers
+        const TIERS = [
+            { label:'< $25K',    min:0,      max:25000  },
+            { label:'$25–75K',   min:25000,  max:75000  },
+            { label:'$75–150K',  min:75000,  max:150000 },
+            { label:'$150K+',    min:150000, max:Infinity },
+        ];
+        const getTier = arr => TIERS.findIndex(t => arr >= t.min && arr < t.max);
+
+        // Build grid: territory × tier → count
+        const grid = {}; // { [territory]: [count, count, count, count] }
+        const pipelineByTerr = {}; // { [territory]: totalArr }
+        territories.forEach(t => { grid[t]=[0,0,0,0]; pipelineByTerr[t]=0; });
+        oppWithTerr.forEach(o => {
+            const ti = getTier(o.arr);
+            if (ti>=0 && grid[o.territory]) {
+                grid[o.territory][ti]++;
+                pipelineByTerr[o.territory] = (pipelineByTerr[o.territory]||0) + o.arr;
+            }
+        });
+
+        const maxCell = Math.max(...territories.flatMap(t=>grid[t]),1);
+        const heatColor = v => {
+            const pct = v/maxCell;
+            if (pct>0.75) return '#3a5530';
+            if (pct>0.5)  return '#4d6b3d';
+            if (pct>0.3)  return '#7a8a5a';
+            if (pct>0.15) return '#c8b99a';
+            if (pct>0.05) return '#e6ddc0';
+            return T.surface2;
+        };
+        const cellTextColor = v => v/maxCell > 0.4 ? '#fbf8f3' : T.ink;
+
+        // ── KPIs
+        const totalOpenOpps = openOppsT.length;
+        const coveredTerrs  = territories.filter(t=>(grid[t]||[]).reduce((s,v)=>s+v,0)>0).length;
+        const avgPerTerr    = territories.length>0 ? Math.round(totalOpenOpps/territories.length) : 0;
+        const oppsByTerr    = territories.map(t=>({ t, n:(grid[t]||[]).reduce((s,v)=>s+v,0) })).sort((a,b)=>a.n-b.n);
+        const gapTerritory  = oppsByTerr[0];
+
+        // ── Industry mix from open opps via account lookup
+        const industryMap = {};
+        openOppsT.forEach(o => {
+            const acct = (reportsTimedActivities&&false)||null; // activities not needed
+            // Look up account verticalMarket from the accounts list via o.account name
+            const accObj = (settings.__accountsRef||[]).find?.(a=>(a.name||'').toLowerCase()===(o.account||'').toLowerCase());
+            const ind = o.vertical || o.verticalMarket || accObj?.verticalMarket || accObj?.industry || 'Other';
+            industryMap[ind] = (industryMap[ind]||0)+1;
+        });
+        const industryRows = Object.entries(industryMap)
+            .map(([industry,opps])=>({ industry, opps, pct:totalOpenOpps>0?opps/totalOpenOpps:0 }))
+            .sort((a,b)=>b.opps-a.opps).slice(0,7);
+        const maxIndustry = Math.max(...industryRows.map(r=>r.opps),1);
+
+        // ── Auto coverage gaps
+        const gaps = [];
+        if (gapTerritory && gapTerritory.n < avgPerTerr * 0.6) {
+            gaps.push({ territory:gapTerritory.t, issue:`Only ${gapTerritory.n} open opp${gapTerritory.n!==1?'s':''} — lowest coverage across all territories.` });
+        }
+        territories.forEach(t => {
+            const largeDealCount = (grid[t]||[])[3]; // $150K+ tier
+            const totalT = (grid[t]||[]).reduce((s,v)=>s+v,0);
+            if (totalT>5 && largeDealCount===0) {
+                gaps.push({ territory:t, issue:`${totalT} open deals but no $150K+ opportunities — consider moving upmarket.` });
+            }
+        });
+        const avgPipeline = territories.length>0 ? Object.values(pipelineByTerr).reduce((s,v)=>s+v,0)/territories.length : 0;
+        territories.forEach(t => {
+            if (pipelineByTerr[t]>0 && pipelineByTerr[t] < avgPipeline*0.4 && !gaps.find(g=>g.territory===t)) {
+                gaps.push({ territory:t, issue:`Pipeline (${fmtShort(pipelineByTerr[t])}) is well below team average — prioritize prospecting here.` });
+            }
+        });
+
+        // No territory data state
+        const noTerritories = territories.length === 0;
+
+        return (
+            <div style={{ fontFamily:T.sans, color:T.ink }}>
+                {/* Header */}
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ flex:1 }}>
+                        <div style={{ ...ebD(T.goldInk), display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>✦ Template · Activity</div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:6 }}>Territory coverage</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Activity density by territory, industry, and deal-size tier — find the under-covered pockets before they show up as a missed quarter.</div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
+                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                    </div>
+                </div>
+
+                {noTerritories ? (
+                    <PanelD padding="3rem">
+                        <div style={{ textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                            No territories configured. Assign territories to reps in Settings → People &amp; Teams → Territories, then this report will populate automatically.
+                        </div>
+                    </PanelD>
+                ) : (
+                    <>
+                        {/* KPI strip */}
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:14 }}>
+                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                                <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Territories covered</div>
+                                <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{coveredTerrs} / {territories.length}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>with open pipeline</div>
+                            </div>
+                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                                <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Open opportunities</div>
+                                <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{oppWithTerr.length}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>across {territories.length} territories</div>
+                            </div>
+                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                                <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Avg per territory</div>
+                                <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{avgPerTerr}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>open opps per territory</div>
+                            </div>
+                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                                <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Coverage gap</div>
+                                <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3, lineHeight:1.1, fontFamily:T.sans }}>{gapTerritory?.t||'—'}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>{gapTerritory?gapTerritory.n+' opps · lowest':'all territories covered'}</div>
+                            </div>
+                        </div>
+
+                        {/* Two-column body */}
+                        <div style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:14 }}>
+                            {/* Left — heatmap */}
+                            <PanelD padding="18px 20px 16px">
+                                <SecHdrD title="Coverage heatmap" subtitle="# of open opps by territory × deal size"
+                                    right={
+                                        <span style={{ fontSize:11, color:T.inkMuted, display:'inline-flex', alignItems:'center', gap:5, fontFamily:T.sans }}>
+                                            <span>Low</span>
+                                            {[T.surface2,'#e6ddc0','#c8b99a','#7a8a5a','#4d6b3d','#3a5530'].map(c=>(
+                                                <span key={c} style={{ width:14, height:10, background:c, border:`1px solid ${T.border}`, display:'inline-block' }}/>
+                                            ))}
+                                            <span>High</span>
+                                        </span>
+                                    }
+                                />
+                                {/* Column headers */}
+                                <div style={{ display:'grid', gridTemplateColumns:`110px repeat(${TIERS.length},1fr) 80px`, gap:6, padding:'0 0 8px', alignItems:'center' }}>
+                                    <div/>
+                                    {TIERS.map(t=><div key={t.label} style={{ ...ebD(T.inkMuted), fontSize:10, textAlign:'center' }}>{t.label}</div>)}
+                                    <div style={{ ...ebD(T.inkMuted), fontSize:10, textAlign:'right' }}>Pipeline</div>
+                                </div>
+                                {territories.map(terr => (
+                                    <div key={terr} style={{ display:'grid', gridTemplateColumns:`110px repeat(${TIERS.length},1fr) 80px`, gap:6, alignItems:'center', padding:'4px 0' }}>
+                                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{terr}</div>
+                                        {(grid[terr]||[0,0,0,0]).map((v,ci)=>(
+                                            <div key={ci} style={{ height:44, background:heatColor(v), color:cellTextColor(v), border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:700, fontFeatureSettings:'"tnum"', borderRadius:2, fontFamily:T.sans }}>
+                                                {v}
+                                            </div>
+                                        ))}
+                                        <div style={{ textAlign:'right', fontSize:13, color:T.ink, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>
+                                            {fmtShort(pipelineByTerr[terr]||0)}
+                                        </div>
+                                    </div>
+                                ))}
+                            </PanelD>
+
+                            {/* Right — industry mix + gaps */}
+                            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                                <PanelD padding="16px 20px 16px">
+                                    <SecHdrD title="Industry mix" subtitle="All open opps, by industry"/>
+                                    {industryRows.length === 0 ? (
+                                        <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No industry data. Set vertical market on accounts to see industry breakdown.</div>
+                                    ) : industryRows.map((ind,i)=>(
+                                        <div key={i} style={{ display:'grid', gridTemplateColumns:'110px 1fr 38px 42px', gap:8, alignItems:'center', padding:'5px 0', borderTop:i===0?'none':`1px solid ${T.border}` }}>
+                                            <span style={{ fontSize:12, color:T.ink, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ind.industry}</span>
+                                            <HBarD value={ind.opps} max={maxIndustry} color={T.gold}/>
+                                            <span style={{ textAlign:'right', fontSize:11.5, color:T.inkMuted, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{ind.opps}</span>
+                                            <span style={{ textAlign:'right', fontSize:12, color:T.ink, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{Math.round(ind.pct*100)}%</span>
+                                        </div>
+                                    ))}
+                                </PanelD>
+
+                                <PanelD padding="16px 20px 14px">
+                                    <SecHdrD title="Coverage gaps" subtitle="Where the pipeline is thin"/>
+                                    {gaps.length === 0 ? (
+                                        <div style={{ fontSize:12, color:T.ok, fontFamily:T.sans }}>✓ All territories have healthy coverage.</div>
+                                    ) : gaps.slice(0,4).map((g,i)=>(
+                                        <div key={i} style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'9px 0', borderTop:i===0?'none':`1px solid ${T.border}` }}>
+                                            <span style={{ fontSize:16, flexShrink:0, marginTop:1 }}>⚠</span>
+                                            <div>
+                                                <div style={{ fontSize:12.5, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{g.territory}</div>
+                                                <div style={{ fontSize:11.5, color:T.inkMid, marginTop:2, lineHeight:1.45, fontFamily:T.sans }}>{g.issue}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </PanelD>
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
         );
     }
