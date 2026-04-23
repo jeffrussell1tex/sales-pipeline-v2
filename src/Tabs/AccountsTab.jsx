@@ -324,9 +324,9 @@ function AccountRow({
             style={{
                 display: 'grid',
                 gridTemplateColumns: selectMode
-                    ? '36px 3px 240px 48px 1fr 90px 60px 110px 100px 28px'
-                    : '3px 240px 48px 1fr 90px 60px 110px 100px 28px',
-                alignItems: 'center', height: 52,
+                    ? '36px 3px 220px 56px 200px 110px 70px 130px 120px 28px'
+                    : '3px 220px 56px 200px 110px 70px 130px 120px 28px',
+                alignItems: 'center', minHeight: 52,
                 borderBottom: `1px solid ${T.border}`,
                 background: isSelected
                     ? 'rgba(42,38,34,0.04)'
@@ -390,7 +390,7 @@ function AccountRow({
             </div>
 
             {/* Industry */}
-            <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 8, paddingRight: 8 }}>
+            <div style={{ fontSize: 12, color: T.inkMid, paddingLeft: 8, paddingRight: 8, lineHeight: 1.4 }}>
                 {account.verticalMarket || account.industry || '—'}
             </div>
 
@@ -700,8 +700,8 @@ export default function AccountsTab() {
         <div style={{
             display: 'grid',
             gridTemplateColumns: sm
-                ? '36px 3px 240px 48px 1fr 90px 60px 110px 100px 28px'
-                : '3px 240px 48px 1fr 90px 60px 110px 100px 28px',
+                ? '36px 3px 220px 56px 200px 110px 70px 130px 120px 28px'
+                : '3px 220px 56px 200px 110px 70px 130px 120px 28px',
             alignItems: 'center', height: 34,
             background: T.surface2, borderBottom: `1px solid ${T.border}`,
             fontSize: 10, fontWeight: 700, color: T.inkMuted,
@@ -718,7 +718,7 @@ export default function AccountsTab() {
                 <SortHeader label="Account"      field="name"        currentField={sortField} currentDir={sortDir} onSort={handleSort} />
             </div>
             <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.6, textTransform: 'uppercase', textAlign: 'center' }}>Subs</div>
-            <SortHeader label="Industry"     field="industry"    currentField={sortField} currentDir={sortDir} onSort={handleSort} />
+            <SortHeader label="Industry"     field="industry"    currentField={sortField} currentDir={sortDir} onSort={handleSort} style={{ paddingLeft: 8 }} />
             <SortHeader label="Pipeline"     field="pipeline"    currentField={sortField} currentDir={sortDir} onSort={handleSort} />
             <SortHeader label="Deals"        field="deals"       currentField={sortField} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'center', justifyContent: 'center' }} />
             <SortHeader label="Last Contact" field="lastContact" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
