@@ -707,7 +707,7 @@ function OppQuotesPanel({ opportunity, contacts, onClose }) {
                 <div><div style={{ ...ey(), marginBottom: 2 }}>Opportunity</div><div style={{ fontSize: '0.875rem', fontWeight: '700', color: T.ink, fontFamily: T.sans }}>{opportunity?.opportunityName || opportunity?.account || '—'}</div></div>
                 <div><div style={{ ...ey(), marginBottom: 2 }}>Account</div><div style={{ fontSize: '0.875rem', fontWeight: '600', color: T.inkMid, fontFamily: T.sans }}>{opportunity?.account || '—'}</div></div>
                 {primaryContact && <div><div style={{ ...ey(), marginBottom: 2 }}>Primary Contact</div><div style={{ fontSize: '0.875rem', fontWeight: '600', color: T.inkMid, fontFamily: T.sans }}>{primaryContact.firstName} {primaryContact.lastName}{primaryContact.title ? ` · ${primaryContact.title}` : ''}</div></div>}
-                <div><div style={{ ...ey(), marginBottom: 2 }}>Est. ARR</div><div style={{ fontSize: '0.875rem', fontWeight: '700', color: T.ink, fontFamily: T.sans }}>{fmtCurrency(opportunity?.arr)}</div></div>
+                <div><div style={{ ...ey(), marginBottom: 2 }}>Revenue</div><div style={{ fontSize: '0.875rem', fontWeight: '700', color: T.ink, fontFamily: T.sans }}>{fmtCurrency(opportunity?.arr)}</div></div>
             </div>
             {oppQuotes.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: T.inkMuted, fontSize: '0.875rem', fontFamily: T.sans }}>
@@ -985,12 +985,6 @@ export default function OpportunityModal({
         };
     });
 
-    const computedArr = (() => {
-        const revs = formData.productRevenues || {};
-        const selectedProducts = formData.products ? formData.products.split(',').map(p => p.trim()).filter(Boolean) : [];
-        if (selectedProducts.length === 0) return parseFloat(formData.arr) || 0;
-        return selectedProducts.reduce((sum, p) => sum + (parseFloat(revs[p]) || 0), 0);
-    })();
 
     const [contactSearch, setContactSearch]             = useState('');
     const [showContactSuggestions, setShowContactSuggestions] = useState(false);
@@ -1004,8 +998,7 @@ export default function OpportunityModal({
     const [selectedContactIds, setSelectedContactIds]   = useState(opportunity?.contactIds || []);
     const [nestedModal, setNestedModal]                 = useState(null);
     const [validationErrors, setValidationErrors]       = useState({});
-    const [productSearch, setProductSearch]             = useState('');
-    const [showProductDropdown, setShowProductDropdown] = useState(false);
+
 
     // Rail drawer state — which detail panel is open
     // null = show rail, 'history' | 'contacts' | 'ai-score' | 'quotes' = show full-width tab
@@ -1107,11 +1100,8 @@ export default function OpportunityModal({
         if (!formData.account || !formData.account.trim()) errors.account = 'Account name is required';
         if (!formData.salesRep || !formData.salesRep.trim()) errors.salesRep = 'Sales rep is required';
         if (!formData.forecastedCloseDate) errors.forecastedCloseDate = 'Close date is required';
-        if (formData.arr === '' || formData.arr === null || formData.arr === undefined || parseFloat(formData.arr) < 0) {
-            const selectedProducts = formData.products ? formData.products.split(',').map(p => p.trim()).filter(Boolean) : [];
-            if (selectedProducts.length === 0 && (formData.arr === '' || formData.arr === null || formData.arr === undefined || parseFloat(formData.arr) < 0))
-                errors.arr = 'Enter revenue for at least one product, or add a manual total';
-        }
+        if (formData.arr === '' || formData.arr === null || formData.arr === undefined || parseFloat(formData.arr) < 0)
+            errors.arr = 'Revenue is required';
         if (formData.account && formData.account.trim()) {
             const isJustCreated = lastCreatedAccountName && lastCreatedAccountName.toLowerCase() === formData.account.trim().toLowerCase();
             if (!isJustCreated) {
@@ -1125,8 +1115,7 @@ export default function OpportunityModal({
             return;
         }
         setValidationErrors({});
-        const cleanRevenues = Object.fromEntries(Object.entries(formData.productRevenues || {}).map(([k, v]) => [k, parseFloat(v) || 0]));
-        onSave({ ...formData, arr: isNaN(computedArr) ? 0 : computedArr, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, productRevenues: cleanRevenues, closeQuarter, contactIds: selectedContactIds });
+        onSave({ ...formData, arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds });
     };
 
     // ── @mention helpers (fully preserved) ───────────────────
@@ -1635,80 +1624,20 @@ export default function OpportunityModal({
                                         </div>
                                     </div>
 
-                                    {/* ── Products & Revenue ── */}
+                                    {/* ── Revenue ── */}
                                     <div style={{ marginBottom: 16 }}>
-                                        <label style={fieldLabelStyle}>Products & Revenue</label>
-                                        {(() => {
-                                            const selectedProducts = formData.products ? formData.products.split(',').map(p => p.trim()).filter(Boolean) : [];
-                                            const availableProducts = (settings?.products || []);
-                                            const filtered = availableProducts.filter(p => p.toLowerCase().includes(productSearch.toLowerCase()) && !selectedProducts.includes(p));
-                                            const toggleProduct = (product) => {
-                                                const current = formData.products ? formData.products.split(',').map(p => p.trim()).filter(Boolean) : [];
-                                                const updated = current.includes(product) ? current.filter(p => p !== product) : [...current, product];
-                                                handleChange('products', updated.join(', '));
-                                            };
-                                            const setProductRevenue = (product, value) => {
-                                                handleChange('productRevenues', { ...(formData.productRevenues || {}), [product]: value });
-                                            };
-                                            return (
-                                                <div style={{ position: 'relative' }}>
-                                                    <input type="text" value={productSearch}
-                                                        onChange={e => { setProductSearch(e.target.value); setShowProductDropdown(true); }}
-                                                        onFocus={() => setShowProductDropdown(true)}
-                                                        onBlur={() => setTimeout(() => setShowProductDropdown(false), 150)}
-                                                        placeholder={availableProducts.length ? 'Search or select products…' : 'No products defined in Settings yet'}
-                                                        style={inputStyle(false)}/>
-                                                    {showProductDropdown && filtered.length > 0 && (
-                                                        <div style={{ ...suggestionDropStyle, maxHeight: 180 }}>
-                                                            {filtered.map(p => (
-                                                                <div key={p} onMouseDown={() => { toggleProduct(p); setProductSearch(''); }}
-                                                                    style={{ padding: '7px 10px', cursor: 'pointer', fontSize: 13, color: T.ink, fontFamily: T.sans, borderBottom: `1px solid ${T.border}` }}
-                                                                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                                                                    onMouseLeave={e => e.currentTarget.style.background = ''}>
-                                                                    {p}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    {selectedProducts.length > 0 && (
-                                                        <div style={{ marginTop: 8, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
-                                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 28px', alignItems: 'center', padding: '5px 10px', background: T.surface2, borderBottom: `1px solid ${T.border}` }}>
-                                                                <span style={{ ...ey() }}>Product</span>
-                                                                <span style={{ ...ey(), textAlign: 'right' }}>Annual Rev ($)</span>
-                                                                <span/>
-                                                            </div>
-                                                            {selectedProducts.map(p => (
-                                                                <div key={p} style={{ display: 'grid', gridTemplateColumns: '1fr 130px 28px', alignItems: 'center', padding: '6px 10px', borderBottom: `1px solid ${T.border}`, gap: 8, background: T.surface }}>
-                                                                    <span style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{p}</span>
-                                                                    <input type="number" min="0"
-                                                                        value={String((formData.productRevenues || {})[p] ?? '')}
-                                                                        onChange={e => setProductRevenue(p, e.target.value)}
-                                                                        placeholder="0"
-                                                                        style={{ padding: '4px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, fontFamily: 'ui-monospace, Menlo, monospace', textAlign: 'right', background: T.surface, color: T.ink, width: '100%', boxSizing: 'border-box' }}/>
-                                                                    <button type="button" onClick={() => toggleProduct(p)}
-                                                                        style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: '1rem', lineHeight: 1, padding: 2, borderRadius: T.r }}
-                                                                        onMouseEnter={e => e.currentTarget.style.color = T.danger}
-                                                                        onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>×</button>
-                                                                </div>
-                                                            ))}
-                                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 28px', alignItems: 'center', padding: '7px 10px', background: 'rgba(77,107,61,0.07)', gap: 8 }}>
-                                                                <span style={{ fontSize: 13, fontWeight: 700, color: T.ok, fontFamily: T.sans }}>Total ARR</span>
-                                                                <span style={{ fontSize: 13, fontWeight: 700, color: T.ok, textAlign: 'right', fontFamily: 'ui-monospace, Menlo, monospace' }}>${(isNaN(computedArr) ? 0 : computedArr).toLocaleString()}</span>
-                                                                <span/>
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                    {selectedProducts.length === 0 && (
-                                                        <div style={{ marginTop: 8 }}>
-                                                            <label style={{ ...ey(), display: 'block', marginBottom: 4 }}>Total ARR ($) — no products selected</label>
-                                                            <input type="number" value={formData.arr ?? 0} onChange={e => handleChange('arr', e.target.value)} placeholder="0"
-                                                                style={inputStyle(validationErrors.arr)}/>
-                                                            {validationErrors.arr && <div className="opp-field-error" style={{ color: T.danger, fontSize: 11, fontWeight: 600, marginTop: 3, fontFamily: T.sans }}>⚠ {validationErrors.arr}</div>}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })()}
+                                        <label style={fieldLabelStyle}>Revenue ($)</label>
+                                        <input type="number" min="0"
+                                            value={formData.arr ?? 0}
+                                            onChange={e => handleChange('arr', e.target.value)}
+                                            placeholder="0"
+                                            style={inputStyle(validationErrors.arr)}/>
+                                        {validationErrors.arr && (
+                                            <div className="opp-field-error" style={{ color: T.danger, fontSize: 11, fontWeight: 600, marginTop: 3, fontFamily: T.sans }}>⚠ {validationErrors.arr}</div>
+                                        )}
+                                        <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 4, fontFamily: T.sans }}>
+                                            Total deal value — product line items are managed in the Quotes tab.
+                                        </div>
                                     </div>
 
                                     {/* ── Contacts ── */}

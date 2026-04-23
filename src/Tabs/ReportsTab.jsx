@@ -640,7 +640,7 @@ ${bodyHtml}
       <thead>
 <tr>
   <th>Opportunity</th><th>Account</th><th>Stage</th>
-  <th style="text-align:right;">ARR</th><th style="text-align:right;">Impl. Cost</th>
+  <th style="text-align:right;">Revenue</th><th style="text-align:right;">Impl. Cost</th>
   <th style="text-align:right;">Total Value</th><th>Close Date</th><th>Owner</th>
 </tr>
       </thead>
@@ -1705,7 +1705,7 @@ ${bodyHtml}
                             const maxType3 = Math.max(...typeRows3.map(([,c])=>c),1);
                             const typeColors3 = { 'Call':T3.info, 'Email':T3.gold, 'Meeting':T3.ok, 'Demo':T3.warn, 'Note':T3.inkMuted, 'Other':T3.inkMuted };
 
-                            // ── Account coverage matrix — top open opps by ARR vs activity count
+                            // ── Account coverage matrix — top open opps by Revenue vs activity count
                             const topOpenByARR = [...openOpps].sort((a,b)=>(parseFloat(b.arr)||0)-(parseFloat(a.arr)||0)).slice(0,9);
                             const maxArr3 = Math.max(...topOpenByARR.map(o=>parseFloat(o.arr)||0),1);
                             const oppActs = topOpenByARR.map(o=>{
@@ -1914,7 +1914,7 @@ ${bodyHtml}
                                   ):(
                                     <>
                                       <div style={{ display:'grid', gridTemplateColumns:'1fr 100px 90px 60px', gap:10, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T3.border}` }}>
-                                        {['Account','ARR','Activity','Count'].map((h,i)=><div key={i} style={{ ...eb3(T3.inkMuted), textAlign:i>=3?'right':'left' }}>{h}</div>)}
+                                        {['Account','Revenue','Activity','Count'].map((h,i)=><div key={i} style={{ ...eb3(T3.inkMuted), textAlign:i>=3?'right':'left' }}>{h}</div>)}
                                       </div>
                                       {oppActs.map((o,i)=>{
                                         const cold = o.actCount===0||(o.actCount<3&&(parseFloat(o.arr)||0)>20000);
@@ -2304,10 +2304,10 @@ ${bodyHtml}
 
                                 {/* ──── V1 REP TABLE ──── */}
                                 <Panel4 p="18px 20px 20px">
-                                    <SecHdr4 title="Rep lead performance" sub="Assigned · converted · rate · est. ARR"/>
+                                    <SecHdr4 title="Rep lead performance" sub="Assigned · converted · rate · est. Revenue"/>
                                     <div style={{ marginTop:4 }}>
                                         <div style={{ display:'grid', gridTemplateColumns:'1.2fr 0.6fr 0.7fr 0.6fr 0.8fr', padding:'8px 0', borderBottom:`1px solid ${T4.border}` }}>
-                                            {['Rep','Assigned','Converted','Rate','Est. ARR'].map((h,i)=>(
+                                            {['Rep','Assigned','Converted','Rate','Est. Revenue'].map((h,i)=>(
                                                 <div key={h} style={{ ...eb4(T4.inkMuted), textAlign:i===0?'left':'right' }}>{h}</div>
                                             ))}
                                         </div>
@@ -2446,7 +2446,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         { id:'p4', name:'Closing next 30 days', basedOn:'Pipeline & Forecast', headline:fmtS(closingARR), subhead:`${closingMonth.length} deals open`, preview:{ kind:'stacked', segments:[{v:Math.max(1,closingARR*0.45),c:TS.ok},{v:Math.max(1,closingARR*0.30),c:TS.gold},{v:Math.max(1,closingARR*0.25),c:'#b0a088'}] } },
     ];
     const personalReports = [
-        { id:'s5', name:'Lead source ROI', basedOn:'Performance', updated:'—', description:'Closed won ARR by lead source, this quarter', preview:{ kind:'bars', data:[68,42,31,19,12] } },
+        { id:'s5', name:'Lead source ROI', basedOn:'Performance', updated:'—', description:'Closed won revenue by lead source, this quarter', preview:{ kind:'bars', data:[68,42,31,19,12] } },
         { id:'s6', name:'Avg days by stage', basedOn:'Pipeline & Forecast', updated:'—', description:'Time in each stage for closed-won deals', preview:{ kind:'bars', data:[6,8,14,11,9,5] } },
         { id:'s7', name:'Win / loss reasons', basedOn:'Performance', updated:'—', description:'Closed-lost breakdown by reason and competitor', preview:{ kind:'bars', data:[5,3,2,1] } },
         { id:'s8', name:'Activity per rep', basedOn:'Activity', updated:'—', description:'Activities logged per rep, trailing 30 days', preview:{ kind:'number', big:String((reportsTimedActivities||[]).length), sub:'activities total' } },
@@ -2708,7 +2708,7 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
                             <thead>
                                 <tr style={{ background: '#fbf8f3', borderBottom: '1px solid #e6ddd0' }}>
-                                    {['Date', 'Rep', 'Type', 'Deal', 'ARR', 'Signal', 'Outcome', 'Days'].map(h => (
+                                    {['Date', 'Rep', 'Type', 'Deal', 'Revenue', 'Signal', 'Outcome', 'Days'].map(h => (
                                         <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', whiteSpace: 'nowrap' }}>{h}</th>
                                     ))}
                                 </tr>

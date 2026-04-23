@@ -431,7 +431,7 @@ export default function PipelineTab() {
 
     const pipelineTotalARR   = pipelineFilteredOpps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
     const commitARR          = pipelineFilteredOpps.filter(o => ['Negotiation','Negotiation/Review','Contracts','Closing'].includes(o.stage)).reduce((s,o) => s+(parseFloat(o.arr)||0), 0);
-    // Weighted ARR = sum of (arr * probability / 100) across open deals
+    // Weighted Revenue = sum of (arr * probability / 100) across open deals
     const weightedARR        = pipelineFilteredOpps
         .filter(o => !['Closed Won','Closed Lost'].includes(o.stage))
         .reduce((s, o) => s + ((parseFloat(o.arr)||0) * (parseFloat(o.probability)||0) / 100), 0);
@@ -469,7 +469,7 @@ export default function PipelineTab() {
 
     // ── Export CSV ────────────────────────────────────────────
     const handleExport = () => {
-        const headers = ['Deal', 'Account', 'Stage', 'ARR', 'Probability', 'Weighted ARR', 'Close Date', 'Sales Rep', 'Health', 'AI Score', 'Days in Stage'];
+        const headers = ['Deal', 'Account', 'Stage', 'Revenue', 'Probability', 'Weighted Revenue', 'Close Date', 'Sales Rep', 'Health', 'AI Score', 'Days in Stage'];
         const rows = smartFilteredOpps.map(o => {
             const health     = calculateDealHealth(o);
             const daysInStage = o.stageChangedDate ? Math.max(0, Math.floor((new Date() - new Date(o.stageChangedDate + 'T12:00:00')) / 86400000)) : '';
@@ -843,7 +843,7 @@ export default function PipelineTab() {
                             <SortHeader label="Account" field="account"         currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} />
                             {canSeeAll && <SortHeader label="Rep" field="salesRep" currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} />}
                             <div>Stage</div>
-                            <SortHeader label="ARR"   field="arr"                currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} style={{ textAlign: 'right', justifyContent: 'flex-end' }} />
+                            <SortHeader label="Revenue" field="arr"                currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} style={{ textAlign: 'right', justifyContent: 'flex-end' }} />
                             <SortHeader label="Close" field="forecastedCloseDate" currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} />
                             <div>AI</div>
                             <div>Health</div>
@@ -930,7 +930,7 @@ export default function PipelineTab() {
                                             <div style={{ width: 6, height: 6, borderRadius: 1, background: stageColor(opp.stage) }}/>{opp.stage}
                                         </div>
 
-                                        {/* ARR */}
+                                        {/* Revenue */}
                                         <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: T.ink }}>
                                             ${(parseFloat(opp.arr)||0) >= 1000 ? Math.round((parseFloat(opp.arr)||0)/1000) + 'K' : (parseFloat(opp.arr)||0).toLocaleString()}
                                         </div>

@@ -989,7 +989,7 @@ export default function SalesManagerTab() {
                                             onFocus={e=>e.target.style.borderColor=T.info} onBlur={e=>e.target.style.borderColor=T.border} />
                                         <select value={spiff.type} onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,type:e.target.value}:s)}))}
                                             style={{ padding:'4px 6px', border:`1.5px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontFamily:T.sans, background:T.surface, cursor:'pointer', outline:'none', color:T.ink }}>
-                                            <option value="flat">Flat $</option><option value="pct">% ARR</option><option value="multiplier">Multiplier</option>
+                                            <option value="flat">Flat $</option><option value="pct">% Revenue</option><option value="multiplier">Multiplier</option>
                                         </select>
                                         <input type="number" value={spiff.amount} placeholder="0"
                                             onChange={e=>setSettings(prev=>({...prev,spiffs:(prev.spiffs||[]).map((s,i)=>i===si?{...s,amount:e.target.value}:s)}))}
