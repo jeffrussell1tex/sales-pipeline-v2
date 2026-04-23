@@ -492,6 +492,7 @@ function FilterPanel({ open, onClose, accounts, onApply, currentFilters }) {
                     <label style={lbl}>Owner</label>
                     <select value={owner} onChange={e => setOwner(e.target.value)} style={selStyle}>
                         <option value="__all__">All owners</option>
+                        <option value="__unassigned__">Unassigned</option>
                         {owners.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                 </div>
@@ -594,7 +595,9 @@ export default function AccountsTab() {
         if (panelFilters.industry !== '__all__') {
             list = list.filter(a => (a.verticalMarket || a.industry) === panelFilters.industry);
         }
-        if (panelFilters.owner !== '__all__') {
+        if (panelFilters.owner === '__unassigned__') {
+            list = list.filter(a => !a.accountOwner || a.accountOwner.trim() === '');
+        } else if (panelFilters.owner !== '__all__') {
             list = list.filter(a => a.accountOwner === panelFilters.owner);
         }
         if (panelFilters.hasPipe === 'yes') {
