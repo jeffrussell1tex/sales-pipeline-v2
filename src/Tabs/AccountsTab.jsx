@@ -323,8 +323,8 @@ function AccountRow({
             style={{
                 display: 'grid',
                 gridTemplateColumns: selectMode
-                    ? '36px 3px 1.8fr 1fr 90px 60px 110px 100px 28px'
-                    : '3px 1.8fr 1fr 90px 60px 110px 100px 28px',
+                    ? '36px 3px 1.8fr 56px 1fr 90px 60px 110px 100px 28px'
+                    : '3px 1.8fr 56px 1fr 90px 60px 110px 100px 28px',
                 alignItems: 'center', height: 52,
                 borderBottom: `1px solid ${T.border}`,
                 background: isSelected
@@ -367,19 +367,9 @@ function AccountRow({
                 </div>
             </div>
 
-            {/* Industry */}
-            <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
-                {account.verticalMarket || account.industry || '—'}
-            </div>
-
-            {/* Pipeline */}
-            <div style={{ fontSize: 12, fontWeight: 600, color: pipeline > 0 ? T.ink : T.inkMuted, fontVariantNumeric: 'tabular-nums', paddingRight: 8 }}>
-                {pipeline > 0 ? fmtArr(pipeline) : '—'}
-            </div>
-
-            {/* Deals — shows sub-account badge here when account has children */}
-            <div style={{ fontSize: 12, color: T.inkMid, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {hasChildren ? (
+            {/* Subs */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {hasChildren && (
                     <button
                         onClick={e => { e.stopPropagation(); onOpenDrawer(account, subAccounts); }}
                         title={`${subAccounts.length} sub-account${subAccounts.length !== 1 ? 's' : ''}`}
@@ -395,9 +385,22 @@ function AccountRow({
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18M3 9h18"/></svg>
                         {subAccounts.length}
                     </button>
-                ) : (
-                    activeOpps.length || '—'
                 )}
+            </div>
+
+            {/* Industry */}
+            <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                {account.verticalMarket || account.industry || '—'}
+            </div>
+
+            {/* Pipeline */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: pipeline > 0 ? T.ink : T.inkMuted, fontVariantNumeric: 'tabular-nums', paddingRight: 8 }}>
+                {pipeline > 0 ? fmtArr(pipeline) : '—'}
+            </div>
+
+            {/* Deals */}
+            <div style={{ fontSize: 12, color: T.inkMid, textAlign: 'center' }}>
+                {activeOpps.length || '—'}
             </div>
 
             {/* Last contact */}
@@ -689,8 +692,8 @@ export default function AccountsTab() {
         <div style={{
             display: 'grid',
             gridTemplateColumns: sm
-                ? '36px 3px 1.8fr 1fr 90px 60px 110px 100px 28px'
-                : '3px 1.8fr 1fr 90px 60px 110px 100px 28px',
+                ? '36px 3px 1.8fr 56px 1fr 90px 60px 110px 100px 28px'
+                : '3px 1.8fr 56px 1fr 90px 60px 110px 100px 28px',
             alignItems: 'center', height: 34,
             background: T.surface2, borderBottom: `1px solid ${T.border}`,
             fontSize: 10, fontWeight: 700, color: T.inkMuted,
@@ -706,6 +709,7 @@ export default function AccountsTab() {
             <div style={{ paddingLeft: 12 }}>
                 <SortHeader label="Account"      field="name"        currentField={sortField} currentDir={sortDir} onSort={handleSort} />
             </div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.6, textTransform: 'uppercase', textAlign: 'center' }}>Subs</div>
             <SortHeader label="Industry"     field="industry"    currentField={sortField} currentDir={sortDir} onSort={handleSort} />
             <SortHeader label="Pipeline"     field="pipeline"    currentField={sortField} currentDir={sortDir} onSort={handleSort} />
             <SortHeader label="Deals"        field="deals"       currentField={sortField} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'center', justifyContent: 'center' }} />

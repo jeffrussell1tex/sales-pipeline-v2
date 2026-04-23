@@ -2363,6 +2363,7 @@ ${bodyHtml}
 // ─────────────────────────────────────────────────────────────
 function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, settings, currentUser }) {
     const [srchQ, setSrchQ] = React.useState('');
+    const [activeTemplate, setActiveTemplate] = React.useState(null);
 
     // ── Design tokens
     const TS = {
@@ -2481,6 +2482,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         const [hov, setHov] = React.useState(false);
         return (
             <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+                onClick={() => setActiveTemplate(t.id)}
                 style={{ background:hov?TS.surface2:TS.surface, border:`${hov?'1px solid':'1px dashed'} ${TS.borderStrong}`, borderRadius:TS.r, padding:'14px 16px', display:'flex', gap:12, alignItems:'flex-start', cursor:'pointer', transition:'background 120ms' }}>
                 <div style={{ width:36, height:36, borderRadius:TS.r, background:TS.surface2, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:18 }}>{t.icon}</div>
                 <div style={{ flex:1, minWidth:0 }}>
@@ -2507,6 +2509,194 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
             {children}
         </div>
     );
+
+
+    // ── Deal Review template — live data computed here ──
+    if (activeTemplate === 't1') {
+        const T = TS;
+        const serif = T.serif;
+        const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const stageColors = { 'Prospecting':'#b0a088','Qualification':'#c8a978','Discovery':'#b07a55','Proposal':'#b87333','Negotiation/Review':'#7a5a3c','Negotiation':'#7a5a3c','Contracts':'#4d6b3d','Closing':'#4d6b3d','Closed Won':'#3a5530','Closed Lost':'#9c3a2e' };
+
+        const PanelD = ({ children, padding='18px 20px', style:s }) => (
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding, ...s }}>{children}</div>
+        );
+        const SecHdrD = ({ title, subtitle, right }) => (
+            <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.2, lineHeight:1.1 }}>{title}</div>
+                    {subtitle && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>}
+                </div>
+                {right}
+            </div>
+        );
+        const KpiD = ({ label, value, sub, danger }) => (
+            <div style={{ border:`1px solid ${danger?'rgba(156,58,46,0.35)':T.border}`, borderRadius:T.r+1, padding:'14px 18px', background:danger?'rgba(156,58,46,0.04)':T.surface }}>
+                <div style={{ ...ebD(danger?T.danger:T.inkMuted), marginBottom:4 }}>{label}</div>
+                <div style={{ fontSize:28, fontWeight:700, color:danger?T.danger:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{value}</div>
+                {sub && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>{sub}</div>}
+            </div>
+        );
+        const StageChipD = ({ stage }) => (
+            <span style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:11, color:T.inkMid, fontWeight:500, fontFamily:T.sans }}>
+                <span style={{ width:6, height:6, background:stageColors[stage]||T.inkMuted, borderRadius:'50%', flexShrink:0 }}/>
+                {stage}
+            </span>
+        );
+
+        const now7 = new Date(); now7.setDate(now7.getDate()-7);
+        const iso7 = now7.toISOString().slice(0,10);
+
+        const commitOpps = allOpen.filter(o =>
+            o.forecastCategory === 'commit' ||
+            (!o.forecastCategory && ['Closing','Negotiation/Review','Contracts','Negotiation'].includes(o.stage))
+        );
+        const atRiskOpps = allOpen.filter(o => {
+            const lastAct = (activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
+            const days = lastAct?.date ? Math.floor((Date.now()-new Date(lastAct.date+'T12:00:00').getTime())/86400000) : 999;
+            return days >= 14;
+        });
+        const newSinceOpps = allOpen.filter(o => o.createdDate && o.createdDate >= iso7);
+        const changedOpps  = (reportsOpps||[]).filter(o => o.stageChangedDate && o.stageChangedDate >= iso7);
+
+        const commitTotal = commitOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+        const riskTotal   = atRiskOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+        const newTotal    = newSinceOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+
+        const lastActLabel = opp => {
+            const a = (activities||[]).filter(a=>a.opportunityId===opp.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
+            if (!a?.date) return 'No activity';
+            return Math.floor((Date.now()-new Date(a.date+'T12:00:00').getTime())/86400000)+'d ago';
+        };
+        const closeLabelFn = opp => {
+            const cd = opp.forecastedCloseDate||opp.closeDate;
+            if (!cd) return null;
+            const diff = Math.ceil((new Date(cd+'T12:00:00')-Date.now())/86400000);
+            if (diff<=0) return 'OVERDUE';
+            if (diff<=7) return 'CLOSE '+new Date(cd+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'}).toUpperCase();
+            return Math.ceil(diff/7)+'wk';
+        };
+
+        return (
+            <div style={{ fontFamily:T.sans, color:T.ink }}>
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ flex:1 }}>
+                        <div style={{ ...ebD(T.goldInk), display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>✦ Template · Pipeline &amp; Forecast</div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:6 }}>Deal review — weekly</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Your 1:1-ready view. Commits you promised, deals slipping, and what's entered the pipe since last review.</div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
+                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                    </div>
+                </div>
+
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:14 }}>
+                    <KpiD label="Your commits this month"    value={fmtShort(commitTotal)} sub={`${commitOpps.length} deal${commitOpps.length!==1?'s':''} · must close`}/>
+                    <KpiD label="At risk — no activity >14d" value={fmtShort(riskTotal)}   sub={`${atRiskOpps.length} deal${atRiskOpps.length!==1?'s':''} · needs action`} danger={true}/>
+                    <KpiD label="New since last review"      value={fmtShort(newTotal)}    sub={`${newSinceOpps.length} opp${newSinceOpps.length!==1?'s':''} · added this week`}/>
+                </div>
+
+                <div style={{ display:'grid', gridTemplateColumns:'1.35fr 1fr', gap:14 }}>
+                    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                        <PanelD padding="18px 20px 14px">
+                            <SecHdrD title="Commits" subtitle={`${commitOpps.length} deal${commitOpps.length!==1?'s':''} · forecast category set to commit`} right={<span style={{ fontSize:12, color:T.inkMid, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(commitTotal)}</span>}/>
+                            {commitOpps.length === 0
+                                ? <div style={{ padding:'16px 0', fontSize:12.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No deals marked as commit. Set Forecast Category on an opportunity to see them here.</div>
+                                : commitOpps.map((o,i) => (
+                                    <div key={o.id} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'center', padding:'10px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
+                                        <div>
+                                            <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{o.opportunityName||o.account}</div>
+                                            <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, display:'flex', alignItems:'center', gap:10, fontFamily:T.sans }}>
+                                                <StageChipD stage={o.stage}/>
+                                                {o.nextSteps && <><span style={{ opacity:0.5 }}>·</span><span>Next: {String(o.nextSteps).slice(0,60)}</span></>}
+                                            </div>
+                                        </div>
+                                        <div style={{ textAlign:'right' }}>
+                                            <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(o.arr)}</div>
+                                            {closeLabelFn(o) && <div style={{ fontSize:10.5, color:T.goldInk, fontWeight:600, marginTop:2, letterSpacing:0.3, textTransform:'uppercase', fontFamily:T.sans }}>{closeLabelFn(o)}</div>}
+                                        </div>
+                                    </div>
+                                ))
+                            }
+                        </PanelD>
+
+                        <PanelD padding="18px 20px 14px">
+                            <SecHdrD title="At risk" subtitle={`${atRiskOpps.length} open deal${atRiskOpps.length!==1?'s':''}, no activity in 14+ days`} right={atRiskOpps.length>0?<span style={{ fontSize:12, color:T.danger, fontFeatureSettings:'"tnum"', fontWeight:600, fontFamily:T.sans }}>{fmtShort(riskTotal)} exposed</span>:null}/>
+                            {atRiskOpps.length === 0
+                                ? <div style={{ padding:'16px 0', fontSize:12.5, color:T.ok, fontStyle:'italic', fontFamily:T.sans }}>✓ No at-risk deals — all open opportunities have recent activity.</div>
+                                : atRiskOpps.slice(0,6).map((o,i) => (
+                                    <div key={o.id} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'center', padding:'11px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
+                                        <div style={{ display:'flex', gap:10 }}>
+                                            <span style={{ width:3, background:T.danger, borderRadius:1.5, flexShrink:0, alignSelf:'stretch' }}/>
+                                            <div>
+                                                <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{o.opportunityName||o.account}</div>
+                                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, display:'flex', alignItems:'center', gap:10, fontFamily:T.sans }}>
+                                                    <StageChipD stage={o.stage}/><span style={{ opacity:0.5 }}>·</span>
+                                                    <span style={{ color:T.danger, fontWeight:500 }}>Last activity {lastActLabel(o)}</span>
+                                                </div>
+                                                {o.notes && <div style={{ fontSize:11.5, color:T.inkMid, marginTop:4, fontStyle:'italic', fontFamily:T.sans }}>"{String(o.notes).slice(0,80)}{o.notes.length>80?'…':''}"</div>}
+                                            </div>
+                                        </div>
+                                        <div style={{ textAlign:'right', fontSize:13.5, fontWeight:700, color:T.ink, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(o.arr)}</div>
+                                    </div>
+                                ))
+                            }
+                        </PanelD>
+                    </div>
+
+                    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                        <PanelD padding="18px 20px 14px">
+                            <SecHdrD title="New since last review" subtitle={`${newSinceOpps.length} opp${newSinceOpps.length!==1?'s':''} added since last week`} right={newTotal>0?<span style={{ fontSize:12, color:T.ok, fontFeatureSettings:'"tnum"', fontWeight:600, fontFamily:T.sans }}>+{fmtShort(newTotal)}</span>:null}/>
+                            {newSinceOpps.length === 0
+                                ? <div style={{ padding:'16px 0', fontSize:12.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No new opportunities created in the last 7 days.</div>
+                                : newSinceOpps.slice(0,5).map((o,i) => (
+                                    <div key={o.id} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'center', padding:'10px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
+                                        <div>
+                                            <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{o.opportunityName||o.account}</div>
+                                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:3, display:'flex', alignItems:'center', gap:8, fontFamily:T.sans }}>
+                                                <StageChipD stage={o.stage}/>
+                                                {o.account && <><span style={{ opacity:0.5 }}>·</span><span>{o.account}</span></>}
+                                            </div>
+                                        </div>
+                                        <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ink, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(o.arr)}</div>
+                                    </div>
+                                ))
+                            }
+                        </PanelD>
+
+                        <PanelD padding="18px 20px 14px">
+                            <SecHdrD title="Stage changes this week" subtitle="Deals that moved forward or back"/>
+                            {changedOpps.length === 0
+                                ? <div style={{ padding:'16px 0', fontSize:12.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No stage changes in the last 7 days.</div>
+                                : changedOpps.slice(0,6).map((o,i) => {
+                                    const isLoss = o.stage==='Closed Lost';
+                                    const isWin  = o.stage==='Closed Won';
+                                    const history = o.stageHistory || [];
+                                    const prevStage = history.length>0 ? history[history.length-1]?.stage : null;
+                                    return (
+                                        <div key={o.id} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'center', padding:'10px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
+                                            <div>
+                                                <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{o.opportunityName||o.account}</div>
+                                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, display:'flex', alignItems:'center', gap:6, fontFamily:T.sans }}>
+                                                    {prevStage && <><StageChipD stage={prevStage}/><span style={{ fontSize:9, color:T.inkMuted }}>→</span></>}
+                                                    <StageChipD stage={o.stage}/>
+                                                </div>
+                                            </div>
+                                            <div style={{ textAlign:'right', fontSize:12, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans, color:isLoss?T.danger:isWin?T.ok:T.inkMuted }}>
+                                                {isLoss?'−'+fmtShort(o.arr):isWin?'+'+fmtShort(o.arr):'—'}
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            }
+                        </PanelD>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div style={{ display:'flex', flexDirection:'column', gap:0, padding:'1rem 1.25rem 1.5rem' }}>
