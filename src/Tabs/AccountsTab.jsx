@@ -918,37 +918,113 @@ export default function AccountsTab() {
         </div>
     );
 
-    // ── Warmth filter chips + live search ─────────────────────
-    const FilterBar = () => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-            {[
-                { key: 'all',  label: 'All',                    dot: null },
-                { key: 'hot',  label: 'Hot',                    dot: T.danger },
-                { key: 'warm', label: 'Warm',                   dot: T.warn },
-                { key: 'cool', label: 'Cool',                   dot: T.info },
-                { key: 'cold', label: 'Cold — needs reach-out', dot: T.inkMuted },
-            ].map(({ key, label, dot }) => {
-                const active = warmthFilter === key;
-                const count  = counts[key] ?? 0;
+    // ── Combined toolbar: tabs + warmth chips + sort + filter (one row) ─────
+    const Toolbar = () => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 12, borderBottom: `1px solid ${T.border}`, paddingBottom: 0 }}>
+            {/* View sub-tabs */}
+            {views.map(v => {
+                const active = view === v.id;
                 return (
-                    <button key={key} onClick={() => setWarmthFilter(key)} style={{
+                    <button key={v.id} onClick={() => setViewPersist(v.id)} style={{
                         display: 'inline-flex', alignItems: 'center', gap: 5,
-                        padding: '4px 10px',
-                        background: active ? T.ink : 'transparent',
-                        border: `1px solid ${active ? T.ink : T.border}`,
-                        color: active ? T.surface : T.ink,
-                        borderRadius: T.r, fontSize: 12, fontWeight: active ? 600 : 400,
-                        cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms',
-                    }}>
-                        {dot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: active ? 'rgba(255,255,255,0.7)' : dot, display: 'inline-block', flexShrink: 0 }} />}
-                        {label}
-                        <span style={{ fontSize: 11, color: active ? 'rgba(255,255,255,0.7)' : T.inkMuted }}>{count}</span>
+                        padding: '8px 14px',
+                        border: 'none',
+                        borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent',
+                        background: 'transparent',
+                        color: active ? T.ink : T.inkMuted,
+                        fontSize: 12, fontWeight: active ? 600 : 400,
+                        cursor: 'pointer', fontFamily: T.sans,
+                        whiteSpace: 'nowrap', marginBottom: -1,
+                    }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.color = T.inkMid; }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.color = T.inkMuted; }}>
+                        <Icon name={v.icon} size={12} color={active ? T.ink : T.inkMuted} />
+                        {v.label}
                     </button>
                 );
             })}
 
-            {/* Live search */}
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, minWidth: 180 }}>
+            {/* Divider */}
+            <div style={{ width: 1, height: 16, background: T.border, margin: '0 10px', flexShrink: 0 }}/>
+
+            {/* Warmth chips — compact, no border on All */}
+            {[
+                { key: 'all',  label: 'All',         dot: null,       count: counts.all  },
+                { key: 'hot',  label: 'Hot',          dot: T.danger,   count: counts.hot  },
+                { key: 'warm', label: 'Warm',         dot: T.warn,     count: counts.warm },
+                { key: 'cool', label: 'Cool',         dot: T.info,     count: counts.cool },
+                { key: 'cold', label: 'Needs reach',  dot: T.inkMuted, count: counts.cold },
+            ].map(({ key, label, dot, count }) => {
+                const active = warmthFilter === key;
+                return (
+                    <button key={key} onClick={() => setWarmthFilter(key)} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '4px 9px',
+                        background: active ? T.ink : 'transparent',
+                        border: `1px solid ${active ? T.ink : 'transparent'}`,
+                        color: active ? T.surface : T.inkMid,
+                        borderRadius: T.r, fontSize: 12, fontWeight: active ? 600 : 400,
+                        cursor: 'pointer', fontFamily: T.sans, transition: 'all 100ms',
+                        marginBottom: -1,
+                    }}
+                    onMouseEnter={e => { if (!active) { e.currentTarget.style.background = T.surface2; e.currentTarget.style.borderColor = T.border; }}}
+                    onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}}>
+                        {dot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: active ? 'rgba(255,255,255,0.7)' : dot, display: 'inline-block', flexShrink: 0 }} />}
+                        {label}
+                        <span style={{ fontSize: 11, color: active ? 'rgba(255,255,255,0.7)' : T.inkMuted, marginLeft: 1 }}>{count}</span>
+                    </button>
+                );
+            })}
+
+            <div style={{ flex: 1 }} />
+
+            {/* Sort toggle */}
+            <button onClick={() => { if (sortField !== 'name') { setSortField('name'); setSortDir('asc'); } else setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans, marginBottom: -1, marginRight: 6 }}
+                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18M7 12h10M11 18h2"/>
+                </svg>
+                Sort: {sortField === 'name' ? (sortDir === 'asc' ? 'A–Z' : 'Z–A') : 'Signal'}
+            </button>
+
+            {/* Filter button */}
+            <div style={{ position: 'relative', marginBottom: -1 }}>
+                <button onClick={() => setFilterOpen(o => !o)}
+                    style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+                        background: activePanelFilterCount > 0 ? T.ink : 'transparent',
+                        border: `1px solid ${activePanelFilterCount > 0 ? T.ink : T.border}`,
+                        borderRadius: T.r, fontSize: 12, fontWeight: activePanelFilterCount > 0 ? 600 : 400,
+                        color: activePanelFilterCount > 0 ? T.surface : T.inkMid,
+                        cursor: 'pointer', fontFamily: T.sans,
+                    }}
+                    onMouseEnter={e => { if (!activePanelFilterCount) e.currentTarget.style.background = T.surface2; }}
+                    onMouseLeave={e => { if (!activePanelFilterCount) e.currentTarget.style.background = 'transparent'; }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                    </svg>
+                    Filter{activePanelFilterCount > 0 ? ` ${activePanelFilterCount}` : ''}
+                </button>
+                <FilterPanel
+                    open={filterOpen}
+                    onClose={() => setFilterOpen(false)}
+                    accounts={visibleAccounts}
+                    settings={settings}
+                    currentFilters={panelFilters}
+                    onApply={setPanelFilters}
+                />
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="tab-page" style={{ fontFamily: T.sans }}>
+            <Header />
+
+            {/* Local search — below header, above toolbar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, marginBottom: 10, maxWidth: 320 }}>
                 <Icon name="search" size={13} color={T.inkMuted} />
                 <input
                     ref={searchRef}
@@ -962,13 +1038,9 @@ export default function AccountsTab() {
                     <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
                 )}
             </div>
-        </div>
-    );
 
-    return (
-        <div className="tab-page" style={{ fontFamily: T.sans }}>
-            <Header />
-            <FilterBar />
+            {/* Combined toolbar: tabs + warmth + sort + filter */}
+            <Toolbar />
 
             {/* Sub-account side drawer */}
             {drawerAccount && (
@@ -980,41 +1052,6 @@ export default function AccountsTab() {
                     onView={setViewingAccount}
                 />
             )}
-
-            {/* ── Underline sub-tab switcher — matches app standard ── */}
-            <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, marginBottom: 12 }}>
-                {views.map(v => {
-                    const active = view === v.id;
-                    return (
-                        <button key={v.id}
-                            onClick={() => setViewPersist(v.id)}
-                            style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 6,
-                                padding: '8px 16px',
-                                border: 'none',
-                                borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent',
-                                background: 'transparent',
-                                color: active ? T.ink : T.inkMuted,
-                                fontSize: 12, fontWeight: active ? 600 : 400,
-                                cursor: 'pointer', fontFamily: T.sans,
-                                transition: 'color 120ms, border-color 120ms',
-                                whiteSpace: 'nowrap', marginBottom: -1,
-                            }}
-                            onMouseEnter={e => { if (!active) e.currentTarget.style.color = T.inkMid; }}
-                            onMouseLeave={e => { if (!active) e.currentTarget.style.color = T.inkMuted; }}>
-                            <Icon name={v.icon} size={12} color={active ? T.ink : T.inkMuted} />
-                            {v.label}
-                        </button>
-                    );
-                })}
-                <div style={{ flex: 1 }} />
-                <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans, paddingBottom: 4 }}>
-                    {filtered.length} account{filtered.length !== 1 ? 's' : ''}
-                    {view === 'signal'   && ' · by signal'}
-                    {view === 'business' && ' · by intent'}
-                    {view === 'list'     && ' · A–Z'}
-                </div>
-            </div>
 
             {view === 'list'     && <ListView />}
             {view === 'business' && <BusinessBookView />}
