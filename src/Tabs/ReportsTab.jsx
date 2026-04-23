@@ -2366,7 +2366,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
     const [activeTemplate, setActiveTemplate] = React.useState(null);
     const [selectedRepSC, setSelectedRepSC] = React.useState(currentUser||'');
     const [showCreateReport, setShowCreateReport] = React.useState(false);
-    const [createMode, setCreateMode] = React.useState('picker'); // 'picker'|'blank'|'template'|'duplicate'|'ai'
+    const [createMode, setCreateMode] = React.useState('picker');
     const [aiPrompt, setAiPrompt] = React.useState('');
     const [aiGenerated, setAiGenerated] = React.useState(false);
     const [aiRefine, setAiRefine] = React.useState('');
@@ -2378,6 +2378,43 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
     const [builderMetrics, setBuilderMetrics] = React.useState([{id:'arr',label:'Revenue',kind:'metric'}]);
     const [builderChart, setBuilderChart] = React.useState('stacked');
     const [builderAdvanced, setBuilderAdvanced] = React.useState(false);
+    // Saved reports library state
+    const [savedReportsList, setSavedReportsList] = React.useState([]);
+    const [saveState, setSaveState] = React.useState('idle'); // 'idle'|'saving'|'saved'|'error'
+    const [saveError, setSaveError] = React.useState(null);
+
+    // Load saved reports on mount
+    React.useEffect(() => {
+        let cancelled = false;
+        dbFetch('/.netlify/functions/saved-reports')
+            .then(data => { if (!cancelled) setSavedReportsList(data?.reports || []); })
+            .catch(() => {}); // silent — library just shows empty
+        return () => { cancelled = true; };
+    }, []);
+
+    // Save report handler — used by both blank and AI builder Save to library buttons
+    const handleSaveReport = React.useCallback(async ({ name, source, dims, metrics, chartType, description }) => {
+        setSaveState('saving');
+        setSaveError(null);
+        const id = 'rpt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        const payload = { id, name: name||'Untitled report', source, dims, metrics, chartType, description, ownerId: currentUser, ownerName: currentUser };
+        try {
+            const data = await dbFetch('/.netlify/functions/saved-reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            setSavedReportsList(prev => [data?.report || payload, ...prev]);
+            setSaveState('saved');
+            setTimeout(() => setSaveState('idle'), 3000);
+            setShowCreateReport(false);
+            setCreateMode('picker');
+        } catch (err) {
+            setSaveState('error');
+            setSaveError('Failed to save. Check your connection and try again.');
+            setTimeout(() => setSaveState('idle'), 4000);
+        }
+    }, [currentUser]);
 
     // ── Design tokens
     const TS = {
@@ -2468,6 +2505,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
     const matchSrch = name => !srchQ.trim() || name.toLowerCase().includes(srchQ.toLowerCase());
     const filteredPinned   = pinnedCards.filter(r=>matchSrch(r.name));
     const filteredTemplates= templates.filter(t=>matchSrch(t.name));
+    const filteredSaved    = savedReportsList.filter(r=>matchSrch(r.name));
 
     // ── Card sub-components (defined inside component so they close over TS)
     const PinnedCardS = ({ r }) => {
@@ -3986,7 +4024,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         );
 
         // Page header shared by all non-picker modes
-        const BuilderHeader = ({title, breadcrumb}) => (
+        const BuilderHeader = ({title, breadcrumb, onSave}) => (
             <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12, paddingBottom:12, borderBottom:`1px solid ${T.border}` }}>
                 <div style={{ flex:1 }}>
                     <div style={{ ...ebD(T.inkMuted), marginBottom:6, display:'flex', gap:6 }}>
@@ -3996,10 +4034,15 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                     <div style={{ fontSize:22, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.4, lineHeight:1.1 }}>{title}</div>
                     <div style={{ fontSize:12, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>Changes are drafted — click Update preview to render.</div>
                 </div>
-                <div style={{ display:'flex', gap:8, flexShrink:0, marginLeft:20 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0, marginLeft:20 }}>
                     <GhostBtnD onClick={()=>setCreateMode('picker')}>← Back to picker</GhostBtnD>
                     <GhostBtnD onClick={closeCreate}>✕ Cancel</GhostBtnD>
-                    <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>✓ Save to library</button>
+                    {saveState==='error' && <span style={{ fontSize:11, color:T.danger, fontFamily:T.sans }}>{saveError}</span>}
+                    {saveState==='saved' && <span style={{ fontSize:11, color:T.ok, fontWeight:600, fontFamily:T.sans }}>✓ Saved to library</span>}
+                    <button onClick={onSave} disabled={saveState==='saving'}
+                        style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:saveState==='saving'?T.borderStrong:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:saveState==='saving'?'default':'pointer', fontFamily:T.sans }}>
+                        {saveState==='saving'?'Saving…':'✓ Save to library'}
+                    </button>
                 </div>
             </div>
         );
@@ -4253,7 +4296,8 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                     </div>
 
                     {/* Page header */}
-                    <BuilderHeader title="Stuck deals by rep" breadcrumb="AI-generated"/>
+                    <BuilderHeader title="Stuck deals by rep" breadcrumb="AI-generated"
+                        onSave={()=>handleSaveReport({ name: aiPrompt||'Stuck deals by rep', source:'Opportunities', dims:[{id:'owner',label:'Owner',kind:'dim'}], metrics:[{id:'count',label:'# of deals',kind:'metric'},{id:'arr',label:'ARR at risk',kind:'metric'}], chartType:'bar', description:'Open deals with no activity in 14+ days, by rep' })}/>
 
                     {/* Body — preview + config rail */}
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:14 }}>
@@ -4396,7 +4440,8 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
             const allAvailMetrics = [...BASIC_METRICS, ...(builderAdvanced ? ADVANCED_METRICS : [])].filter(m=>!builderMetrics.find(x=>x.label===m));
             return (
                 <div style={{ fontFamily:T.sans, color:T.ink }}>
-                    <BuilderHeader title="Untitled report" breadcrumb="Blank canvas"/>
+                    <BuilderHeader title="Untitled report" breadcrumb="Blank canvas"
+                        onSave={()=>handleSaveReport({ name:'Untitled report', source:builderSource, dims:builderDims, metrics:builderMetrics, chartType:builderChart, description:`${builderSource} · ${builderDims.map(d=>d.label).join(', ')}` })}/>
 
                     {/* Body */}
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:14 }}>
@@ -4575,6 +4620,35 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                     </div>
                 </SectionS>
             )}
+            {filteredSaved.length > 0 && (
+                <SectionS title="Your reports" subtitle="Reports you've created and saved to your library" count={`${filteredSaved.length} report${filteredSaved.length!==1?'s':''}`}>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
+                        {filteredSaved.map(r=>(
+                            <div key={r.id} style={{ background:TS.surface, border:`1px solid ${TS.border}`, borderRadius:TS.r, padding:'12px 14px', display:'flex', flexDirection:'column', gap:6, cursor:'pointer', minHeight:100 }}
+                                onMouseEnter={e=>e.currentTarget.style.borderColor=TS.borderStrong}
+                                onMouseLeave={e=>e.currentTarget.style.borderColor=TS.border}>
+                                <div style={{ fontSize:9.5, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:TS.inkMuted, fontFamily:TS.sans }}>{r.source||'Opportunities'}</div>
+                                <div style={{ fontSize:13.5, fontWeight:600, color:TS.ink, letterSpacing:-0.1, fontFamily:TS.sans, lineHeight:1.25 }}>{r.name}</div>
+                                {r.description && <div style={{ fontSize:11.5, color:TS.inkMuted, lineHeight:1.4, fontFamily:TS.sans }}>{r.description}</div>}
+                                <div style={{ marginTop:'auto', paddingTop:6, borderTop:`1px solid ${TS.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:10.5, color:TS.inkMuted, fontFamily:TS.sans }}>
+                                    <span>{r.ownerName||currentUser}</span>
+                                    <button onClick={async (e)=>{ e.stopPropagation(); if(!confirm('Delete this report?')) return; await dbFetch('/.netlify/functions/saved-reports',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})}); setSavedReportsList(prev=>prev.filter(x=>x.id!==r.id)); }}
+                                        style={{ background:'transparent', border:'none', color:TS.inkMuted, cursor:'pointer', fontSize:13, padding:0, lineHeight:1 }}>×</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </SectionS>
+            )}
+            {filteredSaved.length === 0 && !srchQ && (
+                <div style={{ marginBottom:20, padding:'14px 16px', background:TS.surface, border:`1px dashed ${TS.borderStrong}`, borderRadius:TS.r, display:'flex', alignItems:'center', justifyContent:'space-between', fontFamily:TS.sans }}>
+                    <div>
+                        <div style={{ fontSize:13, fontWeight:600, color:TS.ink }}>No saved reports yet</div>
+                        <div style={{ fontSize:11.5, color:TS.inkMuted, marginTop:3 }}>Create a report using the builder and click "Save to library" to see it here.</div>
+                    </div>
+                    <button onClick={()=>{setShowCreateReport(true);setCreateMode('picker');}} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', background:TS.ink, border:'none', borderRadius:TS.r, fontSize:12, fontWeight:600, color:TS.surface, cursor:'pointer', fontFamily:TS.sans }}>+ Create one</button>
+                </div>
+            )}
             {filteredTemplates.length > 0 && (
                 <SectionS title="Start from a template" subtitle="Pre-built report layouts you can customize" count={`${filteredTemplates.length} templates`}>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
@@ -4582,7 +4656,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                     </div>
                 </SectionS>
             )}
-            {filteredPinned.length===0 && filteredTemplates.length===0 && (
+            {filteredPinned.length===0 && filteredSaved.length===0 && filteredTemplates.length===0 && srchQ && (
                 <div style={{ padding:'3rem', textAlign:'center', color:TS.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:TS.sans }}>No reports match "{srchQ}"</div>
             )}
         </div>
