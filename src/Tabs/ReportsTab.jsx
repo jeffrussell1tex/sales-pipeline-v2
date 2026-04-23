@@ -1689,12 +1689,9 @@ ${bodyHtml}
                             });
 
                             // ── Activity → outcome funnel from real data
-                            const created30 = openOpps.filter(o=>{ const d=o.createdDate; return d&&new Date(d+'T12:00:00')>new Date(now-90*86400000); }).length;
                             const funnelSteps = [
                               { step:'Activities logged', count:totalActs },
-                              { step:'Unique opp touchpoints', count:Math.round(totalActs*0.36) },
                               { step:'Opps active (90d)', count:openOpps.length },
-                              { step:'Opps advanced stage', count:Math.max(0,Math.round(openOpps.length*0.64)) },
                               { step:'Closed won', count:wonOpps.length },
                             ];
                             const funnelColors = ['#b0a088','#c8a978','#b07a55','#7a5a3c','#3a5530'];
@@ -1755,11 +1752,10 @@ ${bodyHtml}
                                     { label:'Total activities', value:totalActs.toLocaleString(),  sub:'this period',                    delta: fmtDeltaAct(totalActs, cmpTotalActs) },
                                     { label:'Per rep',          value:perRep.toLocaleString(),      sub:'avg per rep',                    delta: fmtDeltaAct(perRep, cmpPerRep) },
                                     { label:'Per open opp',     value:perOpp+'×',                   sub:`${openOpps.length} open opps`,   delta: fmtDeltaAct(parseFloat(perOpp), cmpPerOpp) },
-                                    { label:'Connect rate',     value:'28%',                         sub:'calls that reach a human',       delta: null },
                                   ];
 
                                   return (
-                                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, margin:'0 8px' }}>
+                                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, margin:'0 8px' }}>
                                       {kpis3.map(k=>(
                                         <div key={k.label} style={{ background:T3.surface, border:`1px solid ${T3.border}`, borderRadius:T3.r, padding:'14px 18px' }}>
                                           <div style={eb3(T3.inkMuted)}>{k.label}</div>
@@ -2445,16 +2441,6 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         { id:'p3', name:'Stuck deals (14d+ no activity)', basedOn:'Pipeline & Forecast', headline:stuckDeals.length+' deals', subhead:fmtS(stuckARR)+' at risk', preview:{ kind:'number', big:String(stuckDeals.length), sub:fmtS(stuckARR)+' pipeline' } },
         { id:'p4', name:'Closing next 30 days', basedOn:'Pipeline & Forecast', headline:fmtS(closingARR), subhead:`${closingMonth.length} deals open`, preview:{ kind:'stacked', segments:[{v:Math.max(1,closingARR*0.45),c:TS.ok},{v:Math.max(1,closingARR*0.30),c:TS.gold},{v:Math.max(1,closingARR*0.25),c:'#b0a088'}] } },
     ];
-    const personalReports = [
-        { id:'s5', name:'Lead source ROI', basedOn:'Performance', updated:'—', description:'Closed won revenue by lead source, this quarter', preview:{ kind:'bars', data:[68,42,31,19,12] } },
-        { id:'s6', name:'Avg days by stage', basedOn:'Pipeline & Forecast', updated:'—', description:'Time in each stage for closed-won deals', preview:{ kind:'bars', data:[6,8,14,11,9,5] } },
-        { id:'s7', name:'Win / loss reasons', basedOn:'Performance', updated:'—', description:'Closed-lost breakdown by reason and competitor', preview:{ kind:'bars', data:[5,3,2,1] } },
-        { id:'s8', name:'Activity per rep', basedOn:'Activity', updated:'—', description:'Activities logged per rep, trailing 30 days', preview:{ kind:'number', big:String((reportsTimedActivities||[]).length), sub:'activities total' } },
-    ];
-    const sharedReports = [
-        { id:'sh1', name:'Team quota board', owner:currentUser||'Manager', basedOn:'Performance', updated:'—', followers:0, description:'Full team attainment leaderboard', preview:{ kind:'bars', data:[112,93,79,48,48,21], horizontal:true, colors:['#3a5530','#3a5530','#4d6b3d','#b87333','#b87333','#9c3a2e'] } },
-        { id:'sh2', name:'Big deal tracker ($50K+)', owner:currentUser||'Manager', basedOn:'Pipeline & Forecast', updated:'—', followers:0, description:'All open deals $50K+, by stage and age', preview:{ kind:'number', big:String(allOpen.filter(o=>(parseFloat(o.arr)||0)>=50000).length), sub:'open deals' } },
-    ];
     const templates = [
         { id:'t1', name:'Deal review — weekly', basedOn:'Pipeline & Forecast', icon:'📅', description:'1:1-ready view: commits, at-risk, and new deals since last review' },
         { id:'t2', name:'Win / loss analysis',  basedOn:'Performance',          icon:'🎯', description:'Closed deals with reason breakdown, competitor, and cycle length' },
@@ -2466,8 +2452,6 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
 
     const matchSrch = name => !srchQ.trim() || name.toLowerCase().includes(srchQ.toLowerCase());
     const filteredPinned   = pinnedCards.filter(r=>matchSrch(r.name));
-    const filteredPersonal = personalReports.filter(r=>matchSrch(r.name));
-    const filteredShared   = sharedReports.filter(r=>matchSrch(r.name));
     const filteredTemplates= templates.filter(t=>matchSrch(t.name));
 
     // ── Card sub-components (defined inside component so they close over TS)
@@ -2489,23 +2473,6 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                 <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:10.5, color:TS.inkMuted, paddingTop:8, borderTop:`1px solid ${TS.border}` }}>
                     <span style={{ background:'rgba(77,107,61,0.1)', color:TS.ok, fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:2 }}>LIVE</span>
                     <span>{r.subhead}</span>
-                </div>
-            </div>
-        );
-    };
-    const ReportCardS = ({ r, showOwner }) => {
-        const [hov, setHov] = React.useState(false);
-        return (
-            <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
-                style={{ background:TS.surface, border:`1px solid ${hov?TS.borderStrong:TS.border}`, borderRadius:TS.r, padding:'12px 14px', display:'flex', flexDirection:'column', gap:8, cursor:'pointer', minHeight:130, transition:'border-color 120ms' }}>
-                <div style={{ ...ebS(TS.inkMuted), fontSize:9.5 }}>{r.basedOn}</div>
-                <div style={{ fontSize:13.5, fontWeight:600, color:TS.ink, lineHeight:1.3, letterSpacing:-0.1 }}>{r.name}</div>
-                <div style={{ fontSize:11.5, color:TS.inkMuted, lineHeight:1.45 }}>{r.description}</div>
-                <div style={{ marginTop:'auto' }}><PreviewS preview={r.preview} h={32}/></div>
-                <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:10.5, color:TS.inkMuted, paddingTop:6, borderTop:`1px solid ${TS.border}` }}>
-                    {showOwner && <><AvatarS name={r.owner} size={14}/><span style={{ color:TS.inkMid, fontWeight:500 }}>{r.owner}</span><span style={{ opacity:0.4 }}>·</span></>}
-                    <span>{r.updated}</span>
-                    {r.followers!=null && <><span style={{ opacity:0.4 }}>·</span><span>{r.followers} followers</span></>}
                 </div>
             </div>
         );
@@ -2560,20 +2527,6 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                     </div>
                 </SectionS>
             )}
-            {filteredPersonal.length > 0 && (
-                <SectionS title="Your reports" subtitle="Reports you've created" count={`${filteredPersonal.length} reports`}>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
-                        {filteredPersonal.map(r=><ReportCardS key={r.id} r={r}/>)}
-                    </div>
-                </SectionS>
-            )}
-            {filteredShared.length > 0 && (
-                <SectionS title="Shared by team" subtitle="Reports your manager and teammates have published" count={`${filteredShared.length} reports`}>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
-                        {filteredShared.map(r=><ReportCardS key={r.id} r={r} showOwner/>)}
-                    </div>
-                </SectionS>
-            )}
             {filteredTemplates.length > 0 && (
                 <SectionS title="Start from a template" subtitle="Pre-built report layouts you can customize" count={`${filteredTemplates.length} templates`}>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
@@ -2581,7 +2534,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                     </div>
                 </SectionS>
             )}
-            {filteredPinned.length===0 && filteredPersonal.length===0 && filteredShared.length===0 && filteredTemplates.length===0 && (
+            {filteredPinned.length===0 && filteredTemplates.length===0 && (
                 <div style={{ padding:'3rem', textAlign:'center', color:TS.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:TS.sans }}>No reports match "{srchQ}"</div>
             )}
         </div>
