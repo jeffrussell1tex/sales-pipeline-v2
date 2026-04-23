@@ -311,7 +311,8 @@ function AccountRow({
     const { warmth, pipeline, activeOpps, daysSince, lastAct } = warmthData;
     const dot = warmthColor(warmth);
     const contactCount = contacts.filter(c => (c.company||'').toLowerCase() === (account.name||'').toLowerCase()).length;
-    const ownerInitials = (account.accountOwner||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    const effectiveOwner = account.accountOwner || account.assignedRep || '';
+    const ownerInitials = effectiveOwner.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
 
     // Only top-level rows show sub-account badge
     const subAccounts = depth === 0 ? getSubAccounts(account.id) : [];
@@ -323,8 +324,8 @@ function AccountRow({
             style={{
                 display: 'grid',
                 gridTemplateColumns: selectMode
-                    ? '36px 3px 240px 48px 1fr 90px 60px 110px 100px 28px'
-                    : '3px 240px 48px 1fr 90px 60px 110px 100px 28px',
+                    ? '36px 3px 240px 48px 160px 90px 60px 110px 100px 28px'
+                    : '3px 240px 48px 160px 90px 60px 110px 100px 28px',
                 alignItems: 'center', height: 52,
                 borderBottom: `1px solid ${T.border}`,
                 background: isSelected
@@ -389,7 +390,7 @@ function AccountRow({
             </div>
 
             {/* Industry */}
-            <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+            <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 8, paddingRight: 8 }}>
                 {account.verticalMarket || account.industry || '—'}
             </div>
 
@@ -413,10 +414,10 @@ function AccountRow({
 
             {/* Owner */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {account.accountOwner && (
-                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: avatarBg(account.accountOwner), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, flexShrink: 0 }}>{ownerInitials}</div>
+                {effectiveOwner && (
+                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: avatarBg(effectiveOwner), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, flexShrink: 0 }}>{ownerInitials}</div>
                 )}
-                <span style={{ fontSize: 11, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.accountOwner || '—'}</span>
+                <span style={{ fontSize: 11, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{effectiveOwner || '—'}</span>
             </div>
 
             {/* Edit */}
@@ -448,7 +449,7 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
     const industries = [...new Set(accounts.map(a => a.verticalMarket || a.industry).filter(Boolean))].sort();
     // Combine users from settings (canonical) with any owner names on accounts (catch strays)
     const settingsUsers = (settings?.users || []).map(u => u.name).filter(Boolean);
-    const accountOwners = accounts.map(a => a.accountOwner).filter(Boolean);
+    const accountOwners = accounts.flatMap(a => [a.accountOwner, a.assignedRep]).filter(Boolean);
     const owners = [...new Set([...settingsUsers, ...accountOwners])].sort();
 
     const selStyle = {
@@ -585,7 +586,8 @@ export default function AccountsTab() {
             list = list.filter(a =>
                 (a.name||'').toLowerCase().includes(q) ||
                 (a.verticalMarket||'').toLowerCase().includes(q) ||
-                (a.accountOwner||'').toLowerCase().includes(q)
+                (a.accountOwner||'').toLowerCase().includes(q) ||
+                (a.assignedRep||'').toLowerCase().includes(q)
             );
         }
 
@@ -599,9 +601,9 @@ export default function AccountsTab() {
             list = list.filter(a => (a.verticalMarket || a.industry) === panelFilters.industry);
         }
         if (panelFilters.owner === '__unassigned__') {
-            list = list.filter(a => !a.accountOwner || a.accountOwner.trim() === '');
+            list = list.filter(a => (!a.accountOwner || a.accountOwner.trim() === '') && (!a.assignedRep || a.assignedRep.trim() === ''));
         } else if (panelFilters.owner !== '__all__') {
-            list = list.filter(a => a.accountOwner === panelFilters.owner);
+            list = list.filter(a => a.accountOwner === panelFilters.owner || a.assignedRep === panelFilters.owner);
         }
         if (panelFilters.hasPipe === 'yes') {
             list = list.filter(a => (warmthMap[a.id]?.pipeline || 0) > 0);
@@ -640,7 +642,7 @@ export default function AccountsTab() {
                     const db = warmthMap[b.id]?.daysSince ?? 9999;
                     return dir * (da - db);
                 }
-                case 'owner':    return dir * ((a.accountOwner||'').localeCompare(b.accountOwner||''));
+                case 'owner':    return dir * ((a.accountOwner||a.assignedRep||'').localeCompare(b.accountOwner||b.assignedRep||''));
                 default:         return 0;
             }
         });
@@ -674,7 +676,7 @@ export default function AccountsTab() {
             return [
                 a.name,
                 a.verticalMarket || a.industry || '',
-                a.accountOwner || '',
+                a.accountOwner || a.assignedRep || '',
                 w?.pipeline || 0,
                 w?.activeOpps?.length || 0,
                 w?.lastAct?.date ? relDate(w.lastAct.date) : '',
@@ -698,8 +700,8 @@ export default function AccountsTab() {
         <div style={{
             display: 'grid',
             gridTemplateColumns: sm
-                ? '36px 3px 240px 48px 1fr 90px 60px 110px 100px 28px'
-                : '3px 240px 48px 1fr 90px 60px 110px 100px 28px',
+                ? '36px 3px 240px 48px 160px 90px 60px 110px 100px 28px'
+                : '3px 240px 48px 160px 90px 60px 110px 100px 28px',
             alignItems: 'center', height: 34,
             background: T.surface2, borderBottom: `1px solid ${T.border}`,
             fontSize: 10, fontWeight: 700, color: T.inkMuted,

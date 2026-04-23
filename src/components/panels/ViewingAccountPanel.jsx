@@ -436,10 +436,16 @@ export default function ViewingAccountPanel({
                     <div style={{ background: '#fbf8f3', border: '1px solid #e6ddd0', borderRadius: '10px', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
 
-                            {/* Company Name — full width */}
-                            <div style={{ gridColumn: '1 / -1' }}>
-                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Company Name</div>
-                                <div style={{ fontSize: '0.9375rem', fontWeight: '700', color: '#2a2622' }}>{acc.name || '—'}</div>
+                            {/* Company Name + Assigned Rep — side by side */}
+                            <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                                <div>
+                                    <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Company Name</div>
+                                    <div style={{ fontSize: '0.9375rem', fontWeight: '700', color: '#2a2622' }}>{acc.name || '—'}</div>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>Assigned Rep</div>
+                                    <div style={{ fontSize: '0.9375rem', fontWeight: '700', color: '#2a2622' }}>{acc.assignedRep || acc.accountOwner || <span style={{ fontWeight: 400, color: '#8a8378' }}>—</span>}</div>
+                                </div>
                             </div>
 
                             {/* Address */}
