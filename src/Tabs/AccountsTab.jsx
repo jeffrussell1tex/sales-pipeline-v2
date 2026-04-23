@@ -323,8 +323,8 @@ function AccountRow({
             style={{
                 display: 'grid',
                 gridTemplateColumns: selectMode
-                    ? '36px 3px 1.8fr 56px 1fr 90px 60px 110px 100px 28px'
-                    : '3px 1.8fr 56px 1fr 90px 60px 110px 100px 28px',
+                    ? '36px 3px 1.2fr 48px 1fr 90px 60px 110px 100px 28px'
+                    : '3px 1.2fr 48px 1fr 90px 60px 110px 100px 28px',
                 alignItems: 'center', height: 52,
                 borderBottom: `1px solid ${T.border}`,
                 background: isSelected
@@ -692,8 +692,8 @@ export default function AccountsTab() {
         <div style={{
             display: 'grid',
             gridTemplateColumns: sm
-                ? '36px 3px 1.8fr 56px 1fr 90px 60px 110px 100px 28px'
-                : '3px 1.8fr 56px 1fr 90px 60px 110px 100px 28px',
+                ? '36px 3px 1.2fr 48px 1fr 90px 60px 110px 100px 28px'
+                : '3px 1.2fr 48px 1fr 90px 60px 110px 100px 28px',
             alignItems: 'center', height: 34,
             background: T.surface2, borderBottom: `1px solid ${T.border}`,
             fontSize: 10, fontWeight: 700, color: T.inkMuted,

@@ -2698,6 +2698,263 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         );
     }
 
+
+    // ── Stage Conversion Deep-Dive template ──
+    if (activeTemplate === 't5') {
+        const T = TS;
+        const serif = T.serif;
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const stageColorMap = { 'Prospecting':'#b0a088','Qualification':'#c8a978','Discovery':'#b07a55','Proposal':'#b87333','Negotiation/Review':'#7a5a3c','Negotiation':'#7a5a3c','Contracts':'#4d6b3d','Closing':'#4d6b3d','Closed Won':'#3a5530','Closed Lost':'#9c3a2e' };
+        const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+
+        const PanelD = ({ children, padding='18px 20px', style:s }) => (
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding, ...s }}>{children}</div>
+        );
+        const SecHdrD = ({ title, subtitle, right }) => (
+            <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:12 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.2, lineHeight:1.1 }}>{title}</div>
+                    {subtitle && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>}
+                </div>
+                {right}
+            </div>
+        );
+
+        // ── Build funnel from real data (same cohort logic as Pipeline tab)
+        const stageOrderD = (settings.funnelStages||[]).filter(s=>s.name).map(s=>s.name)
+            .filter(s=>s!=='Closed Won'&&s!=='Closed Lost');
+        // Fall back to defaults if no funnel stages configured
+        const stageSeq = stageOrderD.length > 0 ? stageOrderD
+            : ['Prospecting','Qualification','Discovery','Proposal','Negotiation','Closing'];
+
+        const stageRankD = s => stageSeq.indexOf(s);
+        const allScopeD  = reportsOpps || [];
+
+        // Max stage reached per opp (using stageHistory if available)
+        const oppMaxD = allScopeD.map(o => {
+            const wonRank = stageSeq.length; // Closed Won = beyond last visible stage
+            if (o.stage === 'Closed Won') return wonRank;
+            if (o.stageHistory && o.stageHistory.length > 0) {
+                const ranks = o.stageHistory.map(h => stageRankD(h.stage)).filter(r => r >= 0);
+                const cur = stageRankD(o.stage);
+                return Math.max(...ranks, cur >= 0 ? cur : 0);
+            }
+            const r = stageRankD(o.stage);
+            return r >= 0 ? r : 0;
+        });
+
+        // Avg days per stage from stageHistory consecutive timestamps
+        const avgDaysForStage = stageName => {
+            const samples = [];
+            allScopeD.forEach(o => {
+                if (!o.stageHistory || o.stageHistory.length < 2) return;
+                o.stageHistory.forEach((h, i) => {
+                    if (h.stage === stageName && i + 1 < o.stageHistory.length) {
+                        const enter = new Date((h.date||h.changedAt||'')+'T12:00:00');
+                        const exit  = new Date((o.stageHistory[i+1].date||o.stageHistory[i+1].changedAt||'')+'T12:00:00');
+                        const d = Math.floor((exit-enter)/86400000);
+                        if (d >= 0 && d < 365) samples.push(d);
+                    }
+                });
+            });
+            if (samples.length === 0) return null;
+            samples.sort((a,b)=>a-b);
+            return samples[Math.floor(samples.length/2)];
+        };
+
+        // Build stage rows
+        const funnelDataD = stageSeq.map((st, i) => {
+            const myRank = stageRankD(st);
+            const entered  = oppMaxD.filter(r => r >= myRank).length;
+            const advanced = i < stageSeq.length - 1
+                ? oppMaxD.filter(r => r >= myRank + 1).length
+                : oppMaxD.filter(r => r >= stageSeq.length).length; // Closed Won
+            const conv = entered > 0 ? advanced / entered : 0;
+            const dropped = entered - advanced;
+            const avgDays = avgDaysForStage(st);
+            return { stage:st, entered, advanced, conv, dropped, avgDays, color:stageColorMap[st]||T.inkMuted };
+        }).filter(s => s.entered > 0);
+
+        const maxEnteredD = Math.max(...funnelDataD.map(s=>s.entered), 1);
+        const overallConv = funnelDataD.length > 0 && funnelDataD[0].entered > 0
+            ? funnelDataD[funnelDataD.length-1].advanced / funnelDataD[0].entered : 0;
+        const totalCycleDays = funnelDataD.reduce((s,st)=>s+(st.avgDays||0),0);
+
+        // Drop-off reasons from lostReason on closed-lost opps, grouped by stage exited
+        const lostOppsD = allScopeD.filter(o=>o.stage==='Closed Lost');
+        const dropoffMap = {};
+        lostOppsD.forEach(o => {
+            if (!o.lostReason) return;
+            // Stage they were in when lost
+            const history = o.stageHistory||[];
+            const exitStage = history.length>0 ? history[history.length-1]?.stage : o.stage;
+            const key = (exitStage||'Unknown')+'||'+(o.lostReason||'Other');
+            dropoffMap[key] = (dropoffMap[key]||0) + 1;
+        });
+        const dropoffReasons = Object.entries(dropoffMap)
+            .map(([k,count]) => { const [stage,reason]=k.split('||'); return {stage,reason,count}; })
+            .sort((a,b)=>b.count-a.count)
+            .slice(0,5);
+
+        // Auto-flag: worst conversion stage + slowest stage
+        const worstConv = [...funnelDataD].sort((a,b)=>a.conv-b.conv)[0];
+        const slowest   = [...funnelDataD].filter(s=>s.avgDays!=null).sort((a,b)=>b.avgDays-a.avgDays)[0];
+
+        return (
+            <div style={{ fontFamily:T.sans, color:T.ink }}>
+                {/* Header */}
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ flex:1 }}>
+                        <div style={{ ...ebD(T.goldInk), display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>✦ Template · Pipeline &amp; Forecast</div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:6 }}>Stage conversion deep-dive</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Funnel with average days in stage, entered vs advanced, and the real reasons for each drop-off.</div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
+                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                    </div>
+                </div>
+
+                {/* KPI strip */}
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:14 }}>
+                    {[
+                        { label:'TOP-OF-FUNNEL',      value: funnelDataD[0]?.entered ?? '—' },
+                        { label:'CLOSED WON',          value: funnelDataD.length>0 ? funnelDataD[funnelDataD.length-1].advanced : '—' },
+                        { label:'OVERALL CONVERSION',  value: funnelDataD.length>0 ? Math.round(overallConv*100)+'%' : '—' },
+                        { label:'FULL-CYCLE AVG',      value: totalCycleDays > 0 ? totalCycleDays+'d' : '—' },
+                    ].map(k => (
+                        <div key={k.label} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                            <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>{k.label}</div>
+                            <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{k.value}</div>
+                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>vs previous period</div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Two-column body */}
+                <div style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:14 }}>
+                    {/* Left — funnel */}
+                    <PanelD padding="18px 20px 18px">
+                        <SecHdrD title="Conversion funnel" subtitle="Entered → advanced, by stage"
+                            right={
+                                <div style={{ display:'flex', alignItems:'center', gap:14, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
+                                    <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                                        <span style={{ width:10, height:10, background:T.goldInk, borderRadius:2 }}/>Advanced
+                                    </span>
+                                    <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                                        <span style={{ width:10, height:10, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:2 }}/>Dropped
+                                    </span>
+                                </div>
+                            }
+                        />
+                        {funnelDataD.length === 0 ? (
+                            <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                                No stage data available. Opportunities need stage history to populate this funnel.
+                            </div>
+                        ) : funnelDataD.map((s, i) => {
+                            const enterW = (s.entered / maxEnteredD) * 100;
+                            const advW   = s.entered > 0 ? (s.advanced / maxEnteredD) * 100 : 0;
+                            const dropW  = enterW - advW;
+                            return (
+                                <div key={s.stage} style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center', padding:'10px 0', borderTop:i===0?'none':`1px solid ${T.border}` }}>
+                                    {/* Label */}
+                                    <div>
+                                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, display:'flex', alignItems:'center', gap:6, fontFamily:T.sans }}>
+                                            <span style={{ width:3, height:14, background:s.color, borderRadius:1.5, flexShrink:0 }}/>
+                                            {s.stage}
+                                        </div>
+                                        <div style={{ fontSize:10, color:T.inkMuted, marginTop:3, letterSpacing:0.4, textTransform:'uppercase', fontWeight:600, fontFamily:T.sans }}>
+                                            {s.avgDays != null ? `Avg ${s.avgDays}d in stage` : 'No timing data'}
+                                        </div>
+                                    </div>
+                                    {/* Bar */}
+                                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                        <div style={{ height:26, flex:1, display:'flex', background:T.surface2, borderRadius:2, overflow:'hidden' }}>
+                                            {/* Advanced segment */}
+                                            <div style={{ width:`${advW}%`, height:'100%', background:T.goldInk, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 8px', minWidth: advW > 0 ? 60 : 0 }}>
+                                                {advW > 15 && <>
+                                                    <span style={{ fontSize:11, color:T.surface, fontWeight:700, fontFeatureSettings:'"tnum"' }}>{s.advanced}</span>
+                                                    <span style={{ fontSize:10, color:'#e6ddc0', fontWeight:600, fontFeatureSettings:'"tnum"' }}>{Math.round(s.conv*100)}%</span>
+                                                </>}
+                                            </div>
+                                            {/* Dropped segment */}
+                                            <div style={{ width:`${dropW}%`, height:'100%', display:'flex', alignItems:'center', paddingLeft:8 }}>
+                                                {s.dropped > 0 && dropW > 8 && (
+                                                    <span style={{ fontSize:11, color:T.danger, fontWeight:600, fontFeatureSettings:'"tnum"' }}>−{s.dropped}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div style={{ width:54, textAlign:'right', fontSize:12, color:T.ink, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans, flexShrink:0 }}>
+                                            {s.entered} in
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </PanelD>
+
+                    {/* Right — leaks + focus */}
+                    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                        <PanelD padding="18px 20px 16px">
+                            <SecHdrD title="Biggest leaks" subtitle="Drop-off reasons by stage"/>
+                            {dropoffReasons.length === 0 ? (
+                                <div style={{ padding:'12px 0', fontSize:12.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>
+                                    No loss reasons recorded yet. Set a lost reason when closing deals to see drop-off analysis here.
+                                </div>
+                            ) : dropoffReasons.map((r, i) => (
+                                <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'center', padding:'10px 0', borderTop:i===0?'none':`1px solid ${T.border}` }}>
+                                    <div>
+                                        <div style={{ ...ebD(T.inkMuted), fontSize:9, marginBottom:2 }}>{r.stage}</div>
+                                        <div style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{r.reason}</div>
+                                    </div>
+                                    <div style={{ fontSize:20, color:T.danger, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>−{r.count}</div>
+                                </div>
+                            ))}
+                        </PanelD>
+
+                        <PanelD padding="18px 20px 14px">
+                            <SecHdrD title="Where to focus" subtitle="Auto-flagged stage-level actions"/>
+                            <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
+                                {worstConv && (
+                                    <div style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'10px 0', borderTop:'none' }}>
+                                        <span style={{ fontSize:16, flexShrink:0, marginTop:1 }}>⚠</span>
+                                        <div>
+                                            <div style={{ fontSize:12.5, fontWeight:700, color:T.ink, fontFamily:T.sans }}>
+                                                {worstConv.stage} — lowest conversion
+                                            </div>
+                                            <div style={{ fontSize:11.5, color:T.inkMid, marginTop:3, lineHeight:1.45, fontFamily:T.sans }}>
+                                                {Math.round(worstConv.conv*100)}% pass rate — {worstConv.dropped} deal{worstConv.dropped!==1?'s':''} dropped here.
+                                                {worstConv.dropped > 5 ? ' High volume loss. Check exit criteria and champion engagement.' : ' Review call recordings and deal notes for patterns.'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                {slowest && slowest.stage !== worstConv?.stage && (
+                                    <div style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'10px 0', borderTop:`1px solid ${T.border}` }}>
+                                        <span style={{ fontSize:16, flexShrink:0, marginTop:1 }}>⏱</span>
+                                        <div>
+                                            <div style={{ fontSize:12.5, fontWeight:700, color:T.ink, fontFamily:T.sans }}>
+                                                {slowest.stage} takes {slowest.avgDays}d
+                                            </div>
+                                            <div style={{ fontSize:11.5, color:T.inkMid, marginTop:3, lineHeight:1.45, fontFamily:T.sans }}>
+                                                Longest stage by average time. Reps may be over-investing here — review if stage exit criteria are well-defined.
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                {!worstConv && !slowest && (
+                                    <div style={{ padding:'12px 0', fontSize:12.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>
+                                        Stage history data needed to auto-flag focus areas.
+                                    </div>
+                                )}
+                            </div>
+                        </PanelD>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div style={{ display:'flex', flexDirection:'column', gap:0, padding:'1rem 1.25rem 1.5rem' }}>
             {/* Toolbar */}
