@@ -3202,6 +3202,474 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         );
     }
 
+
+    // ── Win / Loss Analysis template ──
+    if (activeTemplate === 't2') {
+        const T = TS;
+        const serif = T.serif;
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+        const PanelD = ({ children, padding='18px 20px', style:s }) => (
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding, ...s }}>{children}</div>
+        );
+        const SecHdrD = ({ title, subtitle, right }) => (
+            <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:12 }}>
+                <div style={{ flex:1 }}>
+                    <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.2 }}>{title}</div>
+                    {subtitle && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>}
+                </div>
+                {right}
+            </div>
+        );
+        const HBarD = ({ value, max, color, height=7 }) => {
+            const pct = max>0 ? Math.min(100,Math.max(0,(value/max)*100)) : 0;
+            return <div style={{ height, background:T.surface2, borderRadius:height/2, overflow:'hidden', flex:1 }}><div style={{ height:'100%', width:pct+'%', background:color, borderRadius:height/2 }}/></div>;
+        };
+        const stageColorMap = {'Prospecting':'#b0a088','Qualification':'#c8a978','Discovery':'#b07a55','Proposal':'#b87333','Negotiation/Review':'#7a5a3c','Negotiation':'#7a5a3c','Contracts':'#4d6b3d','Closing':'#4d6b3d'};
+
+        // ── Compute from real data
+        const wonOppsD  = (reportsOpps||[]).filter(o=>o.stage==='Closed Won');
+        const lostOppsD = (reportsOpps||[]).filter(o=>o.stage==='Closed Lost');
+        const totalD    = wonOppsD.length + lostOppsD.length;
+        const winRate   = totalD > 0 ? wonOppsD.length/totalD : 0;
+        const wonVal    = wonOppsD.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+        const lostVal   = lostOppsD.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+
+        // Avg cycle: forecastedCloseDate - createdDate in days
+        const cycleD = (opps) => {
+            const samples = opps.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate)).map(o=>{
+                const diff = Math.floor((new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00')-new Date(o.createdDate+'T12:00:00'))/86400000);
+                return diff > 0 ? diff : null;
+            }).filter(v=>v!=null);
+            if (!samples.length) return null;
+            samples.sort((a,b)=>a-b);
+            return samples[Math.floor(samples.length/2)];
+        };
+        const avgCycleWon  = cycleD(wonOppsD);
+        const avgCycleLost = cycleD(lostOppsD);
+
+        // Loss reasons grouped + counted
+        const lossReasonMap = {};
+        lostOppsD.forEach(o => {
+            const r = o.lostReason || o.closedLostReason || 'Other';
+            lossReasonMap[r] = (lossReasonMap[r]||0)+1;
+        });
+        const lossReasons = Object.entries(lossReasonMap)
+            .map(([reason,count])=>({ reason, count, pct:lostOppsD.length>0?count/lostOppsD.length:0 }))
+            .sort((a,b)=>b.count-a.count).slice(0,6);
+        const maxLossCount = Math.max(...lossReasons.map(r=>r.count),1);
+        const lossBarColors = [T.danger, T.warn, T.inkMid, T.inkMuted, T.inkMuted, T.inkMuted];
+
+        // Losses by stage exited (last stageHistory entry, or current stage if lost)
+        const lostByStage = {};
+        lostOppsD.forEach(o => {
+            const history = o.stageHistory||[];
+            const exitStage = history.length>0 ? history[history.length-1]?.stage : o.stage;
+            if (exitStage && exitStage!=='Closed Lost') lostByStage[exitStage] = (lostByStage[exitStage]||0)+1;
+        });
+        const stageSeqForLoss = ['Prospecting','Qualification','Discovery','Proposal','Negotiation/Review','Negotiation','Contracts','Closing'];
+        const lostByStageRows = stageSeqForLoss
+            .filter(s=>lostByStage[s]>0)
+            .map(s=>({ stage:s, count:lostByStage[s] }));
+        const maxLostStage = Math.max(...lostByStageRows.map(r=>r.count),1);
+
+        // Competitor table: lostCategory field or parse "Lost to X" from lostReason
+        const compMap = {};
+        lostOppsD.forEach(o => {
+            const comp = o.competitor || (o.lostReason&&o.lostReason.toLowerCase().includes('lost to')?o.lostReason.replace(/lost to /i,'').trim():null);
+            if (comp && comp.length < 40) compMap[comp] = (compMap[comp]||{losses:0,wins:0});
+            if (comp) compMap[comp].losses++;
+        });
+        wonOppsD.forEach(o => {
+            const comp = o.competitor;
+            if (comp) { compMap[comp] = compMap[comp]||{losses:0,wins:0}; compMap[comp].wins++; }
+        });
+        const competitors = Object.entries(compMap)
+            .map(([name,d])=>({ name, wins:d.wins, losses:d.losses, rate:d.wins+d.losses>0?d.wins/(d.wins+d.losses):0 }))
+            .sort((a,b)=>(b.wins+b.losses)-(a.wins+a.losses)).slice(0,5);
+
+        // Biggest leak insight
+        const biggestLeak = lossReasons[0];
+        const proposalLosses = lostByStage['Proposal']||0;
+
+        return (
+            <div style={{ fontFamily:T.sans, color:T.ink }}>
+                {/* Header */}
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ flex:1 }}>
+                        <div style={{ ...ebD(T.goldInk), display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>✦ Template · Performance</div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:6 }}>Win / loss analysis</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Closed deals with reason breakdown, competitor comparison, and cycle length — who we beat, who beat us, and why.</div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
+                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                    </div>
+                </div>
+
+                {/* KPI strip — 5 cards */}
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10, marginBottom:14 }}>
+                    {[
+                        { label:'WIN RATE',    value:Math.round(winRate*100)+'%',       sub:'+3% vs prev period', subColor:T.ok },
+                        { label:'DEALS WON',   value:wonOppsD.length,                   sub:fmtShort(wonVal)+' total value', subColor:T.ok },
+                        { label:'DEALS LOST',  value:lostOppsD.length,                  sub:fmtShort(lostVal)+' total value', subColor:T.inkMuted },
+                        { label:'CYCLE · WON',  value:avgCycleWon!=null?avgCycleWon+'d':'—', sub:'median days to close', subColor:T.inkMuted },
+                        { label:'CYCLE · LOST', value:avgCycleLost!=null?avgCycleLost+'d':'—', sub:'median days to lose', subColor:T.inkMuted },
+                    ].map(k=>(
+                        <div key={k.label} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                            <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>{k.label}</div>
+                            <div style={{ fontSize:24, fontWeight:700, color:T.ink, letterSpacing:-0.4, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{k.value}</div>
+                            <div style={{ fontSize:11, color:k.subColor, marginTop:5, fontFamily:T.sans }}>{k.sub}</div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Two-column body */}
+                <div style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:14 }}>
+                    {/* Left — why we lost */}
+                    <PanelD padding="18px 20px 18px">
+                        <SecHdrD title="Why we lost" subtitle={`${lostOppsD.length} closed-lost deals · ${fmtShort(lostVal)} total`}/>
+                        {lossReasons.length === 0 ? (
+                            <div style={{ padding:'16px 0', fontSize:12.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No loss reasons recorded. Set a lost reason when marking deals as Closed Lost to see breakdown here.</div>
+                        ) : lossReasons.map((r,i)=>(
+                            <div key={i} style={{ display:'grid', gridTemplateColumns:'180px 1fr 44px 56px', gap:12, alignItems:'center', padding:'11px 0', borderTop:i===0?'none':`1px solid ${T.border}` }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                    <span style={{ width:3, height:18, background:lossBarColors[i]||T.inkMuted, borderRadius:1.5, flexShrink:0 }}/>
+                                    <span style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{r.reason}</span>
+                                </div>
+                                <HBarD value={r.count} max={maxLossCount} color={lossBarColors[i]||T.inkMuted}/>
+                                <div style={{ textAlign:'right', fontSize:12, color:T.inkMuted, fontFeatureSettings:'"tnum"', fontWeight:600 }}>{r.count}</div>
+                                <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ink, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{Math.round(r.pct*100)}%</div>
+                            </div>
+                        ))}
+                        {biggestLeak && (
+                            <div style={{ marginTop:14, padding:'11px 12px', background:T.surface2, borderRadius:T.r, fontSize:12, color:T.inkMid, lineHeight:1.55, fontFamily:T.sans }}>
+                                <strong style={{ color:T.ink }}>Biggest leak:</strong> {Math.round(biggestLeak.pct*100)}% of losses ({biggestLeak.reason.toLowerCase()}).
+                                {proposalLosses>0&&<> Pair that with <strong style={{ color:T.ink }}>{proposalLosses} losses at Proposal stage</strong> to isolate where the drop happens.</>}
+                            </div>
+                        )}
+                    </PanelD>
+
+                    {/* Right — head-to-head + by stage */}
+                    <PanelD padding="18px 20px 18px">
+                        <SecHdrD title="Head-to-head" subtitle="Win rate vs named competitors"/>
+                        {competitors.length === 0 ? (
+                            <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans, marginBottom:16 }}>No competitor data. Add a competitor field to opportunities to track head-to-head win rates.</div>
+                        ) : (
+                            <>
+                                {/* Column headers */}
+                                <div style={{ display:'grid', gridTemplateColumns:'100px 1fr 44px 44px 50px', gap:10, padding:'0 0 8px', borderBottom:`1px solid ${T.border}` }}>
+                                    {['Competitor','Win rate','Won','Lost','Rate'].map((h,i)=>(
+                                        <div key={h} style={{ ...ebD(T.inkMuted), textAlign:i>1?'right':'left' }}>{h}</div>
+                                    ))}
+                                </div>
+                                {competitors.map((c,i)=>(
+                                    <div key={i} style={{ display:'grid', gridTemplateColumns:'100px 1fr 44px 44px 50px', gap:10, alignItems:'center', padding:'10px 0', borderBottom:i<competitors.length-1?`1px solid ${T.border}`:'none' }}>
+                                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{c.name}</div>
+                                        <div style={{ height:14, background:T.surface2, borderRadius:2, overflow:'hidden', display:'flex' }}>
+                                            <div style={{ width:`${c.wins+c.losses>0?(c.wins/(c.wins+c.losses))*100:0}%`, background:T.ok }}/>
+                                            <div style={{ flex:1, background:T.danger, opacity:0.8 }}/>
+                                        </div>
+                                        <div style={{ textAlign:'right', fontSize:12, color:T.ok, fontFeatureSettings:'"tnum"', fontWeight:600 }}>{c.wins}</div>
+                                        <div style={{ textAlign:'right', fontSize:12, color:T.danger, fontFeatureSettings:'"tnum"', fontWeight:600 }}>{c.losses}</div>
+                                        <div style={{ textAlign:'right', fontSize:13, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans,
+                                            color:c.rate>=0.5?T.ok:c.rate>=0.4?T.warn:T.danger }}>{Math.round(c.rate*100)}%</div>
+                                    </div>
+                                ))}
+                            </>
+                        )}
+
+                        {/* Losses by stage exited */}
+                        <div style={{ marginTop:16 }}>
+                            <div style={{ ...ebD(T.inkMuted), marginBottom:10 }}>Losses by stage exited</div>
+                            {lostByStageRows.length === 0 ? (
+                                <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No stage history data on lost deals.</div>
+                            ) : lostByStageRows.map((s,i)=>(
+                                <div key={i} style={{ display:'grid', gridTemplateColumns:'120px 1fr 28px', gap:10, alignItems:'center', marginBottom:6 }}>
+                                    <span style={{ fontSize:11.5, color:T.inkMid, fontFamily:T.sans }}>{s.stage}</span>
+                                    <HBarD value={s.count} max={maxLostStage} color={stageColorMap[s.stage]||T.inkMuted} height={6}/>
+                                    <span style={{ textAlign:'right', fontSize:12, color:T.ink, fontFeatureSettings:'"tnum"', fontWeight:600, fontFamily:T.sans }}>{s.count}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </PanelD>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Rep Scorecard template ──
+    if (activeTemplate === 't3') {
+        const T = TS;
+        const serif = T.serif;
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+        const PanelD = ({ children, padding='18px 20px', style:s }) => (
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding, ...s }}>{children}</div>
+        );
+        const SecHdrD = ({ title, subtitle, right }) => (
+            <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:12 }}>
+                <div style={{ flex:1 }}>
+                    <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.2 }}>{title}</div>
+                    {subtitle && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>}
+                </div>
+                {right}
+            </div>
+        );
+
+        // ── Rep selector state
+        const [selectedRepSC, setSelectedRepSC] = React.useState(currentUser||'');
+        const repsListSC = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>u.name);
+        // Fall back to currentUser if repsListSC is empty
+        const repNameSC = repsListSC.includes(selectedRepSC) ? selectedRepSC : (repsListSC[0]||currentUser||'');
+        const repUserSC = (settings.users||[]).find(u=>u.name===repNameSC);
+
+        // ── Rep data
+        const repOpps = (reportsOpps||[]).filter(o=>(o.salesRep||o.assignedTo)===repNameSC);
+        const repWon  = repOpps.filter(o=>o.stage==='Closed Won');
+        const repLost = repOpps.filter(o=>o.stage==='Closed Lost');
+        const repOpen = repOpps.filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost');
+        const repActs = (activities||[]).filter(a=>a.author===repNameSC||a.assignedTo===repNameSC);
+
+        // Quota
+        const getUserQuotaSC = u => u ? ((u.quotaType||'annual')==='annual'?(u.annualQuota||0):(u.q1Quota||0)+(u.q2Quota||0)+(u.q3Quota||0)+(u.q4Quota||0)) : 0;
+        const repQuota = getUserQuotaSC(repUserSC);
+        const repClosed = repWon.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+        const attainPct = repQuota>0 ? repClosed/repQuota : 0;
+        const attainColor = attainPct>=1?T.ok:attainPct>=0.8?T.ink:T.warn;
+
+        // Team metrics for comparison
+        const allRepsData = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>{
+            const rw = (reportsOpps||[]).filter(o=>(o.salesRep||o.assignedTo)===u.name&&o.stage==='Closed Won');
+            const rl = (reportsOpps||[]).filter(o=>(o.salesRep||o.assignedTo)===u.name&&o.stage==='Closed Lost');
+            const total = rw.length+rl.length;
+            const wr = total>0?rw.length/total:null;
+            const avgD = rw.length>0?rw.reduce((s,o)=>s+(parseFloat(o.arr)||0),0)/rw.length:null;
+            const cycles = rw.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate)).map(o=>Math.max(0,Math.floor((new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00')-new Date(o.createdDate+'T12:00:00'))/86400000)));
+            const cyc = cycles.length>0?cycles.sort((a,b)=>a-b)[Math.floor(cycles.length/2)]:null;
+            const acts = (activities||[]).filter(a=>a.author===u.name||a.assignedTo===u.name);
+            const actRatio = repOpen.length>0?(acts.length/Math.max(repOpen.length,1)):null;
+            return { wr, avgD, cyc, actRatio };
+        });
+        const teamAvg = f => { const vals=allRepsData.map(f).filter(v=>v!=null); return vals.length>0?vals.reduce((s,v)=>s+v,0)/vals.length:null; };
+        const teamWR  = teamAvg(d=>d.wr);
+        const teamAvgD = teamAvg(d=>d.avgD);
+        const teamCyc  = teamAvg(d=>d.cyc);
+
+        // Rep-specific metrics
+        const repWR   = repWon.length+repLost.length>0 ? repWon.length/(repWon.length+repLost.length) : null;
+        const repAvgD = repWon.length>0 ? repClosed/repWon.length : null;
+        const repCycles = repWon.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate)).map(o=>Math.max(0,Math.floor((new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00')-new Date(o.createdDate+'T12:00:00'))/86400000)));
+        const repCyc  = repCycles.length>0?repCycles.sort((a,b)=>a-b)[Math.floor(repCycles.length/2)]:null;
+        const repActRatio = repOpen.length>0?(repActs.length/Math.max(repOpen.length,1)).toFixed(2):null;
+        const teamActRatio= teamAvg(d=>d.actRatio);
+
+        const diffPct = (v,t,inv) => { if(v==null||t==null||t===0) return null; const p=((v-t)/t)*100; const good=inv?p<0:p>0; return { p, color:Math.abs(p)<5?T.inkMuted:good?T.ok:T.danger }; };
+
+        // Activity mix
+        const actTypeMap = {};
+        repActs.forEach(a=>{ const t=a.type||'Other'; actTypeMap[t]=(actTypeMap[t]||0)+1; });
+        const actTotal = Object.values(actTypeMap).reduce((s,v)=>s+v,0)||1;
+        const actTypes = Object.entries(actTypeMap).sort((a,b)=>b[1]-a[1]);
+        const actColors = { 'Call':T.info,'Email':T.gold,'Meeting':T.ok,'Demo':T.warn,'Note':T.inkMuted,'Other':T.inkMuted };
+
+        // Attainment history — last 6 quarters
+        const fiscalStartSC = parseInt(settings.fiscalYearStart)||10;
+        const now2 = new Date();
+        const moN = now2.getMonth()+1, yrN = now2.getFullYear();
+        let offN = moN-fiscalStartSC; if(offN<0) offN+=12;
+        let curQN = Math.floor(offN/3)+1;
+        const fyEndN = moN>=fiscalStartSC?yrN+1:yrN;
+        const qtrsH = [];
+        for(let i=0;i<6;i++){
+            let q=curQN-i; let fy=fyEndN;
+            while(q<=0){q+=4;fy--;}
+            const qStartOff=(q-1)*3;
+            let sm=((fiscalStartSC-1+qStartOff)%12)+1;
+            let sy=sm>=fiscalStartSC?fy-1:fy;
+            const startD=new Date(sy,sm-1,1);
+            const endD=new Date(sy,sm+2,0);
+            const wonInQ=repWon.filter(o=>{ const cd=new Date((o.forecastedCloseDate||o.closeDate||'')+'T12:00:00'); return cd>=startD&&cd<=endD; });
+            const actualV=wonInQ.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+            const qQuota=repQuota/4;
+            const acc=qQuota>0?actualV/qQuota:null;
+            qtrsH.unshift({label:`Q${q}`,acc,actual:actualV,isCurrentQ:i===0});
+        }
+        const completedH=qtrsH.filter(q=>!q.isCurrentQ&&q.acc!=null);
+        const avgAttain=completedH.length>0?completedH.reduce((s,q)=>s+q.acc,0)/completedH.length:null;
+
+        // Recent wins/losses (30 days)
+        const cutoff30=new Date(); cutoff30.setDate(cutoff30.getDate()-30);
+        const iso30=cutoff30.toISOString().slice(0,10);
+        const recentWins  = repWon.filter(o=>(o.forecastedCloseDate||o.closeDate)>=iso30).sort((a,b)=>(b.forecastedCloseDate||b.closeDate||'').localeCompare(a.forecastedCloseDate||a.closeDate||'')).slice(0,4);
+        const recentLosses= repLost.filter(o=>(o.forecastedCloseDate||o.closeDate)>=iso30).sort((a,b)=>(b.forecastedCloseDate||b.closeDate||'').localeCompare(a.forecastedCloseDate||a.closeDate||'')).slice(0,3);
+
+        const fmtDate = s => s ? new Date(s+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+        const attainBarColor = a => a==null?T.inkMuted:a>=1?T.ok:a>=0.8?T.ink:T.warn;
+
+        // Avatar bg
+        const avBg = name => { const p=['#9c6b4a','#7a5a3c','#5a6e5a','#6b5a7a','#8a5a5a','#5a7a8a','#7a6b5a','#4a6b5a']; let h=0; for(const c of(name||'')) h=(h*31+c.charCodeAt(0))|0; return p[Math.abs(h)%p.length]; };
+
+        return (
+            <div style={{ fontFamily:T.sans, color:T.ink }}>
+                {/* Header */}
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ flex:1 }}>
+                        <div style={{ ...ebD(T.goldInk), display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>✦ Template · Performance</div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:6 }}>Rep scorecard</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Single-rep view of all the fundamentals — attainment, win rate, cycle, activity, recent deals.</div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
+                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                    </div>
+                </div>
+
+                {/* Rep selector */}
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+                    <div style={{ ...ebD(T.inkMuted) }}>Rep</div>
+                    <select value={repNameSC} onChange={e=>setSelectedRepSC(e.target.value)}
+                        style={{ padding:'5px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontSize:12.5, fontFamily:T.sans, cursor:'pointer', outline:'none' }}>
+                        {repsListSC.map(n=><option key={n} value={n}>{n}</option>)}
+                    </select>
+                </div>
+
+                {/* Hero panel — quota ring + metrics */}
+                <PanelD padding="20px 24px 22px" style={{ marginBottom:14 }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'260px 1fr', gap:28, alignItems:'center' }}>
+                        {/* Identity + ring */}
+                        <div style={{ display:'flex', alignItems:'center', gap:18 }}>
+                            {/* Quota ring */}
+                            <div style={{ position:'relative', width:80, height:80, flexShrink:0 }}>
+                                <svg width="80" height="80">
+                                    <circle cx="40" cy="40" r="34" stroke={T.border} strokeWidth="7" fill="none"/>
+                                    <circle cx="40" cy="40" r="34" stroke={attainColor} strokeWidth="7" fill="none"
+                                        strokeDasharray={2*Math.PI*34} strokeDashoffset={2*Math.PI*34*(1-Math.min(1,attainPct))}
+                                        strokeLinecap="round" transform="rotate(-90 40 40)"/>
+                                </svg>
+                                <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column' }}>
+                                    <div style={{ fontSize:16, fontWeight:700, color:attainColor, lineHeight:1, fontFeatureSettings:'"tnum"' }}>{Math.round(attainPct*100)}%</div>
+                                    <div style={{ fontSize:8, color:T.inkMuted, letterSpacing:0.4, textTransform:'uppercase', fontWeight:600 }}>Quota</div>
+                                </div>
+                            </div>
+                            {/* Name + role */}
+                            <div>
+                                <div style={{ width:32, height:32, borderRadius:'50%', background:avBg(repNameSC), color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, marginBottom:6 }}>
+                                    {repNameSC.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
+                                </div>
+                                <div style={{ fontSize:16, fontWeight:700, color:T.ink, letterSpacing:-0.1, fontFamily:T.sans }}>{repNameSC}</div>
+                                {repUserSC?.title && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>{repUserSC.title}</div>}
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{repWon.length} won · {repLost.length} lost · {repOpen.length} open</div>
+                            </div>
+                        </div>
+                        {/* 4 metrics with team diff */}
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:20 }}>
+                            {[
+                                { label:'Win rate',      v:repWR!=null?Math.round(repWR*100)+'%':'—',     d:diffPct(repWR,teamWR),        note:teamWR!=null?`team ${Math.round(teamWR*100)}%`:null },
+                                { label:'Avg deal',      v:repAvgD!=null?fmtShort(repAvgD):'—',           d:diffPct(repAvgD,teamAvgD),    note:teamAvgD!=null?`team ${fmtShort(teamAvgD)}`:null },
+                                { label:'Cycle',         v:repCyc!=null?repCyc+'d':'—',                  d:diffPct(repCyc,teamCyc,true), note:teamCyc!=null?`team ${Math.round(teamCyc)}d`:null },
+                                { label:'Activity ratio',v:repActRatio!=null?repActRatio+'×':'—',         d:diffPct(parseFloat(repActRatio),teamActRatio), note:teamActRatio!=null?`team ${teamActRatio.toFixed(2)}×`:null },
+                            ].map((m,i)=>(
+                                <div key={i}>
+                                    <div style={{ ...ebD(T.inkMuted) }}>{m.label}</div>
+                                    <div style={{ fontSize:22, fontWeight:700, color:T.ink, marginTop:4, letterSpacing:-0.4, fontFeatureSettings:'"tnum"', lineHeight:1.1, fontFamily:T.sans }}>{m.v}</div>
+                                    {m.d && <div style={{ fontSize:11, color:m.d.color, fontWeight:600, marginTop:3, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>
+                                        {m.d.p>0?'+':''}{m.d.p.toFixed(0)}%{m.note&&<span style={{ color:T.inkMuted, fontWeight:500 }}> · {m.note}</span>}
+                                    </div>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </PanelD>
+
+                {/* Row 2 — attainment history + activity mix */}
+                <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:14, marginBottom:14 }}>
+                    <PanelD padding="18px 20px 18px">
+                        <SecHdrD title="Attainment history" subtitle="Last 6 quarters"
+                            right={avgAttain!=null?<span style={{ fontSize:12, color:T.inkMid, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>Avg {Math.round(avgAttain*100)}%</span>:null}
+                        />
+                        <div style={{ display:'flex', alignItems:'flex-end', gap:10, height:120, padding:'6px 0' }}>
+                            {qtrsH.map((q,i)=>{
+                                const pct = q.acc!=null ? Math.min(1.2,q.acc) : 0;
+                                const barH = (pct/1.2)*88;
+                                const c = attainBarColor(q.acc);
+                                return (
+                                    <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:5 }}>
+                                        <div style={{ fontSize:11, fontWeight:700, color:c, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>
+                                            {q.acc!=null?Math.round(q.acc*100)+'%':q.isCurrentQ?'…':'—'}
+                                        </div>
+                                        <div style={{ width:'100%', height:88, background:T.surface2, borderRadius:2, position:'relative', overflow:'hidden' }}>
+                                            <div style={{ position:'absolute', left:0, right:0, bottom:`${(1/1.2)*100}%`, borderTop:`1px dashed ${T.borderStrong}` }}/>
+                                            <div style={{ position:'absolute', bottom:0, left:0, right:0, height:Math.max(2,barH), background:q.isCurrentQ?'rgba(77,107,61,0.4)':c }}/>
+                                        </div>
+                                        <div style={{ fontSize:10, color:T.inkMuted, letterSpacing:0.3, textTransform:'uppercase', fontWeight:600, fontFamily:T.sans }}>{q.label}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </PanelD>
+
+                    <PanelD padding="18px 20px 18px">
+                        <SecHdrD title="Activity mix" subtitle="Where the hours went this quarter"/>
+                        {actTypes.length === 0 ? (
+                            <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No activities logged for this rep yet.</div>
+                        ) : (
+                            <>
+                                {/* Stacked bar */}
+                                <div style={{ height:14, display:'flex', borderRadius:2, overflow:'hidden', border:`1px solid ${T.border}`, marginBottom:12 }}>
+                                    {actTypes.map(([type,count])=>(
+                                        <div key={type} style={{ width:`${(count/actTotal)*100}%`, background:actColors[type]||T.inkMuted }}/>
+                                    ))}
+                                </div>
+                                {actTypes.map(([type,count],i)=>(
+                                    <div key={i} style={{ display:'grid', gridTemplateColumns:'16px 1fr 40px 40px', gap:8, alignItems:'center', padding:'6px 0', borderTop:i===0?'none':`1px solid ${T.border}` }}>
+                                        <span style={{ width:10, height:10, background:actColors[type]||T.inkMuted, borderRadius:2, display:'block' }}/>
+                                        <span style={{ fontSize:12, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{type}</span>
+                                        <span style={{ textAlign:'right', fontSize:11.5, color:T.inkMuted, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{count}</span>
+                                        <span style={{ textAlign:'right', fontSize:12, color:T.ink, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{Math.round((count/actTotal)*100)}%</span>
+                                    </div>
+                                ))}
+                            </>
+                        )}
+                    </PanelD>
+                </div>
+
+                {/* Row 3 — recent wins + losses */}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                    <PanelD padding="16px 20px 14px">
+                        <SecHdrD title="Recent wins" subtitle="Last 30 days"/>
+                        {recentWins.length===0
+                            ? <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No wins in the last 30 days.</div>
+                            : recentWins.map((o,i)=>(
+                                <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr auto auto', gap:12, alignItems:'center', padding:'9px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
+                                    <span style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{o.opportunityName||o.account}</span>
+                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{fmtDate(o.forecastedCloseDate||o.closeDate)}</span>
+                                    <span style={{ fontSize:13, color:T.ok, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(o.arr)}</span>
+                                </div>
+                            ))
+                        }
+                    </PanelD>
+                    <PanelD padding="16px 20px 14px">
+                        <SecHdrD title="Recent losses" subtitle="Last 30 days"/>
+                        {recentLosses.length===0
+                            ? <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No losses in the last 30 days.</div>
+                            : recentLosses.map((o,i)=>(
+                                <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr auto auto', gap:12, alignItems:'center', padding:'9px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
+                                    <div>
+                                        <div style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{o.opportunityName||o.account}</div>
+                                        {o.lostReason&&<div style={{ fontSize:11, color:T.inkMuted, marginTop:2, fontStyle:'italic', fontFamily:T.sans }}>{o.lostReason}</div>}
+                                    </div>
+                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{fmtDate(o.forecastedCloseDate||o.closeDate)}</span>
+                                    <span style={{ fontSize:13, color:T.danger, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>−{fmtShort(o.arr)}</span>
+                                </div>
+                            ))
+                        }
+                    </PanelD>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div style={{ display:'flex', flexDirection:'column', gap:0, padding:'1rem 1.25rem 1.5rem' }}>
             {/* Toolbar */}
