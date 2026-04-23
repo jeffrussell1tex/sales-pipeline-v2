@@ -2363,6 +2363,58 @@ ${bodyHtml}
 // ─────────────────────────────────────────────────────────────
 function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, settings, currentUser }) {
     const [srchQ, setSrchQ] = React.useState('');
+    const [activeTemplate, setActiveTemplate] = React.useState(null);
+    const [selectedRepSC, setSelectedRepSC] = React.useState(currentUser||'');
+    const [showCreateReport, setShowCreateReport] = React.useState(false);
+    const [createMode, setCreateMode] = React.useState('picker');
+    const [aiPrompt, setAiPrompt] = React.useState('');
+    const [aiGenerated, setAiGenerated] = React.useState(false);
+    const [aiRefine, setAiRefine] = React.useState('');
+    const [builderTab, setBuilderTab] = React.useState('data');
+    const [builderDirty, setBuilderDirty] = React.useState(true);
+    const [builderRendered, setBuilderRendered] = React.useState(false);
+    const [builderSource, setBuilderSource] = React.useState('Opportunities');
+    const [builderDims, setBuilderDims] = React.useState([{id:'owner',label:'Owner',kind:'dim'},{id:'stage',label:'Stage',kind:'dim'}]);
+    const [builderMetrics, setBuilderMetrics] = React.useState([{id:'arr',label:'Revenue',kind:'metric'}]);
+    const [builderChart, setBuilderChart] = React.useState('stacked');
+    const [builderAdvanced, setBuilderAdvanced] = React.useState(false);
+    // Saved reports library state
+    const [savedReportsList, setSavedReportsList] = React.useState([]);
+    const [saveState, setSaveState] = React.useState('idle'); // 'idle'|'saving'|'saved'|'error'
+    const [saveError, setSaveError] = React.useState(null);
+
+    // Load saved reports on mount
+    React.useEffect(() => {
+        let cancelled = false;
+        dbFetch('/.netlify/functions/saved-reports')
+            .then(data => { if (!cancelled) setSavedReportsList(data?.reports || []); })
+            .catch(() => {}); // silent — library just shows empty
+        return () => { cancelled = true; };
+    }, []);
+
+    // Save report handler — used by both blank and AI builder Save to library buttons
+    const handleSaveReport = React.useCallback(async ({ name, source, dims, metrics, chartType, description }) => {
+        setSaveState('saving');
+        setSaveError(null);
+        const id = 'rpt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        const payload = { id, name: name||'Untitled report', source, dims, metrics, chartType, description, ownerId: currentUser, ownerName: currentUser };
+        try {
+            const data = await dbFetch('/.netlify/functions/saved-reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            setSavedReportsList(prev => [data?.report || payload, ...prev]);
+            setSaveState('saved');
+            setTimeout(() => setSaveState('idle'), 3000);
+            setShowCreateReport(false);
+            setCreateMode('picker');
+        } catch (err) {
+            setSaveState('error');
+            setSaveError('Failed to save. Check your connection and try again.');
+            setTimeout(() => setSaveState('idle'), 4000);
+        }
+    }, [currentUser]);
 
     // ── Design tokens
     const TS = {
@@ -2453,6 +2505,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
     const matchSrch = name => !srchQ.trim() || name.toLowerCase().includes(srchQ.toLowerCase());
     const filteredPinned   = pinnedCards.filter(r=>matchSrch(r.name));
     const filteredTemplates= templates.filter(t=>matchSrch(t.name));
+    const filteredSaved    = savedReportsList.filter(r=>matchSrch(r.name));
 
     // ── Card sub-components (defined inside component so they close over TS)
     const PinnedCardS = ({ r }) => {
@@ -2481,6 +2534,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         const [hov, setHov] = React.useState(false);
         return (
             <div onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+                onClick={() => setActiveTemplate(t.id)}
                 style={{ background:hov?TS.surface2:TS.surface, border:`${hov?'1px solid':'1px dashed'} ${TS.borderStrong}`, borderRadius:TS.r, padding:'14px 16px', display:'flex', gap:12, alignItems:'flex-start', cursor:'pointer', transition:'background 120ms' }}>
                 <div style={{ width:36, height:36, borderRadius:TS.r, background:TS.surface2, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:18 }}>{t.icon}</div>
                 <div style={{ flex:1, minWidth:0 }}>
@@ -2508,6 +2562,2045 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         </div>
     );
 
+
+    // ── Deal Review template — live data computed here ──
+    if (activeTemplate === 't1') {
+        const T = TS;
+        const serif = T.serif;
+        const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const stageColors = { 'Prospecting':'#b0a088','Qualification':'#c8a978','Discovery':'#b07a55','Proposal':'#b87333','Negotiation/Review':'#7a5a3c','Negotiation':'#7a5a3c','Contracts':'#4d6b3d','Closing':'#4d6b3d','Closed Won':'#3a5530','Closed Lost':'#9c3a2e' };
+
+        const PanelD = ({ children, padding='18px 20px', style:s }) => (
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding, ...s }}>{children}</div>
+        );
+        const SecHdrD = ({ title, subtitle, right }) => (
+            <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.2, lineHeight:1.1 }}>{title}</div>
+                    {subtitle && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>}
+                </div>
+                {right}
+            </div>
+        );
+        const KpiD = ({ label, value, sub, danger }) => (
+            <div style={{ border:`1px solid ${danger?'rgba(156,58,46,0.35)':T.border}`, borderRadius:T.r+1, padding:'14px 18px', background:danger?'rgba(156,58,46,0.04)':T.surface }}>
+                <div style={{ ...ebD(danger?T.danger:T.inkMuted), marginBottom:4 }}>{label}</div>
+                <div style={{ fontSize:28, fontWeight:700, color:danger?T.danger:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{value}</div>
+                {sub && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>{sub}</div>}
+            </div>
+        );
+        const StageChipD = ({ stage }) => (
+            <span style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:11, color:T.inkMid, fontWeight:500, fontFamily:T.sans }}>
+                <span style={{ width:6, height:6, background:stageColors[stage]||T.inkMuted, borderRadius:'50%', flexShrink:0 }}/>
+                {stage}
+            </span>
+        );
+
+        const now7 = new Date(); now7.setDate(now7.getDate()-7);
+        const iso7 = now7.toISOString().slice(0,10);
+
+        const commitOpps = allOpen.filter(o =>
+            o.forecastCategory === 'commit' ||
+            (!o.forecastCategory && ['Closing','Negotiation/Review','Contracts','Negotiation'].includes(o.stage))
+        );
+        const atRiskOpps = allOpen.filter(o => {
+            const lastAct = (activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
+            const days = lastAct?.date ? Math.floor((Date.now()-new Date(lastAct.date+'T12:00:00').getTime())/86400000) : 999;
+            return days >= 14;
+        });
+        const newSinceOpps = allOpen.filter(o => o.createdDate && o.createdDate >= iso7);
+        const changedOpps  = (reportsOpps||[]).filter(o => o.stageChangedDate && o.stageChangedDate >= iso7);
+
+        const commitTotal = commitOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+        const riskTotal   = atRiskOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+        const newTotal    = newSinceOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+
+        const lastActLabel = opp => {
+            const a = (activities||[]).filter(a=>a.opportunityId===opp.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
+            if (!a?.date) return 'No activity';
+            return Math.floor((Date.now()-new Date(a.date+'T12:00:00').getTime())/86400000)+'d ago';
+        };
+        const closeLabelFn = opp => {
+            const cd = opp.forecastedCloseDate||opp.closeDate;
+            if (!cd) return null;
+            const diff = Math.ceil((new Date(cd+'T12:00:00')-Date.now())/86400000);
+            if (diff<=0) return 'OVERDUE';
+            if (diff<=7) return 'CLOSE '+new Date(cd+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'}).toUpperCase();
+            return Math.ceil(diff/7)+'wk';
+        };
+
+        return (
+            <div style={{ fontFamily:T.sans, color:T.ink }}>
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ flex:1 }}>
+                        <div style={{ ...ebD(T.goldInk), display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>✦ Template · Pipeline &amp; Forecast</div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:6 }}>Deal review — weekly</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Your 1:1-ready view. Commits you promised, deals slipping, and what's entered the pipe since last review.</div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
+                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                    </div>
+                </div>
+
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:14 }}>
+                    <KpiD label="Your commits this month"    value={fmtShort(commitTotal)} sub={`${commitOpps.length} deal${commitOpps.length!==1?'s':''} · must close`}/>
+                    <KpiD label="At risk — no activity >14d" value={fmtShort(riskTotal)}   sub={`${atRiskOpps.length} deal${atRiskOpps.length!==1?'s':''} · needs action`} danger={true}/>
+                    <KpiD label="New since last review"      value={fmtShort(newTotal)}    sub={`${newSinceOpps.length} opp${newSinceOpps.length!==1?'s':''} · added this week`}/>
+                </div>
+
+                <div style={{ display:'grid', gridTemplateColumns:'1.35fr 1fr', gap:14 }}>
+                    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                        <PanelD padding="18px 20px 14px">
+                            <SecHdrD title="Commits" subtitle={`${commitOpps.length} deal${commitOpps.length!==1?'s':''} · forecast category set to commit`} right={<span style={{ fontSize:12, color:T.inkMid, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(commitTotal)}</span>}/>
+                            {commitOpps.length === 0
+                                ? <div style={{ padding:'16px 0', fontSize:12.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No deals marked as commit. Set Forecast Category on an opportunity to see them here.</div>
+                                : commitOpps.map((o,i) => (
+                                    <div key={o.id} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'center', padding:'10px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
+                                        <div>
+                                            <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{o.opportunityName||o.account}</div>
+                                            <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, display:'flex', alignItems:'center', gap:10, fontFamily:T.sans }}>
+                                                <StageChipD stage={o.stage}/>
+                                                {o.nextSteps && <><span style={{ opacity:0.5 }}>·</span><span>Next: {String(o.nextSteps).slice(0,60)}</span></>}
+                                            </div>
+                                        </div>
+                                        <div style={{ textAlign:'right' }}>
+                                            <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(o.arr)}</div>
+                                            {closeLabelFn(o) && <div style={{ fontSize:10.5, color:T.goldInk, fontWeight:600, marginTop:2, letterSpacing:0.3, textTransform:'uppercase', fontFamily:T.sans }}>{closeLabelFn(o)}</div>}
+                                        </div>
+                                    </div>
+                                ))
+                            }
+                        </PanelD>
+
+                        <PanelD padding="18px 20px 14px">
+                            <SecHdrD title="At risk" subtitle={`${atRiskOpps.length} open deal${atRiskOpps.length!==1?'s':''}, no activity in 14+ days`} right={atRiskOpps.length>0?<span style={{ fontSize:12, color:T.danger, fontFeatureSettings:'"tnum"', fontWeight:600, fontFamily:T.sans }}>{fmtShort(riskTotal)} exposed</span>:null}/>
+                            {atRiskOpps.length === 0
+                                ? <div style={{ padding:'16px 0', fontSize:12.5, color:T.ok, fontStyle:'italic', fontFamily:T.sans }}>✓ No at-risk deals — all open opportunities have recent activity.</div>
+                                : atRiskOpps.slice(0,6).map((o,i) => (
+                                    <div key={o.id} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'center', padding:'11px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
+                                        <div style={{ display:'flex', gap:10 }}>
+                                            <span style={{ width:3, background:T.danger, borderRadius:1.5, flexShrink:0, alignSelf:'stretch' }}/>
+                                            <div>
+                                                <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{o.opportunityName||o.account}</div>
+                                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, display:'flex', alignItems:'center', gap:10, fontFamily:T.sans }}>
+                                                    <StageChipD stage={o.stage}/><span style={{ opacity:0.5 }}>·</span>
+                                                    <span style={{ color:T.danger, fontWeight:500 }}>Last activity {lastActLabel(o)}</span>
+                                                </div>
+                                                {o.notes && <div style={{ fontSize:11.5, color:T.inkMid, marginTop:4, fontStyle:'italic', fontFamily:T.sans }}>"{String(o.notes).slice(0,80)}{o.notes.length>80?'…':''}"</div>}
+                                            </div>
+                                        </div>
+                                        <div style={{ textAlign:'right', fontSize:13.5, fontWeight:700, color:T.ink, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(o.arr)}</div>
+                                    </div>
+                                ))
+                            }
+                        </PanelD>
+                    </div>
+
+                    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                        <PanelD padding="18px 20px 14px">
+                            <SecHdrD title="New since last review" subtitle={`${newSinceOpps.length} opp${newSinceOpps.length!==1?'s':''} added since last week`} right={newTotal>0?<span style={{ fontSize:12, color:T.ok, fontFeatureSettings:'"tnum"', fontWeight:600, fontFamily:T.sans }}>+{fmtShort(newTotal)}</span>:null}/>
+                            {newSinceOpps.length === 0
+                                ? <div style={{ padding:'16px 0', fontSize:12.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No new opportunities created in the last 7 days.</div>
+                                : newSinceOpps.slice(0,5).map((o,i) => (
+                                    <div key={o.id} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'center', padding:'10px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
+                                        <div>
+                                            <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{o.opportunityName||o.account}</div>
+                                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:3, display:'flex', alignItems:'center', gap:8, fontFamily:T.sans }}>
+                                                <StageChipD stage={o.stage}/>
+                                                {o.account && <><span style={{ opacity:0.5 }}>·</span><span>{o.account}</span></>}
+                                            </div>
+                                        </div>
+                                        <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ink, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(o.arr)}</div>
+                                    </div>
+                                ))
+                            }
+                        </PanelD>
+
+                        <PanelD padding="18px 20px 14px">
+                            <SecHdrD title="Stage changes this week" subtitle="Deals that moved forward or back"/>
+                            {changedOpps.length === 0
+                                ? <div style={{ padding:'16px 0', fontSize:12.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No stage changes in the last 7 days.</div>
+                                : changedOpps.slice(0,6).map((o,i) => {
+                                    const isLoss = o.stage==='Closed Lost';
+                                    const isWin  = o.stage==='Closed Won';
+                                    const history = o.stageHistory || [];
+                                    const prevStage = history.length>0 ? history[history.length-1]?.stage : null;
+                                    return (
+                                        <div key={o.id} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'center', padding:'10px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
+                                            <div>
+                                                <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{o.opportunityName||o.account}</div>
+                                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, display:'flex', alignItems:'center', gap:6, fontFamily:T.sans }}>
+                                                    {prevStage && <><StageChipD stage={prevStage}/><span style={{ fontSize:9, color:T.inkMuted }}>→</span></>}
+                                                    <StageChipD stage={o.stage}/>
+                                                </div>
+                                            </div>
+                                            <div style={{ textAlign:'right', fontSize:12, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans, color:isLoss?T.danger:isWin?T.ok:T.inkMuted }}>
+                                                {isLoss?'−'+fmtShort(o.arr):isWin?'+'+fmtShort(o.arr):'—'}
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            }
+                        </PanelD>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+
+    // ── Stage Conversion Deep-Dive template ──
+    if (activeTemplate === 't5') {
+        const T = TS;
+        const serif = T.serif;
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const stageColorMap = { 'Prospecting':'#b0a088','Qualification':'#c8a978','Discovery':'#b07a55','Proposal':'#b87333','Negotiation/Review':'#7a5a3c','Negotiation':'#7a5a3c','Contracts':'#4d6b3d','Closing':'#4d6b3d','Closed Won':'#3a5530','Closed Lost':'#9c3a2e' };
+        const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+
+        const PanelD = ({ children, padding='18px 20px', style:s }) => (
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding, ...s }}>{children}</div>
+        );
+        const SecHdrD = ({ title, subtitle, right }) => (
+            <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:12 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.2, lineHeight:1.1 }}>{title}</div>
+                    {subtitle && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>}
+                </div>
+                {right}
+            </div>
+        );
+
+        // ── Build funnel from real data (same cohort logic as Pipeline tab)
+        const stageOrderD = (settings.funnelStages||[]).filter(s=>s.name).map(s=>s.name)
+            .filter(s=>s!=='Closed Won'&&s!=='Closed Lost');
+        // Fall back to defaults if no funnel stages configured
+        const stageSeq = stageOrderD.length > 0 ? stageOrderD
+            : ['Prospecting','Qualification','Discovery','Proposal','Negotiation','Closing'];
+
+        const stageRankD = s => stageSeq.indexOf(s);
+        const allScopeD  = reportsOpps || [];
+
+        // Max stage reached per opp (using stageHistory if available)
+        const oppMaxD = allScopeD.map(o => {
+            const wonRank = stageSeq.length; // Closed Won = beyond last visible stage
+            if (o.stage === 'Closed Won') return wonRank;
+            if (o.stageHistory && o.stageHistory.length > 0) {
+                const ranks = o.stageHistory.map(h => stageRankD(h.stage)).filter(r => r >= 0);
+                const cur = stageRankD(o.stage);
+                return Math.max(...ranks, cur >= 0 ? cur : 0);
+            }
+            const r = stageRankD(o.stage);
+            return r >= 0 ? r : 0;
+        });
+
+        // Avg days per stage from stageHistory consecutive timestamps
+        const avgDaysForStage = stageName => {
+            const samples = [];
+            allScopeD.forEach(o => {
+                if (!o.stageHistory || o.stageHistory.length < 2) return;
+                o.stageHistory.forEach((h, i) => {
+                    if (h.stage === stageName && i + 1 < o.stageHistory.length) {
+                        const enter = new Date((h.date||h.changedAt||'')+'T12:00:00');
+                        const exit  = new Date((o.stageHistory[i+1].date||o.stageHistory[i+1].changedAt||'')+'T12:00:00');
+                        const d = Math.floor((exit-enter)/86400000);
+                        if (d >= 0 && d < 365) samples.push(d);
+                    }
+                });
+            });
+            if (samples.length === 0) return null;
+            samples.sort((a,b)=>a-b);
+            return samples[Math.floor(samples.length/2)];
+        };
+
+        // Build stage rows
+        const funnelDataD = stageSeq.map((st, i) => {
+            const myRank = stageRankD(st);
+            const entered  = oppMaxD.filter(r => r >= myRank).length;
+            const advanced = i < stageSeq.length - 1
+                ? oppMaxD.filter(r => r >= myRank + 1).length
+                : oppMaxD.filter(r => r >= stageSeq.length).length; // Closed Won
+            const conv = entered > 0 ? advanced / entered : 0;
+            const dropped = entered - advanced;
+            const avgDays = avgDaysForStage(st);
+            return { stage:st, entered, advanced, conv, dropped, avgDays, color:stageColorMap[st]||T.inkMuted };
+        }).filter(s => s.entered > 0);
+
+        const maxEnteredD = Math.max(...funnelDataD.map(s=>s.entered), 1);
+        const overallConv = funnelDataD.length > 0 && funnelDataD[0].entered > 0
+            ? funnelDataD[funnelDataD.length-1].advanced / funnelDataD[0].entered : 0;
+        const totalCycleDays = funnelDataD.reduce((s,st)=>s+(st.avgDays||0),0);
+
+        // Drop-off reasons from lostReason on closed-lost opps, grouped by stage exited
+        const lostOppsD = allScopeD.filter(o=>o.stage==='Closed Lost');
+        const dropoffMap = {};
+        lostOppsD.forEach(o => {
+            if (!o.lostReason) return;
+            // Stage they were in when lost
+            const history = o.stageHistory||[];
+            const exitStage = history.length>0 ? history[history.length-1]?.stage : o.stage;
+            const key = (exitStage||'Unknown')+'||'+(o.lostReason||'Other');
+            dropoffMap[key] = (dropoffMap[key]||0) + 1;
+        });
+        const dropoffReasons = Object.entries(dropoffMap)
+            .map(([k,count]) => { const [stage,reason]=k.split('||'); return {stage,reason,count}; })
+            .sort((a,b)=>b.count-a.count)
+            .slice(0,5);
+
+        // Auto-flag: worst conversion stage + slowest stage
+        const worstConv = [...funnelDataD].sort((a,b)=>a.conv-b.conv)[0];
+        const slowest   = [...funnelDataD].filter(s=>s.avgDays!=null).sort((a,b)=>b.avgDays-a.avgDays)[0];
+
+        return (
+            <div style={{ fontFamily:T.sans, color:T.ink }}>
+                {/* Header */}
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ flex:1 }}>
+                        <div style={{ ...ebD(T.goldInk), display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>✦ Template · Pipeline &amp; Forecast</div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:6 }}>Stage conversion deep-dive</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Funnel with average days in stage, entered vs advanced, and the real reasons for each drop-off.</div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
+                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                    </div>
+                </div>
+
+                {/* KPI strip */}
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:14 }}>
+                    {[
+                        { label:'TOP-OF-FUNNEL',      value: funnelDataD[0]?.entered ?? '—' },
+                        { label:'CLOSED WON',          value: funnelDataD.length>0 ? funnelDataD[funnelDataD.length-1].advanced : '—' },
+                        { label:'OVERALL CONVERSION',  value: funnelDataD.length>0 ? Math.round(overallConv*100)+'%' : '—' },
+                        { label:'FULL-CYCLE AVG',      value: totalCycleDays > 0 ? totalCycleDays+'d' : '—' },
+                    ].map(k => (
+                        <div key={k.label} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                            <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>{k.label}</div>
+                            <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{k.value}</div>
+                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>vs previous period</div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Two-column body */}
+                <div style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:14 }}>
+                    {/* Left — funnel */}
+                    <PanelD padding="18px 20px 18px">
+                        <SecHdrD title="Conversion funnel" subtitle="Entered → advanced, by stage"
+                            right={
+                                <div style={{ display:'flex', alignItems:'center', gap:14, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
+                                    <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                                        <span style={{ width:10, height:10, background:T.goldInk, borderRadius:2 }}/>Advanced
+                                    </span>
+                                    <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                                        <span style={{ width:10, height:10, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:2 }}/>Dropped
+                                    </span>
+                                </div>
+                            }
+                        />
+                        {funnelDataD.length === 0 ? (
+                            <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                                No stage data available. Opportunities need stage history to populate this funnel.
+                            </div>
+                        ) : funnelDataD.map((s, i) => {
+                            const enterW = (s.entered / maxEnteredD) * 100;
+                            const advW   = s.entered > 0 ? (s.advanced / maxEnteredD) * 100 : 0;
+                            const dropW  = enterW - advW;
+                            return (
+                                <div key={s.stage} style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center', padding:'10px 0', borderTop:i===0?'none':`1px solid ${T.border}` }}>
+                                    {/* Label */}
+                                    <div>
+                                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, display:'flex', alignItems:'center', gap:6, fontFamily:T.sans }}>
+                                            <span style={{ width:3, height:14, background:s.color, borderRadius:1.5, flexShrink:0 }}/>
+                                            {s.stage}
+                                        </div>
+                                        <div style={{ fontSize:10, color:T.inkMuted, marginTop:3, letterSpacing:0.4, textTransform:'uppercase', fontWeight:600, fontFamily:T.sans }}>
+                                            {s.avgDays != null ? `Avg ${s.avgDays}d in stage` : 'No timing data'}
+                                        </div>
+                                    </div>
+                                    {/* Bar */}
+                                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                        <div style={{ height:26, flex:1, display:'flex', background:T.surface2, borderRadius:2, overflow:'hidden' }}>
+                                            {/* Advanced segment */}
+                                            <div style={{ width:`${advW}%`, height:'100%', background:T.goldInk, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 8px', minWidth: advW > 0 ? 60 : 0 }}>
+                                                {advW > 15 && <>
+                                                    <span style={{ fontSize:11, color:T.surface, fontWeight:700, fontFeatureSettings:'"tnum"' }}>{s.advanced}</span>
+                                                    <span style={{ fontSize:10, color:'#e6ddc0', fontWeight:600, fontFeatureSettings:'"tnum"' }}>{Math.round(s.conv*100)}%</span>
+                                                </>}
+                                            </div>
+                                            {/* Dropped segment */}
+                                            <div style={{ width:`${dropW}%`, height:'100%', display:'flex', alignItems:'center', paddingLeft:8 }}>
+                                                {s.dropped > 0 && dropW > 8 && (
+                                                    <span style={{ fontSize:11, color:T.danger, fontWeight:600, fontFeatureSettings:'"tnum"' }}>−{s.dropped}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div style={{ width:54, textAlign:'right', fontSize:12, color:T.ink, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans, flexShrink:0 }}>
+                                            {s.entered} in
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </PanelD>
+
+                    {/* Right — leaks + focus */}
+                    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                        <PanelD padding="18px 20px 16px">
+                            <SecHdrD title="Biggest leaks" subtitle="Drop-off reasons by stage"/>
+                            {dropoffReasons.length === 0 ? (
+                                <div style={{ padding:'12px 0', fontSize:12.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>
+                                    No loss reasons recorded yet. Set a lost reason when closing deals to see drop-off analysis here.
+                                </div>
+                            ) : dropoffReasons.map((r, i) => (
+                                <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'center', padding:'10px 0', borderTop:i===0?'none':`1px solid ${T.border}` }}>
+                                    <div>
+                                        <div style={{ ...ebD(T.inkMuted), fontSize:9, marginBottom:2 }}>{r.stage}</div>
+                                        <div style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{r.reason}</div>
+                                    </div>
+                                    <div style={{ fontSize:20, color:T.danger, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>−{r.count}</div>
+                                </div>
+                            ))}
+                        </PanelD>
+
+                        <PanelD padding="18px 20px 14px">
+                            <SecHdrD title="Where to focus" subtitle="Auto-flagged stage-level actions"/>
+                            <div style={{ display:'flex', flexDirection:'column', gap:0 }}>
+                                {worstConv && (
+                                    <div style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'10px 0', borderTop:'none' }}>
+                                        <span style={{ fontSize:16, flexShrink:0, marginTop:1 }}>⚠</span>
+                                        <div>
+                                            <div style={{ fontSize:12.5, fontWeight:700, color:T.ink, fontFamily:T.sans }}>
+                                                {worstConv.stage} — lowest conversion
+                                            </div>
+                                            <div style={{ fontSize:11.5, color:T.inkMid, marginTop:3, lineHeight:1.45, fontFamily:T.sans }}>
+                                                {Math.round(worstConv.conv*100)}% pass rate — {worstConv.dropped} deal{worstConv.dropped!==1?'s':''} dropped here.
+                                                {worstConv.dropped > 5 ? ' High volume loss. Check exit criteria and champion engagement.' : ' Review call recordings and deal notes for patterns.'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                {slowest && slowest.stage !== worstConv?.stage && (
+                                    <div style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'10px 0', borderTop:`1px solid ${T.border}` }}>
+                                        <span style={{ fontSize:16, flexShrink:0, marginTop:1 }}>⏱</span>
+                                        <div>
+                                            <div style={{ fontSize:12.5, fontWeight:700, color:T.ink, fontFamily:T.sans }}>
+                                                {slowest.stage} takes {slowest.avgDays}d
+                                            </div>
+                                            <div style={{ fontSize:11.5, color:T.inkMid, marginTop:3, lineHeight:1.45, fontFamily:T.sans }}>
+                                                Longest stage by average time. Reps may be over-investing here — review if stage exit criteria are well-defined.
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                {!worstConv && !slowest && (
+                                    <div style={{ padding:'12px 0', fontSize:12.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>
+                                        Stage history data needed to auto-flag focus areas.
+                                    </div>
+                                )}
+                            </div>
+                        </PanelD>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+
+    // ── Forecast vs Actual template ──
+    if (activeTemplate === 't6') {
+        const T = TS;
+        const serif = T.serif;
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+
+        const PanelD = ({ children, padding='18px 20px', style:s }) => (
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding, ...s }}>{children}</div>
+        );
+        const SecHdrD = ({ title, subtitle, right }) => (
+            <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:12 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.2, lineHeight:1.1 }}>{title}</div>
+                    {subtitle && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>}
+                </div>
+                {right}
+            </div>
+        );
+
+        // ── Fiscal quarter helper
+        const fiscalStart = parseInt(settings.fiscalYearStart)||10;
+        const getOppFiscalQtr = (dateStr) => {
+            if (!dateStr) return null;
+            const d = new Date(dateStr+'T12:00:00');
+            const m = d.getMonth()+1; // 1-12
+            const y = d.getFullYear();
+            // How many months past fiscal start
+            let offset = m - fiscalStart;
+            if (offset < 0) offset += 12;
+            const q = Math.floor(offset/3)+1; // 1-4
+            // Fiscal year label: year when fiscal year ends
+            const fyEnd = m >= fiscalStart ? y+1 : y;
+            return { q, fyEnd, label:`Q${q} FY${String(fyEnd).slice(2)}` };
+        };
+
+        // Per-rep quarterly quota — split annual evenly across 4 quarters
+        const getRepQuarterQuota = (user) => {
+            if (!user) return 0;
+            const qMode = user.quotaType||'annual';
+            if (qMode === 'quarterly') {
+                // Return per-quarter average (we don't know which quarter we're asking about without more context)
+                return ((user.q1Quota||0)+(user.q2Quota||0)+(user.q3Quota||0)+(user.q4Quota||0))/4;
+            }
+            return (user.annualQuota||0)/4;
+        };
+
+        // Visible reps
+        const repsD = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager');
+
+        // All won opps with a close date
+        const wonWithDate = (reportsOpps||[]).filter(o=>o.stage==='Closed Won'&&(o.forecastedCloseDate||o.closeDate));
+
+        // Build last 6 quarters in reverse-chronological order then reverse for display
+        const now = new Date();
+        const quarters = [];
+        let yr = now.getFullYear(), mo = now.getMonth()+1;
+        // Find current fiscal quarter
+        let offset = mo - fiscalStart; if(offset<0) offset+=12;
+        let curQ = Math.floor(offset/3)+1;
+        const fyEnd = mo >= fiscalStart ? yr+1 : yr;
+        // Walk back 5 quarters to get 6 total
+        for (let i=0; i<6; i++) {
+            let q = curQ - i; let fy = fyEnd;
+            while(q<=0){ q+=4; fy--; }
+            // Quarter start/end calendar months
+            const qStartOffset = (q-1)*3;
+            let startM = ((fiscalStart-1+qStartOffset)%12)+1;
+            let startY = startM >= fiscalStart ? fy-1 : fy;
+            let endM = ((startM-1+2)%12)+1; // 3 months later - 1
+            endM = ((startM+2-1)%12)+1;
+            const startDate = new Date(startY, startM-1, 1);
+            const endDate   = new Date(startY, startM+2, 0); // last day of 3rd month
+            const isCurrentQ = i===0;
+            quarters.unshift({ q, fy, label:`Q${q} FY${String(fy).slice(2)}`, startDate, endDate, isCurrentQ });
+        }
+
+        // For each quarter, compute actual (Closed Won) and forecast (team quota)
+        const totalQQuota = repsD.reduce((s,u)=>s+getRepQuarterQuota(u),0);
+
+        const qData = quarters.map(qt => {
+            const won = wonWithDate.filter(o => {
+                const cd = new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00');
+                return cd >= qt.startDate && cd <= qt.endDate;
+            });
+            const actual   = won.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+            const forecast = totalQQuota; // team quarterly quota
+            const accuracy = forecast > 0 ? actual/forecast : null;
+            return { ...qt, actual, forecast, accuracy, wonCount:won.length };
+        });
+
+        const completedQs = qData.filter(q=>!q.isCurrentQ&&q.accuracy!=null);
+        const avgAccuracy = completedQs.length>0 ? completedQs.reduce((s,q)=>s+q.accuracy,0)/completedQs.length : null;
+        const currentQ    = qData[qData.length-1];
+        const maxBarVal   = Math.max(...qData.map(q=>Math.max(q.forecast,q.actual)),1);
+
+        // Accuracy color
+        const accColor = v => v==null?T.inkMuted:v>=0.95&&v<=1.05?T.ok:v<0.9||v>1.1?T.danger:T.warn;
+        const accBg    = v => v==null?'transparent':v>=0.95&&v<=1.05?'rgba(77,107,61,0.10)':v<0.9||v>1.1?'rgba(156,58,46,0.10)':'rgba(184,115,51,0.10)';
+
+        // Per-rep accuracy table
+        const repRows = repsD.map(u => {
+            const repWon = wonWithDate.filter(o=>(o.salesRep||o.assignedTo)===u.name);
+            const qCells = quarters.map(qt => {
+                const won = repWon.filter(o=>{ const cd=new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00'); return cd>=qt.startDate&&cd<=qt.endDate; });
+                const actual   = won.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                const forecast = getRepQuarterQuota(u);
+                return forecast>0 ? actual/forecast : null;
+            });
+            const completedCells = qCells.slice(0,-1).filter(v=>v!=null);
+            const avg = completedCells.length>0 ? completedCells.reduce((s,v)=>s+v,0)/completedCells.length : null;
+            return { name:u.name, cells:qCells, avg };
+        }).filter(r=>r.cells.some(v=>v!=null));
+
+        return (
+            <div style={{ fontFamily:T.sans, color:T.ink }}>
+                {/* Header */}
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ flex:1 }}>
+                        <div style={{ ...ebD(T.goldInk), display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>✦ Template · Pipeline &amp; Forecast</div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:6 }}>Forecast vs actual</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Quarterly forecast accuracy trend with per-rep roll-up. Find the sandbaggers and the over-promisers.</div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
+                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                    </div>
+                </div>
+
+                {/* KPI strip */}
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:14 }}>
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                        <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Avg accuracy (5Q)</div>
+                        <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{avgAccuracy!=null?Math.round(avgAccuracy*100)+'%':'—'}</div>
+                        {avgAccuracy!=null&&<div style={{ fontSize:11, color:T.ok, marginTop:5, fontFamily:T.sans }}>vs prior 5 quarters</div>}
+                    </div>
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                        <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Current quarter forecast</div>
+                        <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(currentQ.forecast)}</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>{currentQ.label} team quota</div>
+                    </div>
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                        <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Booked so far</div>
+                        <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(currentQ.actual)}</div>
+                        {currentQ.forecast>0&&<div style={{ fontSize:11, color:T.ok, marginTop:5, fontFamily:T.sans }}>{Math.round(currentQ.actual/currentQ.forecast*100)}% of forecast · {currentQ.wonCount} deals</div>}
+                    </div>
+                    <div style={{ background:'rgba(156,58,46,0.04)', border:'1px solid rgba(156,58,46,0.2)', borderRadius:T.r+1, padding:'14px 18px' }}>
+                        <div style={{ ...ebD(T.danger), marginBottom:4 }}>At-risk gap</div>
+                        <div style={{ fontSize:28, fontWeight:700, color:T.danger, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(Math.max(0,currentQ.forecast-currentQ.actual))}</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>to hit forecast · {currentQ.label}</div>
+                    </div>
+                </div>
+
+                {/* Bar chart — forecast vs actual by quarter */}
+                <PanelD padding="20px 24px 18px" style={{ marginBottom:14 }}>
+                    <SecHdrD
+                        title="Forecast vs actual — by quarter"
+                        subtitle="Side-by-side bars · dashed outline = in-progress quarter"
+                        right={
+                            <div style={{ display:'flex', alignItems:'center', gap:14, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
+                                <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                                    <span style={{ width:10, height:10, background:T.gold, borderRadius:2 }}/>Forecast
+                                </span>
+                                <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                                    <span style={{ width:10, height:10, background:T.ok, borderRadius:2 }}/>Actual
+                                </span>
+                            </div>
+                        }
+                    />
+                    <div style={{ display:'flex', alignItems:'flex-end', gap:20, height:200, paddingBottom:8, borderBottom:`1px solid ${T.border}`, position:'relative' }}>
+                        {qData.map((q,i) => {
+                            const fH = Math.max(4,(q.forecast/maxBarVal)*160);
+                            const aH = Math.max(4,(q.actual/maxBarVal)*160);
+                            const ac = q.accuracy;
+                            const color = accColor(ac);
+                            return (
+                                <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:6, height:'100%', justifyContent:'flex-end' }}>
+                                    <div style={{ display:'flex', gap:5, alignItems:'flex-end' }}>
+                                        {/* Forecast bar */}
+                                        <div style={{ width:22, height:fH, background:q.isCurrentQ?'transparent':T.gold, border:q.isCurrentQ?`2px dashed ${T.gold}`:'none', borderRadius:'2px 2px 0 0', boxSizing:'border-box' }}/>
+                                        {/* Actual bar */}
+                                        <div style={{ width:22, height:aH, background:q.isCurrentQ?'rgba(77,107,61,0.4)':T.ok, borderRadius:'2px 2px 0 0', position:'relative' }}>
+                                            {q.isCurrentQ&&<div style={{ position:'absolute', top:-18, left:'50%', transform:'translateX(-50%)', fontSize:9, color:T.inkMuted, fontWeight:600, letterSpacing:0.3, textTransform:'uppercase', whiteSpace:'nowrap' }}>so far</div>}
+                                        </div>
+                                    </div>
+                                    <div style={{ fontSize:11, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{q.label}</div>
+                                    <div style={{ fontSize:11, fontWeight:700, color:q.isCurrentQ?T.inkMuted:color, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>
+                                        {q.isCurrentQ?'—':ac!=null?Math.round(ac*100)+'%':'—'}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div style={{ display:'flex', gap:20, paddingTop:10, fontSize:11, color:T.inkMid, flexWrap:'wrap', fontFamily:T.sans }}>
+                        <span style={{ ...ebD(T.inkMuted), textTransform:'none', letterSpacing:0 }}>Accuracy target: 95–105%</span>
+                        <span style={{ color:T.ok,     fontWeight:600 }}>● On target</span>
+                        <span style={{ color:T.warn,   fontWeight:600 }}>● Within tolerance</span>
+                        <span style={{ color:T.danger, fontWeight:600 }}>● Miss</span>
+                    </div>
+                </PanelD>
+
+                {/* Per-rep accuracy table */}
+                {repRows.length > 0 && (
+                    <PanelD padding="16px 20px 8px">
+                        <SecHdrD
+                            title="Accuracy by rep"
+                            subtitle="Per-quarter · lower = under-called, higher = over-called"
+                            right={<button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>··· Export</button>}
+                        />
+                        {/* Column headers */}
+                        <div style={{ display:'grid', gridTemplateColumns:`160px repeat(${quarters.length},1fr) 70px`, gap:8, alignItems:'center', padding:'0 0 8px', borderBottom:`1px solid ${T.border}` }}>
+                            <div style={ebD(T.inkMuted)}>Rep</div>
+                            {quarters.map(q=><div key={q.label} style={{ ...ebD(T.inkMuted), textAlign:'center' }}>{q.label}</div>)}
+                            <div style={{ ...ebD(T.inkMuted), textAlign:'right' }}>Avg</div>
+                        </div>
+                        {repRows.map((r,ri) => (
+                            <div key={ri} style={{ display:'grid', gridTemplateColumns:`160px repeat(${quarters.length},1fr) 70px`, gap:8, alignItems:'center', padding:'8px 0', borderBottom:ri<repRows.length-1?`1px solid ${T.border}`:'none' }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
+                                    <div style={{ width:20, height:20, borderRadius:'50%', background:'#9c6b4a', color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:700, flexShrink:0 }}>
+                                        {(r.name||'').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
+                                    </div>
+                                    <span style={{ fontSize:13, color:T.ink, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:T.sans }}>{r.name}</span>
+                                </div>
+                                {r.cells.map((v,ci) => (
+                                    <div key={ci} style={{ textAlign:'center', fontSize:12.5, fontWeight:600, color:accColor(v), fontFeatureSettings:'"tnum"', fontFamily:T.sans, padding:'4px 2px', background:accBg(v), borderRadius:2 }}>
+                                        {v==null?'—':Math.round(v*100)+'%'}
+                                    </div>
+                                ))}
+                                <div style={{ textAlign:'right', fontSize:14, fontWeight:700, color:accColor(r.avg), fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>
+                                    {r.avg!=null?Math.round(r.avg*100)+'%':'—'}
+                                </div>
+                            </div>
+                        ))}
+                    </PanelD>
+                )}
+                {repRows.length === 0 && (
+                    <PanelD padding="24px">
+                        <div style={{ textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                            No per-rep data yet. Set quotas for reps in Sales Manager to see accuracy by rep.
+                        </div>
+                    </PanelD>
+                )}
+            </div>
+        );
+    }
+
+
+    // ── Win / Loss Analysis template ──
+    if (activeTemplate === 't2') {
+        const T = TS;
+        const serif = T.serif;
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+        const PanelD = ({ children, padding='18px 20px', style:s }) => (
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding, ...s }}>{children}</div>
+        );
+        const SecHdrD = ({ title, subtitle, right }) => (
+            <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:12 }}>
+                <div style={{ flex:1 }}>
+                    <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.2 }}>{title}</div>
+                    {subtitle && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>}
+                </div>
+                {right}
+            </div>
+        );
+        const HBarD = ({ value, max, color, height=7 }) => {
+            const pct = max>0 ? Math.min(100,Math.max(0,(value/max)*100)) : 0;
+            return <div style={{ height, background:T.surface2, borderRadius:height/2, overflow:'hidden', flex:1 }}><div style={{ height:'100%', width:pct+'%', background:color, borderRadius:height/2 }}/></div>;
+        };
+        const stageColorMap = {'Prospecting':'#b0a088','Qualification':'#c8a978','Discovery':'#b07a55','Proposal':'#b87333','Negotiation/Review':'#7a5a3c','Negotiation':'#7a5a3c','Contracts':'#4d6b3d','Closing':'#4d6b3d'};
+
+        // ── Compute from real data
+        const wonOppsD  = (reportsOpps||[]).filter(o=>o.stage==='Closed Won');
+        const lostOppsD = (reportsOpps||[]).filter(o=>o.stage==='Closed Lost');
+        const totalD    = wonOppsD.length + lostOppsD.length;
+        const winRate   = totalD > 0 ? wonOppsD.length/totalD : 0;
+        const wonVal    = wonOppsD.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+        const lostVal   = lostOppsD.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+
+        // Avg cycle: forecastedCloseDate - createdDate in days
+        const cycleD = (opps) => {
+            const samples = opps.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate)).map(o=>{
+                const diff = Math.floor((new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00')-new Date(o.createdDate+'T12:00:00'))/86400000);
+                return diff > 0 ? diff : null;
+            }).filter(v=>v!=null);
+            if (!samples.length) return null;
+            samples.sort((a,b)=>a-b);
+            return samples[Math.floor(samples.length/2)];
+        };
+        const avgCycleWon  = cycleD(wonOppsD);
+        const avgCycleLost = cycleD(lostOppsD);
+
+        // Loss reasons grouped + counted
+        const lossReasonMap = {};
+        lostOppsD.forEach(o => {
+            const r = o.lostReason || o.closedLostReason || 'Other';
+            lossReasonMap[r] = (lossReasonMap[r]||0)+1;
+        });
+        const lossReasons = Object.entries(lossReasonMap)
+            .map(([reason,count])=>({ reason, count, pct:lostOppsD.length>0?count/lostOppsD.length:0 }))
+            .sort((a,b)=>b.count-a.count).slice(0,6);
+        const maxLossCount = Math.max(...lossReasons.map(r=>r.count),1);
+        const lossBarColors = [T.danger, T.warn, T.inkMid, T.inkMuted, T.inkMuted, T.inkMuted];
+
+        // Losses by stage exited (last stageHistory entry, or current stage if lost)
+        const lostByStage = {};
+        lostOppsD.forEach(o => {
+            const history = o.stageHistory||[];
+            const exitStage = history.length>0 ? history[history.length-1]?.stage : o.stage;
+            if (exitStage && exitStage!=='Closed Lost') lostByStage[exitStage] = (lostByStage[exitStage]||0)+1;
+        });
+        const stageSeqForLoss = ['Prospecting','Qualification','Discovery','Proposal','Negotiation/Review','Negotiation','Contracts','Closing'];
+        const lostByStageRows = stageSeqForLoss
+            .filter(s=>lostByStage[s]>0)
+            .map(s=>({ stage:s, count:lostByStage[s] }));
+        const maxLostStage = Math.max(...lostByStageRows.map(r=>r.count),1);
+
+        // Competitor table: lostCategory field or parse "Lost to X" from lostReason
+        const compMap = {};
+        lostOppsD.forEach(o => {
+            const comp = o.competitor || (o.lostReason&&o.lostReason.toLowerCase().includes('lost to')?o.lostReason.replace(/lost to /i,'').trim():null);
+            if (comp && comp.length < 40) compMap[comp] = (compMap[comp]||{losses:0,wins:0});
+            if (comp) compMap[comp].losses++;
+        });
+        wonOppsD.forEach(o => {
+            const comp = o.competitor;
+            if (comp) { compMap[comp] = compMap[comp]||{losses:0,wins:0}; compMap[comp].wins++; }
+        });
+        const competitors = Object.entries(compMap)
+            .map(([name,d])=>({ name, wins:d.wins, losses:d.losses, rate:d.wins+d.losses>0?d.wins/(d.wins+d.losses):0 }))
+            .sort((a,b)=>(b.wins+b.losses)-(a.wins+a.losses)).slice(0,5);
+
+        // Biggest leak insight
+        const biggestLeak = lossReasons[0];
+        const proposalLosses = lostByStage['Proposal']||0;
+
+        return (
+            <div style={{ fontFamily:T.sans, color:T.ink }}>
+                {/* Header */}
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ flex:1 }}>
+                        <div style={{ ...ebD(T.goldInk), display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>✦ Template · Performance</div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:6 }}>Win / loss analysis</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Closed deals with reason breakdown, competitor comparison, and cycle length — who we beat, who beat us, and why.</div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
+                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                    </div>
+                </div>
+
+                {/* KPI strip — 5 cards */}
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10, marginBottom:14 }}>
+                    {[
+                        { label:'WIN RATE',    value:Math.round(winRate*100)+'%',       sub:'+3% vs prev period', subColor:T.ok },
+                        { label:'DEALS WON',   value:wonOppsD.length,                   sub:fmtShort(wonVal)+' total value', subColor:T.ok },
+                        { label:'DEALS LOST',  value:lostOppsD.length,                  sub:fmtShort(lostVal)+' total value', subColor:T.inkMuted },
+                        { label:'CYCLE · WON',  value:avgCycleWon!=null?avgCycleWon+'d':'—', sub:'median days to close', subColor:T.inkMuted },
+                        { label:'CYCLE · LOST', value:avgCycleLost!=null?avgCycleLost+'d':'—', sub:'median days to lose', subColor:T.inkMuted },
+                    ].map(k=>(
+                        <div key={k.label} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                            <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>{k.label}</div>
+                            <div style={{ fontSize:24, fontWeight:700, color:T.ink, letterSpacing:-0.4, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{k.value}</div>
+                            <div style={{ fontSize:11, color:k.subColor, marginTop:5, fontFamily:T.sans }}>{k.sub}</div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Two-column body */}
+                <div style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:14 }}>
+                    {/* Left — why we lost */}
+                    <PanelD padding="18px 20px 18px">
+                        <SecHdrD title="Why we lost" subtitle={`${lostOppsD.length} closed-lost deals · ${fmtShort(lostVal)} total`}/>
+                        {lossReasons.length === 0 ? (
+                            <div style={{ padding:'16px 0', fontSize:12.5, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No loss reasons recorded. Set a lost reason when marking deals as Closed Lost to see breakdown here.</div>
+                        ) : lossReasons.map((r,i)=>(
+                            <div key={i} style={{ display:'grid', gridTemplateColumns:'180px 1fr 44px 56px', gap:12, alignItems:'center', padding:'11px 0', borderTop:i===0?'none':`1px solid ${T.border}` }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                    <span style={{ width:3, height:18, background:lossBarColors[i]||T.inkMuted, borderRadius:1.5, flexShrink:0 }}/>
+                                    <span style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{r.reason}</span>
+                                </div>
+                                <HBarD value={r.count} max={maxLossCount} color={lossBarColors[i]||T.inkMuted}/>
+                                <div style={{ textAlign:'right', fontSize:12, color:T.inkMuted, fontFeatureSettings:'"tnum"', fontWeight:600 }}>{r.count}</div>
+                                <div style={{ textAlign:'right', fontSize:13, fontWeight:700, color:T.ink, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{Math.round(r.pct*100)}%</div>
+                            </div>
+                        ))}
+                        {biggestLeak && (
+                            <div style={{ marginTop:14, padding:'11px 12px', background:T.surface2, borderRadius:T.r, fontSize:12, color:T.inkMid, lineHeight:1.55, fontFamily:T.sans }}>
+                                <strong style={{ color:T.ink }}>Biggest leak:</strong> {Math.round(biggestLeak.pct*100)}% of losses ({biggestLeak.reason.toLowerCase()}).
+                                {proposalLosses>0&&<> Pair that with <strong style={{ color:T.ink }}>{proposalLosses} losses at Proposal stage</strong> to isolate where the drop happens.</>}
+                            </div>
+                        )}
+                    </PanelD>
+
+                    {/* Right — head-to-head + by stage */}
+                    <PanelD padding="18px 20px 18px">
+                        <SecHdrD title="Head-to-head" subtitle="Win rate vs named competitors"/>
+                        {competitors.length === 0 ? (
+                            <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans, marginBottom:16 }}>No competitor data. Add a competitor field to opportunities to track head-to-head win rates.</div>
+                        ) : (
+                            <>
+                                {/* Column headers */}
+                                <div style={{ display:'grid', gridTemplateColumns:'100px 1fr 44px 44px 50px', gap:10, padding:'0 0 8px', borderBottom:`1px solid ${T.border}` }}>
+                                    {['Competitor','Win rate','Won','Lost','Rate'].map((h,i)=>(
+                                        <div key={h} style={{ ...ebD(T.inkMuted), textAlign:i>1?'right':'left' }}>{h}</div>
+                                    ))}
+                                </div>
+                                {competitors.map((c,i)=>(
+                                    <div key={i} style={{ display:'grid', gridTemplateColumns:'100px 1fr 44px 44px 50px', gap:10, alignItems:'center', padding:'10px 0', borderBottom:i<competitors.length-1?`1px solid ${T.border}`:'none' }}>
+                                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{c.name}</div>
+                                        <div style={{ height:14, background:T.surface2, borderRadius:2, overflow:'hidden', display:'flex' }}>
+                                            <div style={{ width:`${c.wins+c.losses>0?(c.wins/(c.wins+c.losses))*100:0}%`, background:T.ok }}/>
+                                            <div style={{ flex:1, background:T.danger, opacity:0.8 }}/>
+                                        </div>
+                                        <div style={{ textAlign:'right', fontSize:12, color:T.ok, fontFeatureSettings:'"tnum"', fontWeight:600 }}>{c.wins}</div>
+                                        <div style={{ textAlign:'right', fontSize:12, color:T.danger, fontFeatureSettings:'"tnum"', fontWeight:600 }}>{c.losses}</div>
+                                        <div style={{ textAlign:'right', fontSize:13, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans,
+                                            color:c.rate>=0.5?T.ok:c.rate>=0.4?T.warn:T.danger }}>{Math.round(c.rate*100)}%</div>
+                                    </div>
+                                ))}
+                            </>
+                        )}
+
+                        {/* Losses by stage exited */}
+                        <div style={{ marginTop:16 }}>
+                            <div style={{ ...ebD(T.inkMuted), marginBottom:10 }}>Losses by stage exited</div>
+                            {lostByStageRows.length === 0 ? (
+                                <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No stage history data on lost deals.</div>
+                            ) : lostByStageRows.map((s,i)=>(
+                                <div key={i} style={{ display:'grid', gridTemplateColumns:'120px 1fr 28px', gap:10, alignItems:'center', marginBottom:6 }}>
+                                    <span style={{ fontSize:11.5, color:T.inkMid, fontFamily:T.sans }}>{s.stage}</span>
+                                    <HBarD value={s.count} max={maxLostStage} color={stageColorMap[s.stage]||T.inkMuted} height={6}/>
+                                    <span style={{ textAlign:'right', fontSize:12, color:T.ink, fontFeatureSettings:'"tnum"', fontWeight:600, fontFamily:T.sans }}>{s.count}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </PanelD>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Rep Scorecard template ──
+    if (activeTemplate === 't3') {
+        const T = TS;
+        const serif = T.serif;
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+        const PanelD = ({ children, padding='18px 20px', style:s }) => (
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding, ...s }}>{children}</div>
+        );
+        const SecHdrD = ({ title, subtitle, right }) => (
+            <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:12 }}>
+                <div style={{ flex:1 }}>
+                    <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.2 }}>{title}</div>
+                    {subtitle && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>}
+                </div>
+                {right}
+            </div>
+        );
+
+        // ── Rep selector state (declared at component top level)
+        const repsListSC = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>u.name);
+        // Fall back to currentUser if repsListSC is empty
+        const repNameSC = repsListSC.includes(selectedRepSC) ? selectedRepSC : (repsListSC[0]||currentUser||'');
+        const repUserSC = (settings.users||[]).find(u=>u.name===repNameSC);
+
+        // ── Rep data
+        const repOpps = (reportsOpps||[]).filter(o=>(o.salesRep||o.assignedTo)===repNameSC);
+        const repWon  = repOpps.filter(o=>o.stage==='Closed Won');
+        const repLost = repOpps.filter(o=>o.stage==='Closed Lost');
+        const repOpen = repOpps.filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost');
+        const repActs = (activities||[]).filter(a=>a.author===repNameSC||a.assignedTo===repNameSC);
+
+        // Quota
+        const getUserQuotaSC = u => u ? ((u.quotaType||'annual')==='annual'?(u.annualQuota||0):(u.q1Quota||0)+(u.q2Quota||0)+(u.q3Quota||0)+(u.q4Quota||0)) : 0;
+        const repQuota = getUserQuotaSC(repUserSC);
+        const repClosed = repWon.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+        const attainPct = repQuota>0 ? repClosed/repQuota : 0;
+        const attainColor = attainPct>=1?T.ok:attainPct>=0.8?T.ink:T.warn;
+
+        // Team metrics for comparison
+        const allRepsData = (settings.users||[]).filter(u=>u.name&&u.userType!=='Admin'&&u.userType!=='Manager').map(u=>{
+            const rw = (reportsOpps||[]).filter(o=>(o.salesRep||o.assignedTo)===u.name&&o.stage==='Closed Won');
+            const rl = (reportsOpps||[]).filter(o=>(o.salesRep||o.assignedTo)===u.name&&o.stage==='Closed Lost');
+            const total = rw.length+rl.length;
+            const wr = total>0?rw.length/total:null;
+            const avgD = rw.length>0?rw.reduce((s,o)=>s+(parseFloat(o.arr)||0),0)/rw.length:null;
+            const cycles = rw.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate)).map(o=>Math.max(0,Math.floor((new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00')-new Date(o.createdDate+'T12:00:00'))/86400000)));
+            const cyc = cycles.length>0?cycles.sort((a,b)=>a-b)[Math.floor(cycles.length/2)]:null;
+            const acts = (activities||[]).filter(a=>a.author===u.name||a.assignedTo===u.name);
+            const actRatio = repOpen.length>0?(acts.length/Math.max(repOpen.length,1)):null;
+            return { wr, avgD, cyc, actRatio };
+        });
+        const teamAvg = f => { const vals=allRepsData.map(f).filter(v=>v!=null); return vals.length>0?vals.reduce((s,v)=>s+v,0)/vals.length:null; };
+        const teamWR  = teamAvg(d=>d.wr);
+        const teamAvgD = teamAvg(d=>d.avgD);
+        const teamCyc  = teamAvg(d=>d.cyc);
+
+        // Rep-specific metrics
+        const repWR   = repWon.length+repLost.length>0 ? repWon.length/(repWon.length+repLost.length) : null;
+        const repAvgD = repWon.length>0 ? repClosed/repWon.length : null;
+        const repCycles = repWon.filter(o=>o.createdDate&&(o.forecastedCloseDate||o.closeDate)).map(o=>Math.max(0,Math.floor((new Date((o.forecastedCloseDate||o.closeDate)+'T12:00:00')-new Date(o.createdDate+'T12:00:00'))/86400000)));
+        const repCyc  = repCycles.length>0?repCycles.sort((a,b)=>a-b)[Math.floor(repCycles.length/2)]:null;
+        const repActRatio = repOpen.length>0?(repActs.length/Math.max(repOpen.length,1)).toFixed(2):null;
+        const teamActRatio= teamAvg(d=>d.actRatio);
+
+        const diffPct = (v,t,inv) => { if(v==null||t==null||t===0) return null; const p=((v-t)/t)*100; const good=inv?p<0:p>0; return { p, color:Math.abs(p)<5?T.inkMuted:good?T.ok:T.danger }; };
+
+        // Activity mix
+        const actTypeMap = {};
+        repActs.forEach(a=>{ const t=a.type||'Other'; actTypeMap[t]=(actTypeMap[t]||0)+1; });
+        const actTotal = Object.values(actTypeMap).reduce((s,v)=>s+v,0)||1;
+        const actTypes = Object.entries(actTypeMap).sort((a,b)=>b[1]-a[1]);
+        const actColors = { 'Call':T.info,'Email':T.gold,'Meeting':T.ok,'Demo':T.warn,'Note':T.inkMuted,'Other':T.inkMuted };
+
+        // Attainment history — last 6 quarters
+        const fiscalStartSC = parseInt(settings.fiscalYearStart)||10;
+        const now2 = new Date();
+        const moN = now2.getMonth()+1, yrN = now2.getFullYear();
+        let offN = moN-fiscalStartSC; if(offN<0) offN+=12;
+        let curQN = Math.floor(offN/3)+1;
+        const fyEndN = moN>=fiscalStartSC?yrN+1:yrN;
+        const qtrsH = [];
+        for(let i=0;i<6;i++){
+            let q=curQN-i; let fy=fyEndN;
+            while(q<=0){q+=4;fy--;}
+            const qStartOff=(q-1)*3;
+            let sm=((fiscalStartSC-1+qStartOff)%12)+1;
+            let sy=sm>=fiscalStartSC?fy-1:fy;
+            const startD=new Date(sy,sm-1,1);
+            const endD=new Date(sy,sm+2,0);
+            const wonInQ=repWon.filter(o=>{ const cd=new Date((o.forecastedCloseDate||o.closeDate||'')+'T12:00:00'); return cd>=startD&&cd<=endD; });
+            const actualV=wonInQ.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+            const qQuota=repQuota/4;
+            const acc=qQuota>0?actualV/qQuota:null;
+            qtrsH.unshift({label:`Q${q}`,acc,actual:actualV,isCurrentQ:i===0});
+        }
+        const completedH=qtrsH.filter(q=>!q.isCurrentQ&&q.acc!=null);
+        const avgAttain=completedH.length>0?completedH.reduce((s,q)=>s+q.acc,0)/completedH.length:null;
+
+        // Recent wins/losses (30 days)
+        const cutoff30=new Date(); cutoff30.setDate(cutoff30.getDate()-30);
+        const iso30=cutoff30.toISOString().slice(0,10);
+        const recentWins  = repWon.filter(o=>(o.forecastedCloseDate||o.closeDate)>=iso30).sort((a,b)=>(b.forecastedCloseDate||b.closeDate||'').localeCompare(a.forecastedCloseDate||a.closeDate||'')).slice(0,4);
+        const recentLosses= repLost.filter(o=>(o.forecastedCloseDate||o.closeDate)>=iso30).sort((a,b)=>(b.forecastedCloseDate||b.closeDate||'').localeCompare(a.forecastedCloseDate||a.closeDate||'')).slice(0,3);
+
+        const fmtDate = s => s ? new Date(s+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+        const attainBarColor = a => a==null?T.inkMuted:a>=1?T.ok:a>=0.8?T.ink:T.warn;
+
+        // Avatar bg
+        const avBg = name => { const p=['#9c6b4a','#7a5a3c','#5a6e5a','#6b5a7a','#8a5a5a','#5a7a8a','#7a6b5a','#4a6b5a']; let h=0; for(const c of(name||'')) h=(h*31+c.charCodeAt(0))|0; return p[Math.abs(h)%p.length]; };
+
+        return (
+            <div style={{ fontFamily:T.sans, color:T.ink }}>
+                {/* Header */}
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ flex:1 }}>
+                        <div style={{ ...ebD(T.goldInk), display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>✦ Template · Performance</div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:6 }}>Rep scorecard</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Single-rep view of all the fundamentals — attainment, win rate, cycle, activity, recent deals.</div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
+                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                    </div>
+                </div>
+
+                {/* Rep selector */}
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+                    <div style={{ ...ebD(T.inkMuted) }}>Rep</div>
+                    <select value={repNameSC} onChange={e=>setSelectedRepSC(e.target.value)}
+                        style={{ padding:'5px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontSize:12.5, fontFamily:T.sans, cursor:'pointer', outline:'none' }}>
+                        {repsListSC.map(n=><option key={n} value={n}>{n}</option>)}
+                    </select>
+                </div>
+
+                {/* Hero panel — quota ring + metrics */}
+                <PanelD padding="20px 24px 22px" style={{ marginBottom:14 }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'260px 1fr', gap:28, alignItems:'center' }}>
+                        {/* Identity + ring */}
+                        <div style={{ display:'flex', alignItems:'center', gap:18 }}>
+                            {/* Quota ring */}
+                            <div style={{ position:'relative', width:80, height:80, flexShrink:0 }}>
+                                <svg width="80" height="80">
+                                    <circle cx="40" cy="40" r="34" stroke={T.border} strokeWidth="7" fill="none"/>
+                                    <circle cx="40" cy="40" r="34" stroke={attainColor} strokeWidth="7" fill="none"
+                                        strokeDasharray={2*Math.PI*34} strokeDashoffset={2*Math.PI*34*(1-Math.min(1,attainPct))}
+                                        strokeLinecap="round" transform="rotate(-90 40 40)"/>
+                                </svg>
+                                <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column' }}>
+                                    <div style={{ fontSize:16, fontWeight:700, color:attainColor, lineHeight:1, fontFeatureSettings:'"tnum"' }}>{Math.round(attainPct*100)}%</div>
+                                    <div style={{ fontSize:8, color:T.inkMuted, letterSpacing:0.4, textTransform:'uppercase', fontWeight:600 }}>Quota</div>
+                                </div>
+                            </div>
+                            {/* Name + role */}
+                            <div>
+                                <div style={{ width:32, height:32, borderRadius:'50%', background:avBg(repNameSC), color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, marginBottom:6 }}>
+                                    {repNameSC.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
+                                </div>
+                                <div style={{ fontSize:16, fontWeight:700, color:T.ink, letterSpacing:-0.1, fontFamily:T.sans }}>{repNameSC}</div>
+                                {repUserSC?.title && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>{repUserSC.title}</div>}
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{repWon.length} won · {repLost.length} lost · {repOpen.length} open</div>
+                            </div>
+                        </div>
+                        {/* 4 metrics with team diff */}
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:20 }}>
+                            {[
+                                { label:'Win rate',      v:repWR!=null?Math.round(repWR*100)+'%':'—',     d:diffPct(repWR,teamWR),        note:teamWR!=null?`team ${Math.round(teamWR*100)}%`:null },
+                                { label:'Avg deal',      v:repAvgD!=null?fmtShort(repAvgD):'—',           d:diffPct(repAvgD,teamAvgD),    note:teamAvgD!=null?`team ${fmtShort(teamAvgD)}`:null },
+                                { label:'Cycle',         v:repCyc!=null?repCyc+'d':'—',                  d:diffPct(repCyc,teamCyc,true), note:teamCyc!=null?`team ${Math.round(teamCyc)}d`:null },
+                                { label:'Activity ratio',v:repActRatio!=null?repActRatio+'×':'—',         d:diffPct(parseFloat(repActRatio),teamActRatio), note:teamActRatio!=null?`team ${teamActRatio.toFixed(2)}×`:null },
+                            ].map((m,i)=>(
+                                <div key={i}>
+                                    <div style={{ ...ebD(T.inkMuted) }}>{m.label}</div>
+                                    <div style={{ fontSize:22, fontWeight:700, color:T.ink, marginTop:4, letterSpacing:-0.4, fontFeatureSettings:'"tnum"', lineHeight:1.1, fontFamily:T.sans }}>{m.v}</div>
+                                    {m.d && <div style={{ fontSize:11, color:m.d.color, fontWeight:600, marginTop:3, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>
+                                        {m.d.p>0?'+':''}{m.d.p.toFixed(0)}%{m.note&&<span style={{ color:T.inkMuted, fontWeight:500 }}> · {m.note}</span>}
+                                    </div>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </PanelD>
+
+                {/* Row 2 — attainment history + activity mix */}
+                <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:14, marginBottom:14 }}>
+                    <PanelD padding="18px 20px 18px">
+                        <SecHdrD title="Attainment history" subtitle="Last 6 quarters"
+                            right={avgAttain!=null?<span style={{ fontSize:12, color:T.inkMid, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>Avg {Math.round(avgAttain*100)}%</span>:null}
+                        />
+                        <div style={{ display:'flex', alignItems:'flex-end', gap:10, height:120, padding:'6px 0' }}>
+                            {qtrsH.map((q,i)=>{
+                                const pct = q.acc!=null ? Math.min(1.2,q.acc) : 0;
+                                const barH = (pct/1.2)*88;
+                                const c = attainBarColor(q.acc);
+                                return (
+                                    <div key={i} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:5 }}>
+                                        <div style={{ fontSize:11, fontWeight:700, color:c, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>
+                                            {q.acc!=null?Math.round(q.acc*100)+'%':q.isCurrentQ?'…':'—'}
+                                        </div>
+                                        <div style={{ width:'100%', height:88, background:T.surface2, borderRadius:2, position:'relative', overflow:'hidden' }}>
+                                            <div style={{ position:'absolute', left:0, right:0, bottom:`${(1/1.2)*100}%`, borderTop:`1px dashed ${T.borderStrong}` }}/>
+                                            <div style={{ position:'absolute', bottom:0, left:0, right:0, height:Math.max(2,barH), background:q.isCurrentQ?'rgba(77,107,61,0.4)':c }}/>
+                                        </div>
+                                        <div style={{ fontSize:10, color:T.inkMuted, letterSpacing:0.3, textTransform:'uppercase', fontWeight:600, fontFamily:T.sans }}>{q.label}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </PanelD>
+
+                    <PanelD padding="18px 20px 18px">
+                        <SecHdrD title="Activity mix" subtitle="Where the hours went this quarter"/>
+                        {actTypes.length === 0 ? (
+                            <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No activities logged for this rep yet.</div>
+                        ) : (
+                            <>
+                                {/* Stacked bar */}
+                                <div style={{ height:14, display:'flex', borderRadius:2, overflow:'hidden', border:`1px solid ${T.border}`, marginBottom:12 }}>
+                                    {actTypes.map(([type,count])=>(
+                                        <div key={type} style={{ width:`${(count/actTotal)*100}%`, background:actColors[type]||T.inkMuted }}/>
+                                    ))}
+                                </div>
+                                {actTypes.map(([type,count],i)=>(
+                                    <div key={i} style={{ display:'grid', gridTemplateColumns:'16px 1fr 40px 40px', gap:8, alignItems:'center', padding:'6px 0', borderTop:i===0?'none':`1px solid ${T.border}` }}>
+                                        <span style={{ width:10, height:10, background:actColors[type]||T.inkMuted, borderRadius:2, display:'block' }}/>
+                                        <span style={{ fontSize:12, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{type}</span>
+                                        <span style={{ textAlign:'right', fontSize:11.5, color:T.inkMuted, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{count}</span>
+                                        <span style={{ textAlign:'right', fontSize:12, color:T.ink, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{Math.round((count/actTotal)*100)}%</span>
+                                    </div>
+                                ))}
+                            </>
+                        )}
+                    </PanelD>
+                </div>
+
+                {/* Row 3 — recent wins + losses */}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                    <PanelD padding="16px 20px 14px">
+                        <SecHdrD title="Recent wins" subtitle="Last 30 days"/>
+                        {recentWins.length===0
+                            ? <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No wins in the last 30 days.</div>
+                            : recentWins.map((o,i)=>(
+                                <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr auto auto', gap:12, alignItems:'center', padding:'9px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
+                                    <span style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{o.opportunityName||o.account}</span>
+                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{fmtDate(o.forecastedCloseDate||o.closeDate)}</span>
+                                    <span style={{ fontSize:13, color:T.ok, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(o.arr)}</span>
+                                </div>
+                            ))
+                        }
+                    </PanelD>
+                    <PanelD padding="16px 20px 14px">
+                        <SecHdrD title="Recent losses" subtitle="Last 30 days"/>
+                        {recentLosses.length===0
+                            ? <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No losses in the last 30 days.</div>
+                            : recentLosses.map((o,i)=>(
+                                <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr auto auto', gap:12, alignItems:'center', padding:'9px 0', borderTop:i>0?`1px solid ${T.border}`:'none' }}>
+                                    <div>
+                                        <div style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{o.opportunityName||o.account}</div>
+                                        {o.lostReason&&<div style={{ fontSize:11, color:T.inkMuted, marginTop:2, fontStyle:'italic', fontFamily:T.sans }}>{o.lostReason}</div>}
+                                    </div>
+                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{fmtDate(o.forecastedCloseDate||o.closeDate)}</span>
+                                    <span style={{ fontSize:13, color:T.danger, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>−{fmtShort(o.arr)}</span>
+                                </div>
+                            ))
+                        }
+                    </PanelD>
+                </div>
+            </div>
+        );
+    }
+
+
+    // ── Territory Coverage template ──
+    if (activeTemplate === 't4') {
+        const T = TS;
+        const serif = T.serif;
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+        const PanelD = ({ children, padding='18px 20px', style:s }) => (
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding, ...s }}>{children}</div>
+        );
+        const SecHdrD = ({ title, subtitle, right }) => (
+            <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:12 }}>
+                <div style={{ flex:1 }}>
+                    <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.2 }}>{title}</div>
+                    {subtitle && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{subtitle}</div>}
+                </div>
+                {right}
+            </div>
+        );
+        const HBarD = ({ value, max, color=T.gold, height=5 }) => {
+            const pct = max>0 ? Math.min(100,(value/max)*100) : 0;
+            return <div style={{ height, background:T.surface2, borderRadius:height/2, overflow:'hidden', flex:1 }}><div style={{ height:'100%', width:pct+'%', background:color }}/></div>;
+        };
+
+        // ── Build territory → rep map from settings.users
+        const terrMap = {}; // territory → [repName]
+        (settings.users||[]).forEach(u => {
+            if (u.territory && u.name) {
+                terrMap[u.territory] = terrMap[u.territory]||[];
+                terrMap[u.territory].push(u.name);
+            }
+        });
+        const territories = Object.keys(terrMap).sort();
+
+        // ── Rep → territory lookup
+        const repToTerr = {};
+        Object.entries(terrMap).forEach(([terr,reps]) => reps.forEach(r => repToTerr[r]=terr));
+
+        // ── Open opps
+        const openOppsT = (reportsOpps||[]).filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost');
+
+        // Assign each opp to a territory via its salesRep
+        const oppWithTerr = openOppsT.map(o => ({
+            ...o,
+            territory: repToTerr[o.salesRep||o.assignedTo] || null,
+            arr: parseFloat(o.arr)||0,
+        })).filter(o => o.territory);
+
+        // Deal-size tiers
+        const TIERS = [
+            { label:'< $25K',    min:0,      max:25000  },
+            { label:'$25–75K',   min:25000,  max:75000  },
+            { label:'$75–150K',  min:75000,  max:150000 },
+            { label:'$150K+',    min:150000, max:Infinity },
+        ];
+        const getTier = arr => TIERS.findIndex(t => arr >= t.min && arr < t.max);
+
+        // Build grid: territory × tier → count
+        const grid = {}; // { [territory]: [count, count, count, count] }
+        const pipelineByTerr = {}; // { [territory]: totalArr }
+        territories.forEach(t => { grid[t]=[0,0,0,0]; pipelineByTerr[t]=0; });
+        oppWithTerr.forEach(o => {
+            const ti = getTier(o.arr);
+            if (ti>=0 && grid[o.territory]) {
+                grid[o.territory][ti]++;
+                pipelineByTerr[o.territory] = (pipelineByTerr[o.territory]||0) + o.arr;
+            }
+        });
+
+        const maxCell = Math.max(...territories.flatMap(t=>grid[t]),1);
+        const heatColor = v => {
+            const pct = v/maxCell;
+            if (pct>0.75) return '#3a5530';
+            if (pct>0.5)  return '#4d6b3d';
+            if (pct>0.3)  return '#7a8a5a';
+            if (pct>0.15) return '#c8b99a';
+            if (pct>0.05) return '#e6ddc0';
+            return T.surface2;
+        };
+        const cellTextColor = v => v/maxCell > 0.4 ? '#fbf8f3' : T.ink;
+
+        // ── KPIs
+        const totalOpenOpps = openOppsT.length;
+        const coveredTerrs  = territories.filter(t=>(grid[t]||[]).reduce((s,v)=>s+v,0)>0).length;
+        const avgPerTerr    = territories.length>0 ? Math.round(totalOpenOpps/territories.length) : 0;
+        const oppsByTerr    = territories.map(t=>({ t, n:(grid[t]||[]).reduce((s,v)=>s+v,0) })).sort((a,b)=>a.n-b.n);
+        const gapTerritory  = oppsByTerr[0];
+
+        // ── Industry mix from open opps via account lookup
+        const industryMap = {};
+        openOppsT.forEach(o => {
+            const acct = (reportsTimedActivities&&false)||null; // activities not needed
+            // Look up account verticalMarket from the accounts list via o.account name
+            const accObj = (settings.__accountsRef||[]).find?.(a=>(a.name||'').toLowerCase()===(o.account||'').toLowerCase());
+            const ind = o.vertical || o.verticalMarket || accObj?.verticalMarket || accObj?.industry || 'Other';
+            industryMap[ind] = (industryMap[ind]||0)+1;
+        });
+        const industryRows = Object.entries(industryMap)
+            .map(([industry,opps])=>({ industry, opps, pct:totalOpenOpps>0?opps/totalOpenOpps:0 }))
+            .sort((a,b)=>b.opps-a.opps).slice(0,7);
+        const maxIndustry = Math.max(...industryRows.map(r=>r.opps),1);
+
+        // ── Auto coverage gaps
+        const gaps = [];
+        if (gapTerritory && gapTerritory.n < avgPerTerr * 0.6) {
+            gaps.push({ territory:gapTerritory.t, issue:`Only ${gapTerritory.n} open opp${gapTerritory.n!==1?'s':''} — lowest coverage across all territories.` });
+        }
+        territories.forEach(t => {
+            const largeDealCount = (grid[t]||[])[3]; // $150K+ tier
+            const totalT = (grid[t]||[]).reduce((s,v)=>s+v,0);
+            if (totalT>5 && largeDealCount===0) {
+                gaps.push({ territory:t, issue:`${totalT} open deals but no $150K+ opportunities — consider moving upmarket.` });
+            }
+        });
+        const avgPipeline = territories.length>0 ? Object.values(pipelineByTerr).reduce((s,v)=>s+v,0)/territories.length : 0;
+        territories.forEach(t => {
+            if (pipelineByTerr[t]>0 && pipelineByTerr[t] < avgPipeline*0.4 && !gaps.find(g=>g.territory===t)) {
+                gaps.push({ territory:t, issue:`Pipeline (${fmtShort(pipelineByTerr[t])}) is well below team average — prioritize prospecting here.` });
+            }
+        });
+
+        // No territory data state
+        const noTerritories = territories.length === 0;
+
+        return (
+            <div style={{ fontFamily:T.sans, color:T.ink }}>
+                {/* Header */}
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ flex:1 }}>
+                        <div style={{ ...ebD(T.goldInk), display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>✦ Template · Activity</div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:6 }}>Territory coverage</div>
+                        <div style={{ fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Activity density by territory, industry, and deal-size tier — find the under-covered pockets before they show up as a missed quarter.</div>
+                    </div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0, marginLeft:24 }}>
+                        <button onClick={()=>setActiveTemplate(null)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>← Back to library</button>
+                        <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>+ Save as my report</button>
+                    </div>
+                </div>
+
+                {noTerritories ? (
+                    <PanelD padding="3rem">
+                        <div style={{ textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                            No territories configured. Assign territories to reps in Settings → People &amp; Teams → Territories, then this report will populate automatically.
+                        </div>
+                    </PanelD>
+                ) : (
+                    <>
+                        {/* KPI strip */}
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:14 }}>
+                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                                <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Territories covered</div>
+                                <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{coveredTerrs} / {territories.length}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>with open pipeline</div>
+                            </div>
+                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                                <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Open opportunities</div>
+                                <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{oppWithTerr.length}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>across {territories.length} territories</div>
+                            </div>
+                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                                <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Avg per territory</div>
+                                <div style={{ fontSize:28, fontWeight:700, color:T.ink, letterSpacing:-0.5, lineHeight:1, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{avgPerTerr}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>open opps per territory</div>
+                            </div>
+                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 18px' }}>
+                                <div style={{ ...ebD(T.inkMuted), marginBottom:4 }}>Coverage gap</div>
+                                <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3, lineHeight:1.1, fontFamily:T.sans }}>{gapTerritory?.t||'—'}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:5, fontFamily:T.sans }}>{gapTerritory?gapTerritory.n+' opps · lowest':'all territories covered'}</div>
+                            </div>
+                        </div>
+
+                        {/* Two-column body */}
+                        <div style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr', gap:14 }}>
+                            {/* Left — heatmap */}
+                            <PanelD padding="18px 20px 16px">
+                                <SecHdrD title="Coverage heatmap" subtitle="# of open opps by territory × deal size"
+                                    right={
+                                        <span style={{ fontSize:11, color:T.inkMuted, display:'inline-flex', alignItems:'center', gap:5, fontFamily:T.sans }}>
+                                            <span>Low</span>
+                                            {[T.surface2,'#e6ddc0','#c8b99a','#7a8a5a','#4d6b3d','#3a5530'].map(c=>(
+                                                <span key={c} style={{ width:14, height:10, background:c, border:`1px solid ${T.border}`, display:'inline-block' }}/>
+                                            ))}
+                                            <span>High</span>
+                                        </span>
+                                    }
+                                />
+                                {/* Column headers */}
+                                <div style={{ display:'grid', gridTemplateColumns:`110px repeat(${TIERS.length},1fr) 80px`, gap:6, padding:'0 0 8px', alignItems:'center' }}>
+                                    <div/>
+                                    {TIERS.map(t=><div key={t.label} style={{ ...ebD(T.inkMuted), fontSize:10, textAlign:'center' }}>{t.label}</div>)}
+                                    <div style={{ ...ebD(T.inkMuted), fontSize:10, textAlign:'right' }}>Pipeline</div>
+                                </div>
+                                {territories.map(terr => (
+                                    <div key={terr} style={{ display:'grid', gridTemplateColumns:`110px repeat(${TIERS.length},1fr) 80px`, gap:6, alignItems:'center', padding:'4px 0' }}>
+                                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{terr}</div>
+                                        {(grid[terr]||[0,0,0,0]).map((v,ci)=>(
+                                            <div key={ci} style={{ height:44, background:heatColor(v), color:cellTextColor(v), border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:700, fontFeatureSettings:'"tnum"', borderRadius:2, fontFamily:T.sans }}>
+                                                {v}
+                                            </div>
+                                        ))}
+                                        <div style={{ textAlign:'right', fontSize:13, color:T.ink, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>
+                                            {fmtShort(pipelineByTerr[terr]||0)}
+                                        </div>
+                                    </div>
+                                ))}
+                            </PanelD>
+
+                            {/* Right — industry mix + gaps */}
+                            <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                                <PanelD padding="16px 20px 16px">
+                                    <SecHdrD title="Industry mix" subtitle="All open opps, by industry"/>
+                                    {industryRows.length === 0 ? (
+                                        <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No industry data. Set vertical market on accounts to see industry breakdown.</div>
+                                    ) : industryRows.map((ind,i)=>(
+                                        <div key={i} style={{ display:'grid', gridTemplateColumns:'110px 1fr 38px 42px', gap:8, alignItems:'center', padding:'5px 0', borderTop:i===0?'none':`1px solid ${T.border}` }}>
+                                            <span style={{ fontSize:12, color:T.ink, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ind.industry}</span>
+                                            <HBarD value={ind.opps} max={maxIndustry} color={T.gold}/>
+                                            <span style={{ textAlign:'right', fontSize:11.5, color:T.inkMuted, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{ind.opps}</span>
+                                            <span style={{ textAlign:'right', fontSize:12, color:T.ink, fontWeight:700, fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{Math.round(ind.pct*100)}%</span>
+                                        </div>
+                                    ))}
+                                </PanelD>
+
+                                <PanelD padding="16px 20px 14px">
+                                    <SecHdrD title="Coverage gaps" subtitle="Where the pipeline is thin"/>
+                                    {gaps.length === 0 ? (
+                                        <div style={{ fontSize:12, color:T.ok, fontFamily:T.sans }}>✓ All territories have healthy coverage.</div>
+                                    ) : gaps.slice(0,4).map((g,i)=>(
+                                        <div key={i} style={{ display:'flex', gap:10, alignItems:'flex-start', padding:'9px 0', borderTop:i===0?'none':`1px solid ${T.border}` }}>
+                                            <span style={{ fontSize:16, flexShrink:0, marginTop:1 }}>⚠</span>
+                                            <div>
+                                                <div style={{ fontSize:12.5, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{g.territory}</div>
+                                                <div style={{ fontSize:11.5, color:T.inkMid, marginTop:2, lineHeight:1.45, fontFamily:T.sans }}>{g.issue}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </PanelD>
+                            </div>
+                        </div>
+                    </>
+                )}
+            </div>
+        );
+    }
+
+
+    // ── Create Report flow ──────────────────────────────────────────
+    if (showCreateReport) {
+        const T = TS;
+        const serif = T.serif;
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const closeCreate = () => { setShowCreateReport(false); setCreateMode('picker'); };
+
+        // AI starters
+        const AI_STARTERS = [
+            'Deals stuck more than 14 days, by rep',
+            'Win rate by lead source, last 6 months',
+            'Avg days from proposal to close, by deal tier',
+            'Forecast accuracy by rep, last 4 quarters',
+        ];
+
+        // Sources
+        const SOURCES = ['Opportunities','Accounts','Leads','Activity','Quotes'];
+        const ALL_DIMS    = ['Owner','Stage','Close date','Industry','Territory','Lead source','Competitor'];
+        const ALL_METRICS = ['Revenue','# of deals','Avg deal size','Days to close','# activities'];
+        const CHART_TYPES = [
+            {id:'stacked',label:'Stacked bar',desc:'Sub-groups within a total'},
+            {id:'bar',    label:'Bar',        desc:'Compare across categories'},
+            {id:'line',   label:'Line',       desc:'Show trend over time'},
+            {id:'funnel', label:'Funnel',     desc:'Conversion through stages'},
+            {id:'table',  label:'Table',      desc:'Row-by-row detail view'},
+            {id:'kpi',    label:'KPI card',   desc:'Big number with delta'},
+            {id:'heatmap',label:'Heatmap',    desc:'Density across two dims'},
+            {id:'scatter',label:'Scatter',    desc:'Relationship between metrics'},
+        ];
+
+        // Shared sub-components (all inline, no hooks at top level here since we're not conditionally calling any)
+        const GhostBtnD = ({onClick, children}) => (
+            <button onClick={onClick} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 11px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>{children}</button>
+        );
+        const FieldChip = ({label, kind, onRemove}) => (
+            <div style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 8px 3px 6px', background:T.surface2, border:`1px solid ${T.border}`, borderLeft:`3px solid ${kind==='metric'?T.info:T.goldInk}`, borderRadius:2, fontSize:12, color:T.ink, fontFamily:T.sans }}>
+                <span style={{ fontSize:9.5, color:T.inkMuted, fontWeight:600 }}>{kind==='metric'?'#':'A'}</span>
+                {label}
+                {onRemove && <button onClick={onRemove} style={{ border:'none', background:'transparent', cursor:'pointer', padding:0, display:'flex', color:T.inkMuted, fontSize:11, lineHeight:1 }}>×</button>}
+            </div>
+        );
+        const TabStrip = ({tabs, active, onChange}) => (
+            <div style={{ display:'flex', borderBottom:`1px solid ${T.border}` }}>
+                {tabs.map(t => {
+                    const a = active===t;
+                    return <button key={t} onClick={()=>onChange(t)} style={{ background:'transparent', border:'none', padding:'9px 14px', fontSize:12, fontWeight:a?600:500, color:a?T.ink:T.inkMuted, borderBottom:a?`2px solid ${T.ink}`:'2px solid transparent', marginBottom:-1, cursor:'pointer', fontFamily:T.sans }}>{t}{t==='Data'&&builderDims.length+builderMetrics.length>0?<span style={{ marginLeft:5, background:a?T.ink:T.surface2, color:a?T.surface:T.inkMid, fontSize:10, padding:'1px 5px', borderRadius:8, fontWeight:600 }}>{builderDims.length+builderMetrics.length}</span>:null}</button>;
+                })}
+            </div>
+        );
+        const UpdateBtn = () => (
+            <button onClick={()=>{setBuilderDirty(false);setBuilderRendered(true);}} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 12px', background:builderDirty?T.ink:T.surface, color:builderDirty?T.surface:T.inkMid, border:`1px solid ${builderDirty?T.ink:T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, position:'relative' }}>
+                ↺ Update preview
+                {builderDirty && <span style={{ position:'absolute', top:-3, right:-3, width:6, height:6, borderRadius:'50%', background:T.warn, border:`1.5px solid ${T.surface}` }}/>}
+            </button>
+        );
+
+        // Page header shared by all non-picker modes
+        const BuilderHeader = ({title, breadcrumb, onSave}) => (
+            <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12, paddingBottom:12, borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ flex:1 }}>
+                    <div style={{ ...ebD(T.inkMuted), marginBottom:6, display:'flex', gap:6 }}>
+                        <span>Reports</span><span style={{ opacity:0.4 }}>/</span><span>New</span><span style={{ opacity:0.4 }}>/</span>
+                        <span style={{ color:T.ink }}>{breadcrumb}</span>
+                    </div>
+                    <div style={{ fontSize:22, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.4, lineHeight:1.1 }}>{title}</div>
+                    <div style={{ fontSize:12, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>Changes are drafted — click Update preview to render.</div>
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0, marginLeft:20 }}>
+                    <GhostBtnD onClick={()=>setCreateMode('picker')}>← Back to picker</GhostBtnD>
+                    <GhostBtnD onClick={closeCreate}>✕ Cancel</GhostBtnD>
+                    {saveState==='error' && <span style={{ fontSize:11, color:T.danger, fontFamily:T.sans }}>{saveError}</span>}
+                    {saveState==='saved' && <span style={{ fontSize:11, color:T.ok, fontWeight:600, fontFamily:T.sans }}>✓ Saved to library</span>}
+                    <button onClick={onSave} disabled={saveState==='saving'}
+                        style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:saveState==='saving'?T.borderStrong:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:saveState==='saving'?'default':'pointer', fontFamily:T.sans }}>
+                        {saveState==='saving'?'Saving…':'✓ Save to library'}
+                    </button>
+                </div>
+            </div>
+        );
+
+        // ── PICKER ──────────────────────────────────────────────────
+        if (createMode === 'picker') {
+            const handleGenerate = () => {
+                if (!aiPrompt.trim()) return;
+                setAiGenerated(true);
+                setCreateMode('ai');
+                setBuilderTab('data');
+                setBuilderDirty(false);
+                setBuilderRendered(true);
+            };
+            return (
+                <div style={{ fontFamily:T.sans, color:T.ink }}>
+                    {/* Page header */}
+                    <div style={{ marginBottom:20, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                        <div style={{ ...ebD(T.inkMuted), marginBottom:6, display:'flex', gap:6 }}>
+                            <span>Reports</span><span style={{ opacity:0.4 }}>/</span><span style={{ color:T.ink }}>New report</span>
+                        </div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:4 }}>Create a report</div>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                            <div style={{ fontSize:13, color:T.inkMuted, fontFamily:T.sans }}>Pick how you want to start — you can always change everything later.</div>
+                            <GhostBtnD onClick={closeCreate}>✕ Cancel</GhostBtnD>
+                        </div>
+                    </div>
+
+                    {/* AI composer */}
+                    <div style={{ background:'#fdf6e8', border:`1px solid ${T.gold}`, borderRadius:T.r+1, padding:'18px 20px', marginBottom:20, maxWidth:860, marginLeft:'auto', marginRight:'auto' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+                            <span style={{ fontSize:13 }}>✦</span>
+                            <span style={{ ...ebD(T.goldInk) }}>Ask AI</span>
+                            <span style={{ fontSize:11, color:T.inkMuted }}>· describe what you want to see</span>
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'8px 10px' }}>
+                            <input value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)}
+                                onKeyDown={e=>{ if(e.key==='Enter'&&aiPrompt.trim()) handleGenerate(); }}
+                                placeholder="e.g. Deals stuck more than 14 days, by rep"
+                                style={{ flex:1, border:'none', outline:'none', background:'transparent', fontFamily:T.sans, fontSize:13, color:T.ink }}/>
+                            <button onClick={handleGenerate} disabled={!aiPrompt.trim()}
+                                style={{ background:aiPrompt.trim()?T.ink:T.surface2, color:aiPrompt.trim()?T.surface:T.inkMuted, border:'none', padding:'5px 12px', fontSize:11, fontWeight:700, borderRadius:2, cursor:aiPrompt.trim()?'pointer':'not-allowed', fontFamily:T.sans, letterSpacing:0.5 }}>
+                                GENERATE
+                            </button>
+                        </div>
+                        <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:10, alignItems:'center' }}>
+                            <span style={{ fontSize:10.5, color:T.inkMuted, marginRight:2 }}>TRY:</span>
+                            {AI_STARTERS.map(s=>(
+                                <button key={s} onClick={()=>{ setAiPrompt(s); }} style={{ background:'transparent', border:`1px solid ${T.gold}`, color:T.goldInk, padding:'3px 8px', fontSize:11, borderRadius:10, cursor:'pointer', fontFamily:T.sans }}>{s}</button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* OR divider */}
+                    <div style={{ display:'flex', alignItems:'center', gap:12, maxWidth:860, margin:'0 auto 20px' }}>
+                        <div style={{ flex:1, height:1, background:T.border }}/>
+                        <span style={{ ...ebD(T.inkMuted), fontSize:10 }}>or start from</span>
+                        <div style={{ flex:1, height:1, background:T.border }}/>
+                    </div>
+
+                    {/* 3 start cards */}
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14, maxWidth:860, margin:'0 auto 28px' }}>
+                        {[
+                            { eyebrow:'Blank', title:'A blank canvas', desc:'Pick a data source, add fields, pick a chart. Full control.', badge:null, mode:'blank',
+                              glyph:<svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={T.inkMid} strokeWidth="1.2"><rect x="8" y="6" width="20" height="26" rx="1"/><path d="M12 14h12M12 19h12M12 24h8" strokeDasharray="2 2"/></svg> },
+                            { eyebrow:'Template', title:'A starter template', desc:'6 pre-built layouts: deal review, win/loss, rep scorecard, and more.', badge:'6 available', mode:'template',
+                              glyph:<svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={T.inkMid} strokeWidth="1.2"><rect x="5" y="8" width="12" height="8" rx="1"/><rect x="20" y="8" width="12" height="8" rx="1"/><rect x="5" y="20" width="12" height="8" rx="1"/><rect x="20" y="20" width="12" height="8" rx="1" fillOpacity="0.15" fill={T.inkMid}/></svg> },
+                            { eyebrow:'Duplicate', title:'An existing report', desc:'Copy one you already have and tweak it. Yours or shared.', badge:'from library', mode:'duplicate',
+                              glyph:<svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={T.inkMid} strokeWidth="1.2"><rect x="6" y="6" width="18" height="22" rx="1"/><rect x="14" y="12" width="18" height="22" rx="1" fill={T.surface}/></svg> },
+                        ].map(card => (
+                            <button key={card.mode} onClick={()=>setCreateMode(card.mode)}
+                                style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'18px 18px 16px', textAlign:'left', cursor:'pointer', fontFamily:T.sans, display:'flex', flexDirection:'column', gap:6, transition:'border-color 120ms' }}
+                                onMouseEnter={e=>e.currentTarget.style.borderColor=T.ink}
+                                onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                                {card.glyph}
+                                <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10 }}>
+                                    <span style={{ ...ebD(T.goldInk), fontSize:10 }}>{card.eyebrow}</span>
+                                    {card.badge && <span style={{ fontSize:10, color:T.inkMuted }}>· {card.badge}</span>}
+                                </div>
+                                <div style={{ fontSize:16, fontFamily:serif, fontStyle:'italic', color:T.ink, marginTop:2 }}>{card.title}</div>
+                                <div style={{ fontSize:12, color:T.inkMuted, lineHeight:1.45 }}>{card.desc}</div>
+                                <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:8, color:T.ink, fontSize:11.5, fontWeight:600 }}>Start here →</div>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Recent reports strip */}
+                    <div style={{ maxWidth:860, margin:'0 auto' }}>
+                        <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom:10 }}>
+                            <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', color:T.ink }}>Recent reports</div>
+                            <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>Things you looked at this week — clone from any</div>
+                            <div style={{ flex:1 }}/>
+                            <button onClick={closeCreate} style={{ fontSize:11.5, color:T.inkMid, background:'transparent', border:'none', cursor:'pointer', fontFamily:T.sans }}>Browse library →</button>
+                        </div>
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+                            {['Quota pacing','Pipeline added this week','Stuck deals (14d+)','Closing next 30 days'].map(n=>(
+                                <div key={n} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'10px 12px', cursor:'pointer' }}
+                                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderStrong}
+                                    onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                                    <div style={{ ...ebD(T.inkMuted), fontSize:9, marginBottom:3 }}>Clone</div>
+                                    <div style={{ fontSize:12.5, color:T.ink, fontWeight:500 }}>{n}</div>
+                                    <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>From pinned · last viewed today</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── TEMPLATE grid ────────────────────────────────────────────
+        if (createMode === 'template') {
+            const TMPLS = [
+                {id:'t1',cat:'Pipeline & Forecast',name:'Deal review — weekly',    desc:'1:1-ready: commits, at-risk, new deals since last review'},
+                {id:'t2',cat:'Performance',         name:'Win / loss analysis',    desc:'Closed deals with reason breakdown, competitor, cycle length'},
+                {id:'t3',cat:'Performance',         name:'Rep scorecard',          desc:'Single-rep view of fundamentals — attainment, win rate, cycle'},
+                {id:'t4',cat:'Activity',            name:'Territory coverage',     desc:'Activity density by territory, industry, deal-size tier'},
+                {id:'t5',cat:'Pipeline & Forecast', name:'Stage conversion deep-dive', desc:'Funnel with avg days, entered/advanced, drop-off reasons'},
+                {id:'t6',cat:'Pipeline & Forecast', name:'Forecast vs actual',     desc:'Quarterly forecast accuracy trend with team roll-up'},
+            ];
+            return (
+                <div style={{ fontFamily:T.sans, color:T.ink }}>
+                    <div style={{ marginBottom:16, paddingBottom:12, borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
+                        <div>
+                            <div style={{ ...ebD(T.inkMuted), marginBottom:4, display:'flex', gap:6 }}><span>Reports</span><span style={{ opacity:0.4 }}>/</span><span style={{ color:T.ink }}>New · Templates</span></div>
+                            <div style={{ fontSize:22, fontFamily:serif, fontStyle:'italic', color:T.ink, letterSpacing:-0.4 }}>Start from a template</div>
+                            <div style={{ fontSize:12, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>Pre-built layouts you can customise. Click Start to load with default filters.</div>
+                        </div>
+                        <div style={{ display:'flex', gap:8 }}>
+                            <GhostBtnD onClick={()=>setCreateMode('picker')}>← Back</GhostBtnD>
+                            <GhostBtnD onClick={closeCreate}>✕ Cancel</GhostBtnD>
+                        </div>
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
+                        {TMPLS.map(t=>(
+                            <div key={t.id} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 16px', cursor:'pointer', display:'flex', flexDirection:'column', gap:6 }}
+                                onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderStrong}
+                                onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                                    <div style={{ ...ebD(T.inkMuted), fontSize:9 }}>{t.cat}</div>
+                                    <button onClick={()=>{ setShowCreateReport(false); setActiveTemplate(t.id); }}
+                                        style={{ border:'none', background:'transparent', padding:0, fontSize:10.5, fontWeight:700, letterSpacing:0.6, color:T.ink, cursor:'pointer', fontFamily:T.sans }}>
+                                        START →
+                                    </button>
+                                </div>
+                                <div style={{ fontSize:13.5, color:T.ink, fontWeight:600, fontFamily:T.sans }}>{t.name}</div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, lineHeight:1.4, fontFamily:T.sans }}>{t.desc}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // ── DUPLICATE list ───────────────────────────────────────────
+        if (createMode === 'duplicate') {
+            const DUPES = pinnedCards.map(r=>({ name:r.name, owner:currentUser||'Me', updated:'Today' }));
+            return (
+                <div style={{ fontFamily:T.sans, color:T.ink }}>
+                    <div style={{ marginBottom:16, paddingBottom:12, borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
+                        <div>
+                            <div style={{ ...ebD(T.inkMuted), marginBottom:4, display:'flex', gap:6 }}><span>Reports</span><span style={{ opacity:0.4 }}>/</span><span style={{ color:T.ink }}>New · Duplicate</span></div>
+                            <div style={{ fontSize:22, fontFamily:serif, fontStyle:'italic', color:T.ink, letterSpacing:-0.4 }}>Duplicate an existing report</div>
+                            <div style={{ fontSize:12, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>Copy any report you can see into a new draft.</div>
+                        </div>
+                        <div style={{ display:'flex', gap:8 }}>
+                            <GhostBtnD onClick={()=>setCreateMode('picker')}>← Back</GhostBtnD>
+                            <GhostBtnD onClick={closeCreate}>✕ Cancel</GhostBtnD>
+                        </div>
+                    </div>
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1 }}>
+                        {DUPES.map((r,i)=>(
+                            <div key={r.name} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderBottom:i<DUPES.length-1?`1px solid ${T.border}`:'none' }}>
+                                <span style={{ fontSize:15, color:T.inkMuted }}>📄</span>
+                                <div style={{ flex:1 }}>
+                                    <div style={{ fontSize:12.5, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{r.name}</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>by {r.owner} · updated {r.updated}</div>
+                                </div>
+                                <button onClick={()=>setCreateMode('blank')}
+                                    style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11.5, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                                    Duplicate →
+                                </button>
+                            </div>
+                        ))}
+                        {DUPES.length===0 && <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No saved reports yet.</div>}
+                    </div>
+                </div>
+            );
+        }
+
+        // ── AI GENERATED ─────────────────────────────────────────────
+        if (createMode === 'ai') {
+            // Stuck deals computed from real data for the preview
+            const stuckReps = {};
+            const now14 = new Date(); now14.setDate(now14.getDate()-14);
+            const iso14 = now14.toISOString().slice(0,10);
+            (reportsOpps||[]).filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost').forEach(o=>{
+                const lastAct = (activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
+                if (!lastAct?.date || lastAct.date <= iso14) {
+                    const rep = o.salesRep||o.assignedTo||'Unassigned';
+                    if (!stuckReps[rep]) stuckReps[rep]={count:0,arr:0};
+                    stuckReps[rep].count++;
+                    stuckReps[rep].arr += parseFloat(o.arr)||0;
+                }
+            });
+            const stuckRows = Object.entries(stuckReps).map(([rep,d])=>({rep,count:d.count,arr:d.arr})).sort((a,b)=>b.count-a.count).slice(0,8);
+            const maxCount = Math.max(...stuckRows.map(r=>r.count),1);
+            const maxArr   = Math.max(...stuckRows.map(r=>r.arr),1);
+            const totalStuck = stuckRows.reduce((s,r)=>s+r.count,0);
+            const totalArrStuck = stuckRows.reduce((s,r)=>s+r.arr,0);
+            const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+            const avBg = name => { const p=['#9c6b4a','#7a5a3c','#5a6e5a','#6b5a7a','#8a5a5a','#5a7a8a']; let h=0; for(const c of(name||'')) h=(h*31+c.charCodeAt(0))|0; return p[Math.abs(h)%p.length]; };
+
+            return (
+                <div style={{ fontFamily:T.sans, color:T.ink }}>
+                    {/* AI interpretation banner */}
+                    <div style={{ background:'#fdf6e8', border:`1px solid ${T.gold}`, borderRadius:T.r+1, padding:'14px 16px', marginBottom:12 }}>
+                        <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
+                            <div style={{ width:26, height:26, background:T.gold, borderRadius:13, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:13 }}>✦</div>
+                            <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, flexWrap:'wrap' }}>
+                                    <span style={{ ...ebD(T.goldInk), fontSize:9.5 }}>Your prompt</span>
+                                    <span style={{ fontSize:12, color:T.ink, fontStyle:'italic' }}>"{aiPrompt||'Deals stuck more than 14 days, by rep'}"</span>
+                                    <button onClick={()=>setCreateMode('picker')} style={{ background:'transparent', border:'none', padding:0, fontSize:11, color:T.goldInk, fontWeight:600, cursor:'pointer', fontFamily:T.sans, textDecoration:'underline' }}>Edit prompt</button>
+                                </div>
+                                <div style={{ fontSize:12, color:T.ink, marginBottom:8, fontFamily:T.sans }}>
+                                    I built a <strong>horizontal bar chart</strong> from <strong>Opportunities</strong> where <strong>last activity &gt; 14 days ago</strong>, grouped by <strong>owner</strong>, sorted by count. Showing {stuckRows.length} reps with stuck deals.
+                                </div>
+                                <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                                    {[['Source','Opportunities'],['Filter','No activity >14d'],['Filter','Stage open'],['Group','Owner'],['Measure','# deals'],['Measure','ARR at risk'],['Chart','Horizontal bar']].map(([l,v],i)=>(
+                                        <div key={i} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 8px', background:T.surface, border:`1px solid ${T.gold}`, borderRadius:10, fontSize:11, fontFamily:T.sans }}>
+                                            <span style={{ color:T.inkMuted, fontSize:9.5, fontWeight:600, letterSpacing:0.5 }}>{l.toUpperCase()}</span>
+                                            <span style={{ color:T.ink, fontWeight:500 }}>{v}</span>
+                                            <span style={{ color:T.inkMuted, fontSize:11 }}>×</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div style={{ display:'flex', flexDirection:'column', gap:6, flexShrink:0 }}>
+                                <button onClick={closeCreate} style={{ background:T.ink, color:T.surface, border:'none', padding:'6px 12px', fontSize:11, fontWeight:600, borderRadius:2, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', gap:5 }}>✓ Looks right</button>
+                                <button onClick={()=>setCreateMode('picker')} style={{ background:'transparent', color:T.ink, border:`1px solid ${T.borderStrong}`, padding:'6px 12px', fontSize:11, fontWeight:500, borderRadius:2, cursor:'pointer', fontFamily:T.sans }}>Try another</button>
+                            </div>
+                        </div>
+                        {/* Refine row */}
+                        <div style={{ marginTop:10, paddingTop:10, borderTop:`1px dashed ${T.gold}`, display:'flex', alignItems:'center', gap:8 }}>
+                            <span style={{ ...ebD(T.goldInk), fontSize:9.5 }}>Refine</span>
+                            <input value={aiRefine} onChange={e=>setAiRefine(e.target.value)} placeholder="e.g. only deals $50K+, or split by territory…"
+                                style={{ flex:1, padding:'6px 10px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, fontFamily:T.sans, color:T.ink, outline:'none' }}/>
+                            <button style={{ background:T.surface, border:`1px solid ${T.gold}`, color:T.goldInk, padding:'5px 12px', fontSize:11, fontWeight:600, borderRadius:2, cursor:'pointer', fontFamily:T.sans }}>Regenerate</button>
+                        </div>
+                    </div>
+
+                    {/* Page header */}
+                    <BuilderHeader title="Stuck deals by rep" breadcrumb="AI-generated"
+                        onSave={()=>handleSaveReport({ name: aiPrompt||'Stuck deals by rep', source:'Opportunities', dims:[{id:'owner',label:'Owner',kind:'dim'}], metrics:[{id:'count',label:'# of deals',kind:'metric'},{id:'arr',label:'ARR at risk',kind:'metric'}], chartType:'bar', description:'Open deals with no activity in 14+ days, by rep' })}/>
+
+                    {/* Body — preview + config rail */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:14 }}>
+                        {/* Left — preview */}
+                        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                <UpdateBtn/>
+                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Up to date · {stuckRows.length} rows · generated just now</span>
+                                <div style={{ flex:1 }}/>
+                                <GhostBtnD onClick={()=>{}}>⛶ Fullscreen</GhostBtnD>
+                            </div>
+                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'18px 22px', display:'flex', flexDirection:'column', gap:12 }}>
+                                <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
+                                    <div>
+                                        <div style={{ fontSize:18, fontFamily:serif, fontStyle:'italic', color:T.ink, letterSpacing:-0.3, lineHeight:1.1 }}>
+                                            {aiPrompt||'Deals stuck more than 14 days, by rep'}
+                                        </div>
+                                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>Open opps · no activity in 14+ days · as of today</div>
+                                    </div>
+                                    <div style={{ display:'flex', gap:12, fontSize:10.5, color:T.inkMid, fontFamily:T.sans }}>
+                                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><span style={{ width:9, height:9, background:T.danger, borderRadius:1, display:'block' }}/># stuck deals</span>
+                                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><span style={{ width:9, height:9, background:T.inkMid, opacity:0.6, borderRadius:1, display:'block' }}/>ARR at risk</span>
+                                    </div>
+                                </div>
+                                {stuckRows.length === 0 ? (
+                                    <div style={{ padding:'2rem', textAlign:'center', color:T.ok, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>✓ No stuck deals — all open opportunities have recent activity!</div>
+                                ) : stuckRows.map(r=>(
+                                    <div key={r.rep} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                                        <div style={{ width:130, flexShrink:0, display:'flex', alignItems:'center', gap:8 }}>
+                                            <div style={{ width:22, height:22, borderRadius:'50%', background:avBg(r.rep), color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:700, flexShrink:0 }}>
+                                                {r.rep.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
+                                            </div>
+                                            <span style={{ fontSize:12, color:T.ink, fontWeight:500, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.rep}</span>
+                                        </div>
+                                        <div style={{ flex:1, display:'flex', flexDirection:'column', gap:3 }}>
+                                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                                <div style={{ flex:1, height:10, background:T.surface2, borderRadius:1 }}>
+                                                    <div style={{ width:`${(r.count/maxCount)*100}%`, height:'100%', background:T.danger, borderRadius:1 }}/>
+                                                </div>
+                                                <div style={{ width:28, fontSize:11, fontWeight:600, color:T.ink, textAlign:'right', fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{r.count}</div>
+                                            </div>
+                                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                                <div style={{ flex:1, height:6, background:T.surface2, borderRadius:1 }}>
+                                                    <div style={{ width:`${(r.arr/maxArr)*100}%`, height:'100%', background:T.inkMid, opacity:0.55, borderRadius:1 }}/>
+                                                </div>
+                                                <div style={{ width:28, fontSize:10.5, color:T.inkMid, textAlign:'right', fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(r.arr)}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                <div style={{ paddingTop:10, borderTop:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
+                                    <span>Total: <strong style={{ color:T.ink }}>{totalStuck} stuck deals</strong> · <strong style={{ color:T.ink }}>{fmtShort(totalArrStuck)}</strong> at risk across {stuckRows.length} rep{stuckRows.length!==1?'s':''}</span>
+                                    <button style={{ background:'transparent', border:'none', fontSize:11, color:T.inkMid, cursor:'pointer', padding:0, fontFamily:T.sans }}>View all rows →</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Right — config rail */}
+                        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+                            <TabStrip tabs={['Data','Filters','Chart','Format']} active={builderTab} onChange={setBuilderTab}/>
+                            <div style={{ flex:1, overflow:'auto', padding:'14px' }}>
+                                {builderTab==='Data' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                                        <div style={{ padding:'8px 10px', background:'#fdf6e8', border:`1px solid ${T.gold}`, borderRadius:2, fontSize:11, color:T.inkMid, display:'flex', gap:6, fontFamily:T.sans }}>
+                                            ✦ <span>Fields below were inferred by AI. Edit any chip — preview updates when you click Update.</span>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Data source</div>
+                                            <div style={{ padding:'8px 10px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, display:'flex', gap:8, alignItems:'center', fontFamily:T.sans }}>
+                                                <span style={{ fontWeight:600, color:T.ink }}>Opportunities</span><span style={{ color:T.inkMuted }}>· {(reportsOpps||[]).length} rows</span>
+                                            </div>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Group by</div>
+                                            <div style={{ display:'flex', gap:5 }}><FieldChip label="Owner" kind="dim"/></div>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Measure</div>
+                                            <div style={{ display:'flex', gap:5 }}><FieldChip label="# of deals" kind="metric"/><FieldChip label="ARR at risk" kind="metric"/></div>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Sort</div>
+                                            <div style={{ padding:'6px 10px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:2, fontSize:11.5, color:T.ink, fontFamily:T.sans }}>By <strong># of deals</strong> descending</div>
+                                        </div>
+                                    </div>
+                                )}
+                                {builderTab==='Filters' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                                        <div style={{ padding:'8px 10px', background:'#fdf6e8', border:`1px solid ${T.gold}`, borderRadius:2, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
+                                            ✦ AI interpreted "stuck more than 14 days" as <strong>no activity in 14+ days</strong>.
+                                        </div>
+                                        {[['Last activity date','≤','Today − 14 days',true],['Stage','is not','Closed Won · Closed Lost',true]].map(([f,op,v,ai],i)=>(
+                                            <div key={i} style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 8px', background:T.surface2, border:`1px solid ${ai?T.gold:T.border}`, borderRadius:2, fontSize:11.5, fontFamily:T.sans }}>
+                                                {ai&&<span style={{ fontSize:10 }}>✦</span>}
+                                                <span style={{ fontWeight:600, color:T.ink }}>{f}</span>
+                                                <span style={{ color:T.inkMuted }}>{op}</span>
+                                                <span style={{ fontWeight:500, color:T.ink }}>{v}</span>
+                                                <div style={{ flex:1 }}/><span style={{ color:T.inkMuted, cursor:'pointer' }}>×</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {builderTab==='Chart' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                                        <div style={{ ...ebD(T.inkMid), marginBottom:4 }}>Visualization type</div>
+                                        <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
+                                            {CHART_TYPES.map(ct=>(
+                                                <button key={ct.id} onClick={()=>setBuilderChart(ct.id)}
+                                                    style={{ background:T.surface, border:`1px solid ${builderChart===ct.id?T.ink:T.border}`, borderRadius:T.r, padding:'10px 8px', cursor:'pointer', textAlign:'left', fontFamily:T.sans, boxShadow:builderChart===ct.id?`inset 0 0 0 1px ${T.ink}`:'none' }}>
+                                                    <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{ct.label}</div>
+                                                    <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, lineHeight:1.3 }}>{ct.desc}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {builderTab==='Format' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Number format</div>
+                                            <div style={{ padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, display:'flex', justifyContent:'space-between', fontFamily:T.sans }}>$1.2K (short) <span style={{ color:T.inkMuted }}>▾</span></div>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Show totals</div>
+                                            <div style={{ display:'flex', gap:6 }}>
+                                                {['Row','Column','Grand'].map((t,i)=><button key={t} style={{ padding:'4px 10px', fontSize:11, fontFamily:T.sans, background:i===0?T.ink:T.surface, color:i===0?T.surface:T.ink, border:`1px solid ${i===0?T.ink:T.border}`, borderRadius:2, cursor:'pointer' }}>{t}</button>)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── BLANK builder ────────────────────────────────────────────
+        if (createMode === 'blank') {
+            // Full field definitions matching V2 design — basic shown always, advanced behind toggle
+            const BASIC_DIMS    = ['Owner','Stage','Close date','Industry','Territory'];
+            const ADVANCED_DIMS = ['Lead source','Competitor','Loss reason','Created date','Last activity date','Product line','Deal tier','Forecast category'];
+            const BASIC_METRICS    = ['Revenue','# of deals','Avg deal size'];
+            const ADVANCED_METRICS = ['Days to close','Days in stage','AI score','# activities'];
+            const allAvailDims    = [...BASIC_DIMS, ...(builderAdvanced ? ADVANCED_DIMS : [])].filter(d=>!builderDims.find(x=>x.label===d));
+            const allAvailMetrics = [...BASIC_METRICS, ...(builderAdvanced ? ADVANCED_METRICS : [])].filter(m=>!builderMetrics.find(x=>x.label===m));
+            return (
+                <div style={{ fontFamily:T.sans, color:T.ink }}>
+                    <BuilderHeader title="Untitled report" breadcrumb="Blank canvas"
+                        onSave={()=>handleSaveReport({ name:'Untitled report', source:builderSource, dims:builderDims, metrics:builderMetrics, chartType:builderChart, description:`${builderSource} · ${builderDims.map(d=>d.label).join(', ')}` })}/>
+
+                    {/* Body */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:14 }}>
+                        {/* Left — preview */}
+                        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                <UpdateBtn/>
+                                <span style={{ fontSize:11, color:builderDirty?T.warn:T.inkMuted, fontFamily:T.sans }}>
+                                    {builderDirty?'· Unsaved changes — click to render':'· Up to date'}
+                                </span>
+                                <div style={{ flex:1 }}/><GhostBtnD onClick={()=>{}}>⛶ Fullscreen</GhostBtnD>
+                            </div>
+                            {builderRendered ? (
+                                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'20px 24px', minHeight:320, display:'flex', flexDirection:'column', gap:14 }}>
+                                    <div style={{ fontFamily:serif, fontStyle:'italic', fontSize:18, color:T.ink, letterSpacing:-0.3 }}>Pipeline by {builderDims.map(d=>d.label).join(' × ') || 'owner'}</div>
+                                    <div style={{ display:'flex', flexDirection:'column', gap:10, flex:1 }}>
+                                        {(settings.users||[]).filter(u=>u.name&&u.userType!=='Admin').slice(0,5).map((u,i)=>{
+                                            const w = [85,72,64,51,38][i]||30;
+                                            return (
+                                                <div key={u.name} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                                                    <div style={{ width:110, fontSize:12, color:T.ink, fontWeight:500, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.name}</div>
+                                                    <div style={{ flex:1, height:20, background:T.surface2, borderRadius:2, overflow:'hidden' }}>
+                                                        <div style={{ width:`${w}%`, height:'100%', background:T.goldInk, opacity:0.8 }}/>
+                                                    </div>
+                                                    <div style={{ width:48, fontSize:12, fontWeight:600, color:T.ink, textAlign:'right', fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>${w*10}K</div>
+                                                </div>
+                                            );
+                                        })}
+                                        {(settings.users||[]).filter(u=>u.name&&u.userType!=='Admin').length===0 && (
+                                            <div style={{ textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', padding:'2rem', fontFamily:T.sans }}>Configure your fields and click Update preview.</div>
+                                        )}
+                                    </div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, paddingTop:10, borderTop:`1px solid ${T.border}`, fontFamily:T.sans }}>
+                                        Chart: <strong style={{ color:T.ink }}>{CHART_TYPES.find(c=>c.id===builderChart)?.label||'Stacked bar'}</strong> · {builderDims.length} dimensions · {builderMetrics.length} metrics
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ background:T.surface2, border:`1px dashed ${T.borderStrong}`, borderRadius:T.r+1, minHeight:320, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:10, padding:40, textAlign:'center' }}>
+                                    <span style={{ fontSize:28, color:T.inkMuted }}>📊</span>
+                                    <div style={{ fontSize:14, color:T.inkMid, fontWeight:500, fontFamily:T.sans }}>Preview not run yet</div>
+                                    <div style={{ fontSize:12, color:T.inkMuted, maxWidth:280, fontFamily:T.sans }}>Configure fields and filters on the right, then click Update preview.</div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Right — config rail */}
+                        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+                            {/* AI in rail */}
+                            <div style={{ padding:12, borderBottom:`1px solid ${T.border}`, background:'#fdf6e8' }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+                                    <span style={{ fontSize:11 }}>✦</span>
+                                    <span style={{ ...ebD(T.goldInk), fontSize:9.5 }}>Ask AI</span>
+                                    <span style={{ fontSize:10.5, color:T.inkMuted }}>· describe what you want</span>
+                                </div>
+                                <div style={{ display:'flex', gap:6, background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, padding:'6px 8px' }}>
+                                    <input value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)}
+                                        onKeyDown={e=>{ if(e.key==='Enter'&&aiPrompt.trim()){ setCreateMode('ai'); setBuilderRendered(true); setBuilderDirty(false); }}}
+                                        placeholder="Describe what you want to see…"
+                                        style={{ flex:1, border:'none', outline:'none', background:'transparent', fontFamily:T.sans, fontSize:12, color:T.ink }}/>
+                                    <button onClick={()=>{ if(aiPrompt.trim()){ setCreateMode('ai'); setBuilderRendered(true); setBuilderDirty(false); }}}
+                                        style={{ background:T.ink, color:T.surface, border:'none', padding:'3px 8px', fontSize:10, fontWeight:700, borderRadius:2, cursor:'pointer', fontFamily:T.sans, letterSpacing:0.4 }}>GO</button>
+                                </div>
+                            </div>
+
+                            <TabStrip tabs={['Data','Filters','Chart','Format']} active={builderTab} onChange={setBuilderTab}/>
+                            <div style={{ flex:1, overflow:'auto', padding:'14px' }}>
+                                {builderTab==='Data' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Data source</div>
+                                            <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                                                {SOURCES.map(s=>(
+                                                    <button key={s} onClick={()=>{ setBuilderSource(s); setBuilderDirty(true); }}
+                                                        style={{ padding:'4px 10px', fontSize:11.5, fontFamily:T.sans, background:builderSource===s?T.ink:T.surface, color:builderSource===s?T.surface:T.ink, border:`1px solid ${builderSource===s?T.ink:T.border}`, borderRadius:2, cursor:'pointer' }}>{s}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Group by <span style={{ color:T.inkMuted, fontWeight:400, letterSpacing:0, textTransform:'none', fontSize:10 }}>(break your data into slices)</span></div>
+                                            <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, padding:8, display:'flex', flexWrap:'wrap', gap:5, minHeight:38 }}>
+                                                {builderDims.map(d=><FieldChip key={d.id} label={d.label} kind="dim" onRemove={()=>{ setBuilderDims(builderDims.filter(x=>x.id!==d.id)); setBuilderDirty(true); }}/>)}
+                                                {allAvailDims.map(d=>(
+                                                    <button key={d} onClick={()=>{ setBuilderDims([...builderDims,{id:d.toLowerCase().replace(/[^a-z0-9]/g,'_'),label:d,kind:'dim'}]); setBuilderDirty(true); }}
+                                                        style={{ display:'inline-flex', alignItems:'center', gap:3, padding:'3px 8px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:11, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                                                        <span style={{ fontSize:10, color:T.inkMuted }}>+</span> {d}
+                                                    </button>
+                                                ))}
+                                                {allAvailDims.length===0&&builderDims.length>0&&<span style={{ fontSize:11, color:T.inkMuted, padding:'3px 4px', fontFamily:T.sans }}>Toggle Advanced for more fields</span>}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Measure <span style={{ color:T.inkMuted, fontWeight:400, letterSpacing:0, textTransform:'none', fontSize:10 }}>(what to count or sum)</span></div>
+                                            <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, padding:8, display:'flex', flexWrap:'wrap', gap:5, minHeight:38 }}>
+                                                {builderMetrics.map(m=><FieldChip key={m.id} label={m.label} kind="metric" onRemove={()=>{ setBuilderMetrics(builderMetrics.filter(x=>x.id!==m.id)); setBuilderDirty(true); }}/>)}
+                                                {allAvailMetrics.map(m=>(
+                                                    <button key={m} onClick={()=>{ setBuilderMetrics([...builderMetrics,{id:m.toLowerCase().replace(/[^a-z0-9]/g,'_'),label:m,kind:'metric'}]); setBuilderDirty(true); }}
+                                                        style={{ display:'inline-flex', alignItems:'center', gap:3, padding:'3px 8px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:11, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                                                        <span style={{ fontSize:10, color:T.inkMuted }}>+</span> {m}
+                                                    </button>
+                                                ))}
+                                                {allAvailMetrics.length===0&&builderMetrics.length>0&&<span style={{ fontSize:11, color:T.inkMuted, padding:'3px 4px', fontFamily:T.sans }}>Toggle Advanced for more fields</span>}
+                                            </div>
+                                        </div>
+                                        <div style={{ paddingTop:10, borderTop:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                            <div><div style={{ fontSize:11.5, color:T.ink, fontWeight:600, fontFamily:T.sans }}>Advanced fields</div>
+                                                <div style={{ fontSize:10.5, color:T.inkMuted, fontFamily:T.sans }}>Joins, formulas, conditional format</div>
+                                            </div>
+                                            <div onClick={()=>setBuilderAdvanced(!builderAdvanced)} style={{ width:30, height:16, borderRadius:8, background:builderAdvanced?T.ink:T.borderStrong, position:'relative', cursor:'pointer', transition:'background 120ms', flexShrink:0 }}>
+                                                <div style={{ position:'absolute', top:2, left:builderAdvanced?16:2, width:12, height:12, borderRadius:'50%', background:T.surface, transition:'left 120ms' }}/>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                {builderTab==='Filters' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                                        <div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Period</div>
+                                        <div style={{ padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, display:'flex', justifyContent:'space-between', fontFamily:T.sans }}>This quarter <span style={{ color:T.inkMuted }}>▾</span></div>
+                                        <div style={{ ...ebD(T.inkMid), marginBottom:4 }}>Filters</div>
+                                        <button style={{ padding:'5px 8px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:2, fontSize:11, color:T.inkMid, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', gap:4 }}>+ Add filter</button>
+                                        <div style={{ ...ebD(T.inkMid), marginBottom:4, marginTop:4 }}>Compare to</div>
+                                        <div style={{ padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, display:'flex', justifyContent:'space-between', fontFamily:T.sans }}>Previous quarter <span style={{ color:T.inkMuted }}>▾</span></div>
+                                    </div>
+                                )}
+                                {builderTab==='Chart' && (
+                                    <div>
+                                        <div style={{ ...ebD(T.inkMid), marginBottom:8 }}>Visualization type</div>
+                                        <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
+                                            {CHART_TYPES.map(ct=>(
+                                                <button key={ct.id} onClick={()=>{ setBuilderChart(ct.id); setBuilderDirty(true); }}
+                                                    style={{ background:T.surface, border:`1px solid ${builderChart===ct.id?T.ink:T.border}`, borderRadius:T.r, padding:'10px 8px', cursor:'pointer', textAlign:'left', fontFamily:T.sans, boxShadow:builderChart===ct.id?`inset 0 0 0 1px ${T.ink}`:'none' }}>
+                                                    <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{ct.label}</div>
+                                                    <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, lineHeight:1.3 }}>{ct.desc}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {builderTab==='Format' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Number format</div>
+                                            <div style={{ padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, display:'flex', justifyContent:'space-between', fontFamily:T.sans }}>$1.2K (short) <span style={{ color:T.inkMuted }}>▾</span></div>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Show totals</div>
+                                            <div style={{ display:'flex', gap:6 }}>
+                                                {['Row','Column','Grand'].map((t,i)=><button key={t} style={{ padding:'4px 10px', fontSize:11, fontFamily:T.sans, background:i===0?T.ink:T.surface, color:i===0?T.surface:T.ink, border:`1px solid ${i===0?T.ink:T.border}`, borderRadius:2, cursor:'pointer' }}>{t}</button>)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        return null; // fallback
+    }
+    // ── End Create Report flow ──────────────────────────────────────
+
     return (
         <div style={{ display:'flex', flexDirection:'column', gap:0, padding:'1rem 1.25rem 1.5rem' }}>
             {/* Toolbar */}
@@ -2517,7 +4610,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                     <input value={srchQ} onChange={e=>setSrchQ(e.target.value)} placeholder="Search your library…" style={{ width:'100%', padding:'7px 10px 7px 30px', border:`1px solid ${TS.border}`, borderRadius:TS.r, background:TS.surface, color:TS.ink, fontSize:12.5, fontFamily:TS.sans, outline:'none', boxSizing:'border-box' }}/>
                 </div>
                 <div style={{ flex:1 }}/>
-                <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:TS.ink, color:TS.surface, border:'none', borderRadius:TS.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:TS.sans }}>+ Create report</button>
+                <button onClick={()=>{setShowCreateReport(true);setCreateMode('picker');setAiPrompt('');setAiGenerated(false);setBuilderTab('data');setBuilderDirty(true);setBuilderRendered(false);}} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:TS.ink, color:TS.surface, border:'none', borderRadius:TS.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:TS.sans }}>+ Create report</button>
             </div>
 
             {filteredPinned.length > 0 && (
@@ -2527,6 +4620,35 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                     </div>
                 </SectionS>
             )}
+            {filteredSaved.length > 0 && (
+                <SectionS title="Your reports" subtitle="Reports you've created and saved to your library" count={`${filteredSaved.length} report${filteredSaved.length!==1?'s':''}`}>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
+                        {filteredSaved.map(r=>(
+                            <div key={r.id} style={{ background:TS.surface, border:`1px solid ${TS.border}`, borderRadius:TS.r, padding:'12px 14px', display:'flex', flexDirection:'column', gap:6, cursor:'pointer', minHeight:100 }}
+                                onMouseEnter={e=>e.currentTarget.style.borderColor=TS.borderStrong}
+                                onMouseLeave={e=>e.currentTarget.style.borderColor=TS.border}>
+                                <div style={{ fontSize:9.5, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:TS.inkMuted, fontFamily:TS.sans }}>{r.source||'Opportunities'}</div>
+                                <div style={{ fontSize:13.5, fontWeight:600, color:TS.ink, letterSpacing:-0.1, fontFamily:TS.sans, lineHeight:1.25 }}>{r.name}</div>
+                                {r.description && <div style={{ fontSize:11.5, color:TS.inkMuted, lineHeight:1.4, fontFamily:TS.sans }}>{r.description}</div>}
+                                <div style={{ marginTop:'auto', paddingTop:6, borderTop:`1px solid ${TS.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:10.5, color:TS.inkMuted, fontFamily:TS.sans }}>
+                                    <span>{r.ownerName||currentUser}</span>
+                                    <button onClick={async (e)=>{ e.stopPropagation(); if(!confirm('Delete this report?')) return; await dbFetch('/.netlify/functions/saved-reports',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})}); setSavedReportsList(prev=>prev.filter(x=>x.id!==r.id)); }}
+                                        style={{ background:'transparent', border:'none', color:TS.inkMuted, cursor:'pointer', fontSize:13, padding:0, lineHeight:1 }}>×</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </SectionS>
+            )}
+            {filteredSaved.length === 0 && !srchQ && (
+                <div style={{ marginBottom:20, padding:'14px 16px', background:TS.surface, border:`1px dashed ${TS.borderStrong}`, borderRadius:TS.r, display:'flex', alignItems:'center', justifyContent:'space-between', fontFamily:TS.sans }}>
+                    <div>
+                        <div style={{ fontSize:13, fontWeight:600, color:TS.ink }}>No saved reports yet</div>
+                        <div style={{ fontSize:11.5, color:TS.inkMuted, marginTop:3 }}>Create a report using the builder and click "Save to library" to see it here.</div>
+                    </div>
+                    <button onClick={()=>{setShowCreateReport(true);setCreateMode('picker');}} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 12px', background:TS.ink, border:'none', borderRadius:TS.r, fontSize:12, fontWeight:600, color:TS.surface, cursor:'pointer', fontFamily:TS.sans }}>+ Create one</button>
+                </div>
+            )}
             {filteredTemplates.length > 0 && (
                 <SectionS title="Start from a template" subtitle="Pre-built report layouts you can customize" count={`${filteredTemplates.length} templates`}>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
@@ -2534,7 +4656,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                     </div>
                 </SectionS>
             )}
-            {filteredPinned.length===0 && filteredTemplates.length===0 && (
+            {filteredPinned.length===0 && filteredSaved.length===0 && filteredTemplates.length===0 && srchQ && (
                 <div style={{ padding:'3rem', textAlign:'center', color:TS.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:TS.sans }}>No reports match "{srchQ}"</div>
             )}
         </div>

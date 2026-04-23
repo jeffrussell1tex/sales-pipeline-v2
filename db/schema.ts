@@ -259,8 +259,8 @@ export const leads = pgTable('leads', {
     estimatedARR: decimal('estimated_arr', { precision: 12, scale: 2 }),
     assignedTo:   varchar('assigned_to', { length: 255 }),
     notes:        text('notes'),
-    convertedAt:  varchar('converted_at', { length: 30 }),
-    firstTouchDate: varchar('first_touch_date', { length: 30 }),  // ISO date — set once on first activity/contact after creation
+    convertedAt:      varchar('converted_at', { length: 30 }),
+    firstTouchDate:   varchar('first_touch_date', { length: 30 }),
     createdAt:    timestamp('created_at').notNull().defaultNow(),
     orgId:        text('org_id').notNull(),
     updatedAt:    timestamp('updated_at').notNull().defaultNow(),
@@ -380,4 +380,22 @@ export const quotes = pgTable('quotes', {
     createdBy:       varchar('created_by', { length: 255 }),
     createdAt:       timestamp('created_at').notNull().defaultNow(),
     updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const savedReports = pgTable('saved_reports', {
+    id:          text('id').primaryKey(),
+    orgId:       text('org_id').notNull(),
+    ownerId:     text('owner_id').notNull(),
+    ownerName:   varchar('owner_name', { length: 255 }),
+    name:        varchar('name', { length: 255 }).notNull(),
+    description: text('description'),
+    source:      varchar('source', { length: 100 }),
+    dims:        jsonb('dims'),
+    metrics:     jsonb('metrics'),
+    chartType:   varchar('chart_type', { length: 50 }),
+    filters:     jsonb('filters'),
+    config:      jsonb('config'),
+    isShared:    boolean('is_shared').default(false),
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
+    updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });

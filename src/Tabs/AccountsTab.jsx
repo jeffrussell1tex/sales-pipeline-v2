@@ -311,7 +311,8 @@ function AccountRow({
     const { warmth, pipeline, activeOpps, daysSince, lastAct } = warmthData;
     const dot = warmthColor(warmth);
     const contactCount = contacts.filter(c => (c.company||'').toLowerCase() === (account.name||'').toLowerCase()).length;
-    const ownerInitials = (account.accountOwner||'').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    const effectiveOwner = account.accountOwner || account.assignedRep || '';
+    const ownerInitials = effectiveOwner.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
 
     // Only top-level rows show sub-account badge
     const subAccounts = depth === 0 ? getSubAccounts(account.id) : [];
@@ -323,9 +324,9 @@ function AccountRow({
             style={{
                 display: 'grid',
                 gridTemplateColumns: selectMode
-                    ? '36px 3px 1.8fr 1fr 90px 60px 110px 100px 28px'
-                    : '3px 1.8fr 1fr 90px 60px 110px 100px 28px',
-                alignItems: 'center', height: 52,
+                    ? '36px 3px 220px 56px 200px 110px 70px 130px 120px 28px'
+                    : '3px 220px 56px 200px 110px 70px 130px 120px 28px',
+                alignItems: 'center', minHeight: 52,
                 borderBottom: `1px solid ${T.border}`,
                 background: isSelected
                     ? 'rgba(42,38,34,0.04)'
@@ -367,19 +368,9 @@ function AccountRow({
                 </div>
             </div>
 
-            {/* Industry */}
-            <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
-                {account.verticalMarket || account.industry || '—'}
-            </div>
-
-            {/* Pipeline */}
-            <div style={{ fontSize: 12, fontWeight: 600, color: pipeline > 0 ? T.ink : T.inkMuted, fontVariantNumeric: 'tabular-nums', paddingRight: 8 }}>
-                {pipeline > 0 ? fmtArr(pipeline) : '—'}
-            </div>
-
-            {/* Deals — shows sub-account badge here when account has children */}
-            <div style={{ fontSize: 12, color: T.inkMid, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {hasChildren ? (
+            {/* Subs */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {hasChildren && (
                     <button
                         onClick={e => { e.stopPropagation(); onOpenDrawer(account, subAccounts); }}
                         title={`${subAccounts.length} sub-account${subAccounts.length !== 1 ? 's' : ''}`}
@@ -395,9 +386,22 @@ function AccountRow({
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18M3 9h18"/></svg>
                         {subAccounts.length}
                     </button>
-                ) : (
-                    activeOpps.length || '—'
                 )}
+            </div>
+
+            {/* Industry */}
+            <div style={{ fontSize: 12, color: T.inkMid, paddingLeft: 8, paddingRight: 8, lineHeight: 1.4 }}>
+                {account.verticalMarket || account.industry || '—'}
+            </div>
+
+            {/* Pipeline */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: pipeline > 0 ? T.ink : T.inkMuted, fontVariantNumeric: 'tabular-nums', paddingRight: 8 }}>
+                {pipeline > 0 ? fmtArr(pipeline) : '—'}
+            </div>
+
+            {/* Deals */}
+            <div style={{ fontSize: 12, color: T.inkMid, textAlign: 'center' }}>
+                {activeOpps.length || '—'}
             </div>
 
             {/* Last contact */}
@@ -410,10 +414,10 @@ function AccountRow({
 
             {/* Owner */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {account.accountOwner && (
-                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: avatarBg(account.accountOwner), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, flexShrink: 0 }}>{ownerInitials}</div>
+                {effectiveOwner && (
+                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: avatarBg(effectiveOwner), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, flexShrink: 0 }}>{ownerInitials}</div>
                 )}
-                <span style={{ fontSize: 11, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.accountOwner || '—'}</span>
+                <span style={{ fontSize: 11, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{effectiveOwner || '—'}</span>
             </div>
 
             {/* Edit */}
@@ -426,7 +430,7 @@ function AccountRow({
 }
 
 // ── Filter Panel ──────────────────────────────────────────────
-function FilterPanel({ open, onClose, accounts, onApply, currentFilters }) {
+function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilters }) {
     const [industry, setIndustry] = useState(currentFilters.industry || '__all__');
     const [owner,    setOwner]    = useState(currentFilters.owner    || '__all__');
     const [hasPipe,  setHasPipe]  = useState(currentFilters.hasPipe  || '__all__');
@@ -443,7 +447,10 @@ function FilterPanel({ open, onClose, accounts, onApply, currentFilters }) {
     if (!open) return null;
 
     const industries = [...new Set(accounts.map(a => a.verticalMarket || a.industry).filter(Boolean))].sort();
-    const owners     = [...new Set(accounts.map(a => a.accountOwner).filter(Boolean))].sort();
+    // Combine users from settings (canonical) with any owner names on accounts (catch strays)
+    const settingsUsers = (settings?.users || []).map(u => u.name).filter(Boolean);
+    const accountOwners = accounts.flatMap(a => [a.accountOwner, a.assignedRep]).filter(Boolean);
+    const owners = [...new Set([...settingsUsers, ...accountOwners])].sort();
 
     const selStyle = {
         width: '100%', padding: '7px 10px',
@@ -489,6 +496,7 @@ function FilterPanel({ open, onClose, accounts, onApply, currentFilters }) {
                     <label style={lbl}>Owner</label>
                     <select value={owner} onChange={e => setOwner(e.target.value)} style={selStyle}>
                         <option value="__all__">All owners</option>
+                        <option value="__unassigned__">Unassigned</option>
                         {owners.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                 </div>
@@ -578,7 +586,8 @@ export default function AccountsTab() {
             list = list.filter(a =>
                 (a.name||'').toLowerCase().includes(q) ||
                 (a.verticalMarket||'').toLowerCase().includes(q) ||
-                (a.accountOwner||'').toLowerCase().includes(q)
+                (a.accountOwner||'').toLowerCase().includes(q) ||
+                (a.assignedRep||'').toLowerCase().includes(q)
             );
         }
 
@@ -591,8 +600,10 @@ export default function AccountsTab() {
         if (panelFilters.industry !== '__all__') {
             list = list.filter(a => (a.verticalMarket || a.industry) === panelFilters.industry);
         }
-        if (panelFilters.owner !== '__all__') {
-            list = list.filter(a => a.accountOwner === panelFilters.owner);
+        if (panelFilters.owner === '__unassigned__') {
+            list = list.filter(a => (!a.accountOwner || a.accountOwner.trim() === '') && (!a.assignedRep || a.assignedRep.trim() === ''));
+        } else if (panelFilters.owner !== '__all__') {
+            list = list.filter(a => a.accountOwner === panelFilters.owner || a.assignedRep === panelFilters.owner);
         }
         if (panelFilters.hasPipe === 'yes') {
             list = list.filter(a => (warmthMap[a.id]?.pipeline || 0) > 0);
@@ -631,7 +642,7 @@ export default function AccountsTab() {
                     const db = warmthMap[b.id]?.daysSince ?? 9999;
                     return dir * (da - db);
                 }
-                case 'owner':    return dir * ((a.accountOwner||'').localeCompare(b.accountOwner||''));
+                case 'owner':    return dir * ((a.accountOwner||a.assignedRep||'').localeCompare(b.accountOwner||b.assignedRep||''));
                 default:         return 0;
             }
         });
@@ -665,7 +676,7 @@ export default function AccountsTab() {
             return [
                 a.name,
                 a.verticalMarket || a.industry || '',
-                a.accountOwner || '',
+                a.accountOwner || a.assignedRep || '',
                 w?.pipeline || 0,
                 w?.activeOpps?.length || 0,
                 w?.lastAct?.date ? relDate(w.lastAct.date) : '',
@@ -689,8 +700,8 @@ export default function AccountsTab() {
         <div style={{
             display: 'grid',
             gridTemplateColumns: sm
-                ? '36px 3px 1.8fr 1fr 90px 60px 110px 100px 28px'
-                : '3px 1.8fr 1fr 90px 60px 110px 100px 28px',
+                ? '36px 3px 220px 56px 200px 110px 70px 130px 120px 28px'
+                : '3px 220px 56px 200px 110px 70px 130px 120px 28px',
             alignItems: 'center', height: 34,
             background: T.surface2, borderBottom: `1px solid ${T.border}`,
             fontSize: 10, fontWeight: 700, color: T.inkMuted,
@@ -706,7 +717,8 @@ export default function AccountsTab() {
             <div style={{ paddingLeft: 12 }}>
                 <SortHeader label="Account"      field="name"        currentField={sortField} currentDir={sortDir} onSort={handleSort} />
             </div>
-            <SortHeader label="Industry"     field="industry"    currentField={sortField} currentDir={sortDir} onSort={handleSort} />
+            <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.6, textTransform: 'uppercase', textAlign: 'center' }}>Subs</div>
+            <SortHeader label="Industry"     field="industry"    currentField={sortField} currentDir={sortDir} onSort={handleSort} style={{ paddingLeft: 8 }} />
             <SortHeader label="Pipeline"     field="pipeline"    currentField={sortField} currentDir={sortDir} onSort={handleSort} />
             <SortHeader label="Deals"        field="deals"       currentField={sortField} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'center', justifyContent: 'center' }} />
             <SortHeader label="Last Contact" field="lastContact" currentField={sortField} currentDir={sortDir} onSort={handleSort} />
@@ -862,6 +874,7 @@ export default function AccountsTab() {
                     open={filterOpen}
                     onClose={() => setFilterOpen(false)}
                     accounts={visibleAccounts}
+                    settings={settings}
                     currentFilters={panelFilters}
                     onApply={setPanelFilters}
                 />
@@ -905,37 +918,113 @@ export default function AccountsTab() {
         </div>
     );
 
-    // ── Warmth filter chips + live search ─────────────────────
-    const FilterBar = () => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-            {[
-                { key: 'all',  label: 'All',                    dot: null },
-                { key: 'hot',  label: 'Hot',                    dot: T.danger },
-                { key: 'warm', label: 'Warm',                   dot: T.warn },
-                { key: 'cool', label: 'Cool',                   dot: T.info },
-                { key: 'cold', label: 'Cold — needs reach-out', dot: T.inkMuted },
-            ].map(({ key, label, dot }) => {
-                const active = warmthFilter === key;
-                const count  = counts[key] ?? 0;
+    // ── Combined toolbar: tabs + warmth chips + sort + filter (one row) ─────
+    const Toolbar = () => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 12, borderBottom: `1px solid ${T.border}`, paddingBottom: 0 }}>
+            {/* View sub-tabs */}
+            {views.map(v => {
+                const active = view === v.id;
                 return (
-                    <button key={key} onClick={() => setWarmthFilter(key)} style={{
+                    <button key={v.id} onClick={() => setViewPersist(v.id)} style={{
                         display: 'inline-flex', alignItems: 'center', gap: 5,
-                        padding: '4px 10px',
-                        background: active ? T.ink : 'transparent',
-                        border: `1px solid ${active ? T.ink : T.border}`,
-                        color: active ? T.surface : T.ink,
-                        borderRadius: T.r, fontSize: 12, fontWeight: active ? 600 : 400,
-                        cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms',
-                    }}>
-                        {dot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: active ? 'rgba(255,255,255,0.7)' : dot, display: 'inline-block', flexShrink: 0 }} />}
-                        {label}
-                        <span style={{ fontSize: 11, color: active ? 'rgba(255,255,255,0.7)' : T.inkMuted }}>{count}</span>
+                        padding: '8px 14px',
+                        border: 'none',
+                        borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent',
+                        background: 'transparent',
+                        color: active ? T.ink : T.inkMuted,
+                        fontSize: 12, fontWeight: active ? 600 : 400,
+                        cursor: 'pointer', fontFamily: T.sans,
+                        whiteSpace: 'nowrap', marginBottom: -1,
+                    }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.color = T.inkMid; }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.color = T.inkMuted; }}>
+                        <Icon name={v.icon} size={12} color={active ? T.ink : T.inkMuted} />
+                        {v.label}
                     </button>
                 );
             })}
 
-            {/* Live search */}
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, minWidth: 180 }}>
+            {/* Divider */}
+            <div style={{ width: 1, height: 16, background: T.border, margin: '0 10px', flexShrink: 0 }}/>
+
+            {/* Warmth chips — compact, no border on All */}
+            {[
+                { key: 'all',  label: 'All',         dot: null,       count: counts.all  },
+                { key: 'hot',  label: 'Hot',          dot: T.danger,   count: counts.hot  },
+                { key: 'warm', label: 'Warm',         dot: T.warn,     count: counts.warm },
+                { key: 'cool', label: 'Cool',         dot: T.info,     count: counts.cool },
+                { key: 'cold', label: 'Needs reach',  dot: T.inkMuted, count: counts.cold },
+            ].map(({ key, label, dot, count }) => {
+                const active = warmthFilter === key;
+                return (
+                    <button key={key} onClick={() => setWarmthFilter(key)} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '4px 9px',
+                        background: active ? T.ink : 'transparent',
+                        border: `1px solid ${active ? T.ink : 'transparent'}`,
+                        color: active ? T.surface : T.inkMid,
+                        borderRadius: T.r, fontSize: 12, fontWeight: active ? 600 : 400,
+                        cursor: 'pointer', fontFamily: T.sans, transition: 'all 100ms',
+                        marginBottom: -1,
+                    }}
+                    onMouseEnter={e => { if (!active) { e.currentTarget.style.background = T.surface2; e.currentTarget.style.borderColor = T.border; }}}
+                    onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}}>
+                        {dot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: active ? 'rgba(255,255,255,0.7)' : dot, display: 'inline-block', flexShrink: 0 }} />}
+                        {label}
+                        <span style={{ fontSize: 11, color: active ? 'rgba(255,255,255,0.7)' : T.inkMuted, marginLeft: 1 }}>{count}</span>
+                    </button>
+                );
+            })}
+
+            <div style={{ flex: 1 }} />
+
+            {/* Sort toggle */}
+            <button onClick={() => { if (sortField !== 'name') { setSortField('name'); setSortDir('asc'); } else setSortDir(d => d === 'asc' ? 'desc' : 'asc'); }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans, marginBottom: -1, marginRight: 6 }}
+                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18M7 12h10M11 18h2"/>
+                </svg>
+                Sort: {sortField === 'name' ? (sortDir === 'asc' ? 'A–Z' : 'Z–A') : 'Signal'}
+            </button>
+
+            {/* Filter button */}
+            <div style={{ position: 'relative', marginBottom: -1 }}>
+                <button onClick={() => setFilterOpen(o => !o)}
+                    style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+                        background: activePanelFilterCount > 0 ? T.ink : 'transparent',
+                        border: `1px solid ${activePanelFilterCount > 0 ? T.ink : T.border}`,
+                        borderRadius: T.r, fontSize: 12, fontWeight: activePanelFilterCount > 0 ? 600 : 400,
+                        color: activePanelFilterCount > 0 ? T.surface : T.inkMid,
+                        cursor: 'pointer', fontFamily: T.sans,
+                    }}
+                    onMouseEnter={e => { if (!activePanelFilterCount) e.currentTarget.style.background = T.surface2; }}
+                    onMouseLeave={e => { if (!activePanelFilterCount) e.currentTarget.style.background = 'transparent'; }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                    </svg>
+                    Filter{activePanelFilterCount > 0 ? ` ${activePanelFilterCount}` : ''}
+                </button>
+                <FilterPanel
+                    open={filterOpen}
+                    onClose={() => setFilterOpen(false)}
+                    accounts={visibleAccounts}
+                    settings={settings}
+                    currentFilters={panelFilters}
+                    onApply={setPanelFilters}
+                />
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="tab-page" style={{ fontFamily: T.sans }}>
+            <Header />
+
+            {/* Local search — below header, above toolbar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, marginBottom: 10, maxWidth: 320 }}>
                 <Icon name="search" size={13} color={T.inkMuted} />
                 <input
                     ref={searchRef}
@@ -949,13 +1038,9 @@ export default function AccountsTab() {
                     <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
                 )}
             </div>
-        </div>
-    );
 
-    return (
-        <div className="tab-page" style={{ fontFamily: T.sans }}>
-            <Header />
-            <FilterBar />
+            {/* Combined toolbar: tabs + warmth + sort + filter */}
+            <Toolbar />
 
             {/* Sub-account side drawer */}
             {drawerAccount && (
@@ -967,41 +1052,6 @@ export default function AccountsTab() {
                     onView={setViewingAccount}
                 />
             )}
-
-            {/* ── Underline sub-tab switcher — matches app standard ── */}
-            <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, marginBottom: 12 }}>
-                {views.map(v => {
-                    const active = view === v.id;
-                    return (
-                        <button key={v.id}
-                            onClick={() => setViewPersist(v.id)}
-                            style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 6,
-                                padding: '8px 16px',
-                                border: 'none',
-                                borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent',
-                                background: 'transparent',
-                                color: active ? T.ink : T.inkMuted,
-                                fontSize: 12, fontWeight: active ? 600 : 400,
-                                cursor: 'pointer', fontFamily: T.sans,
-                                transition: 'color 120ms, border-color 120ms',
-                                whiteSpace: 'nowrap', marginBottom: -1,
-                            }}
-                            onMouseEnter={e => { if (!active) e.currentTarget.style.color = T.inkMid; }}
-                            onMouseLeave={e => { if (!active) e.currentTarget.style.color = T.inkMuted; }}>
-                            <Icon name={v.icon} size={12} color={active ? T.ink : T.inkMuted} />
-                            {v.label}
-                        </button>
-                    );
-                })}
-                <div style={{ flex: 1 }} />
-                <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans, paddingBottom: 4 }}>
-                    {filtered.length} account{filtered.length !== 1 ? 's' : ''}
-                    {view === 'signal'   && ' · by signal'}
-                    {view === 'business' && ' · by intent'}
-                    {view === 'list'     && ' · A–Z'}
-                </div>
-            </div>
 
             {view === 'list'     && <ListView />}
             {view === 'business' && <BusinessBookView />}
