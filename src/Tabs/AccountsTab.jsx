@@ -323,8 +323,8 @@ function AccountRow({
             style={{
                 display: 'grid',
                 gridTemplateColumns: selectMode
-                    ? '36px 3px 1.2fr 48px 1fr 90px 60px 110px 100px 28px'
-                    : '3px 1.2fr 48px 1fr 90px 60px 110px 100px 28px',
+                    ? '36px 3px 240px 48px 1fr 90px 60px 110px 100px 28px'
+                    : '3px 240px 48px 1fr 90px 60px 110px 100px 28px',
                 alignItems: 'center', height: 52,
                 borderBottom: `1px solid ${T.border}`,
                 background: isSelected
@@ -429,7 +429,7 @@ function AccountRow({
 }
 
 // ── Filter Panel ──────────────────────────────────────────────
-function FilterPanel({ open, onClose, accounts, onApply, currentFilters }) {
+function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilters }) {
     const [industry, setIndustry] = useState(currentFilters.industry || '__all__');
     const [owner,    setOwner]    = useState(currentFilters.owner    || '__all__');
     const [hasPipe,  setHasPipe]  = useState(currentFilters.hasPipe  || '__all__');
@@ -446,7 +446,10 @@ function FilterPanel({ open, onClose, accounts, onApply, currentFilters }) {
     if (!open) return null;
 
     const industries = [...new Set(accounts.map(a => a.verticalMarket || a.industry).filter(Boolean))].sort();
-    const owners     = [...new Set(accounts.map(a => a.accountOwner).filter(Boolean))].sort();
+    // Combine users from settings (canonical) with any owner names on accounts (catch strays)
+    const settingsUsers = (settings?.users || []).map(u => u.name).filter(Boolean);
+    const accountOwners = accounts.map(a => a.accountOwner).filter(Boolean);
+    const owners = [...new Set([...settingsUsers, ...accountOwners])].sort();
 
     const selStyle = {
         width: '100%', padding: '7px 10px',
@@ -695,8 +698,8 @@ export default function AccountsTab() {
         <div style={{
             display: 'grid',
             gridTemplateColumns: sm
-                ? '36px 3px 1.2fr 48px 1fr 90px 60px 110px 100px 28px'
-                : '3px 1.2fr 48px 1fr 90px 60px 110px 100px 28px',
+                ? '36px 3px 240px 48px 1fr 90px 60px 110px 100px 28px'
+                : '3px 240px 48px 1fr 90px 60px 110px 100px 28px',
             alignItems: 'center', height: 34,
             background: T.surface2, borderBottom: `1px solid ${T.border}`,
             fontSize: 10, fontWeight: 700, color: T.inkMuted,
@@ -869,6 +872,7 @@ export default function AccountsTab() {
                     open={filterOpen}
                     onClose={() => setFilterOpen(false)}
                     accounts={visibleAccounts}
+                    settings={settings}
                     currentFilters={panelFilters}
                     onApply={setPanelFilters}
                 />
