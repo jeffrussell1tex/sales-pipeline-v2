@@ -329,7 +329,7 @@ const TriageView = ({ leads, repNames, onOpenLead, setLeads, showConfirm }) => {
                         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, overflow:'hidden' }}>
                             {/* Column headers */}
                             <div style={{ display:'grid', gridTemplateColumns:'26px 50px 2fr 1fr 110px 1fr 90px 70px', gap:10, padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, alignItems:'center', fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, fontFamily:T.sans }}>
-                                <div/><div>Score</div><div>Name · Company</div><div>Source</div><div>Status</div><div>Assignee</div><div style={{ textAlign:'right' }}>Est. ARR</div><div/>
+                                <div/><div>Score</div><div>Name · Company</div><div>Source</div><div>Status</div><div>Assignee</div><div style={{ textAlign:'right' }}>Est. Revenue</div><div/>
                             </div>
 
                             {allForTable.length === 0 ? (
@@ -436,7 +436,7 @@ const CockpitDetail = ({ lead, onSave, saving }) => {
                             {lead.rev > 0 && <>
                                 <span style={{ opacity:0.4, color:T.inkMuted }}>·</span>
                                 <div style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>
-                                    <span style={{ color:T.inkMuted }}>Est. ARR</span>{' '}
+                                    <span style={{ color:T.inkMuted }}>Est. Revenue</span>{' '}
                                     <strong style={{ fontWeight:600 }}>{fmtRev(lead.rev)}</strong>
                                 </div>
                             </>}

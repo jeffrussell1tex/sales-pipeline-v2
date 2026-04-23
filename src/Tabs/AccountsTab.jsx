@@ -659,7 +659,7 @@ export default function AccountsTab() {
 
     // ── Export — enriched with warmth data ───────────────────
     const handleExport = () => {
-        const headers = ['Account Name', 'Industry', 'Owner', 'Pipeline ARR', 'Active Deals', 'Last Contact', 'Warmth', 'Phone', 'Website'];
+        const headers = ['Account Name', 'Industry', 'Owner', 'Pipeline Revenue', 'Active Deals', 'Last Contact', 'Warmth', 'Phone', 'Website'];
         const rows = filtered.map(a => {
             const w = warmthMap[a.id];
             return [

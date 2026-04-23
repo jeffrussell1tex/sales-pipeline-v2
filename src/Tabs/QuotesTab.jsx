@@ -1053,7 +1053,7 @@ function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, 
             {/* KPI strip */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
                 {[
-                    { label: 'Pending approval', value: pending.length, sub: pending.length > 0 ? `${fmt(pendingARR)} ARR` : 'all clear' },
+                    { label: 'Pending approval', value: pending.length, sub: pending.length > 0 ? `${fmt(pendingARR)} revenue` : 'all clear' },
                     { label: 'Avg approval time', value: '—', sub: '0.7× baseline' },
                     { label: 'Approval rate', value: approvalRate > 0 ? `${approvalRate}%` : '—', sub: '5% error bars for my role' },
                     { label: 'Your approval queue', value: myQueue, sub: userTitle },
@@ -1105,7 +1105,7 @@ function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, 
                                             <div style={{ fontSize: 12, color: T.inkMid, marginBottom: 6, fontFamily: T.sans }}>{opp?.opportunityName || opp?.account || '—'} — {q.name || q.quoteNumber}</div>
                                             <div style={{ fontSize: 11, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>Reason: {reason}</div>
                                         </div>
-                                        {/* Right: ARR + actions */}
+                                        {/* Right: Revenue + actions */}
                                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
                                             <div style={{ fontSize: 18, fontWeight: 700, color: T.ink, letterSpacing: -0.3, fontFamily: T.sans }}>{fmt(q.totalValue || tv || 0)}</div>
                                             <div style={{ fontSize: 10.5, color: T.inkMuted, marginBottom: 10, fontFamily: T.sans }}>{Math.round(avgDiscPct)}% disc · {tier.label}</div>
@@ -1163,7 +1163,7 @@ function ApprovalsTab({ quotes, opportunities, currentUser, userRole, settings, 
                                             <div style={{ fontSize: 10.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans, marginTop: 2 }}>"{q.approvalReason}"</div>
                                         )}
                                     </div>
-                                    {/* Right: approver + date + ARR */}
+                                    {/* Right: approver + date + Revenue */}
                                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
                                         <div style={{ fontSize: 14, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>{fmt(q.totalValue || 0)}</div>
                                         <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans, marginTop: 1 }}>
@@ -1403,7 +1403,7 @@ export default function QuotesTab() {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
                         {[
                             { label: 'Deals with quotes', value: oppQuoteSummaries.length, sub: `of ${(opportunities || []).filter(o => !o.stage.startsWith('Closed')).length} active opps` },
-                            { label: 'Need a quote',      value: needsQuote.length,         sub: `${fmt(needsQuote.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0))} in open ARR` },
+                            { label: 'Need a quote',      value: needsQuote.length,         sub: `${fmt(needsQuote.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0))} in open revenue` },
                             { label: 'Total quoted',      value: fmt(oppQuoteSummaries.reduce((s, x) => s + (parseFloat(x.latest?.totalValue) || 0), 0)), sub: 'across active quotes' },
                             { label: 'Pending approval',  value: pendingCount,              sub: pendingCount > 0 ? 'need manager action' : 'all clear' },
                         ].map(kpi => (
@@ -1446,7 +1446,7 @@ export default function QuotesTab() {
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: `1px solid ${T.border}` }}>
                                                 <div>
                                                     <div style={{ fontSize: 16, fontWeight: 600, color: T.ink, letterSpacing: -0.3, fontFamily: T.sans }}>{fmt(opp.arr)}</div>
-                                                    <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>ARR · {opp.probability || 0}% probability</div>
+                                                    <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>Revenue · {opp.probability || 0}% probability</div>
                                                 </div>
                                                 {canEdit && <button style={{ background: T.ink, color: T.surface, border: 'none', padding: '6px 12px', fontSize: 11.5, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>Start quote →</button>}
                                             </div>
@@ -1543,7 +1543,7 @@ export default function QuotesTab() {
                                     <div style={{ fontSize: 12, color: T.inkMid, marginTop: 2, fontFamily: T.sans }}>{configuratorOpp.opportunityName || configuratorOpp.account}</div>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>opp ARR target</div>
+                                    <div style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>opp revenue target</div>
                                     <div style={{ fontSize: 18, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{fmt(configuratorOpp.arr)}</div>
                                 </div>
                             </div>
