@@ -892,9 +892,13 @@ ${bodyHtml}
 
                             // ── Computed pipeline values
                             const quota = (settings.quotaData?.quarterlyQuota || (settings.users||[]).reduce((s,u)=>s+(parseFloat(u.quota)||0),0)) || 175000;
-                            const commitOpps  = openOpps.filter(o=>['Closing','Negotiation'].includes(o.stage));
+                            // Commit = won + deals where rep marked commit (falls back to Closing/Negotiation stage if no forecastCategory set)
+                            const commitOpps  = openOpps.filter(o=> o.forecastCategory === 'commit' || (!o.forecastCategory && ['Closing','Negotiation/Review','Contracts'].includes(o.stage)));
+                            // Best case = commit + deals marked best_case (falls back to Proposal stage)
+                            const bestCaseOpps= openOpps.filter(o=> o.forecastCategory === 'best_case' || (!o.forecastCategory && ['Proposal'].includes(o.stage)));
+                            // Omitted deals are excluded from all calculations
                             const commitVal   = wonOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0) + commitOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
-                            const bestCaseVal = commitVal + openOpps.filter(o=>['Proposal'].includes(o.stage)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                            const bestCaseVal = commitVal + bestCaseOpps.reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
                             const attainPct   = Math.round((totalWonRevenue / Math.max(quota,1)) * 100);
                             const gapToQuota  = Math.max(0, quota - totalWonRevenue);
                             const coverage    = gapToQuota > 0 ? (totalPipelineValue / gapToQuota) : null;
@@ -1257,7 +1261,7 @@ ${bodyHtml}
                               const rLost = lostOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
                               const rOpen = openOpps.filter(o=>(o.salesRep||o.assignedTo)===rep);
                               const closed = rWon.reduce((s,o)=>s+(parseFloat(o.arr)||0)+(parseFloat(o.implementationCost)||0),0);
-                              const commit = rOpen.filter(o=>['Closing','Negotiation'].includes(o.stage)).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
+                              const commit = rOpen.filter(o=> o.forecastCategory === 'commit' || (!o.forecastCategory && ['Closing','Negotiation/Review','Contracts'].includes(o.stage))).reduce((s,o)=>s+(parseFloat(o.arr)||0),0);
                               const attain = quota>0?closed/quota:0;
                               const commitPct = quota>0?commit/quota:0;
                               const winRate2 = (rWon.length+rLost.length)>0?rWon.length/(rWon.length+rLost.length):0;

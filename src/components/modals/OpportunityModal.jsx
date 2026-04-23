@@ -1594,6 +1594,47 @@ export default function OpportunityModal({
                                         );
                                     })()}
 
+                                    {/* ── Forecast Category ── */}
+                                    <div style={{ marginBottom: 16 }}>
+                                        <label style={{ ...fieldLabelStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            Forecast Category
+                                            <span style={{ fontSize: 10, color: T.inkMuted, fontWeight: 400, textTransform: 'none', letterSpacing: 0, fontFamily: T.sans }}>drives Reports forecast</span>
+                                        </label>
+                                        <div style={{ display: 'flex', gap: 6 }}>
+                                            {[
+                                                { value: 'commit',    label: 'Commit',    bg: 'rgba(42,38,34,0.08)',  fg: T.ink,    bd: T.borderStrong,         hint: 'High confidence — counts in forecast' },
+                                                { value: 'best_case', label: 'Best Case', bg: 'rgba(58,90,122,0.10)', fg: T.info,   bd: 'rgba(58,90,122,0.35)', hint: 'Upside — possible but not certain' },
+                                                { value: 'pipeline',  label: 'Pipeline',  bg: T.surface2,             fg: T.inkMid, bd: T.border,               hint: 'Too early to call' },
+                                                { value: 'omit',      label: 'Omit',      bg: 'rgba(156,58,46,0.07)', fg: T.danger, bd: 'rgba(156,58,46,0.28)', hint: 'Excluded from forecast' },
+                                            ].map(({ value, label, bg, fg, bd, hint }) => {
+                                                const sel = (formData.forecastCategory || 'pipeline') === value;
+                                                return (
+                                                    <button key={value} type="button"
+                                                        title={hint}
+                                                        onClick={() => handleChange('forecastCategory', value)}
+                                                        style={{
+                                                            flex: 1, padding: '7px 4px',
+                                                            border: `1.5px solid ${sel ? bd : T.border}`,
+                                                            borderRadius: T.r,
+                                                            background: sel ? bg : T.surface,
+                                                            color: sel ? fg : T.inkMuted,
+                                                            fontSize: 12, fontWeight: sel ? 700 : 500,
+                                                            cursor: 'pointer', fontFamily: T.sans,
+                                                            transition: 'all 120ms', textAlign: 'center',
+                                                        }}>
+                                                        {label}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 4, fontFamily: T.sans }}>
+                                            {formData.forecastCategory === 'commit'    && 'Rep is confident this deal closes this period.'}
+                                            {formData.forecastCategory === 'best_case' && 'Best Case — upside if everything goes right.'}
+                                            {formData.forecastCategory === 'omit'      && 'Excluded from all forecast calculations.'}
+                                            {(!formData.forecastCategory || formData.forecastCategory === 'pipeline') && 'Pipeline — tracking but not yet forecastable.'}
+                                        </div>
+                                    </div>
+
                                     {/* ── Products & Revenue ── */}
                                     <div style={{ marginBottom: 16 }}>
                                         <label style={fieldLabelStyle}>Products & Revenue</label>
