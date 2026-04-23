@@ -4387,8 +4387,13 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
 
         // ── BLANK builder ────────────────────────────────────────────
         if (createMode === 'blank') {
-            const availDims    = ALL_DIMS.filter(d=>!builderDims.find(x=>x.label===d));
-            const availMetrics = ALL_METRICS.filter(m=>!builderMetrics.find(x=>x.label===m));
+            // Full field definitions matching V2 design — basic shown always, advanced behind toggle
+            const BASIC_DIMS    = ['Owner','Stage','Close date','Industry','Territory'];
+            const ADVANCED_DIMS = ['Lead source','Competitor','Loss reason','Created date','Last activity date','Product line','Deal tier','Forecast category'];
+            const BASIC_METRICS    = ['Revenue','# of deals','Avg deal size'];
+            const ADVANCED_METRICS = ['Days to close','Days in stage','AI score','# activities'];
+            const allAvailDims    = [...BASIC_DIMS, ...(builderAdvanced ? ADVANCED_DIMS : [])].filter(d=>!builderDims.find(x=>x.label===d));
+            const allAvailMetrics = [...BASIC_METRICS, ...(builderAdvanced ? ADVANCED_METRICS : [])].filter(m=>!builderMetrics.find(x=>x.label===m));
             return (
                 <div style={{ fontFamily:T.sans, color:T.ink }}>
                     <BuilderHeader title="Untitled report" breadcrumb="Blank canvas"/>
@@ -4468,21 +4473,30 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                                                 ))}
                                             </div>
                                         </div>
-                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Group by <span style={{ color:T.inkMuted, fontWeight:400, letterSpacing:0, textTransform:'none', fontSize:10 }}>(dimensions)</span></div>
-                                            <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:6 }}>
+                                        <div>
+                                            <div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Group by <span style={{ color:T.inkMuted, fontWeight:400, letterSpacing:0, textTransform:'none', fontSize:10 }}>(break your data into slices)</span></div>
+                                            <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, padding:8, display:'flex', flexWrap:'wrap', gap:5, minHeight:38 }}>
                                                 {builderDims.map(d=><FieldChip key={d.id} label={d.label} kind="dim" onRemove={()=>{ setBuilderDims(builderDims.filter(x=>x.id!==d.id)); setBuilderDirty(true); }}/>)}
-                                            </div>
-                                            <div style={{ background:T.surface2, border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, padding:6, display:'flex', flexWrap:'wrap', gap:4 }}>
-                                                {availDims.map(d=><button key={d} onClick={()=>{ setBuilderDims([...builderDims,{id:d.toLowerCase().replace(/ /g,'_'),label:d,kind:'dim'}]); setBuilderDirty(true); }} style={{ background:T.surface, border:`1px solid ${T.border}`, padding:'3px 8px', fontSize:11, fontFamily:T.sans, color:T.ink, cursor:'pointer', borderRadius:2, display:'inline-flex', alignItems:'center', gap:4 }}>+ {d}</button>)}
-                                                {availDims.length===0&&<span style={{ fontSize:11, color:T.inkMuted, padding:'3px 4px', fontFamily:T.sans }}>All dimensions added</span>}
+                                                {allAvailDims.map(d=>(
+                                                    <button key={d} onClick={()=>{ setBuilderDims([...builderDims,{id:d.toLowerCase().replace(/[^a-z0-9]/g,'_'),label:d,kind:'dim'}]); setBuilderDirty(true); }}
+                                                        style={{ display:'inline-flex', alignItems:'center', gap:3, padding:'3px 8px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:11, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                                                        <span style={{ fontSize:10, color:T.inkMuted }}>+</span> {d}
+                                                    </button>
+                                                ))}
+                                                {allAvailDims.length===0&&builderDims.length>0&&<span style={{ fontSize:11, color:T.inkMuted, padding:'3px 4px', fontFamily:T.sans }}>Toggle Advanced for more fields</span>}
                                             </div>
                                         </div>
-                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Measure <span style={{ color:T.inkMuted, fontWeight:400, letterSpacing:0, textTransform:'none', fontSize:10 }}>(metrics)</span></div>
-                                            <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:6 }}>
+                                        <div>
+                                            <div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Measure <span style={{ color:T.inkMuted, fontWeight:400, letterSpacing:0, textTransform:'none', fontSize:10 }}>(what to count or sum)</span></div>
+                                            <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, padding:8, display:'flex', flexWrap:'wrap', gap:5, minHeight:38 }}>
                                                 {builderMetrics.map(m=><FieldChip key={m.id} label={m.label} kind="metric" onRemove={()=>{ setBuilderMetrics(builderMetrics.filter(x=>x.id!==m.id)); setBuilderDirty(true); }}/>)}
-                                            </div>
-                                            <div style={{ background:T.surface2, border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, padding:6, display:'flex', flexWrap:'wrap', gap:4 }}>
-                                                {availMetrics.map(m=><button key={m} onClick={()=>{ setBuilderMetrics([...builderMetrics,{id:m.toLowerCase().replace(/[^a-z0-9]/g,'_'),label:m,kind:'metric'}]); setBuilderDirty(true); }} style={{ background:T.surface, border:`1px solid ${T.border}`, padding:'3px 8px', fontSize:11, fontFamily:T.sans, color:T.ink, cursor:'pointer', borderRadius:2, display:'inline-flex', alignItems:'center', gap:4 }}>+ {m}</button>)}
+                                                {allAvailMetrics.map(m=>(
+                                                    <button key={m} onClick={()=>{ setBuilderMetrics([...builderMetrics,{id:m.toLowerCase().replace(/[^a-z0-9]/g,'_'),label:m,kind:'metric'}]); setBuilderDirty(true); }}
+                                                        style={{ display:'inline-flex', alignItems:'center', gap:3, padding:'3px 8px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:11, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                                                        <span style={{ fontSize:10, color:T.inkMuted }}>+</span> {m}
+                                                    </button>
+                                                ))}
+                                                {allAvailMetrics.length===0&&builderMetrics.length>0&&<span style={{ fontSize:11, color:T.inkMuted, padding:'3px 4px', fontFamily:T.sans }}>Toggle Advanced for more fields</span>}
                                             </div>
                                         </div>
                                         <div style={{ paddingTop:10, borderTop:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
