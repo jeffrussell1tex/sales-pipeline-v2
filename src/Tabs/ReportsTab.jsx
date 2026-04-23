@@ -2365,6 +2365,19 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
     const [srchQ, setSrchQ] = React.useState('');
     const [activeTemplate, setActiveTemplate] = React.useState(null);
     const [selectedRepSC, setSelectedRepSC] = React.useState(currentUser||'');
+    const [showCreateReport, setShowCreateReport] = React.useState(false);
+    const [createMode, setCreateMode] = React.useState('picker'); // 'picker'|'blank'|'template'|'duplicate'|'ai'
+    const [aiPrompt, setAiPrompt] = React.useState('');
+    const [aiGenerated, setAiGenerated] = React.useState(false);
+    const [aiRefine, setAiRefine] = React.useState('');
+    const [builderTab, setBuilderTab] = React.useState('data');
+    const [builderDirty, setBuilderDirty] = React.useState(true);
+    const [builderRendered, setBuilderRendered] = React.useState(false);
+    const [builderSource, setBuilderSource] = React.useState('Opportunities');
+    const [builderDims, setBuilderDims] = React.useState([{id:'owner',label:'Owner',kind:'dim'},{id:'stage',label:'Stage',kind:'dim'}]);
+    const [builderMetrics, setBuilderMetrics] = React.useState([{id:'arr',label:'Revenue',kind:'metric'}]);
+    const [builderChart, setBuilderChart] = React.useState('stacked');
+    const [builderAdvanced, setBuilderAdvanced] = React.useState(false);
 
     // ── Design tokens
     const TS = {
@@ -3915,6 +3928,620 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
         );
     }
 
+
+    // ── Create Report flow ──────────────────────────────────────────
+    if (showCreateReport) {
+        const T = TS;
+        const serif = T.serif;
+        const ebD = c => ({ fontSize:10, fontWeight:700, letterSpacing:0.8, textTransform:'uppercase', color:c||T.inkMuted, fontFamily:T.sans });
+        const closeCreate = () => { setShowCreateReport(false); setCreateMode('picker'); };
+
+        // AI starters
+        const AI_STARTERS = [
+            'Deals stuck more than 14 days, by rep',
+            'Win rate by lead source, last 6 months',
+            'Avg days from proposal to close, by deal tier',
+            'Forecast accuracy by rep, last 4 quarters',
+        ];
+
+        // Sources
+        const SOURCES = ['Opportunities','Accounts','Leads','Activity','Quotes'];
+        const ALL_DIMS    = ['Owner','Stage','Close date','Industry','Territory','Lead source','Competitor'];
+        const ALL_METRICS = ['Revenue','# of deals','Avg deal size','Days to close','# activities'];
+        const CHART_TYPES = [
+            {id:'stacked',label:'Stacked bar',desc:'Sub-groups within a total'},
+            {id:'bar',    label:'Bar',        desc:'Compare across categories'},
+            {id:'line',   label:'Line',       desc:'Show trend over time'},
+            {id:'funnel', label:'Funnel',     desc:'Conversion through stages'},
+            {id:'table',  label:'Table',      desc:'Row-by-row detail view'},
+            {id:'kpi',    label:'KPI card',   desc:'Big number with delta'},
+            {id:'heatmap',label:'Heatmap',    desc:'Density across two dims'},
+            {id:'scatter',label:'Scatter',    desc:'Relationship between metrics'},
+        ];
+
+        // Shared sub-components (all inline, no hooks at top level here since we're not conditionally calling any)
+        const GhostBtnD = ({onClick, children}) => (
+            <button onClick={onClick} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'6px 11px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>{children}</button>
+        );
+        const FieldChip = ({label, kind, onRemove}) => (
+            <div style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 8px 3px 6px', background:T.surface2, border:`1px solid ${T.border}`, borderLeft:`3px solid ${kind==='metric'?T.info:T.goldInk}`, borderRadius:2, fontSize:12, color:T.ink, fontFamily:T.sans }}>
+                <span style={{ fontSize:9.5, color:T.inkMuted, fontWeight:600 }}>{kind==='metric'?'#':'A'}</span>
+                {label}
+                {onRemove && <button onClick={onRemove} style={{ border:'none', background:'transparent', cursor:'pointer', padding:0, display:'flex', color:T.inkMuted, fontSize:11, lineHeight:1 }}>×</button>}
+            </div>
+        );
+        const TabStrip = ({tabs, active, onChange}) => (
+            <div style={{ display:'flex', borderBottom:`1px solid ${T.border}` }}>
+                {tabs.map(t => {
+                    const a = active===t;
+                    return <button key={t} onClick={()=>onChange(t)} style={{ background:'transparent', border:'none', padding:'9px 14px', fontSize:12, fontWeight:a?600:500, color:a?T.ink:T.inkMuted, borderBottom:a?`2px solid ${T.ink}`:'2px solid transparent', marginBottom:-1, cursor:'pointer', fontFamily:T.sans }}>{t}{t==='Data'&&builderDims.length+builderMetrics.length>0?<span style={{ marginLeft:5, background:a?T.ink:T.surface2, color:a?T.surface:T.inkMid, fontSize:10, padding:'1px 5px', borderRadius:8, fontWeight:600 }}>{builderDims.length+builderMetrics.length}</span>:null}</button>;
+                })}
+            </div>
+        );
+        const UpdateBtn = () => (
+            <button onClick={()=>{setBuilderDirty(false);setBuilderRendered(true);}} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 12px', background:builderDirty?T.ink:T.surface, color:builderDirty?T.surface:T.inkMid, border:`1px solid ${builderDirty?T.ink:T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, position:'relative' }}>
+                ↺ Update preview
+                {builderDirty && <span style={{ position:'absolute', top:-3, right:-3, width:6, height:6, borderRadius:'50%', background:T.warn, border:`1.5px solid ${T.surface}` }}/>}
+            </button>
+        );
+
+        // Page header shared by all non-picker modes
+        const BuilderHeader = ({title, breadcrumb}) => (
+            <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:12, paddingBottom:12, borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ flex:1 }}>
+                    <div style={{ ...ebD(T.inkMuted), marginBottom:6, display:'flex', gap:6 }}>
+                        <span>Reports</span><span style={{ opacity:0.4 }}>/</span><span>New</span><span style={{ opacity:0.4 }}>/</span>
+                        <span style={{ color:T.ink }}>{breadcrumb}</span>
+                    </div>
+                    <div style={{ fontSize:22, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.4, lineHeight:1.1 }}>{title}</div>
+                    <div style={{ fontSize:12, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>Changes are drafted — click Update preview to render.</div>
+                </div>
+                <div style={{ display:'flex', gap:8, flexShrink:0, marginLeft:20 }}>
+                    <GhostBtnD onClick={()=>setCreateMode('picker')}>← Back to picker</GhostBtnD>
+                    <GhostBtnD onClick={closeCreate}>✕ Cancel</GhostBtnD>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'7px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>✓ Save to library</button>
+                </div>
+            </div>
+        );
+
+        // ── PICKER ──────────────────────────────────────────────────
+        if (createMode === 'picker') {
+            const handleGenerate = () => {
+                if (!aiPrompt.trim()) return;
+                setAiGenerated(true);
+                setCreateMode('ai');
+                setBuilderTab('data');
+                setBuilderDirty(false);
+                setBuilderRendered(true);
+            };
+            return (
+                <div style={{ fontFamily:T.sans, color:T.ink }}>
+                    {/* Page header */}
+                    <div style={{ marginBottom:20, paddingBottom:14, borderBottom:`1px solid ${T.border}` }}>
+                        <div style={{ ...ebD(T.inkMuted), marginBottom:6, display:'flex', gap:6 }}>
+                            <span>Reports</span><span style={{ opacity:0.4 }}>/</span><span style={{ color:T.ink }}>New report</span>
+                        </div>
+                        <div style={{ fontSize:26, fontFamily:serif, fontStyle:'italic', fontWeight:400, color:T.ink, letterSpacing:-0.5, lineHeight:1.1, marginBottom:4 }}>Create a report</div>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                            <div style={{ fontSize:13, color:T.inkMuted, fontFamily:T.sans }}>Pick how you want to start — you can always change everything later.</div>
+                            <GhostBtnD onClick={closeCreate}>✕ Cancel</GhostBtnD>
+                        </div>
+                    </div>
+
+                    {/* AI composer */}
+                    <div style={{ background:'#fdf6e8', border:`1px solid ${T.gold}`, borderRadius:T.r+1, padding:'18px 20px', marginBottom:20, maxWidth:860, marginLeft:'auto', marginRight:'auto' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+                            <span style={{ fontSize:13 }}>✦</span>
+                            <span style={{ ...ebD(T.goldInk) }}>Ask AI</span>
+                            <span style={{ fontSize:11, color:T.inkMuted }}>· describe what you want to see</span>
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'8px 10px' }}>
+                            <input value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)}
+                                onKeyDown={e=>{ if(e.key==='Enter'&&aiPrompt.trim()) handleGenerate(); }}
+                                placeholder="e.g. Deals stuck more than 14 days, by rep"
+                                style={{ flex:1, border:'none', outline:'none', background:'transparent', fontFamily:T.sans, fontSize:13, color:T.ink }}/>
+                            <button onClick={handleGenerate} disabled={!aiPrompt.trim()}
+                                style={{ background:aiPrompt.trim()?T.ink:T.surface2, color:aiPrompt.trim()?T.surface:T.inkMuted, border:'none', padding:'5px 12px', fontSize:11, fontWeight:700, borderRadius:2, cursor:aiPrompt.trim()?'pointer':'not-allowed', fontFamily:T.sans, letterSpacing:0.5 }}>
+                                GENERATE
+                            </button>
+                        </div>
+                        <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:10, alignItems:'center' }}>
+                            <span style={{ fontSize:10.5, color:T.inkMuted, marginRight:2 }}>TRY:</span>
+                            {AI_STARTERS.map(s=>(
+                                <button key={s} onClick={()=>{ setAiPrompt(s); }} style={{ background:'transparent', border:`1px solid ${T.gold}`, color:T.goldInk, padding:'3px 8px', fontSize:11, borderRadius:10, cursor:'pointer', fontFamily:T.sans }}>{s}</button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* OR divider */}
+                    <div style={{ display:'flex', alignItems:'center', gap:12, maxWidth:860, margin:'0 auto 20px' }}>
+                        <div style={{ flex:1, height:1, background:T.border }}/>
+                        <span style={{ ...ebD(T.inkMuted), fontSize:10 }}>or start from</span>
+                        <div style={{ flex:1, height:1, background:T.border }}/>
+                    </div>
+
+                    {/* 3 start cards */}
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:14, maxWidth:860, margin:'0 auto 28px' }}>
+                        {[
+                            { eyebrow:'Blank', title:'A blank canvas', desc:'Pick a data source, add fields, pick a chart. Full control.', badge:null, mode:'blank',
+                              glyph:<svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={T.inkMid} strokeWidth="1.2"><rect x="8" y="6" width="20" height="26" rx="1"/><path d="M12 14h12M12 19h12M12 24h8" strokeDasharray="2 2"/></svg> },
+                            { eyebrow:'Template', title:'A starter template', desc:'6 pre-built layouts: deal review, win/loss, rep scorecard, and more.', badge:'6 available', mode:'template',
+                              glyph:<svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={T.inkMid} strokeWidth="1.2"><rect x="5" y="8" width="12" height="8" rx="1"/><rect x="20" y="8" width="12" height="8" rx="1"/><rect x="5" y="20" width="12" height="8" rx="1"/><rect x="20" y="20" width="12" height="8" rx="1" fillOpacity="0.15" fill={T.inkMid}/></svg> },
+                            { eyebrow:'Duplicate', title:'An existing report', desc:'Copy one you already have and tweak it. Yours or shared.', badge:'from library', mode:'duplicate',
+                              glyph:<svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke={T.inkMid} strokeWidth="1.2"><rect x="6" y="6" width="18" height="22" rx="1"/><rect x="14" y="12" width="18" height="22" rx="1" fill={T.surface}/></svg> },
+                        ].map(card => (
+                            <button key={card.mode} onClick={()=>setCreateMode(card.mode)}
+                                style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'18px 18px 16px', textAlign:'left', cursor:'pointer', fontFamily:T.sans, display:'flex', flexDirection:'column', gap:6, transition:'border-color 120ms' }}
+                                onMouseEnter={e=>e.currentTarget.style.borderColor=T.ink}
+                                onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                                {card.glyph}
+                                <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10 }}>
+                                    <span style={{ ...ebD(T.goldInk), fontSize:10 }}>{card.eyebrow}</span>
+                                    {card.badge && <span style={{ fontSize:10, color:T.inkMuted }}>· {card.badge}</span>}
+                                </div>
+                                <div style={{ fontSize:16, fontFamily:serif, fontStyle:'italic', color:T.ink, marginTop:2 }}>{card.title}</div>
+                                <div style={{ fontSize:12, color:T.inkMuted, lineHeight:1.45 }}>{card.desc}</div>
+                                <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:8, color:T.ink, fontSize:11.5, fontWeight:600 }}>Start here →</div>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Recent reports strip */}
+                    <div style={{ maxWidth:860, margin:'0 auto' }}>
+                        <div style={{ display:'flex', alignItems:'baseline', gap:10, marginBottom:10 }}>
+                            <div style={{ fontSize:15, fontFamily:serif, fontStyle:'italic', color:T.ink }}>Recent reports</div>
+                            <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>Things you looked at this week — clone from any</div>
+                            <div style={{ flex:1 }}/>
+                            <button onClick={closeCreate} style={{ fontSize:11.5, color:T.inkMid, background:'transparent', border:'none', cursor:'pointer', fontFamily:T.sans }}>Browse library →</button>
+                        </div>
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+                            {['Quota pacing','Pipeline added this week','Stuck deals (14d+)','Closing next 30 days'].map(n=>(
+                                <div key={n} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'10px 12px', cursor:'pointer' }}
+                                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderStrong}
+                                    onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                                    <div style={{ ...ebD(T.inkMuted), fontSize:9, marginBottom:3 }}>Clone</div>
+                                    <div style={{ fontSize:12.5, color:T.ink, fontWeight:500 }}>{n}</div>
+                                    <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>From pinned · last viewed today</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── TEMPLATE grid ────────────────────────────────────────────
+        if (createMode === 'template') {
+            const TMPLS = [
+                {id:'t1',cat:'Pipeline & Forecast',name:'Deal review — weekly',    desc:'1:1-ready: commits, at-risk, new deals since last review'},
+                {id:'t2',cat:'Performance',         name:'Win / loss analysis',    desc:'Closed deals with reason breakdown, competitor, cycle length'},
+                {id:'t3',cat:'Performance',         name:'Rep scorecard',          desc:'Single-rep view of fundamentals — attainment, win rate, cycle'},
+                {id:'t4',cat:'Activity',            name:'Territory coverage',     desc:'Activity density by territory, industry, deal-size tier'},
+                {id:'t5',cat:'Pipeline & Forecast', name:'Stage conversion deep-dive', desc:'Funnel with avg days, entered/advanced, drop-off reasons'},
+                {id:'t6',cat:'Pipeline & Forecast', name:'Forecast vs actual',     desc:'Quarterly forecast accuracy trend with team roll-up'},
+            ];
+            return (
+                <div style={{ fontFamily:T.sans, color:T.ink }}>
+                    <div style={{ marginBottom:16, paddingBottom:12, borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
+                        <div>
+                            <div style={{ ...ebD(T.inkMuted), marginBottom:4, display:'flex', gap:6 }}><span>Reports</span><span style={{ opacity:0.4 }}>/</span><span style={{ color:T.ink }}>New · Templates</span></div>
+                            <div style={{ fontSize:22, fontFamily:serif, fontStyle:'italic', color:T.ink, letterSpacing:-0.4 }}>Start from a template</div>
+                            <div style={{ fontSize:12, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>Pre-built layouts you can customise. Click Start to load with default filters.</div>
+                        </div>
+                        <div style={{ display:'flex', gap:8 }}>
+                            <GhostBtnD onClick={()=>setCreateMode('picker')}>← Back</GhostBtnD>
+                            <GhostBtnD onClick={closeCreate}>✕ Cancel</GhostBtnD>
+                        </div>
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
+                        {TMPLS.map(t=>(
+                            <div key={t.id} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'14px 16px', cursor:'pointer', display:'flex', flexDirection:'column', gap:6 }}
+                                onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderStrong}
+                                onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                                    <div style={{ ...ebD(T.inkMuted), fontSize:9 }}>{t.cat}</div>
+                                    <button onClick={()=>{ setShowCreateReport(false); setActiveTemplate(t.id); }}
+                                        style={{ border:'none', background:'transparent', padding:0, fontSize:10.5, fontWeight:700, letterSpacing:0.6, color:T.ink, cursor:'pointer', fontFamily:T.sans }}>
+                                        START →
+                                    </button>
+                                </div>
+                                <div style={{ fontSize:13.5, color:T.ink, fontWeight:600, fontFamily:T.sans }}>{t.name}</div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, lineHeight:1.4, fontFamily:T.sans }}>{t.desc}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // ── DUPLICATE list ───────────────────────────────────────────
+        if (createMode === 'duplicate') {
+            const DUPES = pinnedCards.map(r=>({ name:r.name, owner:currentUser||'Me', updated:'Today' }));
+            return (
+                <div style={{ fontFamily:T.sans, color:T.ink }}>
+                    <div style={{ marginBottom:16, paddingBottom:12, borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
+                        <div>
+                            <div style={{ ...ebD(T.inkMuted), marginBottom:4, display:'flex', gap:6 }}><span>Reports</span><span style={{ opacity:0.4 }}>/</span><span style={{ color:T.ink }}>New · Duplicate</span></div>
+                            <div style={{ fontSize:22, fontFamily:serif, fontStyle:'italic', color:T.ink, letterSpacing:-0.4 }}>Duplicate an existing report</div>
+                            <div style={{ fontSize:12, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>Copy any report you can see into a new draft.</div>
+                        </div>
+                        <div style={{ display:'flex', gap:8 }}>
+                            <GhostBtnD onClick={()=>setCreateMode('picker')}>← Back</GhostBtnD>
+                            <GhostBtnD onClick={closeCreate}>✕ Cancel</GhostBtnD>
+                        </div>
+                    </div>
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1 }}>
+                        {DUPES.map((r,i)=>(
+                            <div key={r.name} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderBottom:i<DUPES.length-1?`1px solid ${T.border}`:'none' }}>
+                                <span style={{ fontSize:15, color:T.inkMuted }}>📄</span>
+                                <div style={{ flex:1 }}>
+                                    <div style={{ fontSize:12.5, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{r.name}</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>by {r.owner} · updated {r.updated}</div>
+                                </div>
+                                <button onClick={()=>setCreateMode('blank')}
+                                    style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11.5, fontWeight:600, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                                    Duplicate →
+                                </button>
+                            </div>
+                        ))}
+                        {DUPES.length===0 && <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No saved reports yet.</div>}
+                    </div>
+                </div>
+            );
+        }
+
+        // ── AI GENERATED ─────────────────────────────────────────────
+        if (createMode === 'ai') {
+            // Stuck deals computed from real data for the preview
+            const stuckReps = {};
+            const now14 = new Date(); now14.setDate(now14.getDate()-14);
+            const iso14 = now14.toISOString().slice(0,10);
+            (reportsOpps||[]).filter(o=>o.stage!=='Closed Won'&&o.stage!=='Closed Lost').forEach(o=>{
+                const lastAct = (activities||[]).filter(a=>a.opportunityId===o.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
+                if (!lastAct?.date || lastAct.date <= iso14) {
+                    const rep = o.salesRep||o.assignedTo||'Unassigned';
+                    if (!stuckReps[rep]) stuckReps[rep]={count:0,arr:0};
+                    stuckReps[rep].count++;
+                    stuckReps[rep].arr += parseFloat(o.arr)||0;
+                }
+            });
+            const stuckRows = Object.entries(stuckReps).map(([rep,d])=>({rep,count:d.count,arr:d.arr})).sort((a,b)=>b.count-a.count).slice(0,8);
+            const maxCount = Math.max(...stuckRows.map(r=>r.count),1);
+            const maxArr   = Math.max(...stuckRows.map(r=>r.arr),1);
+            const totalStuck = stuckRows.reduce((s,r)=>s+r.count,0);
+            const totalArrStuck = stuckRows.reduce((s,r)=>s+r.arr,0);
+            const fmtShort = v => { const n=parseFloat(v)||0; if(n>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(n>=1e3) return '$'+Math.round(n/1e3)+'K'; return '$'+Math.round(n); };
+            const avBg = name => { const p=['#9c6b4a','#7a5a3c','#5a6e5a','#6b5a7a','#8a5a5a','#5a7a8a']; let h=0; for(const c of(name||'')) h=(h*31+c.charCodeAt(0))|0; return p[Math.abs(h)%p.length]; };
+
+            return (
+                <div style={{ fontFamily:T.sans, color:T.ink }}>
+                    {/* AI interpretation banner */}
+                    <div style={{ background:'#fdf6e8', border:`1px solid ${T.gold}`, borderRadius:T.r+1, padding:'14px 16px', marginBottom:12 }}>
+                        <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
+                            <div style={{ width:26, height:26, background:T.gold, borderRadius:13, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:13 }}>✦</div>
+                            <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, flexWrap:'wrap' }}>
+                                    <span style={{ ...ebD(T.goldInk), fontSize:9.5 }}>Your prompt</span>
+                                    <span style={{ fontSize:12, color:T.ink, fontStyle:'italic' }}>"{aiPrompt||'Deals stuck more than 14 days, by rep'}"</span>
+                                    <button onClick={()=>setCreateMode('picker')} style={{ background:'transparent', border:'none', padding:0, fontSize:11, color:T.goldInk, fontWeight:600, cursor:'pointer', fontFamily:T.sans, textDecoration:'underline' }}>Edit prompt</button>
+                                </div>
+                                <div style={{ fontSize:12, color:T.ink, marginBottom:8, fontFamily:T.sans }}>
+                                    I built a <strong>horizontal bar chart</strong> from <strong>Opportunities</strong> where <strong>last activity &gt; 14 days ago</strong>, grouped by <strong>owner</strong>, sorted by count. Showing {stuckRows.length} reps with stuck deals.
+                                </div>
+                                <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                                    {[['Source','Opportunities'],['Filter','No activity >14d'],['Filter','Stage open'],['Group','Owner'],['Measure','# deals'],['Measure','ARR at risk'],['Chart','Horizontal bar']].map(([l,v],i)=>(
+                                        <div key={i} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 8px', background:T.surface, border:`1px solid ${T.gold}`, borderRadius:10, fontSize:11, fontFamily:T.sans }}>
+                                            <span style={{ color:T.inkMuted, fontSize:9.5, fontWeight:600, letterSpacing:0.5 }}>{l.toUpperCase()}</span>
+                                            <span style={{ color:T.ink, fontWeight:500 }}>{v}</span>
+                                            <span style={{ color:T.inkMuted, fontSize:11 }}>×</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div style={{ display:'flex', flexDirection:'column', gap:6, flexShrink:0 }}>
+                                <button onClick={closeCreate} style={{ background:T.ink, color:T.surface, border:'none', padding:'6px 12px', fontSize:11, fontWeight:600, borderRadius:2, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', gap:5 }}>✓ Looks right</button>
+                                <button onClick={()=>setCreateMode('picker')} style={{ background:'transparent', color:T.ink, border:`1px solid ${T.borderStrong}`, padding:'6px 12px', fontSize:11, fontWeight:500, borderRadius:2, cursor:'pointer', fontFamily:T.sans }}>Try another</button>
+                            </div>
+                        </div>
+                        {/* Refine row */}
+                        <div style={{ marginTop:10, paddingTop:10, borderTop:`1px dashed ${T.gold}`, display:'flex', alignItems:'center', gap:8 }}>
+                            <span style={{ ...ebD(T.goldInk), fontSize:9.5 }}>Refine</span>
+                            <input value={aiRefine} onChange={e=>setAiRefine(e.target.value)} placeholder="e.g. only deals $50K+, or split by territory…"
+                                style={{ flex:1, padding:'6px 10px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, fontFamily:T.sans, color:T.ink, outline:'none' }}/>
+                            <button style={{ background:T.surface, border:`1px solid ${T.gold}`, color:T.goldInk, padding:'5px 12px', fontSize:11, fontWeight:600, borderRadius:2, cursor:'pointer', fontFamily:T.sans }}>Regenerate</button>
+                        </div>
+                    </div>
+
+                    {/* Page header */}
+                    <BuilderHeader title="Stuck deals by rep" breadcrumb="AI-generated"/>
+
+                    {/* Body — preview + config rail */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:14 }}>
+                        {/* Left — preview */}
+                        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                <UpdateBtn/>
+                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Up to date · {stuckRows.length} rows · generated just now</span>
+                                <div style={{ flex:1 }}/>
+                                <GhostBtnD onClick={()=>{}}>⛶ Fullscreen</GhostBtnD>
+                            </div>
+                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'18px 22px', display:'flex', flexDirection:'column', gap:12 }}>
+                                <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between' }}>
+                                    <div>
+                                        <div style={{ fontSize:18, fontFamily:serif, fontStyle:'italic', color:T.ink, letterSpacing:-0.3, lineHeight:1.1 }}>
+                                            {aiPrompt||'Deals stuck more than 14 days, by rep'}
+                                        </div>
+                                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>Open opps · no activity in 14+ days · as of today</div>
+                                    </div>
+                                    <div style={{ display:'flex', gap:12, fontSize:10.5, color:T.inkMid, fontFamily:T.sans }}>
+                                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><span style={{ width:9, height:9, background:T.danger, borderRadius:1, display:'block' }}/># stuck deals</span>
+                                        <span style={{ display:'flex', alignItems:'center', gap:5 }}><span style={{ width:9, height:9, background:T.inkMid, opacity:0.6, borderRadius:1, display:'block' }}/>ARR at risk</span>
+                                    </div>
+                                </div>
+                                {stuckRows.length === 0 ? (
+                                    <div style={{ padding:'2rem', textAlign:'center', color:T.ok, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>✓ No stuck deals — all open opportunities have recent activity!</div>
+                                ) : stuckRows.map(r=>(
+                                    <div key={r.rep} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                                        <div style={{ width:130, flexShrink:0, display:'flex', alignItems:'center', gap:8 }}>
+                                            <div style={{ width:22, height:22, borderRadius:'50%', background:avBg(r.rep), color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:700, flexShrink:0 }}>
+                                                {r.rep.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
+                                            </div>
+                                            <span style={{ fontSize:12, color:T.ink, fontWeight:500, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.rep}</span>
+                                        </div>
+                                        <div style={{ flex:1, display:'flex', flexDirection:'column', gap:3 }}>
+                                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                                <div style={{ flex:1, height:10, background:T.surface2, borderRadius:1 }}>
+                                                    <div style={{ width:`${(r.count/maxCount)*100}%`, height:'100%', background:T.danger, borderRadius:1 }}/>
+                                                </div>
+                                                <div style={{ width:28, fontSize:11, fontWeight:600, color:T.ink, textAlign:'right', fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{r.count}</div>
+                                            </div>
+                                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                                <div style={{ flex:1, height:6, background:T.surface2, borderRadius:1 }}>
+                                                    <div style={{ width:`${(r.arr/maxArr)*100}%`, height:'100%', background:T.inkMid, opacity:0.55, borderRadius:1 }}/>
+                                                </div>
+                                                <div style={{ width:28, fontSize:10.5, color:T.inkMid, textAlign:'right', fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>{fmtShort(r.arr)}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                <div style={{ paddingTop:10, borderTop:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
+                                    <span>Total: <strong style={{ color:T.ink }}>{totalStuck} stuck deals</strong> · <strong style={{ color:T.ink }}>{fmtShort(totalArrStuck)}</strong> at risk across {stuckRows.length} rep{stuckRows.length!==1?'s':''}</span>
+                                    <button style={{ background:'transparent', border:'none', fontSize:11, color:T.inkMid, cursor:'pointer', padding:0, fontFamily:T.sans }}>View all rows →</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Right — config rail */}
+                        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+                            <TabStrip tabs={['Data','Filters','Chart','Format']} active={builderTab} onChange={setBuilderTab}/>
+                            <div style={{ flex:1, overflow:'auto', padding:'14px' }}>
+                                {builderTab==='Data' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                                        <div style={{ padding:'8px 10px', background:'#fdf6e8', border:`1px solid ${T.gold}`, borderRadius:2, fontSize:11, color:T.inkMid, display:'flex', gap:6, fontFamily:T.sans }}>
+                                            ✦ <span>Fields below were inferred by AI. Edit any chip — preview updates when you click Update.</span>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Data source</div>
+                                            <div style={{ padding:'8px 10px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, display:'flex', gap:8, alignItems:'center', fontFamily:T.sans }}>
+                                                <span style={{ fontWeight:600, color:T.ink }}>Opportunities</span><span style={{ color:T.inkMuted }}>· {(reportsOpps||[]).length} rows</span>
+                                            </div>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Group by</div>
+                                            <div style={{ display:'flex', gap:5 }}><FieldChip label="Owner" kind="dim"/></div>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Measure</div>
+                                            <div style={{ display:'flex', gap:5 }}><FieldChip label="# of deals" kind="metric"/><FieldChip label="ARR at risk" kind="metric"/></div>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Sort</div>
+                                            <div style={{ padding:'6px 10px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:2, fontSize:11.5, color:T.ink, fontFamily:T.sans }}>By <strong># of deals</strong> descending</div>
+                                        </div>
+                                    </div>
+                                )}
+                                {builderTab==='Filters' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                                        <div style={{ padding:'8px 10px', background:'#fdf6e8', border:`1px solid ${T.gold}`, borderRadius:2, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
+                                            ✦ AI interpreted "stuck more than 14 days" as <strong>no activity in 14+ days</strong>.
+                                        </div>
+                                        {[['Last activity date','≤','Today − 14 days',true],['Stage','is not','Closed Won · Closed Lost',true]].map(([f,op,v,ai],i)=>(
+                                            <div key={i} style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 8px', background:T.surface2, border:`1px solid ${ai?T.gold:T.border}`, borderRadius:2, fontSize:11.5, fontFamily:T.sans }}>
+                                                {ai&&<span style={{ fontSize:10 }}>✦</span>}
+                                                <span style={{ fontWeight:600, color:T.ink }}>{f}</span>
+                                                <span style={{ color:T.inkMuted }}>{op}</span>
+                                                <span style={{ fontWeight:500, color:T.ink }}>{v}</span>
+                                                <div style={{ flex:1 }}/><span style={{ color:T.inkMuted, cursor:'pointer' }}>×</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {builderTab==='Chart' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                                        <div style={{ ...ebD(T.inkMid), marginBottom:4 }}>Visualization type</div>
+                                        <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
+                                            {CHART_TYPES.map(ct=>(
+                                                <button key={ct.id} onClick={()=>setBuilderChart(ct.id)}
+                                                    style={{ background:T.surface, border:`1px solid ${builderChart===ct.id?T.ink:T.border}`, borderRadius:T.r, padding:'10px 8px', cursor:'pointer', textAlign:'left', fontFamily:T.sans, boxShadow:builderChart===ct.id?`inset 0 0 0 1px ${T.ink}`:'none' }}>
+                                                    <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{ct.label}</div>
+                                                    <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, lineHeight:1.3 }}>{ct.desc}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {builderTab==='Format' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Number format</div>
+                                            <div style={{ padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, display:'flex', justifyContent:'space-between', fontFamily:T.sans }}>$1.2K (short) <span style={{ color:T.inkMuted }}>▾</span></div>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Show totals</div>
+                                            <div style={{ display:'flex', gap:6 }}>
+                                                {['Row','Column','Grand'].map((t,i)=><button key={t} style={{ padding:'4px 10px', fontSize:11, fontFamily:T.sans, background:i===0?T.ink:T.surface, color:i===0?T.surface:T.ink, border:`1px solid ${i===0?T.ink:T.border}`, borderRadius:2, cursor:'pointer' }}>{t}</button>)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── BLANK builder ────────────────────────────────────────────
+        if (createMode === 'blank') {
+            const availDims    = ALL_DIMS.filter(d=>!builderDims.find(x=>x.label===d));
+            const availMetrics = ALL_METRICS.filter(m=>!builderMetrics.find(x=>x.label===m));
+            return (
+                <div style={{ fontFamily:T.sans, color:T.ink }}>
+                    <BuilderHeader title="Untitled report" breadcrumb="Blank canvas"/>
+
+                    {/* Body */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:14 }}>
+                        {/* Left — preview */}
+                        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                <UpdateBtn/>
+                                <span style={{ fontSize:11, color:builderDirty?T.warn:T.inkMuted, fontFamily:T.sans }}>
+                                    {builderDirty?'· Unsaved changes — click to render':'· Up to date'}
+                                </span>
+                                <div style={{ flex:1 }}/><GhostBtnD onClick={()=>{}}>⛶ Fullscreen</GhostBtnD>
+                            </div>
+                            {builderRendered ? (
+                                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, padding:'20px 24px', minHeight:320, display:'flex', flexDirection:'column', gap:14 }}>
+                                    <div style={{ fontFamily:serif, fontStyle:'italic', fontSize:18, color:T.ink, letterSpacing:-0.3 }}>Pipeline by {builderDims.map(d=>d.label).join(' × ') || 'owner'}</div>
+                                    <div style={{ display:'flex', flexDirection:'column', gap:10, flex:1 }}>
+                                        {(settings.users||[]).filter(u=>u.name&&u.userType!=='Admin').slice(0,5).map((u,i)=>{
+                                            const w = [85,72,64,51,38][i]||30;
+                                            return (
+                                                <div key={u.name} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                                                    <div style={{ width:110, fontSize:12, color:T.ink, fontWeight:500, fontFamily:T.sans, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.name}</div>
+                                                    <div style={{ flex:1, height:20, background:T.surface2, borderRadius:2, overflow:'hidden' }}>
+                                                        <div style={{ width:`${w}%`, height:'100%', background:T.goldInk, opacity:0.8 }}/>
+                                                    </div>
+                                                    <div style={{ width:48, fontSize:12, fontWeight:600, color:T.ink, textAlign:'right', fontFeatureSettings:'"tnum"', fontFamily:T.sans }}>${w*10}K</div>
+                                                </div>
+                                            );
+                                        })}
+                                        {(settings.users||[]).filter(u=>u.name&&u.userType!=='Admin').length===0 && (
+                                            <div style={{ textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', padding:'2rem', fontFamily:T.sans }}>Configure your fields and click Update preview.</div>
+                                        )}
+                                    </div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, paddingTop:10, borderTop:`1px solid ${T.border}`, fontFamily:T.sans }}>
+                                        Chart: <strong style={{ color:T.ink }}>{CHART_TYPES.find(c=>c.id===builderChart)?.label||'Stacked bar'}</strong> · {builderDims.length} dimensions · {builderMetrics.length} metrics
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ background:T.surface2, border:`1px dashed ${T.borderStrong}`, borderRadius:T.r+1, minHeight:320, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:10, padding:40, textAlign:'center' }}>
+                                    <span style={{ fontSize:28, color:T.inkMuted }}>📊</span>
+                                    <div style={{ fontSize:14, color:T.inkMid, fontWeight:500, fontFamily:T.sans }}>Preview not run yet</div>
+                                    <div style={{ fontSize:12, color:T.inkMuted, maxWidth:280, fontFamily:T.sans }}>Configure fields and filters on the right, then click Update preview.</div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Right — config rail */}
+                        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+                            {/* AI in rail */}
+                            <div style={{ padding:12, borderBottom:`1px solid ${T.border}`, background:'#fdf6e8' }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+                                    <span style={{ fontSize:11 }}>✦</span>
+                                    <span style={{ ...ebD(T.goldInk), fontSize:9.5 }}>Ask AI</span>
+                                    <span style={{ fontSize:10.5, color:T.inkMuted }}>· describe what you want</span>
+                                </div>
+                                <div style={{ display:'flex', gap:6, background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, padding:'6px 8px' }}>
+                                    <input value={aiPrompt} onChange={e=>setAiPrompt(e.target.value)}
+                                        onKeyDown={e=>{ if(e.key==='Enter'&&aiPrompt.trim()){ setCreateMode('ai'); setBuilderRendered(true); setBuilderDirty(false); }}}
+                                        placeholder="Describe what you want to see…"
+                                        style={{ flex:1, border:'none', outline:'none', background:'transparent', fontFamily:T.sans, fontSize:12, color:T.ink }}/>
+                                    <button onClick={()=>{ if(aiPrompt.trim()){ setCreateMode('ai'); setBuilderRendered(true); setBuilderDirty(false); }}}
+                                        style={{ background:T.ink, color:T.surface, border:'none', padding:'3px 8px', fontSize:10, fontWeight:700, borderRadius:2, cursor:'pointer', fontFamily:T.sans, letterSpacing:0.4 }}>GO</button>
+                                </div>
+                            </div>
+
+                            <TabStrip tabs={['Data','Filters','Chart','Format']} active={builderTab} onChange={setBuilderTab}/>
+                            <div style={{ flex:1, overflow:'auto', padding:'14px' }}>
+                                {builderTab==='Data' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Data source</div>
+                                            <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                                                {SOURCES.map(s=>(
+                                                    <button key={s} onClick={()=>{ setBuilderSource(s); setBuilderDirty(true); }}
+                                                        style={{ padding:'4px 10px', fontSize:11.5, fontFamily:T.sans, background:builderSource===s?T.ink:T.surface, color:builderSource===s?T.surface:T.ink, border:`1px solid ${builderSource===s?T.ink:T.border}`, borderRadius:2, cursor:'pointer' }}>{s}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Group by <span style={{ color:T.inkMuted, fontWeight:400, letterSpacing:0, textTransform:'none', fontSize:10 }}>(dimensions)</span></div>
+                                            <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:6 }}>
+                                                {builderDims.map(d=><FieldChip key={d.id} label={d.label} kind="dim" onRemove={()=>{ setBuilderDims(builderDims.filter(x=>x.id!==d.id)); setBuilderDirty(true); }}/>)}
+                                            </div>
+                                            <div style={{ background:T.surface2, border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, padding:6, display:'flex', flexWrap:'wrap', gap:4 }}>
+                                                {availDims.map(d=><button key={d} onClick={()=>{ setBuilderDims([...builderDims,{id:d.toLowerCase().replace(/ /g,'_'),label:d,kind:'dim'}]); setBuilderDirty(true); }} style={{ background:T.surface, border:`1px solid ${T.border}`, padding:'3px 8px', fontSize:11, fontFamily:T.sans, color:T.ink, cursor:'pointer', borderRadius:2, display:'inline-flex', alignItems:'center', gap:4 }}>+ {d}</button>)}
+                                                {availDims.length===0&&<span style={{ fontSize:11, color:T.inkMuted, padding:'3px 4px', fontFamily:T.sans }}>All dimensions added</span>}
+                                            </div>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Measure <span style={{ color:T.inkMuted, fontWeight:400, letterSpacing:0, textTransform:'none', fontSize:10 }}>(metrics)</span></div>
+                                            <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:6 }}>
+                                                {builderMetrics.map(m=><FieldChip key={m.id} label={m.label} kind="metric" onRemove={()=>{ setBuilderMetrics(builderMetrics.filter(x=>x.id!==m.id)); setBuilderDirty(true); }}/>)}
+                                            </div>
+                                            <div style={{ background:T.surface2, border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, padding:6, display:'flex', flexWrap:'wrap', gap:4 }}>
+                                                {availMetrics.map(m=><button key={m} onClick={()=>{ setBuilderMetrics([...builderMetrics,{id:m.toLowerCase().replace(/[^a-z0-9]/g,'_'),label:m,kind:'metric'}]); setBuilderDirty(true); }} style={{ background:T.surface, border:`1px solid ${T.border}`, padding:'3px 8px', fontSize:11, fontFamily:T.sans, color:T.ink, cursor:'pointer', borderRadius:2, display:'inline-flex', alignItems:'center', gap:4 }}>+ {m}</button>)}
+                                            </div>
+                                        </div>
+                                        <div style={{ paddingTop:10, borderTop:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                            <div><div style={{ fontSize:11.5, color:T.ink, fontWeight:600, fontFamily:T.sans }}>Advanced fields</div>
+                                                <div style={{ fontSize:10.5, color:T.inkMuted, fontFamily:T.sans }}>Joins, formulas, conditional format</div>
+                                            </div>
+                                            <div onClick={()=>setBuilderAdvanced(!builderAdvanced)} style={{ width:30, height:16, borderRadius:8, background:builderAdvanced?T.ink:T.borderStrong, position:'relative', cursor:'pointer', transition:'background 120ms', flexShrink:0 }}>
+                                                <div style={{ position:'absolute', top:2, left:builderAdvanced?16:2, width:12, height:12, borderRadius:'50%', background:T.surface, transition:'left 120ms' }}/>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                {builderTab==='Filters' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                                        <div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Period</div>
+                                        <div style={{ padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, display:'flex', justifyContent:'space-between', fontFamily:T.sans }}>This quarter <span style={{ color:T.inkMuted }}>▾</span></div>
+                                        <div style={{ ...ebD(T.inkMid), marginBottom:4 }}>Filters</div>
+                                        <button style={{ padding:'5px 8px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:2, fontSize:11, color:T.inkMid, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', gap:4 }}>+ Add filter</button>
+                                        <div style={{ ...ebD(T.inkMid), marginBottom:4, marginTop:4 }}>Compare to</div>
+                                        <div style={{ padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, display:'flex', justifyContent:'space-between', fontFamily:T.sans }}>Previous quarter <span style={{ color:T.inkMuted }}>▾</span></div>
+                                    </div>
+                                )}
+                                {builderTab==='Chart' && (
+                                    <div>
+                                        <div style={{ ...ebD(T.inkMid), marginBottom:8 }}>Visualization type</div>
+                                        <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
+                                            {CHART_TYPES.map(ct=>(
+                                                <button key={ct.id} onClick={()=>{ setBuilderChart(ct.id); setBuilderDirty(true); }}
+                                                    style={{ background:T.surface, border:`1px solid ${builderChart===ct.id?T.ink:T.border}`, borderRadius:T.r, padding:'10px 8px', cursor:'pointer', textAlign:'left', fontFamily:T.sans, boxShadow:builderChart===ct.id?`inset 0 0 0 1px ${T.ink}`:'none' }}>
+                                                    <div style={{ fontSize:12, fontWeight:600, color:T.ink }}>{ct.label}</div>
+                                                    <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, lineHeight:1.3 }}>{ct.desc}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {builderTab==='Format' && (
+                                    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Number format</div>
+                                            <div style={{ padding:'6px 9px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:2, fontSize:12, color:T.ink, display:'flex', justifyContent:'space-between', fontFamily:T.sans }}>$1.2K (short) <span style={{ color:T.inkMuted }}>▾</span></div>
+                                        </div>
+                                        <div><div style={{ ...ebD(T.inkMid), marginBottom:6 }}>Show totals</div>
+                                            <div style={{ display:'flex', gap:6 }}>
+                                                {['Row','Column','Grand'].map((t,i)=><button key={t} style={{ padding:'4px 10px', fontSize:11, fontFamily:T.sans, background:i===0?T.ink:T.surface, color:i===0?T.surface:T.ink, border:`1px solid ${i===0?T.ink:T.border}`, borderRadius:2, cursor:'pointer' }}>{t}</button>)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        return null; // fallback
+    }
+    // ── End Create Report flow ──────────────────────────────────────
+
     return (
         <div style={{ display:'flex', flexDirection:'column', gap:0, padding:'1rem 1.25rem 1.5rem' }}>
             {/* Toolbar */}
@@ -3924,7 +4551,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                     <input value={srchQ} onChange={e=>setSrchQ(e.target.value)} placeholder="Search your library…" style={{ width:'100%', padding:'7px 10px 7px 30px', border:`1px solid ${TS.border}`, borderRadius:TS.r, background:TS.surface, color:TS.ink, fontSize:12.5, fontFamily:TS.sans, outline:'none', boxSizing:'border-box' }}/>
                 </div>
                 <div style={{ flex:1 }}/>
-                <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:TS.ink, color:TS.surface, border:'none', borderRadius:TS.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:TS.sans }}>+ Create report</button>
+                <button onClick={()=>{setShowCreateReport(true);setCreateMode('picker');setAiPrompt('');setAiGenerated(false);setBuilderTab('data');setBuilderDirty(true);setBuilderRendered(false);}} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:TS.ink, color:TS.surface, border:'none', borderRadius:TS.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:TS.sans }}>+ Create report</button>
             </div>
 
             {filteredPinned.length > 0 && (
