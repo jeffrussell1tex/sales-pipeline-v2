@@ -1391,11 +1391,22 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
     const [newDefault, setNewDefault]   = useState(false);
     const [newErr, setNewErr]           = useState('');
     const [saving, setSaving]           = useState(false);
-    const [editingTeam, setEditingTeam] = useState(null); // team name being edited
+    const [editingTeam, setEditingTeam] = useState(null);
     const [showAddStage, setShowAddStage] = useState(false);
     const [newStageName, setNewStageName] = useState('');
     const [newStageType, setNewStageType] = useState('Open');
     const [stageErr, setStageErr]         = useState('');
+    // Pipeline drag state
+    const [dragPipelineIdx, setDragPipelineIdx] = useState(null);
+    const [dragOverPipelineIdx, setDragOverPipelineIdx] = useState(null);
+    // Stage drag state
+    const [dragStageIdx, setDragStageIdx] = useState(null);
+    const [dragOverStageIdx, setDragOverStageIdx] = useState(null);
+    // Stage kebab state
+    const [openKebab, setOpenKebab]       = useState(null); // stage name
+    const [renamingStage, setRenamingStage] = useState(null); // stage name
+    const [renameVal, setRenameVal]         = useState('');
+    const [confirmDelete, setConfirmDelete] = useState(null); // stage name
 
     const pipelines = settings?.pipelines?.length ? settings.pipelines : DEFAULT_PIPELINES;
     const selected  = pipelines.find(p => p.id === selectedId) || pipelines[0];
@@ -1469,6 +1480,56 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
         setNewStageName(''); setNewStageType('Open'); setStageErr(''); setShowAddStage(false);
     };
 
+    // ── Pipeline drag-to-reorder ─────────────────────────────
+    const handlePipelineDrop = async (fromIdx, toIdx) => {
+        if (fromIdx === toIdx) return;
+        const reordered = [...pipelines];
+        const [moved] = reordered.splice(fromIdx, 1);
+        reordered.splice(toIdx, 0, moved);
+        setSettings(prev => ({ ...prev, pipelines: reordered }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: reordered }) }); }
+        catch(e) { console.error('reorder pipelines', e); }
+    };
+
+    // ── Stage drag-to-reorder ─────────────────────────────────
+    const handleStageDrop = async (fromIdx, toIdx) => {
+        if (fromIdx === toIdx) return;
+        const stages = [...(selected?.stages || [])];
+        const [moved] = stages.splice(fromIdx, 1);
+        stages.splice(toIdx, 0, moved);
+        const updatedPipelines = pipelines.map(p =>
+            p.id === selectedId ? { ...p, stages } : p
+        );
+        setSettings(prev => ({ ...prev, pipelines: updatedPipelines }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updatedPipelines }) }); }
+        catch(e) { console.error('reorder stages', e); }
+    };
+
+    // ── Stage rename ──────────────────────────────────────────
+    const handleRenameStage = async () => {
+        if (!renameVal.trim() || renameVal.trim() === renamingStage) { setRenamingStage(null); return; }
+        const stages = (selected?.stages || []).map(s => s === renamingStage ? renameVal.trim() : s);
+        const updatedPipelines = pipelines.map(p =>
+            p.id === selectedId ? { ...p, stages } : p
+        );
+        setSettings(prev => ({ ...prev, pipelines: updatedPipelines }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updatedPipelines }) }); }
+        catch(e) { console.error('rename stage', e); }
+        setRenamingStage(null); setRenameVal(''); setOpenKebab(null);
+    };
+
+    // ── Stage delete ──────────────────────────────────────────
+    const handleDeleteStage = async (stageName) => {
+        const stages = (selected?.stages || []).filter(s => s !== stageName);
+        const updatedPipelines = pipelines.map(p =>
+            p.id === selectedId ? { ...p, stages } : p
+        );
+        setSettings(prev => ({ ...prev, pipelines: updatedPipelines }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updatedPipelines }) }); }
+        catch(e) { console.error('delete stage', e); }
+        setConfirmDelete(null); setOpenKebab(null);
+    };
+
     const selStyle = { padding:'4px 8px', fontSize:12, border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontFamily:T.sans, cursor:'pointer', outline:'none' };
 
     return (
@@ -1528,8 +1589,14 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                 <div>
                     <CSectionCard title="Pipelines" description="Drag to reorder. The default pipeline is used for new opportunities when no pipeline is selected.">
                         {pipelines.map((p,i) => (
-                            <div key={p.id} onClick={() => setSelectedId(p.id)}
-                                style={{ padding:'14px 16px', border:`1.5px solid ${selectedId===p.id ? T.goldInk : T.border}`, background: selectedId===p.id ? 'rgba(200,185,154,0.1)' : T.surface, borderRadius:T.r+2, marginBottom:10, cursor:'pointer', transition:'all 120ms' }}>
+                            <div key={p.id}
+                                draggable
+                                onDragStart={() => setDragPipelineIdx(i)}
+                                onDragOver={e => { e.preventDefault(); setDragOverPipelineIdx(i); }}
+                                onDragEnd={() => { setDragPipelineIdx(null); setDragOverPipelineIdx(null); }}
+                                onDrop={e => { e.preventDefault(); handlePipelineDrop(dragPipelineIdx, i); setDragPipelineIdx(null); setDragOverPipelineIdx(null); }}
+                                onClick={() => setSelectedId(p.id)}
+                                style={{ padding:'14px 16px', border:`1.5px solid ${selectedId===p.id ? T.goldInk : dragOverPipelineIdx===i ? T.goldInk : T.border}`, background: selectedId===p.id ? 'rgba(200,185,154,0.1)' : dragOverPipelineIdx===i ? 'rgba(200,185,154,0.06)' : T.surface, borderRadius:T.r+2, marginBottom:10, cursor:'grab', transition:'all 120ms', opacity: dragPipelineIdx===i ? 0.5 : 1 }}>
                                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
                                     <SPDrag/>
                                     <div style={{ fontSize:14, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{p.name}</div>
@@ -1595,29 +1662,79 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                 </button>
                             </div>
                         )}
-                        <SPTable
-                            columns={[
-                                { key:'drag',  label:'',             w:'28px' },
-                                { key:'name',  label:'Stage',        w:'1.6fr' },
-                                { key:'prob',  label:'Default prob.', w:'120px', align:'right' },
-                                { key:'type',  label:'Type',          w:'90px' },
-                                { key:'days',  label:'Avg days',      w:'90px', align:'right' },
-                                { key:'open',  label:'Open',          w:'70px', align:'right' },
-                                { key:'more',  label:'',              w:'28px' },
-                            ]}
-                            rows={(selected?.stages||[]).map((s,i) => ({
-                                drag: <SPDrag muted={STAGE_TYPES[s] !== undefined}/>,
-                                name: <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
-                                    <span style={{ width:8, height:8, borderRadius:'50%', background:STAGE_COLORS[s]||T.border, display:'inline-block', flexShrink:0 }}/>
-                                    <b style={{ fontFamily:T.sans }}>{s}</b>
-                                </span>,
-                                prob: <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{STAGE_PROBS[s] !== undefined ? `${STAGE_PROBS[s]}%` : '—'}</span>,
-                                type: <span style={{ fontSize:12, color: STAGE_TYPES[s]==='Won' ? T.ok : STAGE_TYPES[s]==='Lost' ? T.danger : T.inkMid, fontFamily:T.sans }}>{STAGE_TYPES[s]||'Open'}</span>,
-                                days: <span style={{ color:T.inkMuted, fontFamily:T.sans }}>{STAGE_TYPES[s] ? '—' : `${5+i*2}d`}</span>,
-                                open: <span style={{ color:T.inkMuted, fontFamily:T.sans }}>{STAGE_TYPES[s] ? '—' : `${Math.max(5, 42 - i*5)}`}</span>,
-                                more: <span style={{ color:T.inkMuted, cursor:'pointer' }}>⋯</span>,
-                            }))}
-                        />
+                        {/* Stage table with drag + kebab */}
+                        <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r+2, overflow:'hidden' }}>
+                            {/* Header */}
+                            <div style={{ display:'grid', gridTemplateColumns:'28px 1.6fr 120px 90px 90px 70px 28px', padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10 }}>
+                                {['','Stage','Default prob.','Type','Avg days','Open',''].map((h,i) => (
+                                    <div key={i} style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign: i>=2&&i<=5 ? 'right' : 'left', fontFamily:T.sans }}>{h}</div>
+                                ))}
+                            </div>
+                            {(selected?.stages||[]).map((s,i) => (
+                                <div key={s}
+                                    draggable
+                                    onDragStart={() => setDragStageIdx(i)}
+                                    onDragOver={e => { e.preventDefault(); setDragOverStageIdx(i); }}
+                                    onDragEnd={() => { setDragStageIdx(null); setDragOverStageIdx(null); }}
+                                    onDrop={e => { e.preventDefault(); handleStageDrop(dragStageIdx, i); setDragStageIdx(null); setDragOverStageIdx(null); }}
+                                    style={{ display:'grid', gridTemplateColumns:'28px 1.6fr 120px 90px 90px 70px 28px', padding:'11px 14px', gap:10, borderBottom: i<(selected?.stages||[]).length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background: dragOverStageIdx===i ? 'rgba(200,185,154,0.06)' : T.surface, opacity: dragStageIdx===i ? 0.4 : 1, cursor:'grab', position:'relative', transition:'background 80ms' }}>
+                                    <div style={{ cursor:'grab', color:T.inkMuted, fontSize:14, letterSpacing:-2 }}>⋮⋮</div>
+                                    <div>
+                                        {renamingStage === s ? (
+                                            <input autoFocus value={renameVal} onChange={e => setRenameVal(e.target.value)}
+                                                onKeyDown={e => { if (e.key==='Enter') handleRenameStage(); if (e.key==='Escape') { setRenamingStage(null); setRenameVal(''); } }}
+                                                onBlur={handleRenameStage}
+                                                style={{ padding:'3px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, outline:'none', width:'90%' }}/>
+                                        ) : (
+                                            <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+                                                <span style={{ width:8, height:8, borderRadius:'50%', background:STAGE_COLORS[s]||T.border, display:'inline-block', flexShrink:0 }}/>
+                                                <b style={{ fontFamily:T.sans }}>{s}</b>
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div style={{ textAlign:'right' }}><span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{STAGE_PROBS[s] !== undefined ? `${STAGE_PROBS[s]}%` : '—'}</span></div>
+                                    <div style={{ textAlign:'right' }}><span style={{ fontSize:12, color: STAGE_TYPES[s]==='Won' ? T.ok : STAGE_TYPES[s]==='Lost' ? T.danger : T.inkMid, fontFamily:T.sans }}>{STAGE_TYPES[s]||'Open'}</span></div>
+                                    <div style={{ textAlign:'right' }}><span style={{ color:T.inkMuted, fontFamily:T.sans }}>{STAGE_TYPES[s] ? '—' : `${5+i*2}d`}</span></div>
+                                    <div style={{ textAlign:'right' }}><span style={{ color:T.inkMuted, fontFamily:T.sans }}>{STAGE_TYPES[s] ? '—' : `${Math.max(5, 42-i*5)}`}</span></div>
+                                    {/* Kebab */}
+                                    <div style={{ position:'relative' }}>
+                                        <button onClick={e => { e.stopPropagation(); setOpenKebab(openKebab===s ? null : s); setConfirmDelete(null); setRenamingStage(null); }}
+                                            style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:0, lineHeight:1, fontFamily:T.sans }}>⋯</button>
+                                        {openKebab === s && (
+                                            <div onClick={e => e.stopPropagation()}
+                                                style={{ position:'absolute', right:0, top:'100%', zIndex:200, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:140, overflow:'hidden' }}>
+                                                {confirmDelete === s ? (
+                                                    <div style={{ padding:'12px 14px' }}>
+                                                        <div style={{ fontSize:12, color:T.ink, marginBottom:8, fontFamily:T.sans }}>Delete <b>{s}</b>?</div>
+                                                        <div style={{ display:'flex', gap:6 }}>
+                                                            <button onClick={() => handleDeleteStage(s)}
+                                                                style={{ flex:1, padding:'5px 0', background:T.danger, color:'#fff', border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Delete</button>
+                                                            <button onClick={() => setConfirmDelete(null)}
+                                                                style={{ flex:1, padding:'5px 0', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <button onClick={() => { setRenamingStage(s); setRenameVal(s); setOpenKebab(null); }}
+                                                            style={{ display:'block', width:'100%', padding:'10px 14px', background:'none', border:'none', textAlign:'left', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                            Rename
+                                                        </button>
+                                                        <button onClick={() => setConfirmDelete(s)}
+                                                            style={{ display:'block', width:'100%', padding:'10px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', fontSize:13, color:T.danger, cursor:'pointer', fontFamily:T.sans }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(156,58,46,0.06)'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                            Delete stage
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </CSectionCard>
 
                     <CSectionCard title="Assignment rules" description="Which teams and pipelines are paired. Reps see their assigned pipelines by default.">
