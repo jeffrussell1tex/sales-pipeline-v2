@@ -567,6 +567,591 @@ const PersonalView = ({ settings, setSettings, currentUser, isAdmin }) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// COMPANY DETAIL PAGES — shared chrome + three pages
+// ─────────────────────────────────────────────────────────────
+
+// Extra icon paths not in the main Icon set
+const EXTRA_ICON_PATHS = {
+    'link':     <g><path d="M10 14a4 4 0 005.66 0l3-3a4 4 0 10-5.66-5.66l-1.5 1.5"/><path d="M14 10a4 4 0 00-5.66 0l-3 3a4 4 0 105.66 5.66l1.5-1.5"/></g>,
+    'upload':   <g><path d="M12 16V4M6 10l6-6 6 6"/><path d="M4 20h16"/></g>,
+    'download': <g><path d="M12 4v12M6 10l6 6 6-6"/><path d="M4 20h16"/></g>,
+    'refresh':  <g><path d="M4 12a8 8 0 0114-5.3L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 01-14 5.3L4 16"/><path d="M4 20v-4h4"/></g>,
+    'lock':     <g><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 018 0v3"/></g>,
+    'info':     <g><circle cx="12" cy="12" r="9"/><path d="M12 8v.5M12 11v5"/></g>,
+    'chevron-down': <path d="M6 9l6 6 6-6"/>,
+};
+const LIcon = ({ name, size = 16, color = 'currentColor', sw = 1.5, style: st }) => {
+    if (EXTRA_ICON_PATHS[name]) {
+        return (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={st}>
+                {EXTRA_ICON_PATHS[name]}
+            </svg>
+        );
+    }
+    return null;
+};
+
+// Shared form primitives
+const CField = ({ label, hint, children, half }) => (
+    <div style={{ display:'flex', flexDirection:'column', gap:5, ...(half ? { gridColumn:'span 1' } : {}) }}>
+        <label style={{ fontSize:11.5, fontWeight:600, color:T.inkMid, letterSpacing:0.2, fontFamily:T.sans }}>{label}</label>
+        {children}
+        {hint && <span style={{ fontSize:11, color:T.inkMuted, lineHeight:1.45, fontFamily:T.sans }}>{hint}</span>}
+    </div>
+);
+const CInput = ({ value, onChange, placeholder, mono }) => (
+    <input
+        value={value || ''}
+        onChange={e => onChange && onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{ padding:'8px 10px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily: mono ? 'ui-monospace,Menlo,monospace' : T.sans, outline:'none', width:'100%', boxSizing:'border-box' }}
+    />
+);
+const CTextarea = ({ value, onChange, rows = 4 }) => (
+    <textarea
+        value={value || ''}
+        onChange={e => onChange && onChange(e.target.value)}
+        rows={rows}
+        style={{ padding:'8px 10px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', resize:'vertical', lineHeight:1.5 }}
+    />
+);
+const CSelect = ({ value, onChange, options }) => (
+    <select value={value || ''} onChange={e => onChange && onChange(e.target.value)}
+        style={{ padding:'8px 10px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', appearance:'none', cursor:'pointer',
+            backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+            backgroundRepeat:'no-repeat', backgroundPosition:'right 10px center', paddingRight:28 }}>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+);
+const CSectionCard = ({ title, description, children, headAction }) => (
+    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20, marginBottom:14 }}>
+        <div style={{ display:'flex', alignItems:'flex-start', gap:16, marginBottom:16 }}>
+            <div style={{ flex:1 }}>
+                <div style={{ fontSize:15, fontWeight:700, color:T.ink, marginBottom:3, fontFamily:T.sans }}>{title}</div>
+                {description && <div style={{ fontSize:12.5, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans }}>{description}</div>}
+            </div>
+            {headAction}
+        </div>
+        {children}
+    </div>
+);
+
+// Shared chrome wrapper for all three detail pages
+const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, updatedAt, onBack, dirty, onCancel, primaryAction, primaryLabel, children }) => (
+    <div style={{ fontFamily:T.sans }}>
+        {/* Breadcrumb */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+            <span>/</span>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Company</button>
+            <span>/</span>
+            <span style={{ color:T.ink, fontWeight:600 }}>{crumb}</span>
+        </div>
+
+        {/* Title band */}
+        <div style={{ display:'flex', alignItems:'flex-end', gap:24, paddingBottom:18, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>
+            <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10, flex:1 }}>
+                <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3, fontFamily:T.sans }}>
+                    {title}
+                    {dirty && <span style={{ fontSize:12, fontWeight:500, color:T.warn, marginLeft:12, fontFamily:T.sans }}>● Unsaved changes</span>}
+                </div>
+                <div style={{ fontSize:13, color:T.inkMid, marginTop:4, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', fontFamily:T.sans }}>
+                    <span>{subtitle}</span>
+                    <span style={{ color:T.inkMuted }}>•</span>
+                    <StatusChip status="ok" detail={statusDetail} small/>
+                    <span style={{ color:T.inkMuted }}>•</span>
+                    <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited {updatedAt} by <span style={{ color:T.inkMid, fontWeight:500 }}>{updatedBy}</span></span>
+                </div>
+            </div>
+            <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                <button onClick={onCancel} style={{ padding:'8px 16px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                <button onClick={primaryAction} disabled={!dirty} style={{ padding:'8px 16px', background: dirty ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: dirty ? 'pointer' : 'default', fontFamily:T.sans, transition:'background 120ms' }}>{primaryLabel}</button>
+            </div>
+        </div>
+
+        {children}
+    </div>
+);
+
+// ── 1. Company Profile ─────────────────────────────────────────
+const CompanyProfileDetail = ({ settings, setSettings, onBack }) => {
+    const saved = {
+        displayName:   settings?.companyDisplayName  || settings?.companyName || '',
+        legalName:     settings?.companyLegalName    || '',
+        brandColor:    settings?.companyBrandColor   || T.goldInk,
+        address:       settings?.companyAddress      || '',
+        city:          settings?.companyCity         || '',
+        state:         settings?.companyState        || '',
+        zip:           settings?.companyZip          || '',
+        country:       settings?.companyCountry      || 'United States',
+        phone:         settings?.companyPhone        || '',
+        supportEmail:  settings?.companySupportEmail || '',
+        quoteHeader:   settings?.quoteHeader         || '',
+    };
+    const [form, setForm]   = useState({ ...saved });
+    const [dirty, setDirty] = useState(false);
+    const [saving, setSaving] = useState(false);
+
+    const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setDirty(true); };
+    const handleCancel = () => { setForm({ ...saved }); setDirty(false); };
+    const handleSave = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev,
+            companyDisplayName:  form.displayName,
+            companyLegalName:    form.legalName,
+            companyBrandColor:   form.brandColor,
+            companyAddress:      form.address,
+            companyCity:         form.city,
+            companyState:        form.state,
+            companyZip:          form.zip,
+            companyCountry:      form.country,
+            companyPhone:        form.phone,
+            companySupportEmail: form.supportEmail,
+            quoteHeader:         form.quoteHeader,
+        }));
+        try {
+            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({
+                companyDisplayName:  form.displayName,
+                companyLegalName:    form.legalName,
+                companyBrandColor:   form.brandColor,
+                companyAddress:      form.address,
+                companyCity:         form.city,
+                companyState:        form.state,
+                companyZip:          form.zip,
+                companyCountry:      form.country,
+                companyPhone:        form.phone,
+                companySupportEmail: form.supportEmail,
+                quoteHeader:         form.quoteHeader,
+            })});
+        } catch(e) { console.error('save company profile', e); }
+        setSaving(false);
+        setDirty(false);
+    };
+
+    const COUNTRIES = ['United States','Canada','United Kingdom','Australia','Germany','France','Other'].map(c => ({ value:c, label:c }));
+
+    return (
+        <DetailPageChrome
+            crumb="Company profile" title="Company profile"
+            subtitle="Logo, address, phone, and default quote header"
+            statusDetail="Complete" updatedBy={settings?.updatedBy || 'Admin'} updatedAt="2 months ago"
+            onBack={onBack} dirty={dirty} onCancel={handleCancel}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+        >
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 420px', gap:20 }}>
+                {/* LEFT */}
+                <div>
+                    <CSectionCard title="Brand" description="Your logo appears on quote PDFs, shared report exports, and in the workspace header for every user.">
+                        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                            <CField label="Brand color" hint="Used as the accent on quote PDFs and report headers.">
+                                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                    <input type="color" value={form.brandColor} onChange={e => set('brandColor', e.target.value)}
+                                        style={{ width:34, height:34, padding:2, border:`1px solid ${T.border}`, borderRadius:T.r, cursor:'pointer', background:'none' }}/>
+                                    <CInput value={form.brandColor} onChange={v => set('brandColor', v)} mono/>
+                                </div>
+                            </CField>
+                            <CField label="Display name" hint="Appears in the top nav and on all exported documents.">
+                                <CInput value={form.displayName} onChange={v => set('displayName', v)} placeholder="Your company name"/>
+                            </CField>
+                            <CField label="Legal name" hint="Full legal entity name for contracts and invoices.">
+                                <CInput value={form.legalName} onChange={v => set('legalName', v)} placeholder="Legal entity name"/>
+                            </CField>
+                        </div>
+                    </CSectionCard>
+
+                    <CSectionCard title="Address & contact" description="The registered office address shown on quotes. For multi-location, set up locations under Sales process → Territories.">
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                            <div style={{ gridColumn:'1 / 3' }}>
+                                <CField label="Street address"><CInput value={form.address} onChange={v => set('address', v)} placeholder="123 Main St, Suite 100"/></CField>
+                            </div>
+                            <CField label="City"><CInput value={form.city} onChange={v => set('city', v)}/></CField>
+                            <CField label="State / Region"><CInput value={form.state} onChange={v => set('state', v)}/></CField>
+                            <CField label="ZIP / Postal code"><CInput value={form.zip} onChange={v => set('zip', v)}/></CField>
+                            <CField label="Country"><CSelect value={form.country} onChange={v => set('country', v)} options={COUNTRIES}/></CField>
+                            <CField label="Main phone"><CInput value={form.phone} onChange={v => set('phone', v)} placeholder="+1 (555) 000-0000"/></CField>
+                            <CField label="Support email"><CInput value={form.supportEmail} onChange={v => set('supportEmail', v)} placeholder="support@yourcompany.com"/></CField>
+                        </div>
+                    </CSectionCard>
+
+                    <CSectionCard
+                        title="Default quote header"
+                        description="This block prints at the top of every new quote PDF. Reps can override per-quote if Quote templates allow it."
+                        headAction={<span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Supports {'{{rep.name}}'}, {'{{account.name}}'}, {'{{quote.number}}'}</span>}
+                    >
+                        <CTextarea value={form.quoteHeader} onChange={v => set('quoteHeader', v)} rows={5}/>
+                    </CSectionCard>
+                </div>
+
+                {/* RIGHT — live PDF preview */}
+                <div>
+                    <div style={{ position:'sticky', top:20, background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                        <div style={{ padding:'10px 14px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', background:T.surface2 }}>
+                            <span style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, fontFamily:T.sans }}>Live preview · Quote PDF</span>
+                            <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Updates as you type</span>
+                        </div>
+                        <div style={{ padding:14, background:'#d9d2c1' }}>
+                            <div style={{ background:'#fff', boxShadow:'0 2px 10px rgba(0,0,0,0.08)', borderRadius:2, padding:24, fontFamily:T.serif }}>
+                                <div style={{ display:'flex', alignItems:'flex-start', gap:14, paddingBottom:14, borderBottom:`2px solid ${form.brandColor || T.goldInk}` }}>
+                                    <div style={{ width:44, height:44, background:form.brandColor || T.gold, borderRadius:3, display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, fontWeight:700, color:'#fff', flexShrink:0 }}>
+                                        {(form.displayName || 'A')[0].toUpperCase()}
+                                    </div>
+                                    <div style={{ flex:1 }}>
+                                        <div style={{ fontSize:15, fontWeight:700, color:T.ink, letterSpacing:-0.2 }}>{form.displayName || 'Your Company'}</div>
+                                        <div style={{ fontSize:10, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans, marginTop:2 }}>
+                                            {form.address && <>{form.address}<br/></>}
+                                            {(form.city || form.state || form.zip) && <>{[form.city, form.state, form.zip].filter(Boolean).join(', ')}<br/></>}
+                                            {form.phone && <>{form.phone}{form.supportEmail ? ' · ' : ''}</>}
+                                            {form.supportEmail}
+                                        </div>
+                                    </div>
+                                    <div style={{ textAlign:'right' }}>
+                                        <div style={{ fontSize:9, fontFamily:T.sans, color:T.inkMuted, letterSpacing:1, fontWeight:600 }}>QUOTE</div>
+                                        <div style={{ fontSize:13, fontWeight:700, color:T.ink, fontFamily:T.serif }}>Q-2026-0001</div>
+                                    </div>
+                                </div>
+                                <div style={{ fontSize:11, color:T.inkMid, marginTop:12, lineHeight:1.55, fontFamily:T.sans }}>
+                                    {form.quoteHeader
+                                        ? form.quoteHeader.replace('{{account.name}}','<b>Acme Corp.</b>').replace('{{rep.name}}','<b>Jamie Chen</b>').replace('{{quote.expires}}','<b>Dec 31, 2026</b>').replace('{{quote.number}}','<b>Q-2026-0001</b>')
+                                        : <em style={{ color:T.inkMuted }}>No quote header set — add one above.</em>}
+                                </div>
+                                <div style={{ marginTop:16, display:'flex', flexDirection:'column', gap:4 }}>
+                                    {[80,60,75,50,65].map((w,i) => <div key={i} style={{ height:6, width:`${w}%`, background:T.border, borderRadius:1 }}/>)}
+                                </div>
+                                <div style={{ marginTop:16, paddingTop:10, borderTop:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', fontSize:10, color:T.inkMuted, fontFamily:T.sans }}>
+                                    <span>{form.supportEmail || 'yourcompany.com'}</span>
+                                    <span>Page 1 of 3</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </DetailPageChrome>
+    );
+};
+
+// ── 2. Fiscal Year ─────────────────────────────────────────────
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS_FULL  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const QUARTER_COLORS = ['#ede7db','#f0ece4','#ece7f2','#f0f4ea'];
+const QUARTER_INKS   = [T.goldInk,'#5a544c','#5e4e7a','#4d6b3d'];
+
+const FiscalRibbon = ({ startMonth }) => {
+    const quarters = [];
+    for (let q = 0; q < 4; q++) {
+        const start = (startMonth + q * 3) % 12;
+        quarters.push({ label:`Q${q+1}`, months:[start,(start+1)%12,(start+2)%12], start });
+    }
+    return (
+        <div>
+            <div style={{ display:'flex', gap:2, marginBottom:6 }}>
+                {Array.from({ length:12 }).map((_, m) => {
+                    const q = quarters.findIndex(qq => qq.months.includes(m));
+                    return (
+                        <div key={m} style={{ flex:1, padding:'20px 0 12px', textAlign:'center', background:QUARTER_COLORS[q], borderTop:`2px solid ${QUARTER_INKS[q]}`, position:'relative' }}>
+                            <div style={{ fontSize:10, fontWeight:600, color:T.inkMid, fontFamily:T.sans }}>{MONTHS_SHORT[m]}</div>
+                            {quarters[q].start === m && (
+                                <div style={{ position:'absolute', top:4, left:5, fontSize:9, fontWeight:700, color:QUARTER_INKS[q], letterSpacing:0.4, fontFamily:T.sans }}>{quarters[q].label}</div>
+                            )}
+                            {m === 0 && (
+                                <div style={{ position:'absolute', bottom:-14, left:'50%', transform:'translateX(-50%)', fontSize:8, color:T.inkMuted, fontWeight:600, letterSpacing:0.3, whiteSpace:'nowrap', fontFamily:T.sans }}>CAL YR START</div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+            <div style={{ marginTop:22, display:'flex', alignItems:'center', gap:14, fontSize:11, color:T.inkMuted, flexWrap:'wrap', fontFamily:T.sans }}>
+                {quarters.map((q, i) => (
+                    <div key={i} style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                        <div style={{ width:10, height:10, background:QUARTER_COLORS[i], border:`1px solid ${QUARTER_INKS[i]}` }}/>
+                        <span><b style={{ color:T.ink }}>{q.label}</b> · {MONTHS_SHORT[q.start]}–{MONTHS_SHORT[(q.start+2)%12]}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const FiscalYearDetail = ({ settings, setSettings, onBack }) => {
+    const savedStart = parseInt(settings?.fiscalYearStart) || 0;
+    const [startMonth, setStartMonth] = useState(savedStart);
+    const [dirty, setDirty]   = useState(false);
+    const [saving, setSaving] = useState(false);
+
+    const handleCancel = () => { setStartMonth(savedStart); setDirty(false); };
+    const handleSave = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, fiscalYearStart: startMonth }));
+        try {
+            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ fiscalYearStart: startMonth }) });
+        } catch(e) { console.error('save fiscal year', e); }
+        setSaving(false);
+        setDirty(false);
+    };
+
+    // Compute current period display
+    const now = new Date();
+    const calYear = now.getFullYear();
+    const fyEndMonth = (startMonth + 11) % 12;
+    const fyEndYear  = startMonth <= fyEndMonth ? calYear : calYear + 1;
+    const fyStartYear = startMonth > now.getMonth() ? calYear - 1 : calYear;
+    const fyLabel = `FY${String(fyStartYear + 1).slice(-2)}`;
+    const currentQ = Math.floor(((now.getMonth() - startMonth + 12) % 12) / 3) + 1;
+    const qStartM  = (startMonth + (currentQ - 1) * 3) % 12;
+    const qEndM    = (qStartM + 2) % 12;
+    const nextQStartM = (qStartM + 3) % 12;
+    const nextQDate = new Date(calYear, nextQStartM, 1);
+    const fyEndDate = new Date(fyEndYear, fyEndMonth + 1, 0);
+    const daysToNextQ = Math.round((nextQDate - now) / 86400000);
+    const daysToFYEnd = Math.round((fyEndDate - now) / 86400000);
+
+    return (
+        <DetailPageChrome
+            crumb="Fiscal year" title="Fiscal year"
+            subtitle="Quarter starts and fiscal year alignment"
+            statusDetail={`Q1 starts ${MONTHS_SHORT[startMonth]} 1`}
+            updatedBy={settings?.updatedBy || 'Admin'} updatedAt="11 months ago"
+            onBack={onBack} dirty={dirty} onCancel={handleCancel}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+        >
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:20 }}>
+                {/* LEFT */}
+                <div>
+                    <CSectionCard title="Fiscal calendar" description={'Choose the month your fiscal year begins. Pipeline, forecast, and every report that says "this quarter" or "this FY" derives from this setting.'}>
+                        <div style={{ display:'flex', gap:20, alignItems:'flex-start', marginBottom:24, flexWrap:'wrap' }}>
+                            <CField label="Fiscal year starts">
+                                <CSelect value={String(startMonth)} onChange={v => { setStartMonth(parseInt(v)); setDirty(true); }}
+                                    options={MONTHS_FULL.map((m, i) => ({ value:String(i), label:m }))}/>
+                            </CField>
+                        </div>
+                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, marginBottom:10, fontFamily:T.sans }}>Current quarter map · Calendar {calYear}</div>
+                        <FiscalRibbon startMonth={startMonth}/>
+                    </CSectionCard>
+
+                    <CSectionCard title="Current period" description={"What Accelerep considers 'today' for every fiscal calculation."}>
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14 }}>
+                            {[
+                                { k:'Current fiscal year', v:fyLabel,              sub:`${MONTHS_SHORT[startMonth]} 1, ${fyStartYear} → ${MONTHS_SHORT[fyEndMonth]} ${fyEndDate.getDate()}, ${fyEndYear}` },
+                                { k:'Current quarter',     v:`Q${currentQ} ${fyLabel}`, sub:`${MONTHS_SHORT[qStartM]}–${MONTHS_SHORT[qEndM]}` },
+                                { k:'Next quarter start',  v:MONTHS_SHORT[nextQStartM]+' 1', sub:`in ${daysToNextQ} days` },
+                                { k:'Fiscal year-end',     v:`${MONTHS_SHORT[fyEndMonth]} ${fyEndDate.getDate()}`, sub:`in ${daysToFYEnd} days` },
+                            ].map((c, i) => (
+                                <div key={i} style={{ padding:'12px 14px', background:T.surface2, borderRadius:T.r, border:`1px solid ${T.border}` }}>
+                                    <div style={{ fontSize:10, fontWeight:600, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:4, fontFamily:T.sans }}>{c.k}</div>
+                                    <div style={{ fontSize:17, fontWeight:700, color:T.ink, fontFamily:T.serif, fontStyle:'italic' }}>{c.v}</div>
+                                    <div style={{ fontSize:11, color:T.inkMid, marginTop:3, fontFamily:T.sans }}>{c.sub}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </CSectionCard>
+
+                    <CSectionCard title="Reporting adjustments" description="Advanced — how weeks and months roll up inside a quarter. Default 3-4-4 is standard for retail; 4-4-5 is common for financial services.">
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
+                            {[
+                                { k:'3-4-4', on:true,  hint:'Standard calendar-month quarter' },
+                                { k:'4-4-5', on:false, hint:'13-week quarter, weekly alignment' },
+                                { k:'4-5-4', on:false, hint:'Retail 4-5-4 calendar' },
+                            ].map((o, i) => (
+                                <div key={i} style={{ padding:'12px 14px', border:`1.5px solid ${o.on ? T.goldInk : T.border}`, borderRadius:T.r, background: o.on ? 'rgba(200,185,154,0.12)' : T.surface, position:'relative' }}>
+                                    <div style={{ fontSize:14, fontWeight:700, color:T.ink, fontFamily:T.serif }}>{o.k}</div>
+                                    <div style={{ fontSize:11.5, color:T.inkMid, marginTop:3, fontFamily:T.sans }}>{o.hint}</div>
+                                    {o.on && <div style={{ position:'absolute', top:8, right:10, fontSize:10, fontWeight:700, color:T.goldInk, letterSpacing:0.4, fontFamily:T.sans }}>● ACTIVE</div>}
+                                </div>
+                            ))}
+                        </div>
+                    </CSectionCard>
+                </div>
+
+                {/* RIGHT — impact panel */}
+                <div>
+                    <div style={{ position:'sticky', top:20, background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                        <div style={{ padding:'14px 16px', background:'#2a2622', color:'#fbf8f3' }}>
+                            <div style={{ fontSize:10, fontWeight:700, color:T.gold, letterSpacing:0.8, textTransform:'uppercase', marginBottom:6, fontFamily:T.sans }}>What this controls</div>
+                            <div style={{ fontSize:13, color:'#fbf8f3', lineHeight:1.5, fontFamily:T.sans }}>
+                                Changing fiscal year realigns <b style={{ color:T.gold }}>6 areas</b> of the app. Preview before saving.
+                            </div>
+                        </div>
+                        <div style={{ padding:4 }}>
+                            {[
+                                { name:'Pipeline & Forecast',     items:'"This quarter" / "This FY" filters' },
+                                { name:'Sales Manager dashboard', items:'Quota attainment windows' },
+                                { name:'Opportunity close date',  items:'Auto-calculated quarter badge' },
+                                { name:'Reports & dashboards',    items:'12 reports use fiscal periods' },
+                                { name:'Automations',             items:'3 rules scheduled per quarter' },
+                                { name:'Leaderboards',            items:'Team rankings reset boundary' },
+                            ].map((item, i) => (
+                                <div key={i} style={{ padding:'11px 12px', borderBottom: i < 5 ? `1px solid ${T.border}` : 'none', display:'flex', alignItems:'flex-start', gap:10 }}>
+                                    <LIcon name="link" size={13} color={T.goldInk} style={{ marginTop:2, flexShrink:0 }}/>
+                                    <div>
+                                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{item.name}</div>
+                                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>{item.items}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div style={{ padding:'10px 12px', borderTop:`1px solid ${T.border}`, background:T.surface2 }}>
+                            <div style={{ fontSize:11, color:T.inkMuted, lineHeight:1.5, fontFamily:T.sans }}>
+                                <LIcon name="info" size={11} color={T.inkMuted}/>{' '}
+                                Historical reports stay stable. Existing reports keep the fiscal year they were generated with.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </DetailPageChrome>
+    );
+};
+
+// ── 3. Company Calendar ────────────────────────────────────────
+const FEDERAL_HOLIDAYS = [
+    { date:'Jan 1',  name:"New Year's Day",                source:'US · Federal', type:'observed' },
+    { date:'Jan 20', name:'Martin Luther King Jr. Day',    source:'US · Federal', type:'observed' },
+    { date:'Feb 17', name:"Presidents' Day",               source:'US · Federal', type:'observed' },
+    { date:'May 26', name:'Memorial Day',                  source:'US · Federal', type:'observed' },
+    { date:'Jun 19', name:'Juneteenth',                    source:'US · Federal', type:'observed' },
+    { date:'Jul 4',  name:'Independence Day (obs.)',       source:'US · Federal', type:'observed' },
+    { date:'Sep 1',  name:'Labor Day',                     source:'US · Federal', type:'observed' },
+    { date:'Nov 27', name:'Thanksgiving',                  source:'US · Federal', type:'observed' },
+    { date:'Dec 25', name:'Christmas Day',                 source:'US · Federal', type:'observed' },
+];
+
+const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
+    const now = new Date();
+    const [year, setYear]       = useState(now.getFullYear());
+    const customHolidays        = settings?.customHolidays || [];
+    const allHolidays           = [...FEDERAL_HOLIDAYS, ...customHolidays].sort((a, b) => {
+        const toDate = s => new Date(`${s} ${year}`);
+        return toDate(a.date) - toDate(b.date);
+    });
+
+    // Build 12-month grid
+    const MonthGrid = ({ m }) => {
+        const first  = new Date(year, m, 1).getDay();
+        const days   = new Date(year, m + 1, 0).getDate();
+        const cells  = [];
+        for (let i = 0; i < first; i++) cells.push({ empty:true });
+        for (let d = 1; d <= days; d++) {
+            const dateStr = `${MONTHS_SHORT[m]} ${d}`;
+            const hit = allHolidays.find(h => h.date === dateStr);
+            cells.push({ d, hit });
+        }
+        const DAYS = ['S','M','T','W','T','F','S'];
+        return (
+            <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:10.5, fontWeight:700, color:T.ink, marginBottom:5, fontFamily:T.sans }}>{MONTHS_SHORT[m]} <span style={{ color:T.inkMuted, fontWeight:500 }}>{year}</span></div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:1, fontSize:9, color:T.inkMuted, marginBottom:2 }}>
+                    {DAYS.map((d,i) => <div key={i} style={{ textAlign:'center', padding:'1px 0', fontFamily:T.sans }}>{d}</div>)}
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:1 }}>
+                    {cells.map((c,ci) => (
+                        <div key={ci} style={{ aspectRatio:'1', textAlign:'center', fontSize:9.5, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:2, fontFamily:T.sans,
+                            color: c.hit ? (c.hit.type === 'custom' ? T.goldInk : T.ink) : T.inkMid,
+                            fontWeight: c.hit ? 700 : 400,
+                            background: c.hit ? (c.hit.type === 'custom' ? 'rgba(200,185,154,0.35)' : 'rgba(77,107,61,0.18)') : 'transparent',
+                        }}>
+                            {c.empty ? '' : c.d}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    const fedCount    = allHolidays.filter(h => h.type === 'observed').length;
+    const customCount = allHolidays.filter(h => h.type === 'custom').length;
+
+    return (
+        <DetailPageChrome
+            crumb="Company calendar" title="Company calendar"
+            subtitle="Shared org-wide holidays and events"
+            statusDetail={`${allHolidays.length} holidays · ${year}`}
+            updatedBy={settings?.updatedBy || 'Admin'} updatedAt="2 months ago"
+            onBack={onBack} dirty={false} onCancel={() => {}}
+            primaryAction={() => {}} primaryLabel="Add holiday"
+        >
+            {/* Year strip */}
+            <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:14, padding:'12px 16px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, flexWrap:'wrap' }}>
+                <div style={{ display:'inline-flex', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:20, padding:2 }}>
+                    {[year-1, year, year+1].map(y => (
+                        <div key={y} onClick={() => setYear(y)} style={{ padding:'5px 14px', fontSize:12.5, fontWeight:600, cursor:'pointer', borderRadius:20, fontFamily:T.sans,
+                            color: y === year ? '#fbf8f3' : T.inkMid,
+                            background: y === year ? T.ink : 'transparent' }}>{y}</div>
+                    ))}
+                </div>
+                <div style={{ width:1, height:20, background:T.border }}/>
+                <div style={{ display:'flex', gap:18 }}>
+                    {[{ k:'Total holidays', v:String(allHolidays.length), c:T.ink },{ k:'Federal (US)', v:String(fedCount), c:T.ok },{ k:'Custom', v:String(customCount), c:T.goldInk }].map((s,i) => (
+                        <div key={i}>
+                            <div style={{ fontSize:10, fontWeight:600, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', fontFamily:T.sans }}>{s.k}</div>
+                            <div style={{ fontSize:15, fontWeight:700, color:s.c, fontFamily:T.serif, fontStyle:'italic' }}>{s.v}</div>
+                        </div>
+                    ))}
+                </div>
+                <div style={{ flex:1 }}/>
+                <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                    <LIcon name="refresh" size={13}/> Sync federal holidays
+                </button>
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 440px', gap:20 }}>
+                {/* Calendar grid */}
+                <CSectionCard title={`Calendar ${year}`} description="Federal holidays auto-sync from the US holiday list. Custom entries are highlighted in gold.">
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:14 }}>
+                        {Array.from({ length:12 }).map((_,m) => <MonthGrid key={m} m={m}/>)}
+                    </div>
+                    <div style={{ marginTop:14, display:'flex', gap:18, fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
+                        <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                            <span style={{ width:10, height:10, background:'rgba(77,107,61,0.4)', borderRadius:2, display:'inline-block' }}/>Observed holiday
+                        </span>
+                        <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                            <span style={{ width:10, height:10, background:'rgba(200,185,154,0.7)', borderRadius:2, display:'inline-block' }}/>Custom company event
+                        </span>
+                    </div>
+                </CSectionCard>
+
+                <div>
+                    {/* Holiday list */}
+                    <CSectionCard title="Holidays & events" description={null}>
+                        <div style={{ maxHeight:520, overflowY:'auto', border:`1px solid ${T.border}`, borderRadius:T.r }}>
+                            {allHolidays.map((h,i) => (
+                                <div key={i} style={{ padding:'10px 12px', display:'flex', alignItems:'center', gap:10, borderBottom: i < allHolidays.length-1 ? `1px solid ${T.border}` : 'none', background: h.type === 'custom' ? 'rgba(200,185,154,0.08)' : T.surface }}>
+                                    <div style={{ width:46, fontFamily:T.serif, fontStyle:'italic', fontSize:13, fontWeight:700, color:T.ink, flexShrink:0 }}>{h.date}</div>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{h.name}</div>
+                                        <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{h.source}</div>
+                                    </div>
+                                    {h.type === 'custom'
+                                        ? <span style={{ fontSize:9.5, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.35)', padding:'2px 6px', borderRadius:2, letterSpacing:0.3, fontFamily:T.sans }}>CUSTOM</span>
+                                        : <LIcon name="lock" size={12} color={T.inkMuted}/>
+                                    }
+                                </div>
+                            ))}
+                        </div>
+                    </CSectionCard>
+
+                    {/* Connected sources */}
+                    <CSectionCard title="Connected holiday sources" description="Auto-populate federal holidays by region. Manually added custom events stay on top.">
+                        {[
+                            { name:'United States · Federal',  on:true,  count:'9 holidays' },
+                            { name:'Canada · Federal',         on:false, count:'—' },
+                            { name:'United Kingdom · Bank',    on:false, count:'—' },
+                            { name:`Google Calendar · ${settings?.companySupportEmail || 'holidays@accelerep.com'}`, on:!!(settings?.googleCalendarConnected), count: settings?.googleCalendarConnected ? 'Synced recently' : '—' },
+                        ].map((s,i) => (
+                            <div key={i} style={{ padding:'10px 12px', display:'flex', alignItems:'center', gap:10, borderBottom: i < 3 ? `1px solid ${T.border}` : 'none' }}>
+                                <div style={{ width:8, height:8, borderRadius:'50%', background: s.on ? T.ok : T.border, flexShrink:0 }}/>
+                                <div style={{ flex:1, fontSize:12.5, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{s.name}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{s.count}</div>
+                                <span style={{ fontSize:11, fontWeight:600, color: s.on ? T.inkMid : T.goldInk, cursor:'pointer', fontFamily:T.sans }}>{s.on ? 'Disconnect' : 'Connect'}</span>
+                            </div>
+                        ))}
+                    </CSectionCard>
+                </div>
+            </div>
+        </DetailPageChrome>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────
 // ADMIN WORKSPACE VIEW
 // ─────────────────────────────────────────────────────────────
 const AdminView = ({ settings, setSettings, currentUser }) => {
@@ -578,14 +1163,26 @@ const AdminView = ({ settings, setSettings, currentUser }) => {
     // Detail panels that have real content — others just open the card (no-op for now)
     const DETAIL_PANELS = {
         'lead-conv-benchmarks': <LeadConvBenchmarks settings={settings} setSettings={setSettings}/>,
+        'company-profile':  'company-profile',
+        'fiscal-year':      'fiscal-year',
+        'company-calendar': 'company-calendar',
     };
 
     if (activeItem) {
-        const panel = DETAIL_PANELS[activeItem.id];
+        const id = activeItem.id;
+        const onBack = () => setActiveItem(null);
+
+        // Company detail pages — full chrome, no wrapper card
+        if (id === 'company-profile')  return <CompanyProfileDetail  settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'fiscal-year')      return <FiscalYearDetail      settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'company-calendar') return <CompanyCalendarDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
+
+        // Generic wrapper for all other panels
+        const panel = DETAIL_PANELS[id];
         return (
             <div>
                 {/* Back breadcrumb */}
-                <button onClick={() => setActiveItem(null)}
+                <button onClick={onBack}
                     style={{ display:'inline-flex', alignItems:'center', gap:6, background:'none', border:'none', color:T.info, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:'0 0 14px' }}>
                     ← Back to settings
                 </button>
