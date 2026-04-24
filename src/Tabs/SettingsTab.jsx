@@ -1024,9 +1024,38 @@ const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
     const [formDay,   setFormDay]   = useState(String(now.getDate()));
     const [formName,  setFormName]  = useState('');
     const [formError, setFormError] = useState('');
+    const [syncing, setSyncing]     = useState(false);
+    const [syncMsg, setSyncMsg]     = useState('');
+
+    const handleSync = async () => {
+        setSyncing(true);
+        setSyncMsg('');
+        try {
+            const data = await dbFetch(`/.netlify/functions/holidays?year=${year}`);
+            if (!data || !data.holidays) throw new Error('No data returned');
+            // Merge: keep custom holidays, replace all observed/federal entries with fresh API data
+            const fresh = data.holidays; // observed entries from API
+            const preserved = customHolidays; // user-added custom entries survive
+            const merged = [...fresh, ...preserved].sort((a, b) => {
+                const toMs = s => { try { return new Date(`${s} ${year}`).getTime(); } catch { return 0; } };
+                return toMs(a.date) - toMs(b.date);
+            });
+            // Store fresh federal list separately so FEDERAL_HOLIDAYS const stays in sync
+            setSettings(prev => ({ ...prev, customHolidays: preserved, federalHolidays: fresh }));
+            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ customHolidays: preserved, federalHolidays: fresh }) });
+            setSyncMsg(`✓ Synced ${fresh.length} federal holidays for ${year}`);
+            setTimeout(() => setSyncMsg(''), 4000);
+        } catch (err) {
+            console.error('sync holidays error', err);
+            setSyncMsg('Failed to sync — check your connection.');
+            setTimeout(() => setSyncMsg(''), 4000);
+        }
+        setSyncing(false);
+    };
 
     const customHolidays = settings?.customHolidays || [];
-    const allHolidays    = [...FEDERAL_HOLIDAYS, ...customHolidays].sort((a, b) => {
+    const federalHolidays = settings?.federalHolidays?.length ? settings.federalHolidays : FEDERAL_HOLIDAYS;
+    const allHolidays    = [...federalHolidays, ...customHolidays].sort((a, b) => {
         const toDate = s => { try { return new Date(`${s} ${year}`); } catch { return new Date(0); } };
         return toDate(a.date) - toDate(b.date);
     });
@@ -1091,7 +1120,7 @@ const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
         );
     };
 
-    const fedCount    = allHolidays.filter(h => h.type === 'observed').length;
+    const fedCount    = federalHolidays.length;
     const customCount = allHolidays.filter(h => h.type === 'custom').length;
     const inpStyle    = { padding:'7px 10px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' };
     const selStyle    = { ...inpStyle, appearance:'none', cursor:'pointer',
@@ -1159,9 +1188,13 @@ const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
                     ))}
                 </div>
                 <div style={{ flex:1 }}/>
-                <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
-                    <LIcon name="refresh" size={13}/> Sync federal holidays
-                </button>
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
+                    <button onClick={handleSync} disabled={syncing}
+                        style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background: syncing ? T.borderStrong : T.surface, color: syncing ? T.inkMuted : T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: syncing ? 'default' : 'pointer', fontFamily:T.sans, transition:'all 120ms' }}>
+                        <LIcon name="refresh" size={13} color={syncing ? T.inkMuted : T.ink}/> {syncing ? 'Syncing…' : 'Sync federal holidays'}
+                    </button>
+                    {syncMsg && <div style={{ fontSize:11, color: syncMsg.startsWith('✓') ? T.ok : T.danger, fontFamily:T.sans, fontWeight:600 }}>{syncMsg}</div>}
+                </div>
             </div>
 
             <div style={{ display:'grid', gridTemplateColumns:'1fr 440px', gap:20 }}>
