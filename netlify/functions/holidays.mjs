@@ -3,19 +3,25 @@ import { verifyAuth } from './auth.mjs';
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 export const handler = async (event) => {
-    try {
-        await verifyAuth(event);
-    } catch (err) {
-        return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
-    }
+    const headers = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+
+    if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
+
+    const auth = await verifyAuth(event);
+    if (auth.error) return { statusCode: auth.status || 401, headers, body: JSON.stringify({ error: auth.error }) };
 
     if (event.httpMethod !== 'GET') {
-        return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+        return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
     }
 
     const year = parseInt(event.queryStringParameters?.year) || new Date().getFullYear();
     if (year < 2000 || year > 2100) {
-        return { statusCode: 400, body: JSON.stringify({ error: 'Invalid year' }) };
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid year' }) };
     }
 
     try {
@@ -24,6 +30,7 @@ export const handler = async (event) => {
         if (!res.ok) {
             return {
                 statusCode: 502,
+                headers,
                 body: JSON.stringify({ error: `Holiday API returned ${res.status}` }),
             };
         }
@@ -50,7 +57,7 @@ export const handler = async (event) => {
 
         return {
             statusCode: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ holidays, year }),
         };
 
@@ -58,6 +65,7 @@ export const handler = async (event) => {
         console.error('holidays.mjs error:', err);
         return {
             statusCode: 500,
+            headers,
             body: JSON.stringify({ error: 'Failed to fetch holidays' }),
         };
     }
