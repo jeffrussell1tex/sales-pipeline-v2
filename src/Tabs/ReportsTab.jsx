@@ -2370,7 +2370,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
     const [aiPrompt, setAiPrompt] = React.useState('');
     const [aiGenerated, setAiGenerated] = React.useState(false);
     const [aiRefine, setAiRefine] = React.useState('');
-    const [builderTab, setBuilderTab] = React.useState('data');
+    const [builderTab, setBuilderTab] = React.useState('Data');
     const [builderDirty, setBuilderDirty] = React.useState(true);
     const [builderRendered, setBuilderRendered] = React.useState(false);
     const [builderSource, setBuilderSource] = React.useState('Opportunities');
@@ -4053,7 +4053,7 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
                 if (!aiPrompt.trim()) return;
                 setAiGenerated(true);
                 setCreateMode('ai');
-                setBuilderTab('data');
+                setBuilderTab('Data');
                 setBuilderDirty(false);
                 setBuilderRendered(true);
             };
