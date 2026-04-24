@@ -1376,10 +1376,71 @@ const DEFAULT_PIPELINES = [
 const STAGE_PROBS = { 'Prospecting':10,'Qualification':25,'Discovery':40,'Proposal':60,'Negotiation':80,'Closing':90,'Closed Won':100,'Closed Lost':0 };
 const STAGE_TYPES = { 'Closed Won':'Won','Closed Lost':'Lost' };
 
+const DEFAULT_ASSIGNMENT_RULES = [
+    { team:'SMB West',           members:8,  defaultPipeline:'New business' },
+    { team:'SMB East',           members:9,  defaultPipeline:'New business' },
+    { team:'Mid-Market',         members:6,  defaultPipeline:'New business' },
+    { team:'Customer Success',   members:5,  defaultPipeline:'Renewals' },
+    { team:'Account Management', members:7,  defaultPipeline:'Expansion' },
+];
+
 const PipelinesDetail = ({ settings, setSettings, onBack }) => {
-    const [selectedId, setSelectedId] = useState('new-biz');
+    const [selectedId, setSelectedId]   = useState('new-biz');
+    const [showNewForm, setShowNewForm] = useState(false);
+    const [newName, setNewName]         = useState('');
+    const [newDefault, setNewDefault]   = useState(false);
+    const [newErr, setNewErr]           = useState('');
+    const [saving, setSaving]           = useState(false);
+    const [editingTeam, setEditingTeam] = useState(null); // team name being edited
+
     const pipelines = settings?.pipelines?.length ? settings.pipelines : DEFAULT_PIPELINES;
-    const selected = pipelines.find(p => p.id === selectedId) || pipelines[0];
+    const selected  = pipelines.find(p => p.id === selectedId) || pipelines[0];
+
+    const assignmentRules = settings?.assignmentRules?.length
+        ? settings.assignmentRules
+        : DEFAULT_ASSIGNMENT_RULES;
+
+    // ── New pipeline ──────────────────────────────────────────
+    const handleAddPipeline = async () => {
+        if (!newName.trim()) { setNewErr('Pipeline name is required.'); return; }
+        if (pipelines.some(p => p.name.toLowerCase() === newName.trim().toLowerCase())) {
+            setNewErr('A pipeline with that name already exists.'); return;
+        }
+        const newPipeline = {
+            id:        newName.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+            name:      newName.trim(),
+            isDefault: newDefault,
+            stages:    ['Prospecting', 'Proposal', 'Closed Won', 'Closed Lost'],
+            active:    0, value: '$0',
+            teams:     [],
+        };
+        // If set as default, clear default flag on existing ones
+        const updated = newDefault
+            ? [...pipelines.map(p => ({ ...p, isDefault: false })), newPipeline]
+            : [...pipelines, newPipeline];
+        setSaving(true);
+        setSettings(prev => ({ ...prev, pipelines: updated }));
+        try {
+            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updated }) });
+        } catch(e) { console.error('save pipelines', e); }
+        setSaving(false);
+        setSelectedId(newPipeline.id);
+        setNewName(''); setNewDefault(false); setNewErr(''); setShowNewForm(false);
+    };
+
+    // ── Assignment rule edit ──────────────────────────────────
+    const handleAssignmentChange = async (teamName, newPipelineName) => {
+        const updated = assignmentRules.map(r =>
+            r.team === teamName ? { ...r, defaultPipeline: newPipelineName } : r
+        );
+        setSettings(prev => ({ ...prev, assignmentRules: updated }));
+        setEditingTeam(null);
+        try {
+            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ assignmentRules: updated }) });
+        } catch(e) { console.error('save assignment rules', e); }
+    };
+
+    const selStyle = { padding:'4px 8px', fontSize:12, border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontFamily:T.sans, cursor:'pointer', outline:'none' };
 
     return (
         <SPDetailPageChrome
@@ -1393,12 +1454,46 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                     <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
                         <LIcon name="download" size={13}/> Export JSON
                     </button>
-                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                    <button onClick={() => { setShowNewForm(v => !v); setNewErr(''); }}
+                        style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background: showNewForm ? T.surface2 : T.ink, color: showNewForm ? T.ink : '#fbf8f3', border: showNewForm ? `1px solid ${T.borderStrong}` : 'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
                         + New pipeline
                     </button>
                 </div>
             }
         >
+            {/* New pipeline inline form */}
+            {showNewForm && (
+                <div style={{ background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+2, padding:16, marginBottom:16, boxShadow:'0 2px 12px rgba(42,38,34,0.08)' }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:12, fontFamily:T.sans }}>New pipeline</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 180px auto auto', gap:10, alignItems:'flex-end' }}>
+                        <div>
+                            <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>Pipeline name</label>
+                            <input value={newName} onChange={e => { setNewName(e.target.value); setNewErr(''); }}
+                                placeholder="e.g. Partner deals"
+                                onKeyDown={e => { if (e.key==='Enter') handleAddPipeline(); if (e.key==='Escape') { setShowNewForm(false); setNewErr(''); } }}
+                                autoFocus
+                                style={{ padding:'7px 10px', background:T.surface, border:`1px solid ${newErr ? T.danger : T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' }}/>
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:2 }}>
+                            <input type="checkbox" id="new-default-chk" checked={newDefault} onChange={e => setNewDefault(e.target.checked)} style={{ cursor:'pointer' }}/>
+                            <label htmlFor="new-default-chk" style={{ fontSize:12.5, color:T.ink, cursor:'pointer', fontFamily:T.sans, whiteSpace:'nowrap' }}>Set as default</label>
+                        </div>
+                        <button onClick={handleAddPipeline} disabled={saving}
+                            style={{ padding:'7px 16px', background: saving ? T.borderStrong : T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: saving ? 'default' : 'pointer', fontFamily:T.sans }}>
+                            {saving ? 'Saving…' : 'Create'}
+                        </button>
+                        <button onClick={() => { setShowNewForm(false); setNewName(''); setNewErr(''); }}
+                            style={{ padding:'7px 12px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                            Cancel
+                        </button>
+                    </div>
+                    {newErr && <div style={{ fontSize:11.5, color:T.danger, marginTop:8, fontFamily:T.sans }}>{newErr}</div>}
+                    <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:newErr ? 4 : 8, fontFamily:T.sans }}>
+                        New pipelines start with 4 default stages. You can add, remove, and reorder stages after creation.
+                    </div>
+                </div>
+            )}
+
             <div style={{ display:'grid', gridTemplateColumns:'420px 1fr', gap:20 }}>
                 {/* Left: pipeline list */}
                 <div>
@@ -1422,6 +1517,7 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                 </div>
                                 <div style={{ marginTop:8, fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
                                     Used by {(p.teams||[]).map((t,ti) => <span key={ti}><b style={{ color:T.inkMid }}>{t}</b>{ti < p.teams.length-1 ? ' · ' : ''}</span>)}
+                                    {(p.teams||[]).length === 0 && <span style={{ color:T.inkMuted, fontStyle:'italic' }}>No teams assigned yet</span>}
                                 </div>
                             </div>
                         ))}
@@ -1465,16 +1561,27 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                             columns={[
                                 { key:'team',    label:'Team',    w:'2fr' },
                                 { key:'members', label:'Members', w:'100px', align:'right' },
-                                { key:'default', label:'Default', w:'140px' },
+                                { key:'default', label:'Default', w:'200px' },
                                 { key:'edit',    label:'',        w:'50px', align:'right' },
                             ]}
-                            rows={[
-                                { team:'SMB West',           members:'8',  default:'New business', edit:<span style={{ color:T.goldInk, fontWeight:600, cursor:'pointer', fontSize:12, fontFamily:T.sans }}>Edit</span> },
-                                { team:'SMB East',           members:'9',  default:'New business', edit:<span style={{ color:T.goldInk, fontWeight:600, cursor:'pointer', fontSize:12, fontFamily:T.sans }}>Edit</span> },
-                                { team:'Mid-Market',         members:'6',  default:'New business', edit:<span style={{ color:T.goldInk, fontWeight:600, cursor:'pointer', fontSize:12, fontFamily:T.sans }}>Edit</span> },
-                                { team:'Customer Success',   members:'5',  default:'Renewals',     edit:<span style={{ color:T.goldInk, fontWeight:600, cursor:'pointer', fontSize:12, fontFamily:T.sans }}>Edit</span> },
-                                { team:'Account Management', members:'7',  default:'Expansion',    edit:<span style={{ color:T.goldInk, fontWeight:600, cursor:'pointer', fontSize:12, fontFamily:T.sans }}>Edit</span> },
-                            ]}
+                            rows={assignmentRules.map(r => ({
+                                team:    <span style={{ fontFamily:T.sans, fontWeight:500, color:T.ink }}>{r.team}</span>,
+                                members: <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{r.members}</span>,
+                                default: editingTeam === r.team ? (
+                                    <select autoFocus value={r.defaultPipeline}
+                                        onChange={e => handleAssignmentChange(r.team, e.target.value)}
+                                        onBlur={() => setEditingTeam(null)}
+                                        style={selStyle}>
+                                        {pipelines.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                                    </select>
+                                ) : (
+                                    <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{r.defaultPipeline}</span>
+                                ),
+                                edit: <button onClick={e => { e.stopPropagation(); setEditingTeam(r.team); }}
+                                    style={{ background:'none', border:'none', color:T.goldInk, fontWeight:600, cursor:'pointer', fontSize:12, fontFamily:T.sans, padding:0 }}>
+                                    {editingTeam === r.team ? 'Done' : 'Edit'}
+                                </button>,
+                            }))}
                         />
                     </CSectionCard>
                 </div>
