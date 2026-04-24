@@ -637,7 +637,7 @@ const CSectionCard = ({ title, description, children, headAction }) => (
 );
 
 // Shared chrome wrapper for all three detail pages
-const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, updatedAt, onBack, dirty, onCancel, primaryAction, primaryLabel, children }) => (
+const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, updatedAt, onBack, dirty, onCancel, primaryAction, primaryLabel, disablePrimary, children }) => (
     <div style={{ fontFamily:T.sans }}>
         {/* Breadcrumb */}
         <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
@@ -665,7 +665,7 @@ const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, upd
             </div>
             <div style={{ display:'flex', gap:8, flexShrink:0 }}>
                 <button onClick={onCancel} style={{ padding:'8px 16px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
-                <button onClick={primaryAction} disabled={!dirty} style={{ padding:'8px 16px', background: dirty ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: dirty ? 'pointer' : 'default', fontFamily:T.sans, transition:'background 120ms' }}>{primaryLabel}</button>
+                <button onClick={primaryAction} disabled={disablePrimary !== undefined ? disablePrimary : !dirty} style={{ padding:'8px 16px', background: (disablePrimary !== undefined ? !disablePrimary : dirty) ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: (disablePrimary !== undefined ? !disablePrimary : dirty) ? 'pointer' : 'default', fontFamily:T.sans, transition:'background 120ms' }}>{primaryLabel}</button>
             </div>
         </div>
 
@@ -1017,18 +1017,52 @@ const FEDERAL_HOLIDAYS = [
 
 const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
     const now = new Date();
-    const [year, setYear]       = useState(now.getFullYear());
-    const customHolidays        = settings?.customHolidays || [];
-    const allHolidays           = [...FEDERAL_HOLIDAYS, ...customHolidays].sort((a, b) => {
-        const toDate = s => new Date(`${s} ${year}`);
+    const [year, setYear]         = useState(now.getFullYear());
+    const [showForm, setShowForm] = useState(false);
+    const [saving, setSaving]     = useState(false);
+    const [formMonth, setFormMonth] = useState(String(now.getMonth()));
+    const [formDay,   setFormDay]   = useState(String(now.getDate()));
+    const [formName,  setFormName]  = useState('');
+    const [formError, setFormError] = useState('');
+
+    const customHolidays = settings?.customHolidays || [];
+    const allHolidays    = [...FEDERAL_HOLIDAYS, ...customHolidays].sort((a, b) => {
+        const toDate = s => { try { return new Date(`${s} ${year}`); } catch { return new Date(0); } };
         return toDate(a.date) - toDate(b.date);
     });
 
+    const resetForm = () => { setFormName(''); setFormMonth(String(now.getMonth())); setFormDay('1'); setFormError(''); setShowForm(false); };
+
+    const handleAddHoliday = async () => {
+        if (!formName.trim()) { setFormError('Name is required.'); return; }
+        const day = parseInt(formDay);
+        const month = parseInt(formMonth);
+        if (!day || day < 1 || day > 31) { setFormError('Enter a valid day.'); return; }
+        const dateStr = `${MONTHS_SHORT[month]} ${day}`;
+        const newHoliday = { date: dateStr, name: formName.trim(), source: 'Custom', type: 'custom' };
+        const updated = [...customHolidays, newHoliday];
+        setSaving(true);
+        setSettings(prev => ({ ...prev, customHolidays: updated }));
+        try {
+            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ customHolidays: updated }) });
+        } catch(e) { console.error('save holiday', e); }
+        setSaving(false);
+        resetForm();
+    };
+
+    const handleDeleteHoliday = async (holiday) => {
+        const updated = customHolidays.filter(h => !(h.date === holiday.date && h.name === holiday.name));
+        setSettings(prev => ({ ...prev, customHolidays: updated }));
+        try {
+            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ customHolidays: updated }) });
+        } catch(e) { console.error('delete holiday', e); }
+    };
+
     // Build 12-month grid
     const MonthGrid = ({ m }) => {
-        const first  = new Date(year, m, 1).getDay();
-        const days   = new Date(year, m + 1, 0).getDate();
-        const cells  = [];
+        const first = new Date(year, m, 1).getDay();
+        const days  = new Date(year, m + 1, 0).getDate();
+        const cells = [];
         for (let i = 0; i < first; i++) cells.push({ empty:true });
         for (let d = 1; d <= days; d++) {
             const dateStr = `${MONTHS_SHORT[m]} ${d}`;
@@ -1059,6 +1093,10 @@ const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
 
     const fedCount    = allHolidays.filter(h => h.type === 'observed').length;
     const customCount = allHolidays.filter(h => h.type === 'custom').length;
+    const inpStyle    = { padding:'7px 10px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' };
+    const selStyle    = { ...inpStyle, appearance:'none', cursor:'pointer',
+        backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+        backgroundRepeat:'no-repeat', backgroundPosition:'right 8px center', paddingRight:26 };
 
     return (
         <DetailPageChrome
@@ -1066,9 +1104,42 @@ const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
             subtitle="Shared org-wide holidays and events"
             statusDetail={`${allHolidays.length} holidays · ${year}`}
             updatedBy={settings?.updatedBy || 'Admin'} updatedAt="2 months ago"
-            onBack={onBack} dirty={false} onCancel={() => {}}
-            primaryAction={() => {}} primaryLabel="Add holiday"
+            onBack={onBack} dirty={true} onCancel={onBack} disablePrimary={false}
+            primaryAction={() => setShowForm(true)} primaryLabel="+ Add holiday"
         >
+            {/* Add holiday inline form */}
+            {showForm && (
+                <div style={{ background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+2, padding:16, marginBottom:14, boxShadow:'0 2px 12px rgba(42,38,34,0.1)' }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:12, fontFamily:T.sans }}>Add custom holiday</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 80px 1fr auto auto', gap:10, alignItems:'flex-end' }}>
+                        <div>
+                            <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>Month</label>
+                            <select value={formMonth} onChange={e => setFormMonth(e.target.value)} style={selStyle}>
+                                {MONTHS_FULL.map((m,i) => <option key={i} value={String(i)}>{m}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>Day</label>
+                            <input type="number" min="1" max="31" value={formDay} onChange={e => { setFormDay(e.target.value); setFormError(''); }} style={inpStyle}/>
+                        </div>
+                        <div>
+                            <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>Name</label>
+                            <input type="text" placeholder="e.g. Company offsite" value={formName} onChange={e => { setFormName(e.target.value); setFormError(''); }}
+                                style={inpStyle} onKeyDown={e => { if (e.key === 'Enter') handleAddHoliday(); if (e.key === 'Escape') resetForm(); }}/>
+                        </div>
+                        <button onClick={handleAddHoliday} disabled={saving}
+                            style={{ padding:'7px 16px', background: saving ? T.borderStrong : T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: saving ? 'default' : 'pointer', fontFamily:T.sans, whiteSpace:'nowrap', alignSelf:'flex-end' }}>
+                            {saving ? 'Saving…' : 'Save'}
+                        </button>
+                        <button onClick={resetForm}
+                            style={{ padding:'7px 12px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans, alignSelf:'flex-end' }}>
+                            Cancel
+                        </button>
+                    </div>
+                    {formError && <div style={{ fontSize:11.5, color:T.danger, marginTop:8, fontFamily:T.sans }}>{formError}</div>}
+                </div>
+            )}
+
             {/* Year strip */}
             <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:14, padding:'12px 16px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, flexWrap:'wrap' }}>
                 <div style={{ display:'inline-flex', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:20, padding:2 }}>
@@ -1113,17 +1184,27 @@ const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
                     {/* Holiday list */}
                     <CSectionCard title="Holidays & events" description={null}>
                         <div style={{ maxHeight:520, overflowY:'auto', border:`1px solid ${T.border}`, borderRadius:T.r }}>
+                            {allHolidays.length === 0 && (
+                                <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>No holidays yet.</div>
+                            )}
                             {allHolidays.map((h,i) => (
-                                <div key={i} style={{ padding:'10px 12px', display:'flex', alignItems:'center', gap:10, borderBottom: i < allHolidays.length-1 ? `1px solid ${T.border}` : 'none', background: h.type === 'custom' ? 'rgba(200,185,154,0.08)' : T.surface }}>
+                                <div key={`${h.date}-${h.name}`} style={{ padding:'10px 12px', display:'flex', alignItems:'center', gap:10, borderBottom: i < allHolidays.length-1 ? `1px solid ${T.border}` : 'none', background: h.type === 'custom' ? 'rgba(200,185,154,0.08)' : T.surface }}>
                                     <div style={{ width:46, fontFamily:T.serif, fontStyle:'italic', fontSize:13, fontWeight:700, color:T.ink, flexShrink:0 }}>{h.date}</div>
                                     <div style={{ flex:1, minWidth:0 }}>
                                         <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{h.name}</div>
                                         <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{h.source}</div>
                                     </div>
-                                    {h.type === 'custom'
-                                        ? <span style={{ fontSize:9.5, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.35)', padding:'2px 6px', borderRadius:2, letterSpacing:0.3, fontFamily:T.sans }}>CUSTOM</span>
-                                        : <LIcon name="lock" size={12} color={T.inkMuted}/>
-                                    }
+                                    {h.type === 'custom' ? (
+                                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                            <span style={{ fontSize:9.5, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.35)', padding:'2px 6px', borderRadius:2, letterSpacing:0.3, fontFamily:T.sans }}>CUSTOM</span>
+                                            <button onClick={() => handleDeleteHoliday(h)} title="Remove"
+                                                style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:15, lineHeight:1, padding:'0 2px', fontFamily:T.sans }}
+                                                onMouseEnter={e => e.currentTarget.style.color = T.danger}
+                                                onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>×</button>
+                                        </div>
+                                    ) : (
+                                        <LIcon name="lock" size={12} color={T.inkMuted}/>
+                                    )}
                                 </div>
                             ))}
                         </div>
