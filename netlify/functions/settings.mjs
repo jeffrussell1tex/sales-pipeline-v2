@@ -27,10 +27,10 @@ export const handler = async (event) => {
                 companyName:      row.companyName     || '',
                 companyLogo:      row.companyLogo     || '',
                 fiscalYearStart:  row.fiscalYearStart || '',
-                funnelStages:     row.stages          || [],
+                funnelStages:     row.extra?.funnelStages || row.stages || [],
                 products:         row.extra?.products        || [],
                 taskTypes:        row.taskTypes       || ['Call', 'Meeting', 'Email'],
-                painPoints:       row.painPoints      || [],
+                painPoints:       row.extra?.painPoints || row.painPoints || [],
                 verticalMarkets:  row.verticalMarkets || [],
                 fieldVisibility:  row.fieldVisibility || {},
                 // Extended fields — stored in the extra jsonb blob column
@@ -72,7 +72,6 @@ export const handler = async (event) => {
                 customFieldsByObject: row.extra?.customFieldsByObject || null,
                 customerTypeTiers:    row.extra?.customerTypeTiers    || null,
                 industries:           row.extra?.industries            || null,
-                painPoints:           row.extra?.painPoints            || row.painPoints || [],
                 // BYOK: send back the plaintext key so the UI can display it,
                 // but NEVER log or expose it in error responses
                 anthropicApiKey:  decryptedKey || null,
@@ -138,6 +137,7 @@ export const handler = async (event) => {
                 customHolidays:       'customHolidays'       in data ? (data.customHolidays       || [])   : existingExtra.customHolidays       || [],
                 federalHolidays:      'federalHolidays'      in data ? (data.federalHolidays      || [])   : existingExtra.federalHolidays      || [],
                 // Sales process Group 1
+                funnelStages:         'funnelStages'         in data ? (data.funnelStages         || [])   : existingExtra.funnelStages         || [],
                 kpiThresholds:        'kpiThresholds'        in data ? (data.kpiThresholds        || null) : existingExtra.kpiThresholds        || null,
                 assignmentRules:      'assignmentRules'      in data ? (data.assignmentRules      || null) : existingExtra.assignmentRules      || null,
                 // Sales process Group 2
