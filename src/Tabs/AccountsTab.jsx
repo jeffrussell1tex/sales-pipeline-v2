@@ -324,8 +324,8 @@ function AccountRow({
             style={{
                 display: 'grid',
                 gridTemplateColumns: selectMode
-                    ? '36px 3px 220px 56px 200px 110px 70px 130px 120px 28px'
-                    : '3px 220px 56px 200px 110px 70px 130px 120px 28px',
+                    ? '36px 3px 1fr 160px 100px 60px 120px 140px 28px'
+                    : '3px 1fr 160px 100px 60px 120px 140px 28px',
                 alignItems: 'center', minHeight: 52,
                 borderBottom: `1px solid ${T.border}`,
                 background: isSelected
@@ -351,42 +351,40 @@ function AccountRow({
             {/* Warmth accent bar */}
             <div style={{ width: 3, height: '100%', background: dot, flexShrink: 0 }} />
 
-            {/* Account name + sub-account badge */}
+            {/* Account name + inline subs badge */}
             <div style={{ paddingLeft: 12, paddingRight: 8, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
                 {depth > 0 && <Icon name="building" size={11} color={T.inkMuted} />}
-                <div style={{ minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap' }}>
                         <span style={{ fontSize: 13, fontWeight: depth > 0 ? 500 : 600, color: depth > 0 ? T.inkMid : T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.name}</span>
-                        {account.isVip && <span style={{ fontSize: 8, fontWeight: 700, color: T.goldInk, background: 'rgba(200,185,154,0.2)', padding: '1px 5px', borderRadius: T.r, border: `1px solid ${T.gold}`, letterSpacing: 0.5 }}>VIP</span>}
-                        {account.isDnc && <span style={{ fontSize: 8, fontWeight: 700, color: T.danger, background: 'rgba(156,58,46,0.1)', padding: '1px 5px', borderRadius: T.r, border: `1px solid rgba(156,58,46,0.3)`, letterSpacing: 0.5 }}>DNC</span>}
+                        {hasChildren && (
+                            <button
+                                onClick={e => { e.stopPropagation(); onOpenDrawer(account, subAccounts); }}
+                                title={`${subAccounts.length} sub-account${subAccounts.length !== 1 ? 's' : ''}`}
+                                style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: 3,
+                                    padding: '2px 6px',
+                                    background: T.ink, color: T.surface,
+                                    border: 'none', borderRadius: T.r,
+                                    fontSize: 10, fontWeight: 700,
+                                    cursor: 'pointer', fontFamily: T.sans,
+                                    flexShrink: 0, letterSpacing: 0.2,
+                                }}>
+                                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18M3 9h18"/></svg>
+                                {subAccounts.length} subs
+                            </button>
+                        )}
+                        {account.isVip && <span style={{ fontSize: 8, fontWeight: 700, color: T.goldInk, background: 'rgba(200,185,154,0.2)', padding: '1px 5px', borderRadius: T.r, border: `1px solid ${T.gold}`, letterSpacing: 0.5, flexShrink: 0 }}>VIP</span>}
+                        {account.isDnc && <span style={{ fontSize: 8, fontWeight: 700, color: T.danger, background: 'rgba(156,58,46,0.1)', padding: '1px 5px', borderRadius: T.r, border: `1px solid rgba(156,58,46,0.3)`, letterSpacing: 0.5, flexShrink: 0 }}>DNC</span>}
                     </div>
                     <div style={{ fontSize: 10, color: T.inkMuted, marginTop: 1 }}>
                         {contactCount > 0 && `${contactCount} contact${contactCount!==1?'s':''}`}
-                        {contactCount > 0 && account.employeeCount && ' · '}
+                        {contactCount > 0 && hasChildren && ' · '}
+                        {hasChildren && `${subAccounts.length} sub-account${subAccounts.length!==1?'s':''}`}
+                        {(contactCount > 0 || hasChildren) && account.employeeCount && ' · '}
                         {account.employeeCount && `${account.employeeCount} employees`}
                     </div>
                 </div>
-            </div>
-
-            {/* Subs */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {hasChildren && (
-                    <button
-                        onClick={e => { e.stopPropagation(); onOpenDrawer(account, subAccounts); }}
-                        title={`${subAccounts.length} sub-account${subAccounts.length !== 1 ? 's' : ''}`}
-                        style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 4,
-                            padding: '3px 8px',
-                            background: T.ink, color: T.surface,
-                            border: 'none', borderRadius: T.r,
-                            fontSize: 11, fontWeight: 700,
-                            cursor: 'pointer', fontFamily: T.sans,
-                            letterSpacing: 0.2,
-                        }}>
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18M3 9h18"/></svg>
-                        {subAccounts.length}
-                    </button>
-                )}
             </div>
 
             {/* Industry */}
@@ -431,16 +429,18 @@ function AccountRow({
 
 // ── Filter Panel ──────────────────────────────────────────────
 function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilters }) {
-    const [industry, setIndustry] = useState(currentFilters.industry || '__all__');
-    const [owner,    setOwner]    = useState(currentFilters.owner    || '__all__');
-    const [hasPipe,  setHasPipe]  = useState(currentFilters.hasPipe  || '__all__');
+    const [industry,    setIndustry]    = useState(currentFilters.industry    || '__all__');
+    const [owner,       setOwner]       = useState(currentFilters.owner       || '__all__');
+    const [hasPipe,     setHasPipe]     = useState(currentFilters.hasPipe     || '__all__');
+    const [accountType, setAccountType] = useState(currentFilters.accountType || '__all__');
 
     // Re-sync when panel opens
     React.useEffect(() => {
         if (open) {
-            setIndustry(currentFilters.industry || '__all__');
-            setOwner(currentFilters.owner       || '__all__');
-            setHasPipe(currentFilters.hasPipe   || '__all__');
+            setIndustry(currentFilters.industry       || '__all__');
+            setOwner(currentFilters.owner             || '__all__');
+            setHasPipe(currentFilters.hasPipe         || '__all__');
+            setAccountType(currentFilters.accountType || '__all__');
         }
     }, [open]);
 
@@ -463,14 +463,17 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
     };
     const lbl = { fontSize: 11, fontWeight: 600, color: T.inkMid, marginBottom: 5, display: 'block', fontFamily: T.sans };
 
+    const accountTypes = [...new Set((settings?.customerTypes || []).filter(Boolean))].sort();
+
     const handleApply = () => {
-        onApply({ industry, owner, hasPipe });
+        onApply({ industry, owner, hasPipe, accountType });
         onClose();
     };
     const handleReset = () => {
         setIndustry('__all__');
         setOwner('__all__');
         setHasPipe('__all__');
+        setAccountType('__all__');
     };
 
     return (
@@ -507,6 +510,14 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
                         <option value="__all__">Any</option>
                         <option value="yes">Has open pipeline</option>
                         <option value="no">No open pipeline</option>
+                    </select>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                    <label style={lbl}>Account Type</label>
+                    <select value={accountType} onChange={e => setAccountType(e.target.value)} style={selStyle}>
+                        <option value="__all__">All types</option>
+                        {accountTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                 </div>
 
@@ -550,14 +561,15 @@ export default function AccountsTab() {
     const [sortDir,   setSortDir]   = useState('asc');
     const [expandedIds, setExpandedIds] = useState({});  // { [accountId]: bool }
     const [filterOpen, setFilterOpen]   = useState(false);
-    const [panelFilters, setPanelFilters] = useState({ industry: '__all__', owner: '__all__', hasPipe: '__all__' });
+    const [panelFilters, setPanelFilters] = useState({ industry: '__all__', owner: '__all__', hasPipe: '__all__', accountType: '__all__' });
     const [drawerAccount, setDrawerAccount] = useState(null); // account whose subs are shown in side drawer
     const searchRef = useRef(null);
 
     const activePanelFilterCount = [
-        panelFilters.industry !== '__all__',
-        panelFilters.owner    !== '__all__',
-        panelFilters.hasPipe  !== '__all__',
+        panelFilters.industry    !== '__all__',
+        panelFilters.owner       !== '__all__',
+        panelFilters.hasPipe     !== '__all__',
+        panelFilters.accountType !== '__all__',
     ].filter(Boolean).length;
 
     const setViewPersist = v => { setView(v); localStorage.setItem('accounts:view', v); };
@@ -609,6 +621,9 @@ export default function AccountsTab() {
             list = list.filter(a => (warmthMap[a.id]?.pipeline || 0) > 0);
         } else if (panelFilters.hasPipe === 'no') {
             list = list.filter(a => (warmthMap[a.id]?.pipeline || 0) === 0);
+        }
+        if (panelFilters.accountType !== '__all__') {
+            list = list.filter(a => (a.customerTypes || []).includes(panelFilters.accountType));
         }
 
         return list;
@@ -700,8 +715,8 @@ export default function AccountsTab() {
         <div style={{
             display: 'grid',
             gridTemplateColumns: sm
-                ? '36px 3px 220px 56px 200px 110px 70px 130px 120px 28px'
-                : '3px 220px 56px 200px 110px 70px 130px 120px 28px',
+                ? '36px 3px 1fr 160px 100px 60px 120px 140px 28px'
+                : '3px 1fr 160px 100px 60px 120px 140px 28px',
             alignItems: 'center', height: 34,
             background: T.surface2, borderBottom: `1px solid ${T.border}`,
             fontSize: 10, fontWeight: 700, color: T.inkMuted,
@@ -717,7 +732,6 @@ export default function AccountsTab() {
             <div style={{ paddingLeft: 12 }}>
                 <SortHeader label="Account"      field="name"        currentField={sortField} currentDir={sortDir} onSort={handleSort} />
             </div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.6, textTransform: 'uppercase', textAlign: 'center' }}>Subs</div>
             <SortHeader label="Industry"     field="industry"    currentField={sortField} currentDir={sortDir} onSort={handleSort} style={{ paddingLeft: 8 }} />
             <SortHeader label="Pipeline"     field="pipeline"    currentField={sortField} currentDir={sortDir} onSort={handleSort} />
             <SortHeader label="Deals"        field="deals"       currentField={sortField} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'center', justifyContent: 'center' }} />
@@ -839,8 +853,8 @@ export default function AccountsTab() {
         </div>
     );
 
-    // ── Header ────────────────────────────────────────────────
-    const Header = () => (
+    // ── Header (inline JSX — NOT a const component, prevents input remount on re-render) ──
+    const headerJSX = (
         <div style={{ padding: '0 0 14px', display: 'flex', alignItems: 'flex-end', gap: 20 }}>
             <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 28, fontFamily: 'Georgia, serif', fontStyle: 'italic', fontWeight: 300, letterSpacing: -0.8, color: T.ink, lineHeight: 1, marginBottom: 5 }}>
@@ -852,7 +866,23 @@ export default function AccountsTab() {
             </div>
 
             {/* Action buttons */}
-            <div style={{ display: 'flex', gap: 8, position: 'relative' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative' }}>
+                {/* Search — must live here (not inside a sub-component) to avoid remount on every keystroke */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, width: 200 }}>
+                    <Icon name="search" size={13} color={T.inkMuted} />
+                    <input
+                        ref={searchRef}
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Escape') { setSearch(''); if (searchRef.current) searchRef.current.value = ''; } }}
+                        placeholder="Search accounts…"
+                        style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, color: T.ink, fontFamily: T.sans, width: '100%' }}
+                    />
+                    {search && (
+                        <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                    )}
+                </div>
+
                 {/* Filter button */}
                 <button
                     onClick={() => setFilterOpen(o => !o)}
@@ -1021,23 +1051,7 @@ export default function AccountsTab() {
 
     return (
         <div className="tab-page" style={{ fontFamily: T.sans }}>
-            <Header />
-
-            {/* Local search — below header, above toolbar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, marginBottom: 10, maxWidth: 320 }}>
-                <Icon name="search" size={13} color={T.inkMuted} />
-                <input
-                    ref={searchRef}
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Escape') { setSearch(''); if (searchRef.current) searchRef.current.value = ''; } }}
-                    placeholder="Search accounts…"
-                    style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, color: T.ink, fontFamily: T.sans, width: '100%' }}
-                />
-                {search && (
-                    <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
-                )}
-            </div>
+            {headerJSX}
 
             {/* Combined toolbar: tabs + warmth + sort + filter */}
             <Toolbar />
