@@ -1266,6 +1266,551 @@ const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// SALES PROCESS DETAIL PAGES — Group 1 of 2
+// ─────────────────────────────────────────────────────────────
+
+// ── Extend DetailPageChrome to support Sales process breadcrumb ──
+// Already defined above — we use it with secondCrumb prop added below.
+// We extend by wrapping: SPDetailPageChrome adds the Sales process crumb.
+const SPDetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, updatedAt,
+    onBack, dirty, onCancel, primaryAction, primaryLabel, disablePrimary, rightActions, children }) => (
+    <div style={{ fontFamily: T.sans }}>
+        {/* Breadcrumb */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+            <span>/</span>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Sales process</button>
+            <span>/</span>
+            <span style={{ color:T.ink, fontWeight:600 }}>{crumb}</span>
+        </div>
+        {/* Title band */}
+        <div style={{ display:'flex', alignItems:'flex-end', gap:24, paddingBottom:18, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>
+            <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10, flex:1 }}>
+                <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3, fontFamily:T.sans }}>
+                    {title}
+                    {dirty && <span style={{ fontSize:12, fontWeight:500, color:T.warn, marginLeft:12, fontFamily:T.sans }}>● Unsaved changes</span>}
+                </div>
+                <div style={{ fontSize:13, color:T.inkMid, marginTop:4, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', fontFamily:T.sans }}>
+                    <span>{subtitle}</span>
+                    <span style={{ color:T.inkMuted }}>•</span>
+                    <StatusChip status="ok" detail={statusDetail} small/>
+                    <span style={{ color:T.inkMuted }}>•</span>
+                    <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited {updatedAt} by <span style={{ color:T.inkMid, fontWeight:500 }}>{updatedBy}</span></span>
+                </div>
+            </div>
+            <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                {rightActions || (
+                    <>
+                        <button onClick={onCancel} style={{ padding:'8px 16px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                        <button onClick={primaryAction} disabled={disablePrimary !== undefined ? disablePrimary : !dirty}
+                            style={{ padding:'8px 16px', background:(disablePrimary !== undefined ? !disablePrimary : dirty) ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:(disablePrimary !== undefined ? !disablePrimary : dirty) ? 'pointer':'default', fontFamily:T.sans, transition:'background 120ms' }}>
+                            {primaryLabel}
+                        </button>
+                    </>
+                )}
+            </div>
+        </div>
+        {children}
+    </div>
+);
+
+// ── Shared SP primitives ──────────────────────────────────────
+const SPTable = ({ columns, rows }) => (
+    <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r+2, overflow:'hidden', background:T.surface }}>
+        <div style={{ display:'grid', gridTemplateColumns:columns.map(c => c.w||'1fr').join(' '), padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10 }}>
+            {columns.map((c,i) => (
+                <div key={i} style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:c.align||'left', fontFamily:T.sans }}>{c.label}</div>
+            ))}
+        </div>
+        {rows.map((row,i) => (
+            <div key={i} style={{ display:'grid', gridTemplateColumns:columns.map(c => c.w||'1fr').join(' '), padding:'11px 14px', gap:10, borderBottom: i===rows.length-1 ? 'none' : `1px solid ${T.border}`, alignItems:'center' }}>
+                {columns.map((c,j) => (
+                    <div key={j} style={{ textAlign:c.align||'left', color:c.muted ? T.inkMid : T.ink, fontFamily: c.mono ? 'ui-monospace,Menlo,monospace' : T.sans, fontSize:13 }}>
+                        {row[c.key]}
+                    </div>
+                ))}
+            </div>
+        ))}
+    </div>
+);
+
+const SPDrag = ({ muted }) => (
+    <span style={{ color: muted ? T.border : T.inkMuted, fontSize:14, cursor:'grab', userSelect:'none', letterSpacing:-2 }}>⋮⋮</span>
+);
+
+const SPSparkline = ({ data, color }) => {
+    const max = Math.max(...data), min = Math.min(...data);
+    const w = 120, h = 28;
+    const pts = data.map((v,i) => {
+        const x = (i / (data.length-1)) * w;
+        const y = h - ((v - min) / ((max-min)||1)) * h;
+        return `${x},${y}`;
+    }).join(' ');
+    return (
+        <svg width={w} height={h} style={{ verticalAlign:'middle' }}>
+            <polyline points={pts} fill="none" stroke={color||T.ok} strokeWidth="1.5"/>
+        </svg>
+    );
+};
+
+const STAGE_COLORS = {
+    'Prospecting':'#e07b4a','Qualification':'#d4a847','Discovery':'#8aab5a',
+    'Proposal':'#4a8abd','Negotiation':'#7a5abd','Closing':'#4aad8a',
+    'Closed Won':'#4d6b3d','Closed Lost':'#9c3a2e',
+};
+
+// ── 1. Pipelines ──────────────────────────────────────────────
+const DEFAULT_PIPELINES = [
+    { id:'new-biz',  name:'New business', isDefault:true,
+      stages:['Prospecting','Qualification','Discovery','Proposal','Negotiation','Closing','Closed Won','Closed Lost'],
+      active:147, value:'$4.8M', teams:['SMB West','SMB East','Mid-Market'] },
+    { id:'renewal',  name:'Renewals', isDefault:false,
+      stages:['Upcoming','Engaged','Negotiating','Renewed','Churned'],
+      active:62, value:'$2.1M', teams:['Customer Success'] },
+    { id:'exp',      name:'Expansion', isDefault:false,
+      stages:['Identified','Qualified','Proposal','Commit','Won','Lost'],
+      active:38, value:'$890k', teams:['Account Management'] },
+];
+
+const STAGE_PROBS = { 'Prospecting':10,'Qualification':25,'Discovery':40,'Proposal':60,'Negotiation':80,'Closing':90,'Closed Won':100,'Closed Lost':0 };
+const STAGE_TYPES = { 'Closed Won':'Won','Closed Lost':'Lost' };
+
+const PipelinesDetail = ({ settings, setSettings, onBack }) => {
+    const [selectedId, setSelectedId] = useState('new-biz');
+    const pipelines = settings?.pipelines?.length ? settings.pipelines : DEFAULT_PIPELINES;
+    const selected = pipelines.find(p => p.id === selectedId) || pipelines[0];
+
+    return (
+        <SPDetailPageChrome
+            crumb="Pipelines" title="Pipelines"
+            subtitle="Manage multiple pipelines and their stages"
+            statusDetail={`${pipelines.length} pipelines · ${pipelines.reduce((a,p) => a + (p.stages?.length||0), 0)} stages`}
+            updatedBy="Admin" updatedAt="3 weeks ago"
+            onBack={onBack} dirty={false}
+            rightActions={
+                <div style={{ display:'flex', gap:8 }}>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                        <LIcon name="download" size={13}/> Export JSON
+                    </button>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                        + New pipeline
+                    </button>
+                </div>
+            }
+        >
+            <div style={{ display:'grid', gridTemplateColumns:'420px 1fr', gap:20 }}>
+                {/* Left: pipeline list */}
+                <div>
+                    <CSectionCard title="Pipelines" description="Drag to reorder. The default pipeline is used for new opportunities when no pipeline is selected.">
+                        {pipelines.map((p,i) => (
+                            <div key={p.id} onClick={() => setSelectedId(p.id)}
+                                style={{ padding:'14px 16px', border:`1.5px solid ${selectedId===p.id ? T.goldInk : T.border}`, background: selectedId===p.id ? 'rgba(200,185,154,0.1)' : T.surface, borderRadius:T.r+2, marginBottom:10, cursor:'pointer', transition:'all 120ms' }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+                                    <SPDrag/>
+                                    <div style={{ fontSize:14, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{p.name}</div>
+                                    {p.isDefault && <span style={{ fontSize:9.5, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.3)', padding:'2px 6px', borderRadius:2, letterSpacing:0.3, fontFamily:T.sans }}>DEFAULT</span>}
+                                    <div style={{ flex:1 }}/>
+                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{p.active} open · {p.value}</span>
+                                </div>
+                                <div style={{ display:'flex', gap:2 }}>
+                                    {(p.stages||[]).map((s,si) => (
+                                        <div key={si} style={{ flex:1, padding:'5px 4px', fontSize:9.5, fontWeight:600, background: STAGE_COLORS[s] ? `${STAGE_COLORS[s]}22` : T.surface2, color:STAGE_COLORS[s]||T.inkMid, borderTop:`2px solid ${STAGE_COLORS[s]||T.border}`, textAlign:'center', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontFamily:T.sans }}>
+                                            {s}
+                                        </div>
+                                    ))}
+                                </div>
+                                <div style={{ marginTop:8, fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
+                                    Used by {(p.teams||[]).map((t,ti) => <span key={ti}><b style={{ color:T.inkMid }}>{t}</b>{ti < p.teams.length-1 ? ' · ' : ''}</span>)}
+                                </div>
+                            </div>
+                        ))}
+                    </CSectionCard>
+                </div>
+
+                {/* Right: selected pipeline stages + assignment */}
+                <div>
+                    <CSectionCard
+                        title={`${selected?.name} — stages`}
+                        description="The stage flow for this pipeline. Probability feeds forecast & Sales Manager dashboards."
+                        headAction={<button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>+ Add stage</button>}
+                    >
+                        <SPTable
+                            columns={[
+                                { key:'drag',  label:'',             w:'28px' },
+                                { key:'name',  label:'Stage',        w:'1.6fr' },
+                                { key:'prob',  label:'Default prob.', w:'120px', align:'right' },
+                                { key:'type',  label:'Type',          w:'90px' },
+                                { key:'days',  label:'Avg days',      w:'90px', align:'right' },
+                                { key:'open',  label:'Open',          w:'70px', align:'right' },
+                                { key:'more',  label:'',              w:'28px' },
+                            ]}
+                            rows={(selected?.stages||[]).map((s,i) => ({
+                                drag: <SPDrag muted={STAGE_TYPES[s] !== undefined}/>,
+                                name: <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+                                    <span style={{ width:8, height:8, borderRadius:'50%', background:STAGE_COLORS[s]||T.border, display:'inline-block', flexShrink:0 }}/>
+                                    <b style={{ fontFamily:T.sans }}>{s}</b>
+                                </span>,
+                                prob: <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{STAGE_PROBS[s] !== undefined ? `${STAGE_PROBS[s]}%` : '—'}</span>,
+                                type: <span style={{ fontSize:12, color: STAGE_TYPES[s]==='Won' ? T.ok : STAGE_TYPES[s]==='Lost' ? T.danger : T.inkMid, fontFamily:T.sans }}>{STAGE_TYPES[s]||'Open'}</span>,
+                                days: <span style={{ color:T.inkMuted, fontFamily:T.sans }}>{STAGE_TYPES[s] ? '—' : `${5+i*2}d`}</span>,
+                                open: <span style={{ color:T.inkMuted, fontFamily:T.sans }}>{STAGE_TYPES[s] ? '—' : `${Math.max(5, 42 - i*5)}`}</span>,
+                                more: <span style={{ color:T.inkMuted, cursor:'pointer' }}>⋯</span>,
+                            }))}
+                        />
+                    </CSectionCard>
+
+                    <CSectionCard title="Assignment rules" description="Which teams and pipelines are paired. Reps see their assigned pipelines by default.">
+                        <SPTable
+                            columns={[
+                                { key:'team',    label:'Team',    w:'2fr' },
+                                { key:'members', label:'Members', w:'100px', align:'right' },
+                                { key:'default', label:'Default', w:'140px' },
+                                { key:'edit',    label:'',        w:'50px', align:'right' },
+                            ]}
+                            rows={[
+                                { team:'SMB West',           members:'8',  default:'New business', edit:<span style={{ color:T.goldInk, fontWeight:600, cursor:'pointer', fontSize:12, fontFamily:T.sans }}>Edit</span> },
+                                { team:'SMB East',           members:'9',  default:'New business', edit:<span style={{ color:T.goldInk, fontWeight:600, cursor:'pointer', fontSize:12, fontFamily:T.sans }}>Edit</span> },
+                                { team:'Mid-Market',         members:'6',  default:'New business', edit:<span style={{ color:T.goldInk, fontWeight:600, cursor:'pointer', fontSize:12, fontFamily:T.sans }}>Edit</span> },
+                                { team:'Customer Success',   members:'5',  default:'Renewals',     edit:<span style={{ color:T.goldInk, fontWeight:600, cursor:'pointer', fontSize:12, fontFamily:T.sans }}>Edit</span> },
+                                { team:'Account Management', members:'7',  default:'Expansion',    edit:<span style={{ color:T.goldInk, fontWeight:600, cursor:'pointer', fontSize:12, fontFamily:T.sans }}>Edit</span> },
+                            ]}
+                        />
+                    </CSectionCard>
+                </div>
+            </div>
+        </SPDetailPageChrome>
+    );
+};
+
+// ── 2. Funnel Stages ──────────────────────────────────────────
+const DEFAULT_FUNNEL_STAGES = [
+    { name:'Prospecting',  prob:10,  type:'Open', color:'#e07b4a' },
+    { name:'Qualification',prob:25,  type:'Open', color:'#d4a847' },
+    { name:'Discovery',    prob:40,  type:'Open', color:'#8aab5a' },
+    { name:'Proposal',     prob:60,  type:'Open', color:'#4a8abd' },
+    { name:'Negotiation',  prob:80,  type:'Open', color:'#7a5abd' },
+    { name:'Closing',      prob:90,  type:'Open', color:'#4aad8a' },
+    { name:'Closed Won',   prob:100, type:'Won',  color:'#4d6b3d' },
+    { name:'Closed Lost',  prob:0,   type:'Lost', color:'#9c3a2e' },
+];
+
+const FunnelStagesDetail = ({ settings, setSettings, onBack }) => {
+    const saved = settings?.funnelStages?.length ? settings.funnelStages : DEFAULT_FUNNEL_STAGES;
+    const [stages, setStages] = useState(() => JSON.parse(JSON.stringify(saved)));
+    const [dirty, setDirty]   = useState(false);
+    const [saving, setSaving] = useState(false);
+
+    const update = (i, field, val) => {
+        setStages(prev => prev.map((s, si) => si === i ? { ...s, [field]: val } : s));
+        setDirty(true);
+    };
+    const handleCancel = () => { setStages(JSON.parse(JSON.stringify(saved))); setDirty(false); };
+    const handleSave   = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, funnelStages: stages }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ funnelStages: stages }) }); }
+        catch(e) { console.error('save funnel stages', e); }
+        setSaving(false); setDirty(false);
+    };
+
+    // Open stages only for probability curve
+    const openStages = stages.filter(s => s.type === 'Open');
+
+    return (
+        <SPDetailPageChrome
+            crumb="Funnel stages" title="Funnel stages"
+            subtitle="Stage names and default win probability"
+            statusDetail={`${stages.length} stages`}
+            updatedBy="Admin" updatedAt="3 weeks ago"
+            onBack={onBack} dirty={dirty} onCancel={handleCancel}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+        >
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 380px', gap:20 }}>
+                {/* Left: stage table */}
+                <div>
+                    <CSectionCard
+                        title="Canonical stages"
+                        description="The master list of stages used across all pipelines. Disabling a stage removes it from any pipeline that references it."
+                        headAction={<button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>+ Add stage</button>}
+                    >
+                        <SPTable
+                            columns={[
+                                { key:'drag',  label:'',              w:'28px' },
+                                { key:'name',  label:'Stage',         w:'1.4fr' },
+                                { key:'prob',  label:'Default prob.',  w:'140px', align:'right' },
+                                { key:'type',  label:'Type',           w:'90px' },
+                                { key:'used',  label:'Used in',        w:'140px' },
+                                { key:'state', label:'State',          w:'80px' },
+                                { key:'more',  label:'',              w:'28px', align:'right' },
+                            ]}
+                            rows={stages.map((s,i) => ({
+                                drag: <SPDrag muted={s.type !== 'Open'}/>,
+                                name: <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+                                    <input type="color" value={s.color} onChange={e => update(i,'color',e.target.value)}
+                                        style={{ width:14, height:14, border:'none', borderRadius:'50%', padding:0, cursor:'pointer', flexShrink:0 }}/>
+                                    <b style={{ fontFamily:T.sans }}>{s.name}</b>
+                                </span>,
+                                prob: <input type="number" min="0" max="100" value={s.prob}
+                                    onChange={e => update(i,'prob',Math.max(0,Math.min(100,parseInt(e.target.value)||0)))}
+                                    style={{ width:60, padding:'3px 6px', fontSize:12, border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', textAlign:'right' }}/>,
+                                type: <select value={s.type} onChange={e => update(i,'type',e.target.value)}
+                                    style={{ fontSize:12, padding:'3px 6px', border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontFamily:T.sans, cursor:'pointer' }}>
+                                    <option>Open</option><option>Won</option><option>Lost</option>
+                                </select>,
+                                used: <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{s.type!=='Open' ? 'All pipelines' : 'New business'}</span>,
+                                state: <StatusChip status="ok" detail="Active" small/>,
+                                more: <span style={{ color:T.inkMuted, cursor:'pointer' }}>⋯</span>,
+                            }))}
+                        />
+                    </CSectionCard>
+
+                    <CSectionCard title="Probability display" description="How win probability is shown to reps on opportunity cards and in forecasts.">
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                            {[
+                                { k:'Stage default',   sub:'Use the default % for each stage', on:true  },
+                                { k:'Rep-adjustable',  sub:'Allow reps to override per-deal',  on:false },
+                            ].map((o,i) => (
+                                <div key={i} style={{ padding:'12px 14px', border:`1.5px solid ${o.on ? T.goldInk : T.border}`, borderRadius:T.r+2, background: o.on ? 'rgba(200,185,154,0.10)' : T.surface }}>
+                                    <div style={{ fontSize:13, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{o.k}</div>
+                                    <div style={{ fontSize:11.5, color:T.inkMid, marginTop:3, fontFamily:T.sans }}>{o.sub}</div>
+                                    {o.on && <div style={{ marginTop:6, fontSize:10, fontWeight:700, color:T.goldInk, letterSpacing:0.4, fontFamily:T.sans }}>● ACTIVE</div>}
+                                </div>
+                            ))}
+                        </div>
+                    </CSectionCard>
+                </div>
+
+                {/* Right: live probability curve */}
+                <div>
+                    <div style={{ position:'sticky', top:20, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+4, overflow:'hidden' }}>
+                        <div style={{ padding:'14px 16px', background:'#2a2622', color:'#fbf8f3' }}>
+                            <div style={{ fontSize:10, fontWeight:700, color:T.gold, letterSpacing:0.8, textTransform:'uppercase', marginBottom:5, fontFamily:T.sans }}>Probability curve</div>
+                            <div style={{ fontSize:13, color:'#fbf8f3', lineHeight:1.5, fontFamily:T.sans }}>How deals weight into your forecast as they move through stages.</div>
+                        </div>
+                        <div style={{ padding:'16px 16px 8px' }}>
+                            <svg width="100%" height="160" viewBox="0 0 320 160" preserveAspectRatio="none">
+                                {[0,25,50,75,100].map((v,i) => (
+                                    <line key={i} x1="30" x2="310" y1={136 - i*28} y2={136-i*28} stroke={T.border} strokeWidth="1" strokeDasharray="3 3"/>
+                                ))}
+                                {openStages.length > 1 && (
+                                    <path
+                                        d={openStages.map((s,i) => {
+                                            const x = 30 + (i/(openStages.length-1))*280;
+                                            const y = 132 - (s.prob/100)*112;
+                                            return `${i===0?'M':'L'}${x} ${y}`;
+                                        }).join(' ')}
+                                        stroke={T.goldInk} strokeWidth="2" fill="none"
+                                    />
+                                )}
+                                {openStages.map((s,i) => {
+                                    const x = 30 + (i/(Math.max(openStages.length-1,1)))*280;
+                                    const y = 132 - (s.prob/100)*112;
+                                    return <circle key={i} cx={x} cy={y} r="4" fill={s.color||T.goldInk}/>;
+                                })}
+                                {[0,25,50,75,100].map((v,i) => (
+                                    <text key={i} x="22" y={140-i*28} fontSize="9" fill={T.inkMuted} textAnchor="end">{v}%</text>
+                                ))}
+                            </svg>
+                            <div style={{ display:'flex', justifyContent:'space-between', fontSize:9, color:T.inkMuted, padding:'0 4px 8px', fontFamily:T.sans }}>
+                                {openStages.map((s,i) => <span key={i}>{s.name.split(' ')[0]}</span>)}
+                            </div>
+                        </div>
+                        <div style={{ padding:'12px 14px', background:'rgba(77,107,61,0.08)', borderTop:`1px solid ${T.border}` }}>
+                            <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.55, fontFamily:T.sans }}>
+                                <b style={{ color:T.ink }}>Forecast math.</b> A $100k deal at Proposal ({openStages.find(s=>s.name==='Proposal')?.prob||60}%) contributes ${Math.round((openStages.find(s=>s.name==='Proposal')?.prob||60))}k to weighted pipeline.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </SPDetailPageChrome>
+    );
+};
+
+// ── 3. KPI Thresholds ─────────────────────────────────────────
+const DEFAULT_KPI_THRESHOLDS = [
+    { k:'Quota attainment',     unit:'%',  good:100, ok:80,  poor:60,  reverse:false, sample:[62,70,68,75,82,88,94,97,103] },
+    { k:'Win rate',             unit:'%',  good:30,  ok:22,  poor:15,  reverse:false, sample:[22,24,19,25,26,28,31,30,29] },
+    { k:'Avg deal size',        unit:'$k', good:50,  ok:35,  poor:25,  reverse:false, sample:[34,38,42,45,48,46,51,54,52] },
+    { k:'Sales cycle length',   unit:'d',  good:35,  ok:50,  poor:70,  reverse:true,  sample:[65,62,58,55,50,48,45,42,40] },
+    { k:'Activities per deal',  unit:'',   good:10,  ok:6,   poor:3,   reverse:false, sample:[4,5,6,6,7,8,9,9,10] },
+    { k:'Opportunity pipeline', unit:'$M', good:4,   ok:2.5, poor:1.5, reverse:false, sample:[1.8,2.1,2.5,2.8,3.2,3.5,3.8,4.1,4.3] },
+];
+
+const KPIThresholdsDetail = ({ settings, setSettings, onBack }) => {
+    const saved = settings?.kpiThresholds?.length ? settings.kpiThresholds : DEFAULT_KPI_THRESHOLDS;
+    const [rows, setRows]   = useState(() => JSON.parse(JSON.stringify(saved)));
+    const [dirty, setDirty] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [errors, setErrors] = useState({});
+
+    const update = (i, field, val) => {
+        const n = parseFloat(val);
+        setRows(prev => prev.map((r,ri) => ri===i ? { ...r, [field]: isNaN(n) ? val : n } : r));
+        setDirty(true);
+        // Validate
+        setErrors(prev => {
+            const next = { ...prev };
+            const row = { ...rows[i], [field]: n };
+            if (!row.reverse && !(row.good > row.ok && row.ok > row.poor)) next[i] = 'Good > Ok > Poor required';
+            else if (row.reverse && !(row.good < row.ok && row.ok < row.poor)) next[i] = 'Good < Ok < Poor required (lower is better)';
+            else delete next[i];
+            return next;
+        });
+    };
+    const hasErrors = Object.keys(errors).length > 0;
+
+    const handleCancel = () => { setRows(JSON.parse(JSON.stringify(saved))); setDirty(false); setErrors({}); };
+    const handleSave   = async () => {
+        if (hasErrors) return;
+        setSaving(true);
+        setSettings(prev => ({ ...prev, kpiThresholds: rows }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ kpiThresholds: rows }) }); }
+        catch(e) { console.error('save kpi thresholds', e); }
+        setSaving(false); setDirty(false);
+    };
+
+    const numInp = (i, field, color) => (
+        <input type="number" value={rows[i][field]} onChange={e => update(i, field, e.target.value)}
+            style={{ width:64, padding:'4px 6px', fontSize:12, border:`1px solid ${errors[i] ? T.danger : T.border}`, borderRadius:T.r, background:T.surface, color, fontFamily:'ui-monospace,Menlo,monospace', textAlign:'right' }}/>
+    );
+
+    return (
+        <SPDetailPageChrome
+            crumb="KPI thresholds" title="KPI thresholds"
+            subtitle="Thresholds, colors, and sparkline ranges for dashboards"
+            statusDetail={`${rows.length} KPIs configured`}
+            updatedBy="Admin" updatedAt="1 month ago"
+            onBack={onBack} dirty={dirty && !hasErrors} onCancel={handleCancel}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+            disablePrimary={!dirty || hasErrors || saving}
+        >
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:20 }}>
+                <div>
+                    <CSectionCard title="Core KPIs" description="Thresholds determine the color (red / yellow / green) shown on Home, Sales Manager dashboards, and report cards.">
+                        <SPTable
+                            columns={[
+                                { key:'name',  label:'KPI',            w:'1.6fr' },
+                                { key:'poor',  label:'Poor ≤',         w:'110px', align:'right' },
+                                { key:'ok',    label:'Ok ≥',           w:'110px', align:'right' },
+                                { key:'good',  label:'Good ≥',         w:'110px', align:'right' },
+                                { key:'spark', label:'Last 9 periods', w:'140px' },
+                                { key:'more',  label:'',               w:'28px' },
+                            ]}
+                            rows={rows.map((k,i) => ({
+                                name: <div>
+                                    <b style={{ fontFamily:T.sans }}>{k.k}</b>
+                                    <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>
+                                        Unit: {k.unit||'count'}{k.reverse ? ' · lower is better':''}
+                                    </div>
+                                    {errors[i] && <div style={{ fontSize:10.5, color:T.danger, marginTop:3, fontFamily:T.sans }}>⚠ {errors[i]}</div>}
+                                </div>,
+                                poor:  numInp(i,'poor',  T.danger),
+                                ok:    numInp(i,'ok',    T.warn),
+                                good:  numInp(i,'good',  T.ok),
+                                spark: <SPSparkline data={k.sample} color={T.ok}/>,
+                                more:  <span style={{ color:T.inkMuted, cursor:'pointer' }}>⋯</span>,
+                            }))}
+                        />
+                    </CSectionCard>
+
+                    <CSectionCard title="Color palette" description="Applies to all KPI cards, sparklines, and bar fills.">
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
+                            {[{ k:'Good', c:T.ok, hex:'#4d6b3d' },{ k:'Ok', c:T.warn, hex:'#b87333' },{ k:'Poor', c:T.danger, hex:'#9c3a2e' }].map((s,i) => (
+                                <div key={i} style={{ padding:'12px 14px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, display:'flex', alignItems:'center', gap:12 }}>
+                                    <div style={{ width:28, height:28, background:s.c, borderRadius:T.r, flexShrink:0 }}/>
+                                    <div>
+                                        <div style={{ fontSize:13, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{s.k}</div>
+                                        <div style={{ fontSize:11, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{s.hex}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </CSectionCard>
+                </div>
+
+                {/* Right: live preview card */}
+                <div>
+                    <div style={{ position:'sticky', top:20 }}>
+                        <CSectionCard title="Preview — Home dashboard card" description="How a KPI card renders with current thresholds.">
+                            <div style={{ padding:16, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r+2 }}>
+                                <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T.sans }}>QUOTA ATTAINMENT · Q1</div>
+                                <div style={{ display:'flex', alignItems:'flex-end', gap:10, marginTop:6 }}>
+                                    <div style={{ fontSize:34, fontWeight:700, color:T.ok, fontFamily:T.serif, fontStyle:'italic' }}>103%</div>
+                                    <div style={{ fontSize:12, color:T.ok, marginBottom:10, fontWeight:600, fontFamily:T.sans }}>+6 vs LQ</div>
+                                </div>
+                                <SPSparkline data={rows[0]?.sample||DEFAULT_KPI_THRESHOLDS[0].sample} color={T.ok}/>
+                                <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>
+                                    <span>Target {rows[0]?.good||100}%</span>
+                                    <span>Poor &lt; {rows[0]?.poor||60}%</span>
+                                </div>
+                            </div>
+                        </CSectionCard>
+                        {hasErrors && (
+                            <div style={{ padding:'12px 14px', background:'rgba(156,58,46,0.08)', border:`1px solid rgba(156,58,46,0.25)`, borderRadius:T.r+2, marginTop:10, fontSize:12.5, color:T.danger, fontFamily:T.sans, fontWeight:600 }}>
+                                ⚠ Fix threshold errors before saving.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </SPDetailPageChrome>
+    );
+};
+
+// ── 4. Lead Conversion Benchmarks (full-chrome wrapper) ───────
+const LeadConversionDetail = ({ settings, setSettings, onBack }) => {
+    return (
+        <SPDetailPageChrome
+            crumb="Lead conversion benchmarks" title="Lead conversion benchmarks"
+            subtitle="Good / average / poor conversion rate targets by lead source"
+            statusDetail="8 sources configured"
+            updatedBy="Admin" updatedAt="today"
+            onBack={onBack} dirty={false}
+            rightActions={
+                <div style={{ display:'flex', gap:8 }}>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                        <LIcon name="refresh" size={13}/> Recompute from history
+                    </button>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                        Save changes
+                    </button>
+                </div>
+            }
+        >
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 380px', gap:20 }}>
+                <div>
+                    <CSectionCard title="Conversion targets" description="Set lead→opportunity conversion thresholds per source. Reps see colored badges on lead queues; managers see variance in Sales Manager dashboards.">
+                        <LeadConvBenchmarks settings={settings} setSettings={setSettings}/>
+                    </CSectionCard>
+                </div>
+                <div>
+                    <div style={{ position:'sticky', top:20, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+4, overflow:'hidden' }}>
+                        <div style={{ padding:'14px 16px', background:'#2a2622', color:'#fbf8f3' }}>
+                            <div style={{ fontSize:10, fontWeight:700, color:T.gold, letterSpacing:0.8, textTransform:'uppercase', marginBottom:5, fontFamily:T.sans }}>Where these show up</div>
+                            <div style={{ fontSize:13, color:'#fbf8f3', lineHeight:1.5, fontFamily:T.sans }}>Benchmarks drive the colored state on 3 surfaces.</div>
+                        </div>
+                        {[
+                            { n:'Leads queue',               d:'Source column colors by target' },
+                            { n:'Sales Manager · Sources',   d:'Variance vs good target' },
+                            { n:'Lead scoring rules',        d:'Auto-route off-target sources' },
+                        ].map((item,idx) => (
+                            <div key={idx} style={{ padding:'11px 12px', borderBottom: idx<2 ? `1px solid ${T.border}` : 'none', display:'flex', gap:10, alignItems:'flex-start' }}>
+                                <LIcon name="link" size={13} color={T.goldInk} style={{ marginTop:2, flexShrink:0 }}/>
+                                <div>
+                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{item.n}</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>{item.d}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </SPDetailPageChrome>
+    );
+};
+
 // ADMIN WORKSPACE VIEW
 // ─────────────────────────────────────────────────────────────
 const AdminView = ({ settings, setSettings, currentUser }) => {
@@ -1277,9 +1822,13 @@ const AdminView = ({ settings, setSettings, currentUser }) => {
     // Detail panels that have real content — others just open the card (no-op for now)
     const DETAIL_PANELS = {
         'lead-conv-benchmarks': <LeadConvBenchmarks settings={settings} setSettings={setSettings}/>,
-        'company-profile':  'company-profile',
-        'fiscal-year':      'fiscal-year',
-        'company-calendar': 'company-calendar',
+        'company-profile':      'company-profile',
+        'fiscal-year':          'fiscal-year',
+        'company-calendar':     'company-calendar',
+        // Sales process Group 1
+        'pipelines':            'pipelines',
+        'funnel-stages':        'funnel-stages',
+        'kpi-settings':         'kpi-settings',
     };
 
     if (activeItem) {
@@ -1290,6 +1839,12 @@ const AdminView = ({ settings, setSettings, currentUser }) => {
         if (id === 'company-profile')  return <CompanyProfileDetail  settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'fiscal-year')      return <FiscalYearDetail      settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'company-calendar') return <CompanyCalendarDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
+
+        // Sales process Group 1 detail pages
+        if (id === 'pipelines')            return <PipelinesDetail        settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'funnel-stages')        return <FunnelStagesDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'kpi-settings')         return <KPIThresholdsDetail    settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'lead-conv-benchmarks') return <LeadConversionDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Generic wrapper for all other panels
         const panel = DETAIL_PANELS[id];
