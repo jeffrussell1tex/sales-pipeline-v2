@@ -540,7 +540,14 @@ dbFetch('/.netlify/functions/users?me=true')
     const visibleOpportunities = applyViewingFilter(
         (opportunities || [])
         .filter(opp => isRepVisible(opp.salesRep))
-        .filter(opp => (opp.pipelineId || 'default') === activePipeline.id)
+        .filter(opp => {
+            // Deals with no pipelineId belong to whichever pipeline is marked isDefault,
+            // or the first pipeline if none is marked. This covers all legacy deals
+            // created before pipelineId was added to the form.
+            const defaultPipeline = allPipelines.find(p => p.isDefault) || allPipelines[0];
+            const oppPipelineId = opp.pipelineId || defaultPipeline.id;
+            return oppPipelineId === activePipeline.id;
+        })
     );
     const visibleAccounts = (accounts || [])
         .filter(acc => isRepVisible(acc.accountOwner))
