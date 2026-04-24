@@ -29,7 +29,6 @@ const Icon = ({ name, size = 16, color = 'currentColor', sw = 1.5 }) => {
         case 'search':    return <svg {...p}><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>;
         case 'x':         return <svg {...p}><path d="M6 6l12 12M18 6L6 18"/></svg>;
         case 'bell':      return <svg {...p}><path d="M6 16V10a6 6 0 1112 0v6l2 2H4l2-2z"/><path d="M10 20a2 2 0 004 0"/></svg>;
-        case 'keyboard':  return <svg {...p}><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M6 14h.01M18 14h.01M10 14h4"/></svg>;
         case 'logout':    return <svg {...p}><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>;
         case 'flash':     return <svg {...p}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>;
         default: return null;
@@ -180,8 +179,8 @@ export default function AppHeader({
                 ACCELEREP
             </div>
 
-            {/* CENTER: nav tabs */}
-            <div style={{ display: 'flex', alignItems: 'stretch', flex: 1, height: 48 }}>
+            {/* CENTER: nav tabs — overflow:hidden + minWidth:0 prevents tabs from pushing the RIGHT group off screen */}
+            <div style={{ display: 'flex', alignItems: 'stretch', flex: 1, height: 48, overflow: 'hidden', minWidth: 0 }}>
                 {tabs.map(tab => {
                     const active = activeTab === tab.id;
                     return (
@@ -228,7 +227,7 @@ export default function AppHeader({
                         display: 'flex', alignItems: 'center', gap: 8,
                         background: 'rgba(255,255,255,0.06)',
                         padding: '5px 12px', borderRadius: T.r,
-                        width: isMobile ? 160 : 280,
+                        width: isMobile ? 160 : 'clamp(160px, 20vw, 280px)',
                         border: '1px solid rgba(255,255,255,0.08)',
                         transition: 'border-color 150ms, background 150ms',
                     }}
@@ -350,7 +349,7 @@ export default function AppHeader({
                     {showProfilePanel && (
                         <>
                         <div style={{ position: 'fixed', inset: 0, zIndex: 1099 }} onClick={() => setShowProfilePanel(false)}/>
-                        <div className="spt-profile-panel" style={{ position: isMobile ? 'fixed' : 'absolute', top: isMobile ? 0 : 40, right: 0, left: isMobile ? 0 : 'auto', bottom: isMobile ? 0 : 'auto', width: isMobile ? '100%' : 420, background: T.surface, borderRadius: isMobile ? 0 : 6, border: `1px solid ${T.border}`, boxShadow: '0 12px 40px rgba(42,38,34,0.18)', zIndex: 1100, overflow: 'auto', fontFamily: T.sans }} onClick={e => e.stopPropagation()}>
+                        <div className="spt-profile-panel" style={{ position: isMobile ? 'fixed' : 'fixed', top: isMobile ? 0 : 56, right: isMobile ? 0 : 16, left: isMobile ? 0 : 'auto', bottom: isMobile ? 0 : 'auto', width: isMobile ? '100%' : 420, background: T.surface, borderRadius: isMobile ? 0 : 6, border: `1px solid ${T.border}`, boxShadow: '0 12px 40px rgba(42,38,34,0.18)', zIndex: 1100, overflow: 'auto', fontFamily: T.sans }} onClick={e => e.stopPropagation()}>
 
                             {/* Panel header */}
                             <div style={{ background: T.surfaceInk, padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -364,16 +363,13 @@ export default function AppHeader({
                                         </span>
                                     </div>
                                 </div>
-                                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                     <button onClick={() => { setQuickLogOpen(v => !v); setShowProfilePanel(false); }} title="Quick-log" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.18)', color: T.surfaceInkFg, cursor: 'pointer', padding: '4px 10px', borderRadius: T.r, fontSize: 11, fontWeight: 600, fontFamily: T.sans, display: 'flex', alignItems: 'center', gap: 4 }}>
                                         <Icon name="flash" size={11} color={T.gold}/> Log
                                     </button>
                                     {userMemberships?.data?.length > 1 && (
                                         <OrganizationSwitcher appearance={{ elements: { rootBox: { display: 'flex', alignItems: 'center' }, organizationSwitcherTrigger: { padding: '3px 8px', borderRadius: T.r, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 11, fontWeight: 600 } }}}/>
                                     )}
-                                    <button onClick={() => { setShowShortcuts(v => !v); setShowProfilePanel(false); }} title="Keyboard shortcuts" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.18)', color: T.surfaceInkFg, borderRadius: T.r, width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                        <Icon name="keyboard" size={14} color={T.surfaceInkFg}/>
-                                    </button>
                                     <button onClick={handleLogout} title="Sign out" style={{ background: 'none', border: '1px solid rgba(255,255,255,0.18)', color: 'rgba(230,221,208,0.6)', cursor: 'pointer', padding: '4px 10px', borderRadius: T.r, fontSize: 11, fontWeight: 600, fontFamily: T.sans, display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.15s' }}
                                         onMouseEnter={e => { e.currentTarget.style.background = T.danger; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = T.danger; }}
                                         onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'rgba(230,221,208,0.6)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.18)'; }}>
