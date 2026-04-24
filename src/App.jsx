@@ -541,11 +541,12 @@ dbFetch('/.netlify/functions/users?me=true')
         (opportunities || [])
         .filter(opp => isRepVisible(opp.salesRep))
         .filter(opp => {
-            // Deals with no pipelineId belong to whichever pipeline is marked isDefault,
-            // or the first pipeline if none is marked. This covers all legacy deals
-            // created before pipelineId was added to the form.
+            // Deals with no pipelineId or the legacy 'default' string belong to
+            // whichever pipeline is marked isDefault, or the first pipeline.
             const defaultPipeline = allPipelines.find(p => p.isDefault) || allPipelines[0];
-            const oppPipelineId = opp.pipelineId || defaultPipeline.id;
+            const oppPipelineId = (!opp.pipelineId || opp.pipelineId === 'default')
+                ? defaultPipeline.id
+                : opp.pipelineId;
             return oppPipelineId === activePipeline.id;
         })
     );
