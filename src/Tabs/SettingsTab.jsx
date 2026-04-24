@@ -1407,6 +1407,10 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
     const [renamingStage, setRenamingStage] = useState(null); // stage name
     const [renameVal, setRenameVal]         = useState('');
     const [confirmDelete, setConfirmDelete] = useState(null); // stage name
+    // Pipeline kebab + delete state
+    const [openPipelineKebab, setOpenPipelineKebab]     = useState(null); // pipeline id
+    const [confirmDeletePipeline, setConfirmDeletePipeline] = useState(null); // pipeline id
+    const [blockedDeletePipeline, setBlockedDeletePipeline] = useState(null); // { name, reason }
 
     const pipelines = settings?.pipelines?.length ? settings.pipelines : DEFAULT_PIPELINES;
     const selected  = pipelines.find(p => p.id === selectedId) || pipelines[0];
@@ -1491,6 +1495,53 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
         catch(e) { console.error('reorder pipelines', e); }
     };
 
+    // ── Delete pipeline ──────────────────────────────────────
+    const handleDeletePipeline = (pipelineId) => {
+        const pipeline = pipelines.find(p => p.id === pipelineId);
+        if (!pipeline) return;
+        if (pipeline.isDefault) {
+            setBlockedDeletePipeline({ name: pipeline.name, reason: 'This is the default pipeline. Set another pipeline as default before deleting it.' });
+            setOpenPipelineKebab(null);
+            return;
+        }
+        if ((pipeline.active || 0) > 0) {
+            setBlockedDeletePipeline({ name: pipeline.name, reason: `This pipeline has ${pipeline.active} open deal${pipeline.active !== 1 ? 's' : ''}. Move or close all deals before deleting.` });
+            setOpenPipelineKebab(null);
+            return;
+        }
+        setConfirmDeletePipeline(pipelineId);
+        setOpenPipelineKebab(null);
+    };
+
+    const handleConfirmDeletePipeline = async () => {
+        const updated = pipelines.filter(p => p.id !== confirmDeletePipeline);
+        setSettings(prev => ({ ...prev, pipelines: updated }));
+        if (selectedId === confirmDeletePipeline) setSelectedId(updated[0]?.id || null);
+        setConfirmDeletePipeline(null);
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updated }) }); }
+        catch(e) { console.error('delete pipeline', e); }
+    };
+
+    // ── Export JSON ───────────────────────────────────────────
+    const handleExportJSON = () => {
+        const exportData = {
+            exportedAt: new Date().toISOString(),
+            pipelines: pipelines.map(p => ({
+                id: p.id, name: p.name, isDefault: p.isDefault,
+                stages: p.stages, teams: p.teams,
+                activeDeals: p.active, pipelineValue: p.value,
+            })),
+            assignmentRules,
+        };
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `accelerep-pipelines-${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
     // ── Stage drag-to-reorder ─────────────────────────────────
     const handleStageDrop = async (fromIdx, toIdx) => {
         if (fromIdx === toIdx) return;
@@ -1541,7 +1592,9 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
             onBack={onBack} dirty={false}
             rightActions={
                 <div style={{ display:'flex', gap:8 }}>
-                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                    <button onClick={handleExportJSON} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                        onMouseLeave={e => e.currentTarget.style.background = T.surface}>
                         <LIcon name="download" size={13}/> Export JSON
                     </button>
                     <button onClick={() => { setShowNewForm(v => !v); setNewErr(''); }}
@@ -1584,6 +1637,47 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                 </div>
             )}
 
+            {/* Blocked-delete modal */}
+            {blockedDeletePipeline && (
+                <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.5)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center' }}
+                    onClick={() => setBlockedDeletePipeline(null)}>
+                    <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:T.r+4, padding:28, maxWidth:400, width:'90%', boxShadow:'0 8px 32px rgba(42,38,34,0.2)', fontFamily:T.sans }}>
+                        <div style={{ fontSize:16, fontWeight:700, color:T.ink, marginBottom:8 }}>Cannot delete "{blockedDeletePipeline.name}"</div>
+                        <div style={{ fontSize:13, color:T.inkMid, lineHeight:1.6, marginBottom:20 }}>{blockedDeletePipeline.reason}</div>
+                        <button onClick={() => setBlockedDeletePipeline(null)}
+                            style={{ padding:'8px 20px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                            Got it
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Confirm-delete modal */}
+            {confirmDeletePipeline && (() => {
+                const p = pipelines.find(pp => pp.id === confirmDeletePipeline);
+                return (
+                    <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.5)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center' }}
+                        onClick={() => setConfirmDeletePipeline(null)}>
+                        <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:T.r+4, padding:28, maxWidth:400, width:'90%', boxShadow:'0 8px 32px rgba(42,38,34,0.2)', fontFamily:T.sans }}>
+                            <div style={{ fontSize:16, fontWeight:700, color:T.ink, marginBottom:8 }}>Delete "{p?.name}"?</div>
+                            <div style={{ fontSize:13, color:T.inkMid, lineHeight:1.6, marginBottom:20 }}>
+                                This pipeline has no open deals and can be safely deleted. This action cannot be undone.
+                            </div>
+                            <div style={{ display:'flex', gap:10 }}>
+                                <button onClick={handleConfirmDeletePipeline}
+                                    style={{ padding:'8px 20px', background:T.danger, color:'#fff', border:'none', borderRadius:T.r, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                                    Delete pipeline
+                                </button>
+                                <button onClick={() => setConfirmDeletePipeline(null)}
+                                    style={{ padding:'8px 20px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
             <div style={{ display:'grid', gridTemplateColumns:'420px 1fr', gap:20 }}>
                 {/* Left: pipeline list */}
                 <div>
@@ -1603,6 +1697,41 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                     {p.isDefault && <span style={{ fontSize:9.5, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.3)', padding:'2px 6px', borderRadius:2, letterSpacing:0.3, fontFamily:T.sans }}>DEFAULT</span>}
                                     <div style={{ flex:1 }}/>
                                     <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{p.active} open · {p.value}</span>
+                                    {/* Pipeline kebab */}
+                                    <div style={{ position:'relative' }} onClick={e => e.stopPropagation()}>
+                                        <button onClick={() => setOpenPipelineKebab(openPipelineKebab===p.id ? null : p.id)}
+                                            style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:'0 2px', lineHeight:1 }}>⋯</button>
+                                        {openPipelineKebab === p.id && (
+                                            <div style={{ position:'absolute', right:0, top:'100%', zIndex:300, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:160, overflow:'hidden' }}>
+                                                <button onClick={() => { setSelectedId(p.id); setOpenPipelineKebab(null); }}
+                                                    style={{ display:'block', width:'100%', padding:'10px 14px', background:'none', border:'none', textAlign:'left', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                    View stages
+                                                </button>
+                                                {!p.isDefault && (
+                                                    <button onClick={async () => {
+                                                        const updated = pipelines.map(pp => ({ ...pp, isDefault: pp.id === p.id }));
+                                                        setSettings(prev => ({ ...prev, pipelines: updated }));
+                                                        setOpenPipelineKebab(null);
+                                                        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updated }) }); }
+                                                        catch(e) { console.error('set default', e); }
+                                                    }}
+                                                        style={{ display:'block', width:'100%', padding:'10px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                        Set as default
+                                                    </button>
+                                                )}
+                                                <button onClick={() => handleDeletePipeline(p.id)}
+                                                    style={{ display:'block', width:'100%', padding:'10px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', fontSize:13, color:T.danger, cursor:'pointer', fontFamily:T.sans }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(156,58,46,0.06)'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                    Delete pipeline
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                                 <div style={{ display:'flex', gap:2 }}>
                                     {(p.stages||[]).map((s,si) => (
@@ -1677,7 +1806,7 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                                     onDragOver={e => { e.preventDefault(); setDragOverStageIdx(i); }}
                                     onDragEnd={() => { setDragStageIdx(null); setDragOverStageIdx(null); }}
                                     onDrop={e => { e.preventDefault(); handleStageDrop(dragStageIdx, i); setDragStageIdx(null); setDragOverStageIdx(null); }}
-                                    style={{ display:'grid', gridTemplateColumns:'28px 1.6fr 120px 90px 90px 70px 28px', padding:'11px 14px', gap:10, borderBottom: i<(selected?.stages||[]).length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background: dragOverStageIdx===i ? 'rgba(200,185,154,0.06)' : T.surface, opacity: dragStageIdx===i ? 0.4 : 1, cursor:'grab', position:'relative', transition:'background 80ms' }}>
+                                    style={{ display:'grid', gridTemplateColumns:'28px 1.6fr 120px 90px 90px 70px 28px', padding:'11px 14px', gap:10, borderBottom: i<(selected?.stages||[]).length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background: dragOverStageIdx===i ? 'rgba(200,185,154,0.06)' : T.surface, opacity: dragStageIdx===i ? 0.4 : 1, cursor:'grab', position:'relative', transition:'background 80ms', fontSize:13, fontFamily:T.sans }}>
                                     <div style={{ cursor:'grab', color:T.inkMuted, fontSize:14, letterSpacing:-2 }}>⋮⋮</div>
                                     <div>
                                         {renamingStage === s ? (
