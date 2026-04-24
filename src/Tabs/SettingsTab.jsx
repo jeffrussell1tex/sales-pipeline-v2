@@ -1392,6 +1392,10 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
     const [newErr, setNewErr]           = useState('');
     const [saving, setSaving]           = useState(false);
     const [editingTeam, setEditingTeam] = useState(null); // team name being edited
+    const [showAddStage, setShowAddStage] = useState(false);
+    const [newStageName, setNewStageName] = useState('');
+    const [newStageType, setNewStageType] = useState('Open');
+    const [stageErr, setStageErr]         = useState('');
 
     const pipelines = settings?.pipelines?.length ? settings.pipelines : DEFAULT_PIPELINES;
     const selected  = pipelines.find(p => p.id === selectedId) || pipelines[0];
@@ -1438,6 +1442,31 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
         try {
             await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ assignmentRules: updated }) });
         } catch(e) { console.error('save assignment rules', e); }
+    };
+
+    // ── Add stage to selected pipeline ───────────────────────
+    const handleAddStage = async () => {
+        if (!newStageName.trim()) { setStageErr('Stage name is required.'); return; }
+        const currentStages = selected?.stages || [];
+        if (currentStages.some(s => s.toLowerCase() === newStageName.trim().toLowerCase())) {
+            setStageErr('A stage with that name already exists in this pipeline.'); return;
+        }
+        // Insert before terminal stages (Closed Won / Closed Lost)
+        const terminals = currentStages.filter(s => STAGE_TYPES[s]);
+        const opens     = currentStages.filter(s => !STAGE_TYPES[s]);
+        const newStage  = newStageName.trim();
+        const updatedStages = newStageType === 'Open'
+            ? [...opens, newStage, ...terminals]
+            : [...opens, ...terminals.filter(s => STAGE_TYPES[s] !== newStageType), newStage, ...terminals.filter(s => STAGE_TYPES[s] === newStageType)];
+
+        const updatedPipelines = pipelines.map(p =>
+            p.id === selectedId ? { ...p, stages: updatedStages } : p
+        );
+        setSettings(prev => ({ ...prev, pipelines: updatedPipelines }));
+        try {
+            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ pipelines: updatedPipelines }) });
+        } catch(e) { console.error('save stage', e); }
+        setNewStageName(''); setNewStageType('Open'); setStageErr(''); setShowAddStage(false);
     };
 
     const selStyle = { padding:'4px 8px', fontSize:12, border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontFamily:T.sans, cursor:'pointer', outline:'none' };
@@ -1529,8 +1558,43 @@ const PipelinesDetail = ({ settings, setSettings, onBack }) => {
                     <CSectionCard
                         title={`${selected?.name} — stages`}
                         description="The stage flow for this pipeline. Probability feeds forecast & Sales Manager dashboards."
-                        headAction={<button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>+ Add stage</button>}
+                        headAction={
+                            <button onClick={() => { setShowAddStage(v => !v); setStageErr(''); setNewStageName(''); }}
+                                style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background: showAddStage ? T.surface2 : 'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                                + Add stage
+                            </button>
+                        }
                     >
+                        {/* Add stage inline form */}
+                        {showAddStage && (
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 120px auto auto', gap:8, alignItems:'flex-end', padding:'10px 12px', background:T.surface2, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+1, marginBottom:12 }}>
+                                <div>
+                                    <label style={{ fontSize:10.5, fontWeight:600, color:T.inkMid, display:'block', marginBottom:3, fontFamily:T.sans }}>Stage name</label>
+                                    <input value={newStageName} onChange={e => { setNewStageName(e.target.value); setStageErr(''); }}
+                                        placeholder="e.g. Due diligence"
+                                        autoFocus
+                                        onKeyDown={e => { if (e.key==='Enter') handleAddStage(); if (e.key==='Escape') { setShowAddStage(false); setStageErr(''); } }}
+                                        style={{ padding:'6px 10px', background:T.surface, border:`1px solid ${stageErr ? T.danger : T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' }}/>
+                                    {stageErr && <div style={{ fontSize:10.5, color:T.danger, marginTop:3, fontFamily:T.sans }}>{stageErr}</div>}
+                                </div>
+                                <div>
+                                    <label style={{ fontSize:10.5, fontWeight:600, color:T.inkMid, display:'block', marginBottom:3, fontFamily:T.sans }}>Type</label>
+                                    <select value={newStageType} onChange={e => setNewStageType(e.target.value)} style={{ ...selStyle, width:'100%' }}>
+                                        <option>Open</option>
+                                        <option>Won</option>
+                                        <option>Lost</option>
+                                    </select>
+                                </div>
+                                <button onClick={handleAddStage}
+                                    style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                                    Add
+                                </button>
+                                <button onClick={() => { setShowAddStage(false); setStageErr(''); setNewStageName(''); }}
+                                    style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, cursor:'pointer', fontFamily:T.sans }}>
+                                    Cancel
+                                </button>
+                            </div>
+                        )}
                         <SPTable
                             columns={[
                                 { key:'drag',  label:'',             w:'28px' },
