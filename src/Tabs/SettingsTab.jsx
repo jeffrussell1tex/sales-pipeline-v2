@@ -1031,8 +1031,10 @@ const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
         setSyncing(true);
         setSyncMsg('');
         try {
-            const data = await dbFetch(`/.netlify/functions/holidays?year=${year}`);
-            if (!data || !data.holidays) throw new Error('No data returned');
+            const res  = await dbFetch(`/.netlify/functions/holidays?year=${year}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || `Server error ${res.status}`);
+            if (!data || !data.holidays) throw new Error('No holidays in response');
             // Merge: keep custom holidays, replace all observed/federal entries with fresh API data
             const fresh = data.holidays; // observed entries from API
             const preserved = customHolidays; // user-added custom entries survive
@@ -1047,8 +1049,8 @@ const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
             setTimeout(() => setSyncMsg(''), 4000);
         } catch (err) {
             console.error('sync holidays error', err);
-            setSyncMsg('Failed to sync — check your connection.');
-            setTimeout(() => setSyncMsg(''), 4000);
+            setSyncMsg(`Failed to sync — ${err.message}`);
+            setTimeout(() => setSyncMsg(''), 6000);
         }
         setSyncing(false);
     };
