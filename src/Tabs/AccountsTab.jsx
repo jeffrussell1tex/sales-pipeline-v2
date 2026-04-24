@@ -429,16 +429,18 @@ function AccountRow({
 
 // ── Filter Panel ──────────────────────────────────────────────
 function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilters }) {
-    const [industry, setIndustry] = useState(currentFilters.industry || '__all__');
-    const [owner,    setOwner]    = useState(currentFilters.owner    || '__all__');
-    const [hasPipe,  setHasPipe]  = useState(currentFilters.hasPipe  || '__all__');
+    const [industry,    setIndustry]    = useState(currentFilters.industry    || '__all__');
+    const [owner,       setOwner]       = useState(currentFilters.owner       || '__all__');
+    const [hasPipe,     setHasPipe]     = useState(currentFilters.hasPipe     || '__all__');
+    const [accountType, setAccountType] = useState(currentFilters.accountType || '__all__');
 
     // Re-sync when panel opens
     React.useEffect(() => {
         if (open) {
-            setIndustry(currentFilters.industry || '__all__');
-            setOwner(currentFilters.owner       || '__all__');
-            setHasPipe(currentFilters.hasPipe   || '__all__');
+            setIndustry(currentFilters.industry       || '__all__');
+            setOwner(currentFilters.owner             || '__all__');
+            setHasPipe(currentFilters.hasPipe         || '__all__');
+            setAccountType(currentFilters.accountType || '__all__');
         }
     }, [open]);
 
@@ -461,14 +463,17 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
     };
     const lbl = { fontSize: 11, fontWeight: 600, color: T.inkMid, marginBottom: 5, display: 'block', fontFamily: T.sans };
 
+    const accountTypes = [...new Set((settings?.customerTypes || []).filter(Boolean))].sort();
+
     const handleApply = () => {
-        onApply({ industry, owner, hasPipe });
+        onApply({ industry, owner, hasPipe, accountType });
         onClose();
     };
     const handleReset = () => {
         setIndustry('__all__');
         setOwner('__all__');
         setHasPipe('__all__');
+        setAccountType('__all__');
     };
 
     return (
@@ -505,6 +510,14 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
                         <option value="__all__">Any</option>
                         <option value="yes">Has open pipeline</option>
                         <option value="no">No open pipeline</option>
+                    </select>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                    <label style={lbl}>Account Type</label>
+                    <select value={accountType} onChange={e => setAccountType(e.target.value)} style={selStyle}>
+                        <option value="__all__">All types</option>
+                        {accountTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                 </div>
 
@@ -548,14 +561,15 @@ export default function AccountsTab() {
     const [sortDir,   setSortDir]   = useState('asc');
     const [expandedIds, setExpandedIds] = useState({});  // { [accountId]: bool }
     const [filterOpen, setFilterOpen]   = useState(false);
-    const [panelFilters, setPanelFilters] = useState({ industry: '__all__', owner: '__all__', hasPipe: '__all__' });
+    const [panelFilters, setPanelFilters] = useState({ industry: '__all__', owner: '__all__', hasPipe: '__all__', accountType: '__all__' });
     const [drawerAccount, setDrawerAccount] = useState(null); // account whose subs are shown in side drawer
     const searchRef = useRef(null);
 
     const activePanelFilterCount = [
-        panelFilters.industry !== '__all__',
-        panelFilters.owner    !== '__all__',
-        panelFilters.hasPipe  !== '__all__',
+        panelFilters.industry    !== '__all__',
+        panelFilters.owner       !== '__all__',
+        panelFilters.hasPipe     !== '__all__',
+        panelFilters.accountType !== '__all__',
     ].filter(Boolean).length;
 
     const setViewPersist = v => { setView(v); localStorage.setItem('accounts:view', v); };
@@ -607,6 +621,9 @@ export default function AccountsTab() {
             list = list.filter(a => (warmthMap[a.id]?.pipeline || 0) > 0);
         } else if (panelFilters.hasPipe === 'no') {
             list = list.filter(a => (warmthMap[a.id]?.pipeline || 0) === 0);
+        }
+        if (panelFilters.accountType !== '__all__') {
+            list = list.filter(a => (a.customerTypes || []).includes(panelFilters.accountType));
         }
 
         return list;

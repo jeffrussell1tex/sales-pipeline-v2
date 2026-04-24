@@ -224,10 +224,10 @@ export default function ViewingAccountPanel({
 
                 {panelTab === 'overview' && (<>
                 {/* Account metadata + sub-accounts */}
-                {(acc.verticalMarket || acc.country || hasSubs) && (
+                {(acc.verticalMarket || acc.country) && (
                     <div style={{ background: '#fbf8f3', border: '1px solid #e6ddd0', borderRadius: '10px', padding: '1.25rem 1.5rem', marginBottom: '1.25rem', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                         {(acc.verticalMarket || acc.country) && (
-                            <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', fontSize: '0.875rem', marginBottom: hasSubs ? '1rem' : 0, paddingBottom: hasSubs ? '1rem' : 0, borderBottom: hasSubs ? '1px solid #f1f3f5' : 'none' }}>
+                            <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', fontSize: '0.875rem' }}>
                                 {acc.verticalMarket && (
                                     <div>
                                         <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Vertical</div>
@@ -242,33 +242,7 @@ export default function ViewingAccountPanel({
                                 )}
                             </div>
                         )}
-                        {hasSubs && (
-                            <div>
-                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>Sub-Accounts ({subs.length})</div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                    {subData.map(({ sub, subOpen, subWon, subPipeline, subContacts }) => (
-                                        <div key={sub.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0.75rem', background: '#fbf8f3', borderRadius: '8px', border: '1px solid #e6ddd0', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                                                <span style={{ color: '#8a8378', fontSize: '0.75rem' }}>↳</span>
-                                                <span style={{ fontWeight: '700', color: '#3a5a7a', fontSize: '0.875rem', cursor: 'pointer' }}
-                                                    onClick={() => setViewingAccount(sub)}
-                                                    onMouseEnter={e => e.target.style.textDecoration = 'underline'}
-                                                    onMouseLeave={e => e.target.style.textDecoration = 'none'}
-                                                >{sub.name}</span>
-                                                {sub.accountOwner && <span style={{ color: '#8a8378', fontSize: '0.75rem' }}>{sub.accountOwner}</span>}
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                                                {subOpen.length > 0    && <span style={{ background: 'rgba(58,90,122,0.1)', color: '#2a2622', padding: '0.1rem 0.5rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700' }}>{subOpen.length} active</span>}
-                                                {subWon.length > 0     && <span style={{ background: 'rgba(77,107,61,0.1)', color: '#2e4a24', padding: '0.1rem 0.5rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700' }}>{subWon.length} won</span>}
-                                                {subPipeline > 0       && <span style={{ background: 'rgba(184,115,51,0.1)', color: '#6b4820', padding: '0.1rem 0.5rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700' }}>${subPipeline >= 1000 ? Math.round(subPipeline / 1000) + 'K' : subPipeline.toLocaleString()} pipeline</span>}
-                                                {subContacts.length > 0 && <span style={{ background: 'rgba(90,74,122,0.08)', color: '#5a4a7a', padding: '0.1rem 0.5rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700' }}>{subContacts.length} contacts</span>}
-                                                {subOpen.length === 0 && subWon.length === 0 && <span style={{ color: '#8a8378', fontSize: '0.75rem', fontStyle: 'italic' }}>No opportunities</span>}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+
                     </div>
                 )}
 

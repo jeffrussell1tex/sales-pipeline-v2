@@ -517,7 +517,7 @@ export default function AccountModal({
 
                             {/* ── Customer Types ── */}
                             <div className="form-group full" style={{ position: 'relative' }}>
-                                <label>Customer Type</label>
+                                <label>Account Type</label>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginBottom: (formData.customerTypes || []).length > 0 ? '0.5rem' : 0 }}>
                                     {(formData.customerTypes || []).map((ct, i) => (
                                         <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: '#1c1917', color: '#f5f1eb', borderRadius: '4px', padding: '0.2rem 0.5rem', fontSize: '0.75rem', fontWeight: '600' }}>
