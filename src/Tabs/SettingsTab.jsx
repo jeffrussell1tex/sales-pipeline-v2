@@ -2057,30 +2057,44 @@ const DEFAULT_KPI_THRESHOLDS = [
     { k:'Opportunity pipeline', unit:'$M', good:4,   ok:2.5, poor:1.5, reverse:false, sample:[1.8,2.1,2.5,2.8,3.2,3.5,3.8,4.1,4.3] },
 ];
 
+const CORE_KPI_IDS = new Set(['Quota attainment','Win rate','Avg deal size','Sales cycle length','Activities per deal','Opportunity pipeline']);
+
 const KPIThresholdsDetail = ({ settings, setSettings, onBack }) => {
     const saved = settings?.kpiThresholds?.length ? settings.kpiThresholds : DEFAULT_KPI_THRESHOLDS;
-    const [rows, setRows]   = useState(() => JSON.parse(JSON.stringify(saved)));
-    const [dirty, setDirty] = useState(false);
+    const [rows, setRows]     = useState(() => JSON.parse(JSON.stringify(saved)));
+    const [dirty, setDirty]   = useState(false);
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState({});
+    // Kebab menu state
+    const [openKPI, setOpenKPI]       = useState(null); // index
+    const [editingUnit, setEditingUnit] = useState(null); // index — inline unit editor
+    // Add KPI form state
+    const [showAdd, setShowAdd]   = useState(false);
+    const [newKPI, setNewKPI]     = useState({ k:'', unit:'%', good:80, ok:60, poor:40, reverse:false, sample:[40,45,50,55,60,65,70,75,80], custom:true });
+    const [addErr, setAddErr]     = useState('');
+
+    const validate = (row, idx) => {
+        if (!row.reverse && !(row.good > row.ok && row.ok > row.poor)) return 'Good > Ok > Poor required';
+        if (row.reverse  && !(row.good < row.ok && row.ok < row.poor)) return 'Good < Ok < Poor required (lower is better)';
+        return null;
+    };
 
     const update = (i, field, val) => {
         const n = parseFloat(val);
-        setRows(prev => prev.map((r,ri) => ri===i ? { ...r, [field]: isNaN(n) ? val : n } : r));
+        const updated = rows.map((r,ri) => ri===i ? { ...r, [field]: isNaN(n) ? val : n } : r);
+        setRows(updated);
         setDirty(true);
-        // Validate
         setErrors(prev => {
             const next = { ...prev };
-            const row = { ...rows[i], [field]: n };
-            if (!row.reverse && !(row.good > row.ok && row.ok > row.poor)) next[i] = 'Good > Ok > Poor required';
-            else if (row.reverse && !(row.good < row.ok && row.ok < row.poor)) next[i] = 'Good < Ok < Poor required (lower is better)';
-            else delete next[i];
+            const err = validate(updated[i], i);
+            if (err) next[i] = err; else delete next[i];
             return next;
         });
     };
+
     const hasErrors = Object.keys(errors).length > 0;
 
-    const handleCancel = () => { setRows(JSON.parse(JSON.stringify(saved))); setDirty(false); setErrors({}); };
+    const handleCancel = () => { setRows(JSON.parse(JSON.stringify(saved))); setDirty(false); setErrors({}); setShowAdd(false); };
     const handleSave   = async () => {
         if (hasErrors) return;
         setSaving(true);
@@ -2090,16 +2104,59 @@ const KPIThresholdsDetail = ({ settings, setSettings, onBack }) => {
         setSaving(false); setDirty(false);
     };
 
+    // ── Kebab actions ─────────────────────────────────────────
+    const handleResetToDefault = (i) => {
+        const def = DEFAULT_KPI_THRESHOLDS.find(d => d.k === rows[i].k);
+        if (!def) return;
+        const updated = rows.map((r,ri) => ri===i ? { ...def } : r);
+        setRows(updated); setDirty(true); setOpenKPI(null);
+        setErrors(prev => { const next = {...prev}; delete next[i]; return next; });
+    };
+
+    const handleToggleHidden = (i) => {
+        const updated = rows.map((r,ri) => ri===i ? { ...r, hidden: !r.hidden } : r);
+        setRows(updated); setDirty(true); setOpenKPI(null);
+    };
+
+    const handleDuplicate = (i) => {
+        const clone = { ...rows[i], k: rows[i].k + ' (copy)', custom: true };
+        setRows(prev => [...prev, clone]); setDirty(true); setOpenKPI(null);
+    };
+
+    const handleRemove = (i) => {
+        setRows(prev => prev.filter((_,ri) => ri !== i));
+        setErrors(prev => {
+            const next = {};
+            Object.entries(prev).forEach(([k,v]) => { const ki = parseInt(k); if (ki < i) next[ki] = v; else if (ki > i) next[ki-1] = v; });
+            return next;
+        });
+        setDirty(true); setOpenKPI(null);
+    };
+
+    // ── Add KPI ───────────────────────────────────────────────
+    const handleAddKPI = () => {
+        if (!newKPI.k.trim()) { setAddErr('KPI name is required.'); return; }
+        if (rows.some(r => r.k.toLowerCase() === newKPI.k.trim().toLowerCase())) { setAddErr('A KPI with that name already exists.'); return; }
+        const err = validate(newKPI, -1);
+        if (err) { setAddErr(err); return; }
+        setRows(prev => [...prev, { ...newKPI, k: newKPI.k.trim() }]);
+        setNewKPI({ k:'', unit:'%', good:80, ok:60, poor:40, reverse:false, sample:[40,45,50,55,60,65,70,75,80], custom:true });
+        setAddErr(''); setShowAdd(false); setDirty(true);
+    };
+
     const numInp = (i, field, color) => (
         <input type="number" value={rows[i][field]} onChange={e => update(i, field, e.target.value)}
             style={{ width:64, padding:'4px 6px', fontSize:12, border:`1px solid ${errors[i] ? T.danger : T.border}`, borderRadius:T.r, background:T.surface, color, fontFamily:'ui-monospace,Menlo,monospace', textAlign:'right' }}/>
     );
 
+    const UNITS = ['%', '$k', '$M', 'd', 'h', 'count', '$'];
+    const inpSt = { padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' };
+
     return (
         <SPDetailPageChrome
             crumb="KPI thresholds" title="KPI thresholds"
             subtitle="Thresholds, colors, and sparkline ranges for dashboards"
-            statusDetail={`${rows.length} KPIs configured`}
+            statusDetail={`${rows.filter(r=>!r.hidden).length} KPIs configured`}
             updatedBy="Admin" updatedAt="1 month ago"
             onBack={onBack} dirty={dirty && !hasErrors} onCancel={handleCancel}
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
@@ -2107,31 +2164,125 @@ const KPIThresholdsDetail = ({ settings, setSettings, onBack }) => {
         >
             <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:20 }}>
                 <div>
-                    <CSectionCard title="Core KPIs" description="Thresholds determine the color (red / yellow / green) shown on Home, Sales Manager dashboards, and report cards.">
-                        <SPTable
-                            columns={[
-                                { key:'name',  label:'KPI',            w:'1.6fr' },
-                                { key:'poor',  label:'Poor ≤',         w:'110px', align:'right' },
-                                { key:'ok',    label:'Ok ≥',           w:'110px', align:'right' },
-                                { key:'good',  label:'Good ≥',         w:'110px', align:'right' },
-                                { key:'spark', label:'Last 9 periods', w:'140px' },
-                                { key:'more',  label:'',               w:'28px' },
-                            ]}
-                            rows={rows.map((k,i) => ({
-                                name: <div>
-                                    <b style={{ fontFamily:T.sans }}>{k.k}</b>
-                                    <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>
-                                        Unit: {k.unit||'count'}{k.reverse ? ' · lower is better':''}
+                    <CSectionCard
+                        title="Core KPIs"
+                        description="Thresholds determine the color (red / yellow / green) shown on Home, Sales Manager dashboards, and report cards."
+                        headAction={
+                            <button onClick={() => { setShowAdd(v => !v); setAddErr(''); }}
+                                style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background: showAdd ? T.surface2 : 'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                                + New KPI
+                            </button>
+                        }
+                    >
+                        {/* Add KPI inline form */}
+                        {showAdd && (
+                            <div style={{ padding:'12px 14px', background:T.surface2, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+1, marginBottom:14 }}>
+                                <div style={{ fontSize:12.5, fontWeight:700, color:T.ink, marginBottom:10, fontFamily:T.sans }}>New KPI</div>
+                                <div style={{ display:'grid', gridTemplateColumns:'1fr 80px 90px 90px 90px auto auto', gap:8, alignItems:'flex-end' }}>
+                                    <div>
+                                        <label style={{ fontSize:10.5, fontWeight:600, color:T.inkMid, display:'block', marginBottom:3, fontFamily:T.sans }}>Name</label>
+                                        <input value={newKPI.k} onChange={e => { setNewKPI(p => ({ ...p, k:e.target.value })); setAddErr(''); }}
+                                            placeholder="e.g. Emails per deal"
+                                            style={{ ...inpSt, width:'100%' }}
+                                            onKeyDown={e => { if (e.key==='Enter') handleAddKPI(); if (e.key==='Escape') { setShowAdd(false); setAddErr(''); } }}/>
                                     </div>
-                                    {errors[i] && <div style={{ fontSize:10.5, color:T.danger, marginTop:3, fontFamily:T.sans }}>⚠ {errors[i]}</div>}
-                                </div>,
-                                poor:  numInp(i,'poor',  T.danger),
-                                ok:    numInp(i,'ok',    T.warn),
-                                good:  numInp(i,'good',  T.ok),
-                                spark: <SPSparkline data={k.sample} color={T.ok}/>,
-                                more:  <span style={{ color:T.inkMuted, cursor:'pointer' }}>⋯</span>,
-                            }))}
-                        />
+                                    <div>
+                                        <label style={{ fontSize:10.5, fontWeight:600, color:T.inkMid, display:'block', marginBottom:3, fontFamily:T.sans }}>Unit</label>
+                                        <select value={newKPI.unit} onChange={e => setNewKPI(p => ({ ...p, unit:e.target.value }))}
+                                            style={{ ...inpSt, width:'100%', appearance:'none', cursor:'pointer' }}>
+                                            {UNITS.map(u => <option key={u}>{u}</option>)}
+                                        </select>
+                                    </div>
+                                    {[['Poor', 'poor', T.danger], ['Ok', 'ok', T.warn], ['Good', 'good', T.ok]].map(([lbl, field, color]) => (
+                                        <div key={field}>
+                                            <label style={{ fontSize:10.5, fontWeight:600, color, display:'block', marginBottom:3, fontFamily:T.sans }}>{lbl}</label>
+                                            <input type="number" value={newKPI[field]}
+                                                onChange={e => setNewKPI(p => ({ ...p, [field]: parseFloat(e.target.value)||0 }))}
+                                                style={{ ...inpSt, width:'100%', fontFamily:'ui-monospace,Menlo,monospace', color, textAlign:'right' }}/>
+                                        </div>
+                                    ))}
+                                    <button onClick={handleAddKPI}
+                                        style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
+                                    <button onClick={() => { setShowAdd(false); setAddErr(''); }}
+                                        style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                                </div>
+                                <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8 }}>
+                                    <input type="checkbox" id="reverse-chk" checked={newKPI.reverse} onChange={e => setNewKPI(p => ({ ...p, reverse:e.target.checked }))} style={{ cursor:'pointer' }}/>
+                                    <label htmlFor="reverse-chk" style={{ fontSize:12, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Lower is better (e.g. cycle length, churn rate)</label>
+                                </div>
+                                {addErr && <div style={{ fontSize:11.5, color:T.danger, marginTop:6, fontFamily:T.sans }}>{addErr}</div>}
+                            </div>
+                        )}
+
+                        {/* KPI table — native div so each row can have relative positioning for the popover */}
+                        <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r+2, overflow:'hidden' }}>
+                            {/* Header */}
+                            <div style={{ display:'grid', gridTemplateColumns:'1.6fr 110px 110px 110px 140px 28px', padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10 }}>
+                                {['KPI','Poor ≤','Ok ≥','Good ≥','Last 9 periods',''].map((h,i) => (
+                                    <div key={i} style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign: i>0&&i<4 ? 'right' : 'left', fontFamily:T.sans }}>{h}</div>
+                                ))}
+                            </div>
+
+                            {rows.map((k,i) => (
+                                <div key={i} style={{ display:'grid', gridTemplateColumns:'1.6fr 110px 110px 110px 140px 28px', padding:'12px 14px', gap:10, borderBottom: i<rows.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background: k.hidden ? 'rgba(138,131,120,0.06)' : T.surface, position:'relative', opacity: k.hidden ? 0.6 : 1 }}>
+                                    {/* Name cell */}
+                                    <div>
+                                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                            <b style={{ fontFamily:T.sans, color:T.ink }}>{k.k}</b>
+                                            {k.custom && <span style={{ fontSize:9, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.25)', padding:'1px 5px', borderRadius:2, letterSpacing:0.4, fontFamily:T.sans }}>CUSTOM</span>}
+                                            {k.hidden && <span style={{ fontSize:9, fontWeight:700, color:T.inkMuted, background:T.surface2, padding:'1px 5px', borderRadius:2, letterSpacing:0.4, fontFamily:T.sans }}>HIDDEN</span>}
+                                        </div>
+                                        {editingUnit === i ? (
+                                            <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:3 }}>
+                                                <span style={{ fontSize:10.5, color:T.inkMuted, fontFamily:T.sans }}>Unit:</span>
+                                                <select value={k.unit} onChange={e => { update(i,'unit',e.target.value); }} onBlur={() => setEditingUnit(null)}
+                                                    autoFocus style={{ fontSize:11, padding:'2px 6px', border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, color:T.ink, fontFamily:T.sans, cursor:'pointer' }}>
+                                                    {UNITS.map(u => <option key={u}>{u}</option>)}
+                                                </select>
+                                                <input type="checkbox" checked={k.reverse||false} onChange={e => update(i,'reverse',e.target.checked)} style={{ cursor:'pointer' }}/>
+                                                <span style={{ fontSize:10.5, color:T.inkMuted, fontFamily:T.sans }}>Lower is better</span>
+                                            </div>
+                                        ) : (
+                                            <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>
+                                                Unit: {k.unit||'count'}{k.reverse ? ' · lower is better':''}
+                                            </div>
+                                        )}
+                                        {errors[i] && <div style={{ fontSize:10.5, color:T.danger, marginTop:3, fontFamily:T.sans }}>⚠ {errors[i]}</div>}
+                                    </div>
+                                    {/* Threshold inputs */}
+                                    <div style={{ textAlign:'right' }}>{numInp(i,'poor',T.danger)}</div>
+                                    <div style={{ textAlign:'right' }}>{numInp(i,'ok',  T.warn)}</div>
+                                    <div style={{ textAlign:'right' }}>{numInp(i,'good',T.ok)}</div>
+                                    <div><SPSparkline data={k.sample||[40,50,60,65,70,72,75,78,80]} color={T.ok}/></div>
+                                    {/* Kebab */}
+                                    <div style={{ position:'relative' }}>
+                                        <button onClick={e => { e.stopPropagation(); setOpenKPI(openKPI===i ? null : i); setEditingUnit(null); }}
+                                            style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:0, lineHeight:1 }}>⋯</button>
+                                        {openKPI === i && (
+                                            <div onClick={e => e.stopPropagation()}
+                                                style={{ position:'absolute', right:0, top:'100%', zIndex:300, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200, overflow:'hidden' }}>
+                                                {[
+                                                    { label:'Edit unit & format', action: () => { setEditingUnit(i); setOpenKPI(null); } },
+                                                    { label: k.hidden ? 'Show on dashboards' : 'Hide from dashboards', action: () => handleToggleHidden(i) },
+                                                    { label:'Duplicate', action: () => handleDuplicate(i) },
+                                                    ...(!k.custom ? [{ label:'Reset to default', action: () => handleResetToDefault(i) }] : []),
+                                                    { label:'View usage', action: () => setOpenKPI(null), note:'Quota attainment appears on 3 dashboards' },
+                                                    ...(k.custom ? [{ label:'Remove', action: () => handleRemove(i), danger: true }] : []),
+                                                ].map((item, mi) => (
+                                                    <button key={mi} onClick={item.action}
+                                                        style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.danger ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(156,58,46,0.06)' : T.surface2}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                        <div>{item.label}</div>
+                                                        {item.note && <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{item.note}</div>}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </CSectionCard>
 
                     <CSectionCard title="Color palette" description="Applies to all KPI cards, sparklines, and bar fills.">
@@ -2161,8 +2312,8 @@ const KPIThresholdsDetail = ({ settings, setSettings, onBack }) => {
                                 </div>
                                 <SPSparkline data={rows[0]?.sample||DEFAULT_KPI_THRESHOLDS[0].sample} color={T.ok}/>
                                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>
-                                    <span>Target {rows[0]?.good||100}%</span>
-                                    <span>Poor &lt; {rows[0]?.poor||60}%</span>
+                                    <span>Target {rows[0]?.good||100}{rows[0]?.unit||'%'}</span>
+                                    <span>Poor &lt; {rows[0]?.poor||60}{rows[0]?.unit||'%'}</span>
                                 </div>
                             </div>
                         </CSectionCard>
