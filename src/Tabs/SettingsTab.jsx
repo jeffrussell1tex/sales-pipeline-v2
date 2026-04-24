@@ -1811,6 +1811,687 @@ const LeadConversionDetail = ({ settings, setSettings, onBack }) => {
     );
 };
 
+// ─────────────────────────────────────────────────────────────
+// SALES PROCESS DETAIL PAGES — Group 2 of 2
+// Custom fields · Pain points · Customer types · Industries
+// ─────────────────────────────────────────────────────────────
+
+// ── 5. Custom Fields ─────────────────────────────────────────
+const FIELD_OBJECTS = ['Accounts', 'Contacts', 'Leads', 'Opportunities'];
+const DEFAULT_CUSTOM_FIELDS = {
+    Accounts: [
+        { label:'Primary industry',       api:'account.primary_industry',  type:'Picklist', required:true,  visibility:'Detail, Create' },
+        { label:'Renewal month',          api:'account.renewal_month',     type:'Month',    required:false, visibility:'Detail' },
+        { label:'ARR tier',               api:'account.arr_tier',          type:'Picklist', required:false, visibility:'Detail, List' },
+        { label:'Regional preference',    api:'account.region_pref',       type:'Picklist', required:false, visibility:'Detail' },
+        { label:'Decision-maker title',   api:'account.dm_title',          type:'Text',     required:false, visibility:'Detail' },
+        { label:'Procurement portal URL', api:'account.procurement_url',   type:'URL',      required:false, visibility:'Detail', isNew:true },
+    ],
+    Contacts: [
+        { label:'LinkedIn URL',           api:'contact.linkedin_url',      type:'URL',      required:false, visibility:'Detail' },
+        { label:'Persona tag',            api:'contact.persona_tag',       type:'Picklist', required:false, visibility:'Detail' },
+        { label:'Executive sponsor',      api:'contact.exec_sponsor',      type:'Toggle',   required:false, visibility:'Detail, List' },
+    ],
+    Leads: [
+        { label:'Lead score override',    api:'lead.score_override',       type:'Number',   required:false, visibility:'Detail' },
+        { label:'Referral source detail', api:'lead.referral_detail',      type:'Text',     required:false, visibility:'Detail' },
+        { label:'Budget confirmed',       api:'lead.budget_confirmed',     type:'Toggle',   required:false, visibility:'Detail' },
+        { label:'BANT notes',             api:'lead.bant_notes',           type:'Text',     required:false, visibility:'Detail' },
+    ],
+    Opportunities: [
+        { label:'Decision date',          api:'opp.decision_date',         type:'Date',     required:false, visibility:'Detail' },
+        { label:'Champion name',          api:'opp.champion_name',         type:'Text',     required:false, visibility:'Detail' },
+        { label:'Competitors',            api:'opp.competitors',           type:'Picklist', required:false, visibility:'Detail' },
+        { label:'Why we lose',            api:'opp.why_lose',              type:'Text',     required:false, visibility:'Detail' },
+        { label:'Paper process',          api:'opp.paper_process',         type:'Text',     required:false, visibility:'Detail', isNew:true },
+    ],
+};
+
+const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
+    const saved     = settings?.customFieldsByObject || DEFAULT_CUSTOM_FIELDS;
+    const [activeObj, setActiveObj] = useState('Accounts');
+    const [fields, setFields]       = useState(() => JSON.parse(JSON.stringify(saved)));
+    const [dirty, setDirty]         = useState(false);
+    const [saving, setSaving]       = useState(false);
+    const [search, setSearch]       = useState('');
+    const [showAdd, setShowAdd]     = useState(false);
+    const [newLabel, setNewLabel]   = useState('');
+    const [newType, setNewType]     = useState('Text');
+    const [newReq, setNewReq]       = useState(false);
+    const [addErr, setAddErr]       = useState('');
+
+    const handleCancel = () => { setFields(JSON.parse(JSON.stringify(saved))); setDirty(false); setShowAdd(false); };
+    const handleSave   = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, customFieldsByObject: fields }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ customFieldsByObject: fields }) }); }
+        catch(e) { console.error('save custom fields', e); }
+        setSaving(false); setDirty(false);
+    };
+
+    const handleAddField = () => {
+        if (!newLabel.trim()) { setAddErr('Label is required.'); return; }
+        const apiKey = `${activeObj.toLowerCase().slice(0,3)}.${newLabel.trim().toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'')}`;
+        const newField = { label: newLabel.trim(), api: apiKey, type: newType, required: newReq, visibility: 'Detail' };
+        setFields(prev => ({ ...prev, [activeObj]: [...(prev[activeObj]||[]), newField] }));
+        setNewLabel(''); setNewType('Text'); setNewReq(false); setAddErr(''); setShowAdd(false); setDirty(true);
+    };
+
+    const removeField = (idx) => {
+        setFields(prev => ({ ...prev, [activeObj]: prev[activeObj].filter((_,i) => i !== idx) }));
+        setDirty(true);
+    };
+
+    const allFields   = Object.values(fields).flat();
+    const activeFields = (fields[activeObj]||[]).filter(f => !search || f.label.toLowerCase().includes(search.toLowerCase()));
+    const totalFields  = allFields.length;
+    const reqFields    = allFields.filter(f => f.required).length;
+
+    const FIELD_TYPES = ['Text','Number','Date','Picklist','Toggle','URL','Month','Email','Phone'];
+
+    return (
+        <SPDetailPageChrome
+            crumb="Custom fields" title="Custom fields"
+            subtitle="Extend Accounts, Contacts, Leads, and Opportunities"
+            statusDetail={`${totalFields} custom fields`}
+            updatedBy="Admin" updatedAt="5 days ago"
+            onBack={onBack} dirty={dirty} onCancel={handleCancel}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+        >
+            {/* Object tabs + search */}
+            <div style={{ display:'flex', alignItems:'center', gap:4, borderBottom:`1px solid ${T.border}`, marginBottom:18 }}>
+                {FIELD_OBJECTS.map((obj,i) => {
+                    const cnt = (fields[obj]||[]).length;
+                    const isNew = obj === 'Accounts' || obj === 'Opportunities';
+                    return (
+                        <div key={obj} onClick={() => { setActiveObj(obj); setShowAdd(false); setSearch(''); }}
+                            style={{ padding:'10px 18px', fontSize:13, fontWeight:600, cursor:'pointer', color: obj===activeObj ? T.ink : T.inkMuted, borderBottom: obj===activeObj ? `2px solid ${T.goldInk}` : '2px solid transparent', marginBottom:-1, display:'flex', alignItems:'center', gap:8, fontFamily:T.sans }}>
+                            {obj}
+                            <span style={{ fontSize:11, fontWeight:600, color:T.inkMuted, background:T.surface2, padding:'1px 7px', borderRadius:8, fontFamily:T.sans }}>{cnt}</span>
+                            {isNew && <span style={{ fontSize:9, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.25)', padding:'1px 5px', borderRadius:2, letterSpacing:0.4, fontFamily:T.sans }}>NEW</span>}
+                        </div>
+                    );
+                })}
+                <div style={{ flex:1 }}/>
+                <div style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 10px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, width:220, marginBottom:4 }}>
+                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search fields…" style={{ flex:1, border:'none', outline:'none', background:'transparent', fontSize:12, color:T.ink, fontFamily:T.sans }}/>
+                    {search && <button onClick={() => setSearch('')} style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:13, padding:0 }}>×</button>}
+                </div>
+            </div>
+
+            {/* Inline add field form */}
+            {showAdd && (
+                <div style={{ background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+2, padding:16, marginBottom:14, boxShadow:'0 2px 12px rgba(42,38,34,0.08)' }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:12, fontFamily:T.sans }}>New field — {activeObj}</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 140px 120px auto auto', gap:10, alignItems:'flex-end' }}>
+                        <div>
+                            <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>Label</label>
+                            <input value={newLabel} onChange={e => { setNewLabel(e.target.value); setAddErr(''); }} placeholder="e.g. Partner tier" onKeyDown={e => { if (e.key==='Enter') handleAddField(); if (e.key==='Escape') { setShowAdd(false); setAddErr(''); } }}
+                                style={{ padding:'7px 10px', background:T.surface, border:`1px solid ${addErr ? T.danger : T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' }}/>
+                        </div>
+                        <div>
+                            <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>Type</label>
+                            <select value={newType} onChange={e => setNewType(e.target.value)}
+                                style={{ padding:'7px 10px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', cursor:'pointer' }}>
+                                {FIELD_TYPES.map(t => <option key={t}>{t}</option>)}
+                            </select>
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:2 }}>
+                            <input type="checkbox" id="req-chk" checked={newReq} onChange={e => setNewReq(e.target.checked)} style={{ cursor:'pointer' }}/>
+                            <label htmlFor="req-chk" style={{ fontSize:12.5, color:T.ink, cursor:'pointer', fontFamily:T.sans }}>Required</label>
+                        </div>
+                        <button onClick={handleAddField} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
+                        <button onClick={() => { setShowAdd(false); setAddErr(''); }} style={{ padding:'7px 12px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    </div>
+                    {addErr && <div style={{ fontSize:11.5, color:T.danger, marginTop:8, fontFamily:T.sans }}>{addErr}</div>}
+                </div>
+            )}
+
+            <CSectionCard
+                title={`${activeObj} — custom fields`}
+                description={`Fields show up on the ${activeObj} detail pane, are filterable in views, and appear as report columns.`}
+                headAction={
+                    <button onClick={() => setShowAdd(v => !v)} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background: showAdd ? T.surface2 : 'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                        + New field
+                    </button>
+                }
+            >
+                {activeFields.length === 0 ? (
+                    <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                        {search ? `No fields match "${search}".` : 'No custom fields yet.'}
+                    </div>
+                ) : (
+                    <SPTable
+                        columns={[
+                            { key:'drag',  label:'',           w:'28px' },
+                            { key:'label', label:'Label',      w:'1.6fr' },
+                            { key:'api',   label:'API name',   w:'1.2fr', mono:true },
+                            { key:'type',  label:'Type',       w:'110px' },
+                            { key:'req',   label:'Required',   w:'90px' },
+                            { key:'where', label:'Visible on', w:'150px' },
+                            { key:'del',   label:'',           w:'28px' },
+                        ]}
+                        rows={activeFields.map((f,i) => ({
+                            drag:  <SPDrag/>,
+                            label: <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontFamily:T.sans }}>
+                                       <b>{f.label}</b>
+                                       {f.isNew && <span style={{ fontSize:9, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.25)', padding:'1px 5px', borderRadius:2, letterSpacing:0.4, fontFamily:T.sans }}>NEW</span>}
+                                   </span>,
+                            api:   <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{f.api}</span>,
+                            type:  <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{f.type}</span>,
+                            req:   <span style={{ fontSize:12, color: f.required ? T.warn : T.inkMuted, fontWeight: f.required ? 600 : 400, fontFamily:T.sans }}>{f.required ? 'Yes' : 'No'}</span>,
+                            where: <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>{f.visibility}</span>,
+                            del:   <button onClick={() => removeField((fields[activeObj]||[]).findIndex(ff => ff.api === f.api))}
+                                       style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:15, padding:0, lineHeight:1 }}
+                                       onMouseEnter={e => e.currentTarget.style.color = T.danger}
+                                       onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>×</button>,
+                        }))}
+                    />
+                )}
+            </CSectionCard>
+
+            {/* Stats strip */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginTop:4 }}>
+                {[
+                    { k:'Total custom fields', v:String(totalFields),  sub:'across 4 objects',  acc:T.ink },
+                    { k:'Required fields',      v:String(reqFields),    sub:'gate on save',       acc:T.warn },
+                    { k:'Fields in reports',    v:String(Math.floor(totalFields * 0.6)), sub:'used as columns', acc:T.ok },
+                    { k:'Orphaned fields',       v:'0',                 sub:'never referenced',  acc:T.ok },
+                ].map((s,i) => (
+                    <div key={i} style={{ padding:'14px 16px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2 }}>
+                        <div style={{ fontSize:10.5, fontWeight:600, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:4, fontFamily:T.sans }}>{s.k}</div>
+                        <div style={{ fontSize:22, fontWeight:700, color:s.acc, fontFamily:T.serif, fontStyle:'italic' }}>{s.v}</div>
+                        <div style={{ fontSize:11, color:T.inkMid, marginTop:2, fontFamily:T.sans }}>{s.sub}</div>
+                    </div>
+                ))}
+            </div>
+        </SPDetailPageChrome>
+    );
+};
+
+// ── 6. Pain Points Library ────────────────────────────────────
+const DEFAULT_PAIN_POINTS = [
+    { cat:'Cost & ROI',       items:['High TCO vs incumbent','Unpredictable renewal costs','Low ROI on current stack','Hidden implementation fees'] },
+    { cat:'Efficiency',       items:['Manual data entry across tools','Reps hopping between 5+ apps','Reports take > 2 days to compile','Forecasting is a spreadsheet game'] },
+    { cat:'Data & reporting', items:['Pipeline hygiene is poor','Leadership distrusts forecast','No single source of truth'] },
+    { cat:'Team & adoption',  items:['Low CRM adoption','High rep turnover','Training onboarding > 30 days','Managers coach blind'] },
+    { cat:'Integrations',     items:['Quote-to-cash is disjointed','Email sync is unreliable','Slack alerts are noisy'] },
+    { cat:'Compliance',       items:['No audit trail','GDPR requests are manual','Field-level permissions are coarse'] },
+];
+
+const MOST_USED_PAIN_POINTS = [
+    { k:'Manual data entry across tools',   n:38 },
+    { k:'Forecasting is a spreadsheet game',n:31 },
+    { k:'Low CRM adoption',                 n:27 },
+    { k:'Reps hopping between 5+ apps',     n:24 },
+    { k:'Pipeline hygiene is poor',         n:19 },
+];
+
+const PainPointsDetail = ({ settings, setSettings, onBack }) => {
+    const saved    = settings?.painPoints?.length ? settings.painPoints : DEFAULT_PAIN_POINTS;
+    const [groups, setGroups]   = useState(() => JSON.parse(JSON.stringify(saved)));
+    const [dirty, setDirty]     = useState(false);
+    const [saving, setSaving]   = useState(false);
+    const [search, setSearch]   = useState('');
+    const [addingCat, setAddingCat] = useState(false);
+    const [newCat, setNewCat]   = useState('');
+    const [addingItem, setAddingItem] = useState(null); // category name
+    const [newItem, setNewItem] = useState('');
+
+    const handleCancel = () => { setGroups(JSON.parse(JSON.stringify(saved))); setDirty(false); };
+    const handleSave   = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, painPoints: groups }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ painPoints: groups }) }); }
+        catch(e) { console.error('save pain points', e); }
+        setSaving(false); setDirty(false);
+    };
+
+    const addCategory = () => {
+        if (!newCat.trim()) return;
+        if (groups.some(g => g.cat === newCat.trim())) return;
+        setGroups(prev => [...prev, { cat: newCat.trim(), items: [] }]);
+        setNewCat(''); setAddingCat(false); setDirty(true);
+    };
+    const addItem = (cat) => {
+        if (!newItem.trim()) return;
+        setGroups(prev => prev.map(g => g.cat === cat ? { ...g, items: [...g.items, newItem.trim()] } : g));
+        setNewItem(''); setAddingItem(null); setDirty(true);
+    };
+    const removeItem = (cat, item) => {
+        setGroups(prev => prev.map(g => g.cat === cat ? { ...g, items: g.items.filter(i => i !== item) } : g));
+        setDirty(true);
+    };
+
+    const totalItems = groups.reduce((a,g) => a + g.items.length, 0);
+    const filtered   = groups.map(g => ({
+        ...g,
+        items: search ? g.items.filter(item => item.toLowerCase().includes(search.toLowerCase())) : g.items,
+    })).filter(g => !search || g.items.length > 0);
+
+    return (
+        <SPDetailPageChrome
+            crumb="Pain points library" title="Pain points library"
+            subtitle="Reusable customer pain point templates"
+            statusDetail={`${totalItems} pain points`}
+            updatedBy="Admin" updatedAt="2 weeks ago"
+            onBack={onBack} dirty={dirty} onCancel={handleCancel}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+            rightActions={
+                <div style={{ display:'flex', gap:8 }}>
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                        <LIcon name="upload" size={13}/> Import CSV
+                    </button>
+                    <button onClick={() => setAddingCat(true)} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                        + New pain point
+                    </button>
+                </div>
+            }
+        >
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:20 }}>
+                {/* Left */}
+                <div>
+                    {/* Search + count */}
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, width:260 }}>
+                            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search pain points…" style={{ flex:1, border:'none', outline:'none', background:'transparent', fontSize:12, color:T.ink, fontFamily:T.sans }}/>
+                            {search && <button onClick={() => setSearch('')} style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:13, padding:0 }}>×</button>}
+                        </div>
+                        <div style={{ flex:1 }}/>
+                        <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Showing {totalItems} of {totalItems} · grouped by category</span>
+                    </div>
+
+                    {/* New category form */}
+                    {addingCat && (
+                        <div style={{ display:'flex', gap:8, marginBottom:14, padding:12, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+2 }}>
+                            <input value={newCat} onChange={e => setNewCat(e.target.value)} placeholder="Category name…" onKeyDown={e => { if (e.key==='Enter') addCategory(); if (e.key==='Escape') { setAddingCat(false); setNewCat(''); } }}
+                                autoFocus style={{ flex:1, padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none' }}/>
+                            <button onClick={addCategory} style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
+                            <button onClick={() => { setAddingCat(false); setNewCat(''); }} style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                        </div>
+                    )}
+
+                    {filtered.map((g,gi) => (
+                        <CSectionCard
+                            key={g.cat}
+                            title={`${g.cat} · ${g.items.length}`}
+                            description="Drag any pain point onto an opportunity to associate it."
+                            headAction={
+                                <button onClick={() => { setAddingItem(g.cat); setNewItem(''); }}
+                                    style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'4px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                                    + Add
+                                </button>
+                            }
+                        >
+                            {addingItem === g.cat && (
+                                <div style={{ display:'flex', gap:8, marginBottom:10 }}>
+                                    <input value={newItem} onChange={e => setNewItem(e.target.value)} placeholder="Pain point description…" onKeyDown={e => { if (e.key==='Enter') addItem(g.cat); if (e.key==='Escape') { setAddingItem(null); setNewItem(''); } }}
+                                        autoFocus style={{ flex:1, padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none' }}/>
+                                    <button onClick={() => addItem(g.cat)} style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
+                                    <button onClick={() => { setAddingItem(null); setNewItem(''); }} style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                                </div>
+                            )}
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                                {g.items.map((item, ii) => (
+                                    <div key={ii} style={{ padding:'10px 12px', display:'flex', alignItems:'center', gap:10, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r+2 }}>
+                                        <SPDrag/>
+                                        <div style={{ flex:1, fontSize:12.5, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{item}</div>
+                                        <button onClick={() => removeItem(g.cat, item)}
+                                            style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:14, padding:0, lineHeight:1, flexShrink:0 }}
+                                            onMouseEnter={e => e.currentTarget.style.color = T.danger}
+                                            onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>×</button>
+                                    </div>
+                                ))}
+                            </div>
+                        </CSectionCard>
+                    ))}
+                </div>
+
+                {/* Right */}
+                <div>
+                    <div style={{ position:'sticky', top:20 }}>
+                        <CSectionCard title="Most-used pain points" description="Across all open opportunities this quarter.">
+                            {MOST_USED_PAIN_POINTS.map((p,i) => (
+                                <div key={i} style={{ padding:'9px 0', borderBottom: i<4 ? `1px solid ${T.border}` : 'none', display:'flex', gap:10, alignItems:'center' }}>
+                                    <div style={{ fontSize:12.5, color:T.ink, flex:1, fontFamily:T.sans }}>{p.k}</div>
+                                    <div style={{ fontFamily:T.serif, fontStyle:'italic', fontSize:15, fontWeight:700, color:T.goldInk }}>{p.n}</div>
+                                </div>
+                            ))}
+                        </CSectionCard>
+                        <CSectionCard title="Categories" description="Reorder or hide whole categories.">
+                            {groups.map((g,i) => (
+                                <div key={i} style={{ padding:'8px 0', borderBottom: i<groups.length-1 ? `1px solid ${T.border}` : 'none', display:'flex', alignItems:'center', gap:10 }}>
+                                    <SPDrag/>
+                                    <div style={{ flex:1, fontSize:12.5, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{g.cat}</div>
+                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{g.items.length}</span>
+                                </div>
+                            ))}
+                        </CSectionCard>
+                    </div>
+                </div>
+            </div>
+        </SPDetailPageChrome>
+    );
+};
+
+// ── 7. Customer Types ─────────────────────────────────────────
+const DEFAULT_CUST_TYPES = [
+    { tier:'SMB',        hex:'#8a9a7a', range:'< $10M',       sla:'24h', owner:'SMB teams',   count:312 },
+    { tier:'Mid-Market', hex:'#b87333', range:'$10M–$250M',   sla:'8h',  owner:'Mid-Market',  count:148 },
+    { tier:'Enterprise', hex:'#7a5a3c', range:'$250M–$1B',    sla:'2h',  owner:'Enterprise',  count:42  },
+    { tier:'Strategic',  hex:'#4d6b3d', range:'$1B+',         sla:'30m', owner:'Strategic',   count:11  },
+    { tier:'Partner',    hex:'#3a5a7a', range:'n/a',          sla:'4h',  owner:'Channel',     count:18  },
+];
+
+const AUTO_CLASS_RULES = [
+    { when:'Annual revenue < $10M',      then:'SMB' },
+    { when:'Annual revenue $10M–$250M',  then:'Mid-Market' },
+    { when:'Annual revenue $250M–$1B',   then:'Enterprise' },
+    { when:'Annual revenue ≥ $1B',       then:'Strategic' },
+    { when:'Account type = Partner',     then:'Partner' },
+];
+
+const CustomerTypesDetail = ({ settings, setSettings, onBack }) => {
+    const saved    = settings?.customerTypeTiers?.length ? settings.customerTypeTiers : DEFAULT_CUST_TYPES;
+    const [tiers, setTiers]     = useState(() => JSON.parse(JSON.stringify(saved)));
+    const [dirty, setDirty]     = useState(false);
+    const [saving, setSaving]   = useState(false);
+    const [showAdd, setShowAdd] = useState(false);
+    const [newTier, setNewTier] = useState({ tier:'', hex:'#7a6a48', range:'', sla:'', owner:'', count:0 });
+    const [addErr, setAddErr]   = useState('');
+
+    const handleCancel = () => { setTiers(JSON.parse(JSON.stringify(saved))); setDirty(false); setShowAdd(false); };
+    const handleSave   = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, customerTypeTiers: tiers }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ customerTypeTiers: tiers }) }); }
+        catch(e) { console.error('save customer types', e); }
+        setSaving(false); setDirty(false);
+    };
+
+    const handleAddTier = () => {
+        if (!newTier.tier.trim()) { setAddErr('Tier name is required.'); return; }
+        setTiers(prev => [...prev, { ...newTier, count:0 }]);
+        setNewTier({ tier:'', hex:'#7a6a48', range:'', sla:'', owner:'', count:0 });
+        setAddErr(''); setShowAdd(false); setDirty(true);
+    };
+
+    const total = tiers.reduce((a,t) => a+t.count, 0)||1;
+
+    return (
+        <SPDetailPageChrome
+            crumb="Customer types" title="Customer types"
+            subtitle="Account classification tags (SMB, Mid-market, Enterprise…)"
+            statusDetail={`${tiers.length} tiers`}
+            updatedBy="Admin" updatedAt="6 months ago"
+            onBack={onBack} dirty={dirty} onCancel={handleCancel}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+            rightActions={
+                <div style={{ display:'flex', gap:8 }}>
+                    <button onClick={handleCancel} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    <button onClick={() => setShowAdd(true)} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New tier</button>
+                </div>
+            }
+        >
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:20 }}>
+                {/* Left */}
+                <div>
+                    {/* Add tier form */}
+                    {showAdd && (
+                        <div style={{ background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+2, padding:16, marginBottom:14, boxShadow:'0 2px 12px rgba(42,38,34,0.08)' }}>
+                            <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:12, fontFamily:T.sans }}>New tier</div>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 100px 120px 80px 1fr auto auto', gap:10, alignItems:'flex-end' }}>
+                                {[
+                                    { label:'Tier name', key:'tier', placeholder:'e.g. Enterprise' },
+                                    { label:'Revenue', key:'range', placeholder:'$250M+' },
+                                    { label:'Owning team', key:'owner', placeholder:'e.g. Enterprise' },
+                                    { label:'SLA', key:'sla', placeholder:'2h' },
+                                ].map(f => (
+                                    <div key={f.key}>
+                                        <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>{f.label}</label>
+                                        <input value={newTier[f.key]} onChange={e => setNewTier(p => ({ ...p, [f.key]:e.target.value }))} placeholder={f.placeholder}
+                                            style={{ padding:'6px 10px', border:`1px solid ${f.key==='tier'&&addErr ? T.danger : T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' }}/>
+                                    </div>
+                                ))}
+                                <div>
+                                    <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>Color</label>
+                                    <input type="color" value={newTier.hex} onChange={e => setNewTier(p => ({ ...p, hex:e.target.value }))}
+                                        style={{ width:38, height:34, border:`1px solid ${T.border}`, borderRadius:T.r, padding:2, cursor:'pointer' }}/>
+                                </div>
+                                <button onClick={handleAddTier} style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans, alignSelf:'flex-end' }}>Add</button>
+                                <button onClick={() => { setShowAdd(false); setAddErr(''); }} style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, cursor:'pointer', fontFamily:T.sans, alignSelf:'flex-end' }}>Cancel</button>
+                            </div>
+                            {addErr && <div style={{ fontSize:11.5, color:T.danger, marginTop:8, fontFamily:T.sans }}>{addErr}</div>}
+                        </div>
+                    )}
+
+                    <CSectionCard title="Tiers" description="Drag to reorder. Classification drives auto-assignment rules, SLA, and dashboard grouping.">
+                        <SPTable
+                            columns={[
+                                { key:'drag',  label:'',           w:'28px' },
+                                { key:'tier',  label:'Tier',       w:'1.3fr' },
+                                { key:'range', label:'Revenue',    w:'140px' },
+                                { key:'count', label:'Accounts',   w:'90px', align:'right' },
+                                { key:'sla',   label:'SLA',        w:'70px', align:'right' },
+                                { key:'owner', label:'Owning team',w:'130px' },
+                                { key:'more',  label:'',           w:'28px', align:'right' },
+                            ]}
+                            rows={tiers.map((t,i) => ({
+                                drag:  <SPDrag/>,
+                                tier:  <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+                                           <span style={{ width:10, height:10, background:t.hex, borderRadius:2, flexShrink:0 }}/>
+                                           <b style={{ fontFamily:T.sans }}>{t.tier}</b>
+                                       </span>,
+                                range: <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>{t.range}</span>,
+                                count: <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:14, color:T.ink }}>{t.count}</span>,
+                                sla:   <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{t.sla}</span>,
+                                owner: <span style={{ color:T.inkMid, fontFamily:T.sans, fontSize:12 }}>{t.owner}</span>,
+                                more:  <span style={{ color:T.inkMuted, cursor:'pointer' }}>⋯</span>,
+                            }))}
+                        />
+                    </CSectionCard>
+
+                    <CSectionCard title="Auto-classification" description="Rules that assign a tier when an account is created or revenue changes.">
+                        {AUTO_CLASS_RULES.map((r,i) => (
+                            <div key={i} style={{ padding:'10px 0', borderBottom: i<AUTO_CLASS_RULES.length-1 ? `1px solid ${T.border}` : 'none', display:'flex', gap:14, alignItems:'center' }}>
+                                <div style={{ flex:1, fontSize:12.5, color:T.ink, fontFamily:T.sans }}>
+                                    <span style={{ color:T.inkMuted }}>When</span> <b>{r.when}</b>
+                                    <span style={{ color:T.inkMuted }}> → tag as </span>
+                                    <b style={{ color:T.goldInk }}>{r.then}</b>
+                                </div>
+                                <StatusChip status="ok" detail="Active" small/>
+                                <span style={{ fontSize:11, color:T.goldInk, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Edit</span>
+                            </div>
+                        ))}
+                    </CSectionCard>
+                </div>
+
+                {/* Right — distribution chart */}
+                <div>
+                    <div style={{ position:'sticky', top:20 }}>
+                        <CSectionCard title="Distribution" description="Accounts by tier.">
+                            {/* Stacked bar */}
+                            <div style={{ display:'flex', gap:2, height:12, borderRadius:2, overflow:'hidden', border:`1px solid ${T.border}`, marginBottom:14 }}>
+                                {tiers.map((t,i) => (
+                                    <div key={i} style={{ flex:t.count, background:t.hex }} title={`${t.tier} — ${t.count}`}/>
+                                ))}
+                            </div>
+                            {tiers.map((t,i) => (
+                                <div key={i} style={{ padding:'6px 0', display:'flex', alignItems:'center', gap:8, fontSize:12, borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                                    <span style={{ width:8, height:8, background:t.hex, borderRadius:2, flexShrink:0 }}/>
+                                    <span style={{ flex:1, color:T.ink, fontFamily:T.sans }}>{t.tier}</span>
+                                    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMid }}>{t.count}</span>
+                                    <span style={{ width:44, textAlign:'right', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{Math.round(t.count/total*100)}%</span>
+                                </div>
+                            ))}
+                        </CSectionCard>
+                    </div>
+                </div>
+            </div>
+        </SPDetailPageChrome>
+    );
+};
+
+// ── 8. Industries ─────────────────────────────────────────────
+const DEFAULT_INDUSTRIES = [
+    { k:'Technology',          subs:['SaaS','Hardware','IT services','Cybersecurity','Fintech'],              n:118 },
+    { k:'Manufacturing',       subs:['Industrial','Consumer goods','Automotive','Aerospace'],                 n:74  },
+    { k:'Healthcare',          subs:['Providers','Payers','Pharma','Medical devices'],                        n:62  },
+    { k:'Financial services',  subs:['Banking','Insurance','Asset mgmt','Capital markets'],                   n:54  },
+    { k:'Retail & CPG',        subs:['Apparel','Grocery','E-comm','Luxury'],                                  n:41  },
+    { k:'Professional services',subs:['Consulting','Legal','Accounting'],                                     n:38  },
+    { k:'Logistics',           subs:['Freight','Warehousing','Last-mile'],                                    n:29  },
+    { k:'Energy',              subs:['Oil & gas','Utilities','Renewables'],                                   n:22  },
+    { k:'Education',           subs:['K-12','Higher ed','EdTech'],                                            n:18  },
+    { k:'Government',          subs:['Federal','State & local','Defense'],                                    n:14  },
+    { k:'Real estate',         subs:['Commercial','Residential','PropTech'],                                  n:12  },
+    { k:'Media & entertainment',subs:['Publishing','Streaming','Gaming'],                                     n:9   },
+    { k:'Agriculture',         subs:['Farming','AgTech'],                                                     n:5   },
+    { k:'Non-profit',          subs:['Foundations','NGOs'],                                                   n:4   },
+];
+
+const IndustriesDetail = ({ settings, setSettings, onBack }) => {
+    const saved = settings?.industries?.length ? settings.industries : DEFAULT_INDUSTRIES;
+    const [industries, setIndustries] = useState(() => JSON.parse(JSON.stringify(saved)));
+    const [dirty, setDirty]     = useState(false);
+    const [saving, setSaving]   = useState(false);
+    const [expanded, setExpanded] = useState({});
+    const [addingSubTo, setAddingSubTo] = useState(null);
+    const [newSub, setNewSub]   = useState('');
+    const [showAddInd, setShowAddInd] = useState(false);
+    const [newInd, setNewInd]   = useState('');
+
+    const handleCancel = () => { setIndustries(JSON.parse(JSON.stringify(saved))); setDirty(false); };
+    const handleSave   = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, industries }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ industries }) }); }
+        catch(e) { console.error('save industries', e); }
+        setSaving(false); setDirty(false);
+    };
+
+    const addSub = (indKey) => {
+        if (!newSub.trim()) return;
+        setIndustries(prev => prev.map(ind => ind.k === indKey ? { ...ind, subs: [...ind.subs, newSub.trim()] } : ind));
+        setNewSub(''); setAddingSubTo(null); setDirty(true);
+    };
+    const removeSub = (indKey, sub) => {
+        setIndustries(prev => prev.map(ind => ind.k === indKey ? { ...ind, subs: ind.subs.filter(s => s !== sub) } : ind));
+        setDirty(true);
+    };
+    const addIndustry = () => {
+        if (!newInd.trim()) return;
+        setIndustries(prev => [...prev, { k: newInd.trim(), subs:[], n:0 }]);
+        setNewInd(''); setShowAddInd(false); setDirty(true);
+    };
+
+    const total = industries.reduce((a,i) => a+i.n, 0) || 1;
+    const totalSubs = industries.reduce((a,i) => a+i.subs.length, 0);
+
+    return (
+        <SPDetailPageChrome
+            crumb="Industries" title="Industries"
+            subtitle="Primary and sub-industry taxonomy"
+            statusDetail={`${industries.length} industries · ${totalSubs} sub-types`}
+            updatedBy="Admin" updatedAt="4 months ago"
+            onBack={onBack} dirty={dirty} onCancel={handleCancel}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+            rightActions={
+                <div style={{ display:'flex', gap:8 }}>
+                    <button onClick={handleCancel} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    <button onClick={() => setShowAddInd(true)} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New industry</button>
+                </div>
+            }
+        >
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:20 }}>
+                {/* Left */}
+                <div>
+                    <CSectionCard title="Industry taxonomy" description="Two-level taxonomy. Primary industries are required on every Account; sub-industries are optional.">
+                        {/* Add industry form */}
+                        {showAddInd && (
+                            <div style={{ display:'flex', gap:8, marginBottom:12 }}>
+                                <input value={newInd} onChange={e => setNewInd(e.target.value)} placeholder="Industry name…" autoFocus
+                                    onKeyDown={e => { if (e.key==='Enter') addIndustry(); if (e.key==='Escape') { setShowAddInd(false); setNewInd(''); } }}
+                                    style={{ flex:1, padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none' }}/>
+                                <button onClick={addIndustry} style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
+                                <button onClick={() => { setShowAddInd(false); setNewInd(''); }} style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                            </div>
+                        )}
+
+                        <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r+2, background:T.surface, overflow:'hidden' }}>
+                            {industries.map((ind,i) => {
+                                const isExp = expanded[ind.k];
+                                return (
+                                    <div key={ind.k} style={{ borderBottom: i<industries.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                                        {/* Row header */}
+                                        <div style={{ padding:'10px 14px', display:'flex', alignItems:'center', gap:10 }}>
+                                            <SPDrag/>
+                                            <span onClick={() => setExpanded(p => ({ ...p, [ind.k]: !isExp }))}
+                                                style={{ fontSize:11, color:T.inkMuted, cursor:'pointer', transform: isExp ? 'rotate(0deg)' : 'rotate(-90deg)', display:'inline-block', transition:'transform 120ms', userSelect:'none' }}>▾</span>
+                                            <div style={{ flex:1, fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{ind.k}</div>
+                                            <span style={{ fontSize:11, color:T.inkMuted, marginRight:10, fontFamily:T.sans }}>{ind.subs.length} sub-types</span>
+                                            <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:14, color:T.ink, minWidth:30, textAlign:'right' }}>{ind.n}</span>
+                                            <span style={{ fontSize:12, color:T.inkMuted, cursor:'pointer', marginLeft:8 }}>⋯</span>
+                                        </div>
+                                        {/* Sub-industries */}
+                                        <div style={{ padding:'0 14px 10px 52px', display:'flex', flexWrap:'wrap', gap:6 }}>
+                                            {ind.subs.map((s,si) => (
+                                                <span key={si} style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 9px', fontSize:11.5, color:T.inkMid, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:12 }}>
+                                                    {s}
+                                                    <button onClick={() => removeSub(ind.k, s)} style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:12, padding:0, lineHeight:1 }}
+                                                        onMouseEnter={e => e.currentTarget.style.color = T.danger}
+                                                        onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>×</button>
+                                                </span>
+                                            ))}
+                                            {addingSubTo === ind.k ? (
+                                                <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                                                    <input value={newSub} onChange={e => setNewSub(e.target.value)} placeholder="Sub-type…" autoFocus
+                                                        onKeyDown={e => { if (e.key==='Enter') addSub(ind.k); if (e.key==='Escape') { setAddingSubTo(null); setNewSub(''); } }}
+                                                        style={{ width:120, padding:'3px 8px', border:`1px solid ${T.border}`, borderRadius:10, fontSize:11.5, color:T.ink, fontFamily:T.sans, outline:'none' }}/>
+                                                    <button onClick={() => addSub(ind.k)} style={{ fontSize:11.5, fontWeight:600, color:T.goldInk, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Add</button>
+                                                    <button onClick={() => { setAddingSubTo(null); setNewSub(''); }} style={{ fontSize:11.5, color:T.inkMuted, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                                                </span>
+                                            ) : (
+                                                <span onClick={() => { setAddingSubTo(ind.k); setNewSub(''); }}
+                                                    style={{ padding:'3px 9px', fontSize:11.5, color:T.goldInk, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ Add</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </CSectionCard>
+                </div>
+
+                {/* Right — distribution */}
+                <div>
+                    <div style={{ position:'sticky', top:20 }}>
+                        <CSectionCard title="Distribution" description="Accounts per primary industry.">
+                            {industries.map((ind,i) => {
+                                const pct = (ind.n/total)*100;
+                                return (
+                                    <div key={i} style={{ padding:'6px 0', borderBottom: i<industries.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                                        <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, marginBottom:4 }}>
+                                            <span style={{ flex:1, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{ind.k}</span>
+                                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMid, fontSize:11 }}>{ind.n}</span>
+                                            <span style={{ width:36, textAlign:'right', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{pct.toFixed(1)}%</span>
+                                        </div>
+                                        <div style={{ height:4, background:T.surface2, borderRadius:1 }}>
+                                            <div style={{ width:`${pct}%`, height:'100%', background:T.goldInk, opacity:0.7, borderRadius:1 }}/>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </CSectionCard>
+                    </div>
+                </div>
+            </div>
+        </SPDetailPageChrome>
+    );
+};
+
 // ADMIN WORKSPACE VIEW
 // ─────────────────────────────────────────────────────────────
 const AdminView = ({ settings, setSettings, currentUser }) => {
@@ -1829,6 +2510,11 @@ const AdminView = ({ settings, setSettings, currentUser }) => {
         'pipelines':            'pipelines',
         'funnel-stages':        'funnel-stages',
         'kpi-settings':         'kpi-settings',
+        // Sales process Group 2
+        'custom-fields':        'custom-fields',
+        'pain-points':          'pain-points',
+        'customer-types':       'customer-types',
+        'industries':           'industries',
     };
 
     if (activeItem) {
@@ -1845,6 +2531,12 @@ const AdminView = ({ settings, setSettings, currentUser }) => {
         if (id === 'funnel-stages')        return <FunnelStagesDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'kpi-settings')         return <KPIThresholdsDetail    settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'lead-conv-benchmarks') return <LeadConversionDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
+
+        // Sales process Group 2 detail pages
+        if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'pain-points')     return <PainPointsDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Generic wrapper for all other panels
         const panel = DETAIL_PANELS[id];
