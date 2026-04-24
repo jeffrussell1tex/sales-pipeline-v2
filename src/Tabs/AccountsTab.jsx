@@ -852,7 +852,23 @@ export default function AccountsTab() {
             </div>
 
             {/* Action buttons */}
-            <div style={{ display: 'flex', gap: 8, position: 'relative' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative' }}>
+                {/* Search */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, width: 200 }}>
+                    <Icon name="search" size={13} color={T.inkMuted} />
+                    <input
+                        ref={searchRef}
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Escape') { setSearch(''); if (searchRef.current) searchRef.current.value = ''; } }}
+                        placeholder="Search accounts…"
+                        style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, color: T.ink, fontFamily: T.sans, width: '100%' }}
+                    />
+                    {search && (
+                        <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                    )}
+                </div>
+
                 {/* Filter button */}
                 <button
                     onClick={() => setFilterOpen(o => !o)}
@@ -1022,22 +1038,6 @@ export default function AccountsTab() {
     return (
         <div className="tab-page" style={{ fontFamily: T.sans }}>
             <Header />
-
-            {/* Local search — below header, above toolbar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, marginBottom: 10, maxWidth: 320 }}>
-                <Icon name="search" size={13} color={T.inkMuted} />
-                <input
-                    ref={searchRef}
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Escape') { setSearch(''); if (searchRef.current) searchRef.current.value = ''; } }}
-                    placeholder="Search accounts…"
-                    style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, color: T.ink, fontFamily: T.sans, width: '100%' }}
-                />
-                {search && (
-                    <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
-                )}
-            </div>
 
             {/* Combined toolbar: tabs + warmth + sort + filter */}
             <Toolbar />
