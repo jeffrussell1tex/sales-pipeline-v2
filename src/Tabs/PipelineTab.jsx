@@ -65,12 +65,12 @@ function FilterPanel({
     pipelineRepFilter,     setPipelineRepFilter,
     pipelineTerritoryFilter, setPipelineTerritoryFilter,
     allReps, allTerritories, stages,
-    getQuarter, getQuarterLabel, currentUser,
+    getQuarter, getQuarterLabel, currentUser, canSeeAll,
 }) {
     const [draftPipeline,   setDraftPipeline]   = useState(activePipeline?.id || null);
     const [draftTimeWindow, setDraftTimeWindow] = useState(pipelineQuarterFilter[0] || 'thisQuarter');
     const [draftStage,      setDraftStage]      = useState(pipelineStageFilter[0]   || '__allOpen__');
-    const [draftRep,        setDraftRep]        = useState(pipelineRepFilter[0]     || '__me__');
+    const [draftRep,        setDraftRep]        = useState(pipelineRepFilter[0]     || (canSeeAll ? '__all__' : '__me__'));
     const [draftTerritory,  setDraftTerritory]  = useState(pipelineTerritoryFilter[0] || '__all__');
 
     useEffect(() => {
@@ -78,7 +78,7 @@ function FilterPanel({
             setDraftPipeline(activePipeline?.id || null);
             setDraftTimeWindow(pipelineQuarterFilter[0] || 'thisQuarter');
             setDraftStage(pipelineStageFilter[0] || '__allOpen__');
-            setDraftRep(pipelineRepFilter[0] || '__me__');
+            setDraftRep(pipelineRepFilter[0] || (canSeeAll ? '__all__' : '__me__'));
             setDraftTerritory(pipelineTerritoryFilter[0] || '__all__');
         }
     }, [open]);
@@ -105,8 +105,8 @@ function FilterPanel({
         if (draftPipeline && setActivePipelineId) setActivePipelineId(draftPipeline);
         setPipelineQuarterFilter(draftTimeWindow === 'allTime' || draftTimeWindow === 'thisQuarter' ? [] : [draftTimeWindow]);
         setPipelineStageFilter(draftStage === '__allOpen__' ? [] : [draftStage]);
-        if (draftRep === '__me__')  setPipelineRepFilter([currentUser]);
-        else if (draftRep === '__all__') setPipelineRepFilter([]);
+        if (draftRep === '__all__') setPipelineRepFilter([]);
+        else if (draftRep === '__me__') setPipelineRepFilter([currentUser]);
         else setPipelineRepFilter([draftRep]);
         setPipelineTerritoryFilter(draftTerritory === '__all__' ? [] : [draftTerritory]);
         onApply();
@@ -695,6 +695,7 @@ export default function PipelineTab() {
                         setPipelineQuarterFilter={setPipelineQuarterFilter}
                         pipelineStageFilter={pipelineStageFilter}
                         setPipelineStageFilter={setPipelineStageFilter}
+                        canSeeAll={canSeeAll}
                         pipelineRepFilter={pipelineRepFilter}
                         setPipelineRepFilter={setPipelineRepFilter}
                         pipelineTerritoryFilter={pipelineTerritoryFilter}
