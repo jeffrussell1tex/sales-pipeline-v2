@@ -3784,6 +3784,388 @@ const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
     );
 };
 
+// ─────────────────────────────────────────────────────────────
+// QUOTE TEMPLATES & BRANDING DETAIL PAGE
+// Settings → Quoting → Quote templates & branding
+// ─────────────────────────────────────────────────────────────
+
+const DEFAULT_QUOTE_TEMPLATES = [
+    { id:'tpl1', name:'SMB Starter — Annual',    desc:'Core + Pipeline + Reports + Basic onboarding. Ideal for 10–50 seats.',           usedTimes:47, lastUsed:'3 days ago',   avgWinRate:0.48 },
+    { id:'tpl2', name:'Growth Package',           desc:'Core + all core modules + white-glove services. 50–200 seats, 2-3 yr terms.',     usedTimes:28, lastUsed:'1 week ago',   avgWinRate:0.44 },
+    { id:'tpl3', name:'Enterprise — Multi-year',  desc:'Premium core + full module stack + dedicated CSM. 200+ seats.',                  usedTimes:9,  lastUsed:'2 weeks ago',  avgWinRate:0.57 },
+    { id:'tpl4', name:'Quick trial → paid',       desc:'Minimal Core + basic onboarding, annual. Conversion-from-trial template.',        usedTimes:19, lastUsed:'6 days ago',   avgWinRate:0.52 },
+];
+
+const QT_BRANDING = {
+    primary: '#6b2a22', ink: '#1a1612', paper: '#fbf8f3', accent: '#b87333',
+    serifFamily: 'Georgia, serif', sansFamily: 'system-ui, sans-serif',
+    logoMark: '◐', companyName: 'Accelerep',
+    contactLine: 'sales@accelerep.com · accelerep.com',
+};
+
+// Mini quote doc preview — scaled-down representation
+const MiniQuoteDoc = ({ scale = 0.32 }) => {
+    const w = Math.round(360 * scale);
+    const h = Math.round(480 * scale);
+    const s = scale;
+    return (
+        <div style={{ width:w, height:h, background:QT_BRANDING.paper, border:`1px solid ${T.border}`, borderRadius:4, boxShadow:'0 4px 12px rgba(0,0,0,0.06)', padding:Math.round(18*s), fontSize:Math.round(9*s), color:QT_BRANDING.ink, fontFamily:T.sans, overflow:'hidden', display:'flex', flexDirection:'column', gap:Math.round(8*s) }}>
+            {/* Cover */}
+            <div style={{ display:'flex', alignItems:'center', gap:Math.round(6*s) }}>
+                <span style={{ fontSize:Math.round(18*s), color:QT_BRANDING.primary }}>{QT_BRANDING.logoMark}</span>
+                <b style={{ fontFamily:T.serif, fontStyle:'italic', fontSize:Math.round(11*s) }}>{QT_BRANDING.companyName}</b>
+            </div>
+            <div style={{ height:1, background:QT_BRANDING.primary, opacity:0.6 }}/>
+            <div style={{ fontSize:Math.round(7*s), fontWeight:700, color:QT_BRANDING.accent, letterSpacing:0.5, textTransform:'uppercase' }}>QUOTE · Q-2026</div>
+            <div style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:Math.round(16*s), lineHeight:1.1 }}>Mountain View Capital</div>
+            <div style={{ fontSize:Math.round(7*s), color:T.inkMuted }}>Prepared for Helena Choi · Valid 30 days</div>
+            {/* Lines */}
+            <div>
+                <div style={{ display:'flex', justifyContent:'space-between', padding:`${Math.round(3*s)}px 0`, borderBottom:`1px solid ${QT_BRANDING.primary}`, fontWeight:700, fontSize:Math.round(7*s), letterSpacing:0.4 }}>
+                    <span>ITEM</span><span>QTY</span><span>TOTAL</span>
+                </div>
+                {[['Accelerep Core','50','$36,000'],['Pipeline','50','$12,000'],['Support','1','$4,800']].map((r,i) => (
+                    <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:`${Math.round(3*s)}px 0`, fontSize:Math.round(7*s), borderBottom:`1px solid rgba(0,0,0,0.06)` }}>
+                        <span>{r[0]}</span><span style={{ color:T.inkMuted }}>{r[1]}</span><span style={{ fontFamily:'ui-monospace,Menlo,monospace' }}>{r[2]}</span>
+                    </div>
+                ))}
+                <div style={{ display:'flex', justifyContent:'space-between', paddingTop:Math.round(4*s), fontSize:Math.round(8*s), fontWeight:700 }}>
+                    <span>Total</span>
+                    <span style={{ color:QT_BRANDING.primary, fontFamily:T.serif, fontStyle:'italic' }}>$52,800</span>
+                </div>
+            </div>
+            {/* Terms */}
+            <div style={{ marginTop:'auto', fontSize:Math.round(6*s), color:T.inkMuted, lineHeight:1.45 }}>
+                <div style={{ fontWeight:700, color:QT_BRANDING.accent, letterSpacing:0.5, textTransform:'uppercase', fontSize:Math.round(6*s), marginBottom:2 }}>Terms</div>
+                Net-30 invoicing. Auto-renew with 60-day notice. Pricing locked for the term.
+            </div>
+        </div>
+    );
+};
+
+// Template card
+const TplLibCard = ({ t, isDefault, isSelected, onClick }) => (
+    <div onClick={onClick} style={{ background:T.surface, border:`1.5px solid ${isSelected ? T.goldInk : T.border}`, borderRadius:T.r+2, overflow:'hidden', cursor:'pointer', display:'flex', flexDirection:'column', transition:'border-color 120ms' }}>
+        <div style={{ height:130, background:'linear-gradient(180deg, #f4ede0 0%, #ede4d2 100%)', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
+            <div style={{ transform:'scale(0.32)', transformOrigin:'center' }}>
+                <MiniQuoteDoc/>
+            </div>
+            {isDefault && (
+                <span style={{ position:'absolute', top:8, left:8, padding:'2px 7px', background:'rgba(0,0,0,0.7)', color:'#fff', fontSize:9, fontWeight:700, letterSpacing:0.6, borderRadius:2, textTransform:'uppercase' }}>Default</span>
+            )}
+        </div>
+        <div style={{ padding:12, flex:1, display:'flex', flexDirection:'column' }}>
+            <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:4 }}>{t.name}</div>
+            <div style={{ fontSize:11, color:T.inkMuted, marginBottom:10, lineHeight:1.5, height:32, overflow:'hidden' }}>{t.desc}</div>
+            <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:10.5, color:T.inkMid, marginTop:'auto' }}>
+                <span><b style={{ color:T.ink, fontFamily:T.serif, fontStyle:'italic', fontSize:13 }}>{t.usedTimes}</b> uses</span>
+                <span style={{ color:T.inkMuted }}>·</span>
+                <span>Last: {t.lastUsed}</span>
+                <div style={{ flex:1 }}/>
+                <QPill tone="rep" dot>{Math.round(t.avgWinRate*100)}% win</QPill>
+            </div>
+        </div>
+    </div>
+);
+
+// New template modal
+const NewTemplateModal = ({ templates, onClose, onCreate }) => {
+    const [mode, setMode]         = useState('blank'); // blank | duplicate | import | library
+    const [selectedTpl, setSelectedTpl] = useState(null);
+    const [newName, setNewName]   = useState('');
+    const [setAsDefault, setSetAsDefault] = useState(false);
+
+    const modeOptions = [
+        { key:'blank',     label:'Blank',          sub:'Start from scratch' },
+        { key:'duplicate', label:'Duplicate',       sub:'From existing' },
+        { key:'import',    label:'Import',          sub:'PDF · DOCX · .qtpl' },
+        { key:'library',   label:'From library',    sub:'Accelerep starters' },
+    ];
+
+    return (
+        <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.5)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={onClose}>
+            <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:T.r+4, width:660, maxHeight:'90vh', overflow:'auto', boxShadow:'0 16px 48px rgba(42,38,34,0.2)', fontFamily:T.sans }}>
+                {/* Header */}
+                <div style={{ padding:'20px 24px 0', borderBottom:`1px solid ${T.border}`, paddingBottom:16 }}>
+                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
+                        <div>
+                            <div style={{ fontSize:17, fontWeight:700, color:T.ink, marginBottom:3 }}>New quote template</div>
+                            <div style={{ fontSize:12.5, color:T.inkMuted }}>Choose how to start, then name the template.</div>
+                        </div>
+                        <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:18, padding:0, lineHeight:1 }}>×</button>
+                    </div>
+                </div>
+
+                <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', minHeight:300 }}>
+                    {/* Left: mode rail */}
+                    <div style={{ borderRight:`1px solid ${T.border}`, padding:'14px 12px', display:'flex', flexDirection:'column', gap:4 }}>
+                        {modeOptions.map(opt => (
+                            <div key={opt.key} onClick={() => { setMode(opt.key); setSelectedTpl(null); }}
+                                style={{ padding:'10px 12px', borderRadius:T.r+1, cursor:'pointer', background: mode===opt.key ? 'rgba(200,185,154,0.15)' : 'none', border: mode===opt.key ? `1.5px solid ${T.goldInk}` : '1.5px solid transparent', transition:'all 100ms' }}>
+                                <div style={{ fontSize:13, fontWeight:600, color: mode===opt.key ? T.ink : T.inkMid }}>{opt.label}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{opt.sub}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Right: content area */}
+                    <div style={{ padding:'14px 20px' }}>
+                        {mode === 'blank' && (
+                            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                                <div style={{ padding:20, border:`1.5px dashed ${T.border}`, borderRadius:T.r+2, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:8, color:T.inkMuted, minHeight:120 }}>
+                                    <span style={{ fontSize:28, color:T.goldInk }}>+</span>
+                                    <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>Start from scratch</span>
+                                    <span style={{ fontSize:11, color:T.inkMuted }}>You'll be taken to the template editor after creating</span>
+                                </div>
+                            </div>
+                        )}
+                        {mode === 'duplicate' && (
+                            <div>
+                                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>Pick a template to duplicate</div>
+                                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                                    {templates.map((tpl,i) => (
+                                        <div key={tpl.id} onClick={() => { setSelectedTpl(tpl); setNewName(tpl.name + ' — copy'); }}
+                                            style={{ padding:'12px 14px', border:`1.5px solid ${selectedTpl?.id===tpl.id ? T.goldInk : T.border}`, borderRadius:T.r+1, cursor:'pointer', display:'flex', gap:14, alignItems:'center', background: selectedTpl?.id===tpl.id ? 'rgba(200,185,154,0.1)' : T.surface }}>
+                                            <div style={{ width:52, height:52, background:'linear-gradient(180deg,#f4ede0,#ede4d2)', border:`1px solid ${T.border}`, borderRadius:T.r, overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                                <div style={{ transform:'scale(0.14)', transformOrigin:'center' }}><MiniQuoteDoc/></div>
+                                            </div>
+                                            <div style={{ flex:1 }}>
+                                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{tpl.name}</div>
+                                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{tpl.desc}</div>
+                                                <div style={{ fontSize:10.5, color:T.inkMid, marginTop:4 }}>
+                                                    <b style={{ fontFamily:T.serif, fontStyle:'italic' }}>{tpl.usedTimes}</b> uses · Last: {tpl.lastUsed}
+                                                    <span style={{ marginLeft:8 }}><QPill tone="rep" dot>{Math.round(tpl.avgWinRate*100)}% win</QPill></span>
+                                                </div>
+                                            </div>
+                                            <div style={{ width:18, height:18, borderRadius:'50%', border:`2px solid ${selectedTpl?.id===tpl.id ? T.goldInk : T.border}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                                {selectedTpl?.id===tpl.id && <div style={{ width:8, height:8, borderRadius:'50%', background:T.goldInk }}/>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {mode === 'import' && (
+                            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                                <div style={{ padding:20, border:`1.5px dashed ${T.border}`, borderRadius:T.r+2, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:8, color:T.inkMuted, minHeight:120, cursor:'pointer' }}
+                                    onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.06)'}
+                                    onMouseLeave={e => e.currentTarget.style.background='none'}>
+                                    <LIcon name="upload" size={22} color={T.inkMuted}/>
+                                    <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>Drop file here or click to browse</span>
+                                    <span style={{ fontSize:11, color:T.inkMuted }}>PDF · DOCX · .qtpl — max 10 MB</span>
+                                </div>
+                            </div>
+                        )}
+                        {mode === 'library' && (
+                            <div style={{ fontSize:13, color:T.inkMuted, fontStyle:'italic', padding:'20px 0' }}>
+                                Accelerep starter templates coming soon.
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Footer — name + create */}
+                {(mode === 'blank' || (mode === 'duplicate' && selectedTpl) || mode === 'import') && (
+                    <div style={{ padding:'14px 20px', borderTop:`1px solid ${T.border}`, display:'flex', gap:14, alignItems:'flex-end' }}>
+                        <div style={{ flex:1 }}>
+                            <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4 }}>New template name</label>
+                            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Enterprise Q3 push"
+                                style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', boxSizing:'border-box' }}/>
+                        </div>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:2 }}>
+                            <span style={{ fontSize:12, color:T.inkMid }}>Set as default?</span>
+                            <ATToggle on={setAsDefault} onChange={() => setSetAsDefault(v => !v)}/>
+                            <span style={{ fontSize:12, color:T.inkMuted }}>{setAsDefault ? 'Yes' : 'No'}</span>
+                        </div>
+                        <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                            <button onClick={onClose} style={{ padding:'7px 16px', background:T.surface, color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                            <button onClick={() => { if(newName.trim()) onCreate({ name:newName.trim(), mode, sourceTpl:selectedTpl, isDefault:setAsDefault }); }}
+                                disabled={!newName.trim()}
+                                style={{ padding:'7px 16px', background: newName.trim() ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: newName.trim() ? 'pointer' : 'default', fontFamily:T.sans }}>
+                                Create draft →
+                            </button>
+                        </div>
+                    </div>
+                )}
+                {mode === 'blank' || mode === 'duplicate' || mode === 'import' ? (
+                    <div style={{ padding:'0 20px 12px', fontSize:11, color:T.inkMuted }}>Step 1 of 2 — You'll edit content next</div>
+                ) : null}
+            </div>
+        </div>
+    );
+};
+
+const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
+    const savedTemplates  = settings?.quoteTemplates?.length ? settings.quoteTemplates : DEFAULT_QUOTE_TEMPLATES;
+    const savedDefaults   = settings?.quoteDefaults || { validity:'30 days', paymentTerms:'Net-30', autoRenew:'60-day notice', currency:'USD', signOff:'DocuSign', issueDate:'Date sent' };
+    const savedBoilerplate = settings?.quoteBoilerplate || '"Pricing reflects current list less applicable discounts. Quote valid for 30 days from issue. Auto-renews for like terms unless 60-day written notice…"';
+
+    const [templates,    setTemplates]   = useState(() => JSON.parse(JSON.stringify(savedTemplates)));
+    const [defaults,     setDefaults]    = useState({ ...savedDefaults });
+    const [boilerplate,  setBoilerplate] = useState(savedBoilerplate);
+    const [selectedId,   setSelectedId]  = useState(templates[0]?.id || null);
+    const [showNewModal, setShowNewModal] = useState(false);
+    const [dirty,        setDirty]       = useState(false);
+    const [saving,       setSaving]      = useState(false);
+    const [editBoilerplate, setEditBoilerplate] = useState(false);
+
+    const handleCancel = () => { setTemplates(JSON.parse(JSON.stringify(savedTemplates))); setDefaults({ ...savedDefaults }); setBoilerplate(savedBoilerplate); setDirty(false); };
+    const handleSave   = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, quoteTemplates:templates, quoteDefaults:defaults, quoteBoilerplate:boilerplate }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ quoteTemplates:templates, quoteDefaults:defaults, quoteBoilerplate:boilerplate }) }); }
+        catch(e) { console.error('save quote templates', e); }
+        setSaving(false); setDirty(false);
+    };
+
+    const handleCreateTemplate = ({ name, mode, sourceTpl, isDefault }) => {
+        const newTpl = {
+            id: `tpl_${Date.now()}`, name, desc:'New template — edit to add description.',
+            usedTimes:0, lastUsed:'Just created', avgWinRate:0,
+        };
+        const updated = isDefault
+            ? [...templates.map(t => ({ ...t })), newTpl].map((t,i,arr) => ({ ...t, isDefault: t.id === newTpl.id }))
+            : [...templates, newTpl];
+        setTemplates(updated); setDirty(true); setShowNewModal(false); setSelectedId(newTpl.id);
+    };
+
+    const setfd = (k, v) => { setDefaults(p => ({ ...p, [k]:v })); setDirty(true); };
+    const sel = (opts, val, onChange) => (
+        <select value={val} onChange={e => onChange(e.target.value)}
+            style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer',
+                backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+                backgroundRepeat:'no-repeat', backgroundPosition:'right 10px center', paddingRight:28, appearance:'none' }}>
+            {opts.map(o => <option key={o}>{o}</option>)}
+        </select>
+    );
+
+    // Brand — read from company profile settings
+    const brandColor   = settings?.companyBrandColor   || QT_BRANDING.primary;
+    const brandName    = settings?.companyDisplayName   || QT_BRANDING.companyName;
+
+    return (
+        <SPDetailPageChrome
+            crumb="Quote templates & branding" title="Quote templates & branding"
+            subtitle="Header, footer, terms boilerplate, and PDF styling for sent quotes"
+            statusDetail={`${templates.length} templates · brand locked`}
+            updatedBy="Admin" updatedAt="1 month ago"
+            onBack={onBack} dirty={dirty} onCancel={handleCancel}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+        >
+            {/* New template modal */}
+            {showNewModal && <NewTemplateModal templates={templates} onClose={() => setShowNewModal(false)} onCreate={handleCreateTemplate}/>}
+
+            <div style={{ padding:'0 0 40px' }}>
+                {/* Brand strip */}
+                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:'14px 18px', marginBottom:18, display:'grid', gridTemplateColumns:'60px 1fr 1fr 1fr 1fr 120px', gap:18, alignItems:'center' }}>
+                    <div style={{ width:48, height:48, background:QT_BRANDING.paper, border:`1.5px solid ${brandColor}`, borderRadius:4, display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, color:brandColor }}>
+                        {QT_BRANDING.logoMark}
+                    </div>
+                    <div>
+                        <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:2, fontFamily:T.sans }}>Company name</div>
+                        <div style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:16 }}>{brandName}</div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:2, fontFamily:T.sans }}>Primary color</div>
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                            <span style={{ width:14, height:14, background:brandColor, borderRadius:2, border:'1px solid rgba(0,0,0,0.1)', flexShrink:0 }}/>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{brandColor}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:2, fontFamily:T.sans }}>Display font</div>
+                        <div style={{ fontFamily:T.serif, fontStyle:'italic', fontSize:14 }}>Editorial</div>
+                    </div>
+                    <div>
+                        <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:2, fontFamily:T.sans }}>Body font</div>
+                        <div style={{ fontSize:13, fontFamily:T.sans }}>Söhne</div>
+                    </div>
+                    <button style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                        onMouseLeave={e => e.currentTarget.style.background=T.surface}>
+                        Edit brand
+                    </button>
+                </div>
+
+                {/* Two-column body */}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:20 }}>
+                    {/* Left: templates grid */}
+                    <CSectionCard
+                        title="Templates"
+                        description="The set of quote layouts your team can pick from. The default is used unless a rep changes it."
+                        headAction={
+                            <div style={{ display:'flex', gap:8 }}>
+                                <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}
+                                    onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                    <LIcon name="upload" size={12}/> Import
+                                </button>
+                                <button onClick={() => { setShowNewModal(true); }}
+                                    style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}
+                                    onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                    + New template
+                                </button>
+                            </div>
+                        }
+                    >
+                        <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:14 }}>
+                            {templates.map((t,i) => (
+                                <TplLibCard key={t.id} t={t} isDefault={i===0} isSelected={selectedId===t.id} onClick={() => setSelectedId(t.id)}/>
+                            ))}
+                            {/* New template CTA tile */}
+                            <div onClick={() => setShowNewModal(true)}
+                                style={{ border:`1.5px dashed ${T.border}`, borderRadius:T.r+2, minHeight:230, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:6, color:T.inkMuted, cursor:'pointer', background:'rgba(255,255,255,0.4)', transition:'border-color 120ms, background 120ms' }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor=T.goldInk; e.currentTarget.style.background='rgba(200,185,154,0.06)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor=T.border; e.currentTarget.style.background='rgba(255,255,255,0.4)'; }}>
+                                <span style={{ fontSize:22, color:T.goldInk }}>+</span>
+                                <span style={{ fontSize:12, fontWeight:600, color:T.inkMid }}>New template</span>
+                                <span style={{ fontSize:10.5, color:T.inkMuted }}>Start blank or duplicate</span>
+                            </div>
+                        </div>
+                    </CSectionCard>
+
+                    {/* Right: defaults + boilerplate */}
+                    <div>
+                        <CSectionCard title="Defaults" description="Applied to all templates unless overridden.">
+                            {[
+                                { label:'Issue date',              hint:'When the date stamped on the quote is set', key:'issueDate',     opts:['Date sent','Date created','Manual'] },
+                                { label:'Default validity',         hint:null, key:'validity',      opts:['14 days','30 days','45 days','60 days','90 days'] },
+                                { label:'Default payment terms',   hint:null, key:'paymentTerms',  opts:['Net-15','Net-30','Net-45','Net-60','Due on receipt'] },
+                                { label:'Auto-renew clause',       hint:null, key:'autoRenew',     opts:['None','30-day notice','60-day notice','90-day notice'] },
+                                { label:'Currency',                hint:null, key:'currency',      opts:['USD','EUR','GBP','CAD','AUD'] },
+                                { label:'Sign-off method',         hint:null, key:'signOff',       opts:['DocuSign','PandaDoc','HelloSign','Manual signature','None'] },
+                            ].map((f,i) => (
+                                <div key={i} style={{ marginBottom:12 }}>
+                                    <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:3, fontFamily:T.sans }}>{f.label}</label>
+                                    {sel(f.opts, defaults[f.key] || f.opts[0], v => setfd(f.key, v))}
+                                    {f.hint && <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{f.hint}</span>}
+                                </div>
+                            ))}
+                        </CSectionCard>
+
+                        <CSectionCard title="Boilerplate text" description="Editable per template; this is the fallback.">
+                            {editBoilerplate ? (
+                                <textarea value={boilerplate} onChange={e => { setBoilerplate(e.target.value); setDirty(true); }} rows={5}
+                                    style={{ width:'100%', padding:12, background:T.surface2, borderRadius:T.r, fontSize:11, color:T.inkMid, lineHeight:1.6, fontFamily:T.serif, fontStyle:'italic', border:`1px solid ${T.border}`, outline:'none', resize:'vertical', boxSizing:'border-box' }}/>
+                            ) : (
+                                <div style={{ position:'relative', padding:12, background:T.surface2, borderRadius:T.r, fontSize:11, color:T.inkMid, lineHeight:1.6, fontFamily:T.serif, fontStyle:'italic', maxHeight:110, overflow:'hidden' }}>
+                                    {boilerplate}
+                                    <div style={{ position:'absolute', bottom:0, left:0, right:0, height:30, background:`linear-gradient(180deg, transparent 0%, ${T.surface2} 100%)` }}/>
+                                </div>
+                            )}
+                            <button onClick={() => setEditBoilerplate(v => !v)}
+                                style={{ marginTop:10, fontSize:11, color:T.goldInk, fontWeight:600, cursor:'pointer', background:'none', border:'none', padding:0, fontFamily:T.sans }}>
+                                {editBoilerplate ? 'Done editing' : 'Edit boilerplate →'}
+                            </button>
+                        </CSectionCard>
+                    </div>
+                </div>
+            </div>
+        </SPDetailPageChrome>
+    );
+};
+
 // ADMIN WORKSPACE VIEW
 // ─────────────────────────────────────────────────────────────
 const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter }) => {
@@ -3804,6 +4186,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         'kpi-settings':         'kpi-settings',
         // Quoting
         'approval-tiers':       'approval-tiers',
+        'quote-templates':      'quote-templates',
         // Sales process Group 2
         'custom-fields':        'custom-fields',
         'pain-points':          'pain-points',
@@ -3827,6 +4210,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'lead-conv-benchmarks') return <LeadConversionDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Quoting detail pages
+        if (id === 'quote-templates') return <QuoteTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'approval-tiers')  return <ApprovalTiersDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Sales process Group 2 detail pages
