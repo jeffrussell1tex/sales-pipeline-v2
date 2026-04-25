@@ -3868,128 +3868,262 @@ const TplLibCard = ({ t, isDefault, isSelected, onClick }) => (
     </div>
 );
 
-// New template modal
+// New template modal — matches target design: left mode rail with icons,
+// duplicate cards with full-width preview thumbnail, radio circles, footer name+toggle+CTA.
 const NewTemplateModal = ({ templates, onClose, onCreate }) => {
-    const [mode, setMode]         = useState('blank'); // blank | duplicate | import | library
+    const [mode, setMode]               = useState('blank'); // blank | duplicate | import | library
     const [selectedTpl, setSelectedTpl] = useState(null);
-    const [newName, setNewName]   = useState('');
+    const [newName, setNewName]         = useState('');
     const [setAsDefault, setSetAsDefault] = useState(false);
 
+    const showFooter = mode === 'blank' || (mode === 'duplicate' && selectedTpl) || mode === 'import';
+
+    // Mode rail — icon glyphs rendered inline as SVG paths to avoid external deps
     const modeOptions = [
-        { key:'blank',     label:'Blank',          sub:'Start from scratch' },
-        { key:'duplicate', label:'Duplicate',       sub:'From existing' },
-        { key:'import',    label:'Import',          sub:'PDF · DOCX · .qtpl' },
-        { key:'library',   label:'From library',    sub:'Accelerep starters' },
+        {
+            key: 'blank',
+            label: 'Blank',
+            sub: 'Start from scratch',
+            icon: (active) => (
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={active ? T.goldInk : T.inkMuted} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9"/>
+                    <path d="M12 8v8M8 12h8"/>
+                </svg>
+            ),
+        },
+        {
+            key: 'duplicate',
+            label: 'Duplicate',
+            sub: 'From existing',
+            icon: (active) => (
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={active ? T.goldInk : T.inkMuted} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="8" y="8" width="12" height="12" rx="2"/>
+                    <path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2"/>
+                </svg>
+            ),
+        },
+        {
+            key: 'import',
+            label: 'Import',
+            sub: 'PDF · DOCX · .qtpl',
+            icon: (active) => (
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={active ? T.goldInk : T.inkMuted} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 16V4M6 10l6 6 6-6"/>
+                    <path d="M4 20h16"/>
+                </svg>
+            ),
+        },
+        {
+            key: 'library',
+            label: 'From library',
+            sub: 'Accelerep starters',
+            icon: (active) => (
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={active ? T.goldInk : T.inkMuted} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+            ),
+        },
     ];
 
     return (
-        <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.5)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={onClose}>
-            <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:T.r+4, width:660, maxHeight:'90vh', overflow:'auto', boxShadow:'0 16px 48px rgba(42,38,34,0.2)', fontFamily:T.sans }}>
-                {/* Header */}
-                <div style={{ padding:'20px 24px 0', borderBottom:`1px solid ${T.border}`, paddingBottom:16 }}>
+        <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.52)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center' }}
+            onClick={onClose}>
+            <div onClick={e => e.stopPropagation()}
+                style={{ background:T.surface, borderRadius:12, width:680, maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 60px rgba(42,38,34,0.22)', fontFamily:T.sans }}>
+
+                {/* ── Header ── */}
+                <div style={{ padding:'20px 24px 16px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
                     <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
                         <div>
-                            <div style={{ fontSize:17, fontWeight:700, color:T.ink, marginBottom:3 }}>New quote template</div>
+                            <div style={{ fontSize:18, fontWeight:700, color:T.ink, marginBottom:4, letterSpacing:-0.2 }}>New quote template</div>
                             <div style={{ fontSize:12.5, color:T.inkMuted }}>Choose how to start, then name the template.</div>
                         </div>
-                        <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:18, padding:0, lineHeight:1 }}>×</button>
+                        <button onClick={onClose}
+                            style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:20, lineHeight:1, padding:'2px 4px', borderRadius:4 }}
+                            onMouseEnter={e => e.currentTarget.style.color=T.ink}
+                            onMouseLeave={e => e.currentTarget.style.color=T.inkMuted}>
+                            ×
+                        </button>
                     </div>
                 </div>
 
-                <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', minHeight:300 }}>
+                {/* ── Body: mode rail + content ── */}
+                <div style={{ display:'grid', gridTemplateColumns:'184px 1fr', flex:1, overflow:'hidden' }}>
+
                     {/* Left: mode rail */}
-                    <div style={{ borderRight:`1px solid ${T.border}`, padding:'14px 12px', display:'flex', flexDirection:'column', gap:4 }}>
-                        {modeOptions.map(opt => (
-                            <div key={opt.key} onClick={() => { setMode(opt.key); setSelectedTpl(null); }}
-                                style={{ padding:'10px 12px', borderRadius:T.r+1, cursor:'pointer', background: mode===opt.key ? 'rgba(200,185,154,0.15)' : 'none', border: mode===opt.key ? `1.5px solid ${T.goldInk}` : '1.5px solid transparent', transition:'all 100ms' }}>
-                                <div style={{ fontSize:13, fontWeight:600, color: mode===opt.key ? T.ink : T.inkMid }}>{opt.label}</div>
-                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{opt.sub}</div>
-                            </div>
-                        ))}
+                    <div style={{ borderRight:`1px solid ${T.border}`, padding:'14px 10px', display:'flex', flexDirection:'column', gap:3, overflowY:'auto' }}>
+                        {modeOptions.map(opt => {
+                            const active = mode === opt.key;
+                            return (
+                                <div key={opt.key}
+                                    onClick={() => { setMode(opt.key); setSelectedTpl(null); if (opt.key !== 'duplicate') setNewName(''); }}
+                                    style={{
+                                        padding:'10px 12px', borderRadius:6, cursor:'pointer',
+                                        background: active ? 'rgba(200,185,154,0.18)' : 'transparent',
+                                        border: active ? `1.5px solid ${T.goldInk}` : '1.5px solid transparent',
+                                        display:'flex', alignItems:'center', gap:10,
+                                        transition:'background 100ms, border-color 100ms',
+                                    }}
+                                    onMouseEnter={e => { if (!active) e.currentTarget.style.background='rgba(200,185,154,0.07)'; }}
+                                    onMouseLeave={e => { if (!active) e.currentTarget.style.background='transparent'; }}>
+                                    <div style={{ flexShrink:0, width:16, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                                        {opt.icon(active)}
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize:13, fontWeight:600, color: active ? T.ink : T.inkMid, lineHeight:1.2 }}>{opt.label}</div>
+                                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{opt.sub}</div>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
 
-                    {/* Right: content area */}
-                    <div style={{ padding:'14px 20px' }}>
+                    {/* Right: mode content */}
+                    <div style={{ padding:'16px 20px', overflowY:'auto' }}>
+
+                        {/* BLANK */}
                         {mode === 'blank' && (
-                            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                                <div style={{ padding:20, border:`1.5px dashed ${T.border}`, borderRadius:T.r+2, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:8, color:T.inkMuted, minHeight:120 }}>
-                                    <span style={{ fontSize:28, color:T.goldInk }}>+</span>
-                                    <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>Start from scratch</span>
-                                    <span style={{ fontSize:11, color:T.inkMuted }}>You'll be taken to the template editor after creating</span>
-                                </div>
+                            <div style={{ padding:24, border:`1.5px dashed ${T.border}`, borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:10, minHeight:140, cursor:'default' }}>
+                                <span style={{ fontSize:30, color:T.goldInk, lineHeight:1 }}>+</span>
+                                <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>Start from scratch</span>
+                                <span style={{ fontSize:11.5, color:T.inkMuted, textAlign:'center', maxWidth:240, lineHeight:1.5 }}>You'll be taken to the template editor after naming your template.</span>
                             </div>
                         )}
+
+                        {/* DUPLICATE */}
                         {mode === 'duplicate' && (
                             <div>
-                                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>Pick a template to duplicate</div>
-                                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                                    {templates.map((tpl,i) => (
-                                        <div key={tpl.id} onClick={() => { setSelectedTpl(tpl); setNewName(tpl.name + ' — copy'); }}
-                                            style={{ padding:'12px 14px', border:`1.5px solid ${selectedTpl?.id===tpl.id ? T.goldInk : T.border}`, borderRadius:T.r+1, cursor:'pointer', display:'flex', gap:14, alignItems:'center', background: selectedTpl?.id===tpl.id ? 'rgba(200,185,154,0.1)' : T.surface }}>
-                                            <div style={{ width:52, height:52, background:'linear-gradient(180deg,#f4ede0,#ede4d2)', border:`1px solid ${T.border}`, borderRadius:T.r, overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                                                <div style={{ transform:'scale(0.14)', transformOrigin:'center' }}><MiniQuoteDoc/></div>
-                                            </div>
-                                            <div style={{ flex:1 }}>
-                                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{tpl.name}</div>
-                                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{tpl.desc}</div>
-                                                <div style={{ fontSize:10.5, color:T.inkMid, marginTop:4 }}>
-                                                    <b style={{ fontFamily:T.serif, fontStyle:'italic' }}>{tpl.usedTimes}</b> uses · Last: {tpl.lastUsed}
-                                                    <span style={{ marginLeft:8 }}><QPill tone="rep" dot>{Math.round(tpl.avgWinRate*100)}% win</QPill></span>
+                                <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.8, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>
+                                    Pick a template to duplicate
+                                </div>
+                                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                                    {templates.map((tpl) => {
+                                        const isSelected = selectedTpl?.id === tpl.id;
+                                        return (
+                                            <div key={tpl.id}
+                                                onClick={() => { setSelectedTpl(tpl); setNewName(tpl.name + ' — Q4 push'); }}
+                                                style={{
+                                                    border:`1.5px solid ${isSelected ? T.goldInk : T.border}`,
+                                                    borderRadius:8, cursor:'pointer',
+                                                    display:'flex', gap:0, alignItems:'stretch',
+                                                    background: isSelected ? 'rgba(200,185,154,0.08)' : T.surface,
+                                                    overflow:'hidden',
+                                                    transition:'border-color 100ms, background 100ms',
+                                                }}>
+                                                {/* Thumbnail region */}
+                                                <div style={{
+                                                    width:72, flexShrink:0,
+                                                    background:'linear-gradient(180deg,#f4ede0 0%,#ede4d2 100%)',
+                                                    borderRight:`1px solid ${T.border}`,
+                                                    display:'flex', alignItems:'center', justifyContent:'center',
+                                                    padding:'8px 0',
+                                                }}>
+                                                    <div style={{ transform:'scale(0.16)', transformOrigin:'center', width:360, height:240, marginTop:-100, marginLeft:-130 }}>
+                                                        <MiniQuoteDoc scale={1}/>
+                                                    </div>
+                                                </div>
+                                                {/* Text content */}
+                                                <div style={{ flex:1, padding:'12px 14px', minWidth:0 }}>
+                                                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:3 }}>{tpl.name}</div>
+                                                    <div style={{ fontSize:11.5, color:T.inkMuted, lineHeight:1.5, marginBottom:8, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{tpl.desc}</div>
+                                                    <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, color:T.inkMid }}>
+                                                        <span>
+                                                            <b style={{ fontFamily:T.serif, fontStyle:'italic', fontSize:13, color:T.ink }}>{tpl.usedTimes}</b> uses
+                                                        </span>
+                                                        <span style={{ color:T.inkMuted }}>·</span>
+                                                        <span>Last {tpl.lastUsed}</span>
+                                                        <div style={{ flex:1 }}/>
+                                                        <QPill tone="rep" dot>{Math.round(tpl.avgWinRate * 100)}% win</QPill>
+                                                    </div>
+                                                </div>
+                                                {/* Radio circle */}
+                                                <div style={{ padding:'12px 14px', display:'flex', alignItems:'center', flexShrink:0 }}>
+                                                    <div style={{
+                                                        width:18, height:18, borderRadius:'50%',
+                                                        border:`2px solid ${isSelected ? T.goldInk : T.borderStrong}`,
+                                                        display:'flex', alignItems:'center', justifyContent:'center',
+                                                        background: isSelected ? 'rgba(122,106,72,0.08)' : 'transparent',
+                                                        transition:'border-color 100ms',
+                                                        flexShrink:0,
+                                                    }}>
+                                                        {isSelected && (
+                                                            <div style={{ width:9, height:9, borderRadius:'50%', background:T.goldInk }}/>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div style={{ width:18, height:18, borderRadius:'50%', border:`2px solid ${selectedTpl?.id===tpl.id ? T.goldInk : T.border}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                                                {selectedTpl?.id===tpl.id && <div style={{ width:8, height:8, borderRadius:'50%', background:T.goldInk }}/>}
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
+
+                        {/* IMPORT */}
                         {mode === 'import' && (
-                            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                                <div style={{ padding:20, border:`1.5px dashed ${T.border}`, borderRadius:T.r+2, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:8, color:T.inkMuted, minHeight:120, cursor:'pointer' }}
-                                    onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.06)'}
-                                    onMouseLeave={e => e.currentTarget.style.background='none'}>
-                                    <LIcon name="upload" size={22} color={T.inkMuted}/>
-                                    <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>Drop file here or click to browse</span>
-                                    <span style={{ fontSize:11, color:T.inkMuted }}>PDF · DOCX · .qtpl — max 10 MB</span>
-                                </div>
+                            <div style={{ padding:24, border:`1.5px dashed ${T.border}`, borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:10, minHeight:140, cursor:'pointer' }}
+                                onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.06)'}
+                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                <LIcon name="upload" size={24} color={T.inkMuted}/>
+                                <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>Drop file here or click to browse</span>
+                                <span style={{ fontSize:11.5, color:T.inkMuted }}>PDF · DOCX · .qtpl — max 10 MB</span>
                             </div>
                         )}
+
+                        {/* LIBRARY */}
                         {mode === 'library' && (
-                            <div style={{ fontSize:13, color:T.inkMuted, fontStyle:'italic', padding:'20px 0' }}>
-                                Accelerep starter templates coming soon.
+                            <div style={{ padding:24, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:8, minHeight:140, color:T.inkMuted }}>
+                                <span style={{ fontSize:24 }}>★</span>
+                                <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>Accelerep starter templates</span>
+                                <span style={{ fontSize:11.5, color:T.inkMuted }}>Coming soon — curated layouts for common deal types.</span>
                             </div>
                         )}
+
                     </div>
                 </div>
 
-                {/* Footer — name + create */}
-                {(mode === 'blank' || (mode === 'duplicate' && selectedTpl) || mode === 'import') && (
-                    <div style={{ padding:'14px 20px', borderTop:`1px solid ${T.border}`, display:'flex', gap:14, alignItems:'flex-end' }}>
-                        <div style={{ flex:1 }}>
-                            <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4 }}>New template name</label>
-                            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Enterprise Q3 push"
-                                style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', boxSizing:'border-box' }}/>
+                {/* ── Footer: name field + default toggle + action buttons ── */}
+                {showFooter && (
+                    <div style={{ borderTop:`1px solid ${T.border}`, padding:'14px 20px', flexShrink:0 }}>
+                        <div style={{ display:'flex', gap:14, alignItems:'flex-end' }}>
+                            {/* Name field */}
+                            <div style={{ flex:1 }}>
+                                <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, letterSpacing:0.1 }}>New template name</label>
+                                <input
+                                    value={newName}
+                                    onChange={e => setNewName(e.target.value)}
+                                    placeholder="e.g. Growth Package — Q4 push"
+                                    style={{ width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r+1, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}
+                                    onFocus={e => e.currentTarget.style.borderColor=T.goldInk}
+                                    onBlur={e => e.currentTarget.style.borderColor=T.border}
+                                />
+                            </div>
+                            {/* Set as default toggle */}
+                            <div style={{ display:'flex', flexDirection:'column', gap:5, flexShrink:0 }}>
+                                <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, letterSpacing:0.1 }}>Set as default?</label>
+                                <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                                    <ATToggle on={setAsDefault} onChange={() => setSetAsDefault(v => !v)}/>
+                                    <span style={{ fontSize:12, color:T.inkMuted, minWidth:18 }}>{setAsDefault ? 'Yes' : 'No'}</span>
+                                </div>
+                            </div>
+                            {/* Action buttons */}
+                            <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                                <button onClick={onClose}
+                                    style={{ padding:'8px 18px', background:T.surface, color:T.inkMid, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+1, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                                    onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                    onMouseLeave={e => e.currentTarget.style.background=T.surface}>
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => { if (newName.trim()) onCreate({ name:newName.trim(), mode, sourceTpl:selectedTpl, isDefault:setAsDefault }); }}
+                                    disabled={!newName.trim()}
+                                    style={{ padding:'8px 18px', background: newName.trim() ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r+1, fontSize:12.5, fontWeight:600, cursor: newName.trim() ? 'pointer' : 'default', fontFamily:T.sans, transition:'background 100ms' }}>
+                                    Create draft
+                                </button>
+                            </div>
                         </div>
-                        <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:2 }}>
-                            <span style={{ fontSize:12, color:T.inkMid }}>Set as default?</span>
-                            <ATToggle on={setAsDefault} onChange={() => setSetAsDefault(v => !v)}/>
-                            <span style={{ fontSize:12, color:T.inkMuted }}>{setAsDefault ? 'Yes' : 'No'}</span>
-                        </div>
-                        <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-                            <button onClick={onClose} style={{ padding:'7px 16px', background:T.surface, color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
-                            <button onClick={() => { if(newName.trim()) onCreate({ name:newName.trim(), mode, sourceTpl:selectedTpl, isDefault:setAsDefault }); }}
-                                disabled={!newName.trim()}
-                                style={{ padding:'7px 16px', background: newName.trim() ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: newName.trim() ? 'pointer' : 'default', fontFamily:T.sans }}>
-                                Create draft →
-                            </button>
-                        </div>
+                        <div style={{ marginTop:10, fontSize:11, color:T.inkMuted }}>Step 1 of 2 · You'll edit content next</div>
                     </div>
                 )}
-                {mode === 'blank' || mode === 'duplicate' || mode === 'import' ? (
-                    <div style={{ padding:'0 20px 12px', fontSize:11, color:T.inkMuted }}>Step 1 of 2 — You'll edit content next</div>
-                ) : null}
             </div>
         </div>
     );
