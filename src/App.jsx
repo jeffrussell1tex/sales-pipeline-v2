@@ -1507,6 +1507,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 <ErrorBoundary tabName="Accounts">
                     <AccountsTab
                         initialAccountSegmentFilter={accountsDeepFilter?.accountSegment || '__all__'}
+                        initialIndustryFilter={accountsDeepFilter?.industry || '__all__'}
                         onDeepFilterConsumed={() => setAccountsDeepFilter(null)}
                     />
                 </ErrorBoundary>

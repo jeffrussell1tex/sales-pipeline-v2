@@ -2799,6 +2799,14 @@ const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTab, setA
     // Kebab state
     const SYSTEM_TIERS = new Set(['SMB','Mid-Market','Enterprise','Strategic','Partner']);
     const [openTierKebab, setOpenTierKebab]   = useState(null); // tier index
+
+    // Close kebab on click-outside
+    React.useEffect(() => {
+        if (openTierKebab === null) return;
+        const handler = () => setOpenTierKebab(null);
+        document.addEventListener('click', handler);
+        return () => document.removeEventListener('click', handler);
+    }, [openTierKebab]);
     const [editingTierIdx, setEditingTierIdx] = useState(null); // inline edit
     const [editingTierVal, setEditingTierVal] = useState({}); // { tier, range, sla, owner, hex }
 
@@ -2934,7 +2942,7 @@ const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTab, setA
                                                         {[
                                                             { label:'Edit tier', action: () => { setEditingTierIdx(i); setEditingTierVal({}); setOpenTierKebab(null); } },
                                                             { label:'Duplicate',  action: () => handleDuplicateTier(i) },
-                                                            { label:`View ${t.count} accounts`, note:'Filter Accounts tab by this tier', action: () => {
+                                                            { label:'View accounts', note:'Filter Accounts tab by this tier', action: () => {
                                                                 setOpenTierKebab(null);
                                                                 if (setAccountsDeepFilter && setActiveTab) {
                                                                     setAccountsDeepFilter({ accountSegment: t.tier });
@@ -3021,7 +3029,7 @@ const DEFAULT_INDUSTRIES = [
     { k:'Non-profit',          subs:['Foundations','NGOs'],                                                   n:4   },
 ];
 
-const IndustriesDetail = ({ settings, setSettings, onBack }) => {
+const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, setAccountsDeepFilter }) => {
     const saved = settings?.industries?.length ? settings.industries : DEFAULT_INDUSTRIES;
     const [industries, setIndustries] = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
@@ -3041,6 +3049,19 @@ const IndustriesDetail = ({ settings, setSettings, onBack }) => {
         setSaving(false); setDirty(false);
     };
 
+    // Industry kebab state
+    const [openIndKebab, setOpenIndKebab]     = useState(null); // industry key
+    const [renamingInd,  setRenamingInd]      = useState(null); // industry key
+    const [renameIndVal, setRenameIndVal]     = useState('');
+
+    // Close kebab on click-outside
+    React.useEffect(() => {
+        if (openIndKebab === null) return;
+        const handler = () => setOpenIndKebab(null);
+        document.addEventListener('click', handler);
+        return () => document.removeEventListener('click', handler);
+    }, [openIndKebab]);
+
     const addSub = (indKey) => {
         if (!newSub.trim()) return;
         setIndustries(prev => prev.map(ind => ind.k === indKey ? { ...ind, subs: [...ind.subs, newSub.trim()] } : ind));
@@ -3054,6 +3075,35 @@ const IndustriesDetail = ({ settings, setSettings, onBack }) => {
         if (!newInd.trim()) return;
         setIndustries(prev => [...prev, { k: newInd.trim(), subs:[], n:0 }]);
         setNewInd(''); setShowAddInd(false); setDirty(true);
+    };
+
+    // Kebab actions
+    const handleRenameInd = (indKey) => {
+        if (!renameIndVal.trim() || renameIndVal.trim() === indKey) { setRenamingInd(null); return; }
+        setIndustries(prev => prev.map(ind => ind.k === indKey ? { ...ind, k: renameIndVal.trim() } : ind));
+        setRenamingInd(null); setRenameIndVal(''); setDirty(true);
+    };
+    const handleDuplicateInd = (ind) => {
+        const clone = { ...ind, k: ind.k + ' (copy)', n: 0 };
+        setIndustries(prev => [...prev, clone]); setDirty(true); setOpenIndKebab(null);
+    };
+    const handleInsertAbove = (i) => {
+        const blank = { k: 'New industry', subs: [], n: 0 };
+        setIndustries(prev => { const next = [...prev]; next.splice(i, 0, blank); return next; });
+        setDirty(true); setOpenIndKebab(null);
+    };
+    const handleInsertBelow = (i) => {
+        const blank = { k: 'New industry', subs: [], n: 0 };
+        setIndustries(prev => { const next = [...prev]; next.splice(i + 1, 0, blank); return next; });
+        setDirty(true); setOpenIndKebab(null);
+    };
+    const handleToggleHidden = (indKey) => {
+        setIndustries(prev => prev.map(ind => ind.k === indKey ? { ...ind, hidden: !ind.hidden } : ind));
+        setDirty(true); setOpenIndKebab(null);
+    };
+    const handleDeleteInd = (indKey) => {
+        setIndustries(prev => prev.filter(ind => ind.k !== indKey));
+        setDirty(true); setOpenIndKebab(null);
     };
 
     const total = industries.reduce((a,i) => a+i.n, 0) || 1;
@@ -3096,14 +3146,102 @@ const IndustriesDetail = ({ settings, setSettings, onBack }) => {
                                 return (
                                     <div key={ind.k} style={{ borderBottom: i<industries.length-1 ? `1px solid ${T.border}` : 'none' }}>
                                         {/* Row header */}
-                                        <div style={{ padding:'10px 14px', display:'flex', alignItems:'center', gap:10 }}>
+                                        <div style={{ padding:'10px 14px', display:'flex', alignItems:'center', gap:10, opacity: ind.hidden ? 0.5 : 1 }}>
                                             <SPDrag/>
                                             <span onClick={() => setExpanded(p => ({ ...p, [ind.k]: !isExp }))}
                                                 style={{ fontSize:11, color:T.inkMuted, cursor:'pointer', transform: isExp ? 'rotate(0deg)' : 'rotate(-90deg)', display:'inline-block', transition:'transform 120ms', userSelect:'none' }}>▾</span>
-                                            <div style={{ flex:1, fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{ind.k}</div>
+
+                                            {/* Industry name — inline rename or display */}
+                                            {renamingInd === ind.k ? (
+                                                <input autoFocus value={renameIndVal}
+                                                    onChange={e => setRenameIndVal(e.target.value)}
+                                                    onKeyDown={e => { if (e.key==='Enter') handleRenameInd(ind.k); if (e.key==='Escape') { setRenamingInd(null); setRenameIndVal(''); } }}
+                                                    onBlur={() => handleRenameInd(ind.k)}
+                                                    style={{ flex:1, padding:'3px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, outline:'none' }}/>
+                                            ) : (
+                                                <div style={{ flex:1, fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>
+                                                    {ind.k}
+                                                    {ind.hidden && <span style={{ marginLeft:8, fontSize:9, fontWeight:700, color:T.inkMuted, background:T.surface2, padding:'1px 5px', borderRadius:2, letterSpacing:0.4, fontFamily:T.sans }}>HIDDEN</span>}
+                                                </div>
+                                            )}
+
                                             <span style={{ fontSize:11, color:T.inkMuted, marginRight:10, fontFamily:T.sans }}>{ind.subs.length} sub-types</span>
                                             <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:14, color:T.ink, minWidth:30, textAlign:'right' }}>{ind.n}</span>
-                                            <span style={{ fontSize:12, color:T.inkMuted, cursor:'pointer', marginLeft:8 }}>⋯</span>
+
+                                            {/* Kebab */}
+                                            <div style={{ position:'relative', marginLeft:8 }} onClick={e => e.stopPropagation()}>
+                                                <button onClick={() => setOpenIndKebab(openIndKebab === ind.k ? null : ind.k)}
+                                                    style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:0, lineHeight:1 }}>⋯</button>
+                                                {openIndKebab === ind.k && (
+                                                    <div style={{ position:'absolute', right:0, top:'100%', zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 20px rgba(42,38,34,0.14)', minWidth:220, overflow:'hidden' }}>
+
+                                                        {/* Edit */}
+                                                        {[
+                                                            { label:'Edit industry', sub:'Name, description, color', action:() => { setRenamingInd(ind.k); setRenameIndVal(ind.k); setOpenIndKebab(null); } },
+                                                            { label:'Duplicate', sub:'Clone with sub-types', action:() => handleDuplicateInd(ind) },
+                                                            { label:'Move…', sub:'Drag the handle to reorder', action:() => setOpenIndKebab(null), muted:true },
+                                                        ].map((item,mi) => (
+                                                            <button key={mi} onClick={item.action}
+                                                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', cursor: item.muted ? 'default' : 'pointer', fontFamily:T.sans }}
+                                                                onMouseEnter={e => { if (!item.muted) e.currentTarget.style.background = T.surface2; }}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                                <div style={{ fontSize:13, color: item.muted ? T.inkMuted : T.ink }}>{item.label}</div>
+                                                                {item.sub && <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{item.sub}</div>}
+                                                            </button>
+                                                        ))}
+
+                                                        {/* Add New group */}
+                                                        <div style={{ padding:'5px 14px 3px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', borderTop:`1px solid ${T.border}`, background:T.surface2, fontFamily:T.sans }}>Add new</div>
+                                                        {[
+                                                            { label:'Insert industry above', sub:`New industry above ${ind.k}`, action:() => handleInsertAbove(i) },
+                                                            { label:'Insert industry below', sub:`New industry below ${ind.k}`, action:() => handleInsertBelow(i) },
+                                                            { label:'Add sub-industry…', sub:`Add a sub-type to ${ind.k}`, action:() => { setAddingSubTo(ind.k); setNewSub(''); setExpanded(p => ({ ...p, [ind.k]: true })); setOpenIndKebab(null); } },
+                                                            { label:'Merge into another…', sub:'Move sub-types and accounts', action:() => setOpenIndKebab(null), muted:true },
+                                                        ].map((item,mi) => (
+                                                            <button key={mi} onClick={item.action}
+                                                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', cursor: item.muted ? 'default' : 'pointer', fontFamily:T.sans }}
+                                                                onMouseEnter={e => { if (!item.muted) e.currentTarget.style.background = T.surface2; }}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                                <div style={{ fontSize:13, color: item.muted ? T.inkMuted : T.ink }}>{item.label}</div>
+                                                                {item.sub && <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{item.sub}</div>}
+                                                            </button>
+                                                        ))}
+
+                                                        {/* Apply to accounts group */}
+                                                        <div style={{ padding:'5px 14px 3px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', borderTop:`1px solid ${T.border}`, background:T.surface2, fontFamily:T.sans }}>Apply to accounts</div>
+                                                        {[
+                                                            { label:'View accounts', sub:'Open in Accounts, filtered', action:() => { setOpenIndKebab(null); if (setAccountsDeepFilter && setActiveTab) { setAccountsDeepFilter({ industry: ind.k }); setActiveTab('accounts'); } } },
+                                                            { label:'Reassign accounts…', sub:'Move accounts to another industry', action:() => setOpenIndKebab(null), muted:true },
+                                                            { label:'Re-run auto-tagging', sub:'From company name + website', action:() => setOpenIndKebab(null), muted:true },
+                                                        ].map((item,mi) => (
+                                                            <button key={mi} onClick={item.action}
+                                                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', cursor: item.muted ? 'default' : 'pointer', fontFamily:T.sans }}
+                                                                onMouseEnter={e => { if (!item.muted) e.currentTarget.style.background = T.surface2; }}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                                <div style={{ fontSize:13, color: item.muted ? T.inkMuted : T.ink }}>{item.label}</div>
+                                                                {item.sub && <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{item.sub}</div>}
+                                                            </button>
+                                                        ))}
+
+                                                        {/* Visibility group */}
+                                                        <div style={{ padding:'5px 14px 3px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', borderTop:`1px solid ${T.border}`, background:T.surface2, fontFamily:T.sans }}>Visibility</div>
+                                                        <button onClick={() => handleToggleHidden(ind.k)}
+                                                            style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', cursor:'pointer', fontFamily:T.sans }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                            <div style={{ fontSize:13, color:T.ink }}>{ind.hidden ? 'Show for new accounts' : 'Hide from new accounts'}</div>
+                                                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>Existing accounts keep this tag</div>
+                                                        </button>
+                                                        <button onClick={() => handleDeleteInd(ind.k)}
+                                                            style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', cursor:'pointer', fontFamily:T.sans }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(156,58,46,0.06)'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                            <div style={{ fontSize:13, color:T.danger }}>Delete industry</div>
+                                                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>Removes tag from all accounts</div>
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                         {/* Sub-industries */}
                                         <div style={{ padding:'0 14px 10px 52px', display:'flex', flexWrap:'wrap', gap:6 }}>
@@ -3206,7 +3344,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'pain-points')     return <PainPointsDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
-        if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
 
         // Generic wrapper for all other panels
         const panel = DETAIL_PANELS[id];

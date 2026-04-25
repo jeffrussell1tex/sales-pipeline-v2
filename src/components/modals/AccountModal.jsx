@@ -516,7 +516,7 @@ export default function AccountModal({
                                 )}
                             </div>
 
-                            {/* ── Segment (SMB / Mid-Market / Enterprise etc.) ── */}
+                            {/* ── Segment ── */}
                             <div className="form-group full">
                                 <label>Segment</label>
                                 <select
@@ -528,10 +528,9 @@ export default function AccountModal({
                                     {(() => {
                                         const tiers = settings?.customerTypeTiers;
                                         if (Array.isArray(tiers) && tiers.length > 0 && typeof tiers[0] === 'object') {
-                                            return tiers.map(t => <option key={t.tier} value={t.tier}>{t.tier}</option>);
+                                            return [...tiers].sort((a,b) => a.tier.localeCompare(b.tier)).map(t => <option key={t.tier} value={t.tier}>{t.tier}</option>);
                                         }
-                                        // Fallback to default segments
-                                        return ['SMB','Mid-Market','Enterprise','Strategic','Partner'].map(t => <option key={t} value={t}>{t}</option>);
+                                        return ['Enterprise','Mid-Market','Partner','SMB','Strategic'].map(t => <option key={t} value={t}>{t}</option>);
                                     })()}
                                 </select>
                                 <span className="field-hint">Account segment — size or revenue classification</span>
