@@ -3166,14 +3166,15 @@ const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, setAcco
                                             )}
 
                                             <span style={{ fontSize:11, color:T.inkMuted, marginRight:10, fontFamily:T.sans }}>{ind.subs.length} sub-types</span>
-                                            <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:14, color:T.ink, minWidth:30, textAlign:'right' }}>{ind.n}</span>
+
 
                                             {/* Kebab */}
                                             <div style={{ position:'relative', marginLeft:8 }} onClick={e => e.stopPropagation()}>
                                                 <button onClick={() => setOpenIndKebab(openIndKebab === ind.k ? null : ind.k)}
                                                     style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:0, lineHeight:1 }}>⋯</button>
                                                 {openIndKebab === ind.k && (
-                                                    <div style={{ position:'absolute', right:0, top:'100%', zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 20px rgba(42,38,34,0.14)', minWidth:220, overflow:'hidden' }}>
+                                                    <div style={{ position:'absolute', right:0, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 20px rgba(42,38,34,0.14)', minWidth:220, overflow:'hidden',
+                                                ...(i >= industries.length - 4 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }) }}>
 
                                                         {/* Edit */}
                                                         {[
