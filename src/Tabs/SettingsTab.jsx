@@ -3301,6 +3301,276 @@ const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, setAcco
     );
 };
 
+// ─────────────────────────────────────────────────────────────
+// APPROVAL TIERS DETAIL PAGE
+// Settings → Quoting → Approval tiers
+// ─────────────────────────────────────────────────────────────
+
+const DEFAULT_APPROVAL_TIERS = [
+    { id:'rep',  label:'Rep',          color:'#4d6b3d', maxDiscount:0.10, approver:null,            sla:null, fallback:null,       active:true },
+    { id:'mgr',  label:'Mgr approval', color:'#b87333', maxDiscount:0.20, approver:'Sales Manager', sla:'8h', fallback:'VP Sales',  active:true },
+    { id:'vp',   label:'VP approval',  color:'#9c3a2e', maxDiscount:0.30, approver:'VP Sales',      sla:'24h',fallback:'CFO',       active:true },
+    { id:'cfo',  label:'CFO approval', color:'#6b2a22', maxDiscount:1.00, approver:'CFO',           sla:'48h',fallback:'CEO',       active:true },
+];
+
+const APPROVAL_TIER_USAGE = [
+    { tier:'Rep',          tone:'rep', quotes:312, approved:312, declined:0,  pending:0,  avgHours:0  },
+    { tier:'Mgr approval', tone:'mgr', quotes:88,  approved:76,  declined:12, pending:4,  avgHours:6  },
+    { tier:'VP approval',  tone:'vp',  quotes:24,  approved:20,  declined:4,  pending:2,  avgHours:18 },
+    { tier:'CFO approval', tone:'cfo', quotes:6,   approved:5,   declined:1,  pending:1,  avgHours:36 },
+];
+
+const DEFAULT_TRIGGERS = [
+    { k:'Average discount %',    on:true,  hint:'Calculated across all line items.' },
+    { k:'Single-line discount',  on:false, hint:'Trigger if any one line exceeds the threshold.' },
+    { k:'Contract term > 36 mo', on:true,  hint:'Long terms route to VP regardless of discount.' },
+    { k:'Custom pricing used',   on:true,  hint:'Any line with non-list price triggers Mgr at minimum.' },
+    { k:'Deal value > $250K',    on:false, hint:'Big deals always route to VP.' },
+    { k:'Non-standard terms',    on:true,  hint:'Custom legal/payment terms route to CFO.' },
+];
+
+// QPill — approval tier status pill
+const QPill = ({ tone = 'neutral', children, dot }) => {
+    const map = {
+        rep:     { bg:'rgba(77,107,61,0.12)',   fg:'#4d6b3d' },
+        mgr:     { bg:'rgba(184,115,51,0.12)',  fg:'#b87333' },
+        vp:      { bg:'rgba(156,58,46,0.12)',   fg:'#9c3a2e' },
+        cfo:     { bg:'rgba(107,42,34,0.14)',   fg:'#6b2a22' },
+        neutral: { bg:'rgba(138,131,120,0.14)', fg:'#5a544c' },
+    };
+    const c = map[tone] || map.neutral;
+    return (
+        <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'2px 8px', borderRadius:12, background:c.bg, color:c.fg, fontSize:11, fontWeight:600, letterSpacing:0.1, whiteSpace:'nowrap' }}>
+            {dot && <span style={{ width:6, height:6, borderRadius:'50%', background:c.fg }}/>}
+            {children}
+        </span>
+    );
+};
+
+// Toggle
+const ATToggle = ({ on, onChange }) => (
+    <span onClick={onChange} style={{ display:'inline-block', width:28, height:16, borderRadius:8, background: on ? T.ok : T.borderStrong, position:'relative', cursor:'pointer', verticalAlign:'middle', flexShrink:0 }}>
+        <span style={{ position:'absolute', top:2, left: on ? 14 : 2, width:12, height:12, borderRadius:'50%', background:'#fff', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 120ms' }}/>
+    </span>
+);
+
+// NumStep
+const NumStep = ({ value, onChange, suffix='', min=0, max=100 }) => (
+    <div style={{ display:'inline-flex', alignItems:'center', border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, overflow:'hidden' }}>
+        <button onClick={() => onChange && onChange(Math.max(min, value-1))} style={{ padding:'4px 8px', background:'none', border:'none', color:T.inkMuted, fontSize:14, cursor:'pointer', lineHeight:1 }}>−</button>
+        <span style={{ borderLeft:`1px solid ${T.border}`, borderRight:`1px solid ${T.border}`, padding:'4px 10px', minWidth:56, textAlign:'center', fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, color:T.ink }}>{value}{suffix}</span>
+        <button onClick={() => onChange && onChange(Math.min(max, value+1))} style={{ padding:'4px 8px', background:'none', border:'none', color:T.inkMuted, fontSize:14, cursor:'pointer', lineHeight:1 }}>+</button>
+    </div>
+);
+
+const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
+    const saved = {
+        tiers:    settings?.approvalTiers    || DEFAULT_APPROVAL_TIERS,
+        triggers: settings?.approvalTriggers || DEFAULT_TRIGGERS,
+    };
+    const [tiers,    setTiers]    = useState(() => JSON.parse(JSON.stringify(saved.tiers)));
+    const [triggers, setTriggers] = useState(() => JSON.parse(JSON.stringify(saved.triggers)));
+    const [dirty,    setDirty]    = useState(false);
+    const [saving,   setSaving]   = useState(false);
+
+    // Try a deal simulator
+    const [trialDiscount, setTrialDiscount] = useState(18);
+    const [trialValue,    setTrialValue]    = useState(84500);
+    const [trialTerm,     setTrialTerm]     = useState('24 months');
+
+    const matchedTier = (() => {
+        for (const tier of tiers) {
+            const lo = tiers[tiers.indexOf(tier) - 1]?.maxDiscount ?? 0;
+            if ((trialDiscount / 100) <= tier.maxDiscount) return tier;
+        }
+        return tiers[tiers.length - 1];
+    })();
+
+    const handleCancel = () => { setTiers(JSON.parse(JSON.stringify(saved.tiers))); setTriggers(JSON.parse(JSON.stringify(saved.triggers))); setDirty(false); };
+    const handleSave   = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, approvalTiers: tiers, approvalTriggers: triggers }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ approvalTiers: tiers, approvalTriggers: triggers }) }); }
+        catch(e) { console.error('save approval tiers', e); }
+        setSaving(false); setDirty(false);
+    };
+
+    const toggleTrigger = (i) => { setTriggers(prev => prev.map((t,ti) => ti===i ? { ...t, on:!t.on } : t)); setDirty(true); };
+    const toneForIdx = (i) => ['rep','mgr','vp','cfo'][i] || 'neutral';
+
+    return (
+        <SPDetailPageChrome
+            crumb="Approval tiers" title="Approval tiers"
+            subtitle="Discount thresholds that trigger manager or VP approval"
+            statusDetail={`${tiers.length} tiers · advanced rules off`}
+            updatedBy="Admin" updatedAt="2 months ago"
+            onBack={onBack} dirty={dirty} onCancel={handleCancel}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+        >
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:20 }}>
+                {/* ── LEFT COLUMN ─────────────────────────────────── */}
+                <div>
+                    {/* Discount thresholds table */}
+                    <CSectionCard
+                        title="Discount thresholds"
+                        description="When a quote's average discount crosses a threshold, it's routed to the listed approver before it can be sent."
+                        headAction={
+                            <button style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 11px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                                + Add tier
+                            </button>
+                        }
+                    >
+                        <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r+2, overflow:'hidden' }}>
+                            {/* Header */}
+                            <div style={{ display:'grid', gridTemplateColumns:'28px 1.4fr 170px 1.2fr 80px 1fr 70px 30px', padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10 }}>
+                                {['','Tier','Discount range','Approver','SLA','Fallback','',''].map((h,i) => (
+                                    <div key={i} style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign: i>=4&&i<=5 ? 'right' : 'left', fontFamily:T.sans }}>{h}</div>
+                                ))}
+                            </div>
+                            {tiers.map((t,i) => {
+                                const lo = i===0 ? 0 : tiers[i-1].maxDiscount;
+                                const hi = t.maxDiscount;
+                                return (
+                                    <div key={t.id} style={{ display:'grid', gridTemplateColumns:'28px 1.4fr 170px 1.2fr 80px 1fr 70px 30px', padding:'12px 14px', gap:10, borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background:T.surface, fontSize:13, fontFamily:T.sans }}>
+                                        <div><SPDrag/></div>
+                                        <div>
+                                            <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+                                                <span style={{ width:10, height:10, background:t.color, borderRadius:2, flexShrink:0 }}/>
+                                                <b style={{ fontFamily:T.sans }}>{t.label}</b>
+                                            </span>
+                                        </div>
+                                        <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>
+                                            {Math.round(lo*100)}% – {Math.round(hi*100)}%
+                                        </div>
+                                        <div>
+                                            {t.approver ? (
+                                                <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                                                    <span style={{ width:22, height:22, borderRadius:'50%', background:T.surface2, border:`1px solid ${T.border}`, fontSize:10, color:T.inkMid, display:'inline-flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>
+                                                        {t.approver.split(' ').map(s=>s[0]).slice(0,2).join('')}
+                                                    </span>
+                                                    <span style={{ fontSize:13 }}>{t.approver}</span>
+                                                </span>
+                                            ) : (
+                                                <span style={{ color:T.inkMuted, fontStyle:'italic', fontSize:12 }}>No approval needed</span>
+                                            )}
+                                        </div>
+                                        <div style={{ textAlign:'right', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{t.sla || '—'}</div>
+                                        <div style={{ color:T.inkMid, fontSize:12 }}>{t.fallback || '—'}</div>
+                                        <div style={{ textAlign:'right' }}><QPill tone={toneForIdx(i)} dot>Active</QPill></div>
+                                        <div style={{ textAlign:'right', color:T.inkMuted, cursor:'pointer', fontSize:16 }}>⋯</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </CSectionCard>
+
+                    {/* Approval ladder flow strip */}
+                    <CSectionCard title="Approval ladder" description="A live preview of how the tiers carve up the 0–100% discount range.">
+                        <div>
+                            <div style={{ display:'flex', height:28, borderRadius:T.r+1, overflow:'hidden', border:`1px solid ${T.border}` }}>
+                                {(() => {
+                                    let prev = 0;
+                                    return tiers.map((t,i) => {
+                                        const width = (t.maxDiscount - prev) * 100;
+                                        const seg = (
+                                            <div key={i} style={{ flex:`${width} 0 0`, background:t.color, opacity:0.85, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:11, fontWeight:600, letterSpacing:0.2, borderRight: i<tiers.length-1 ? '1px solid rgba(255,255,255,0.3)' : 'none', overflow:'hidden', whiteSpace:'nowrap', padding:'0 6px' }}>
+                                                {t.label}
+                                            </div>
+                                        );
+                                        prev = t.maxDiscount;
+                                        return seg;
+                                    });
+                                })()}
+                            </div>
+                            <div style={{ display:'flex', justifyContent:'space-between', marginTop:4, fontSize:10, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>
+                                <span>0%</span>
+                                {tiers.map((t,i) => <span key={i}>{Math.round(t.maxDiscount*100)}%</span>)}
+                            </div>
+                        </div>
+                    </CSectionCard>
+
+                    {/* Triggers */}
+                    <CSectionCard title="Triggers" description="What activates the approval flow. By default only avg discount, but you can add deal-level triggers.">
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                            {triggers.map((r,i) => (
+                                <div key={i} onClick={() => toggleTrigger(i)} style={{ padding:'10px 12px', border:`1px solid ${r.on ? T.goldInk : T.border}`, borderRadius:T.r+2, background: r.on ? 'rgba(200,185,154,0.08)' : T.surface, cursor:'pointer', transition:'all 120ms' }}>
+                                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                                        <ATToggle on={r.on}/>
+                                        <span style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{r.k}</span>
+                                    </div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{r.hint}</div>
+                                </div>
+                            ))}
+                        </div>
+                        <div style={{ marginTop:14, fontSize:11.5, color:T.inkMuted, display:'flex', alignItems:'center', gap:8, fontFamily:T.sans }}>
+                            Need conditional logic per product or customer type?
+                            <span style={{ color:T.goldInk, fontWeight:600, cursor:'pointer' }}>Switch to advanced rules →</span>
+                        </div>
+                    </CSectionCard>
+                </div>
+
+                {/* ── RIGHT COLUMN ────────────────────────────────── */}
+                <div>
+                    <div style={{ position:'sticky', top:20 }}>
+                        {/* Last 90 days */}
+                        <CSectionCard title="Last 90 days" description="How approvals are flowing in practice.">
+                            {APPROVAL_TIER_USAGE.map((u,i) => (
+                                <div key={i} style={{ padding:'10px 0', borderBottom: i<APPROVAL_TIER_USAGE.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                                        <QPill tone={u.tone}>{u.tier}</QPill>
+                                        <div style={{ flex:1 }}/>
+                                        <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:14, color:T.ink }}>{u.quotes}</span>
+                                        <span style={{ fontSize:10, color:T.inkMuted, fontFamily:T.sans }}>quotes</span>
+                                    </div>
+                                    <div style={{ fontSize:11, color:T.inkMid, display:'flex', gap:12, fontFamily:T.sans }}>
+                                        <span>✓ {u.approved}</span>
+                                        {u.declined > 0 && <span style={{ color:T.danger }}>✗ {u.declined}</span>}
+                                        {u.pending  > 0 && <span style={{ color:T.warn }}>● {u.pending} pending</span>}
+                                        {u.avgHours > 0 && <span style={{ marginLeft:'auto', color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>~{u.avgHours}h avg</span>}
+                                    </div>
+                                </div>
+                            ))}
+                        </CSectionCard>
+
+                        {/* Try a deal — live simulator */}
+                        <CSectionCard title="Try a deal" description="See which tier a hypothetical quote would hit.">
+                            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                                <div>
+                                    <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>Avg discount <span style={{ color:T.inkMuted, fontWeight:400 }}>Across all line items.</span></label>
+                                    <NumStep value={trialDiscount} onChange={v => { setTrialDiscount(v); }} suffix="%" min={0} max={100}/>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>Deal value</label>
+                                    <input type="number" value={trialValue} onChange={e => setTrialValue(parseInt(e.target.value)||0)}
+                                        style={{ padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', width:'100%', boxSizing:'border-box', background:T.surface }}/>
+                                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>${trialValue.toLocaleString()}</div>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, display:'block', marginBottom:4, fontFamily:T.sans }}>Term</label>
+                                    <select value={trialTerm} onChange={e => setTrialTerm(e.target.value)} style={{ padding:'6px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', background:T.surface, cursor:'pointer' }}>
+                                        {['12 months','24 months','36 months','48 months','60 months'].map(t => <option key={t}>{t}</option>)}
+                                    </select>
+                                </div>
+
+                                {/* Result */}
+                                <div style={{ padding:'12px 14px', background:`${matchedTier.color}1a`, border:`1.5px solid ${matchedTier.color}`, borderRadius:T.r+2, marginTop:4 }}>
+                                    <div style={{ fontSize:10, fontWeight:700, color:matchedTier.color, letterSpacing:0.8, textTransform:'uppercase', fontFamily:T.sans, marginBottom:6 }}>Routes to</div>
+                                    <div style={{ fontSize:14, fontWeight:700, color:matchedTier.color, fontFamily:T.sans }}>{matchedTier.label}</div>
+                                    <div style={{ fontSize:11, color:T.inkMid, marginTop:4, fontFamily:T.sans }}>
+                                        {matchedTier.approver
+                                            ? `Avg discount ${trialDiscount}% › ${Math.round((tiers[tiers.indexOf(matchedTier)-1]?.maxDiscount??0)*100)}% threshold · est. ${matchedTier.sla} SLA`
+                                            : `Avg discount ${trialDiscount}% is within the ${Math.round(matchedTier.maxDiscount*100)}% rep tier — no approval needed`}
+                                    </div>
+                                </div>
+                            </div>
+                        </CSectionCard>
+                    </div>
+                </div>
+            </div>
+        </SPDetailPageChrome>
+    );
+};
+
 // ADMIN WORKSPACE VIEW
 // ─────────────────────────────────────────────────────────────
 const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter }) => {
@@ -3319,6 +3589,8 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         'pipelines':            'pipelines',
         'funnel-stages':        'funnel-stages',
         'kpi-settings':         'kpi-settings',
+        // Quoting
+        'approval-tiers':       'approval-tiers',
         // Sales process Group 2
         'custom-fields':        'custom-fields',
         'pain-points':          'pain-points',
@@ -3340,6 +3612,9 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'funnel-stages')        return <FunnelStagesDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'kpi-settings')         return <KPIThresholdsDetail    settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'lead-conv-benchmarks') return <LeadConversionDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
+
+        // Quoting detail pages
+        if (id === 'approval-tiers')  return <ApprovalTiersDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Sales process Group 2 detail pages
         if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
