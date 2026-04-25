@@ -2796,6 +2796,26 @@ const CustomerTypesDetail = ({ settings, setSettings, onBack }) => {
         setAddErr(''); setShowAdd(false); setDirty(true);
     };
 
+    // Kebab state
+    const SYSTEM_TIERS = new Set(['SMB','Mid-Market','Enterprise','Strategic','Partner']);
+    const [openTierKebab, setOpenTierKebab]   = useState(null); // tier index
+    const [editingTierIdx, setEditingTierIdx] = useState(null); // inline edit
+    const [editingTierVal, setEditingTierVal] = useState({}); // { tier, range, sla, owner, hex }
+
+    const handleDuplicateTier = (i) => {
+        const clone = { ...tiers[i], tier: tiers[i].tier + ' (copy)', count: 0 };
+        setTiers(prev => [...prev, clone]); setDirty(true); setOpenTierKebab(null);
+    };
+    const handleDeleteTier = (i) => {
+        setTiers(prev => prev.filter((_,ri) => ri !== i)); setDirty(true); setOpenTierKebab(null);
+    };
+    const handleEditTierSave = (i) => {
+        setTiers(prev => prev.map((t,ri) => ri===i ? { ...t, ...editingTierVal } : t));
+        setEditingTierIdx(null); setEditingTierVal({}); setDirty(true);
+    };
+
+    const inpSm = { padding:'4px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' };
+
     const total = tiers.reduce((a,t) => a+t.count, 0)||1;
 
     return (
@@ -2847,29 +2867,93 @@ const CustomerTypesDetail = ({ settings, setSettings, onBack }) => {
                     )}
 
                     <CSectionCard title="Tiers" description="Drag to reorder. Classification drives auto-assignment rules, SLA, and dashboard grouping.">
-                        <SPTable
-                            columns={[
-                                { key:'drag',  label:'',           w:'28px' },
-                                { key:'tier',  label:'Tier',       w:'1.3fr' },
-                                { key:'range', label:'Revenue',    w:'140px' },
-                                { key:'count', label:'Accounts',   w:'90px', align:'right' },
-                                { key:'sla',   label:'SLA',        w:'70px', align:'right' },
-                                { key:'owner', label:'Owning team',w:'130px' },
-                                { key:'more',  label:'',           w:'28px', align:'right' },
-                            ]}
-                            rows={tiers.map((t,i) => ({
-                                drag:  <SPDrag/>,
-                                tier:  <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
-                                           <span style={{ width:10, height:10, background:t.hex, borderRadius:2, flexShrink:0 }}/>
-                                           <b style={{ fontFamily:T.sans }}>{t.tier}</b>
-                                       </span>,
-                                range: <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>{t.range}</span>,
-                                count: <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:14, color:T.ink }}>{t.count}</span>,
-                                sla:   <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{t.sla}</span>,
-                                owner: <span style={{ color:T.inkMid, fontFamily:T.sans, fontSize:12 }}>{t.owner}</span>,
-                                more:  <span style={{ color:T.inkMuted, cursor:'pointer' }}>⋯</span>,
-                            }))}
-                        />
+                        <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r+2, overflow:'visible' }}>
+                            {/* Header */}
+                            <div style={{ display:'grid', gridTemplateColumns:'28px 1.3fr 140px 90px 70px 130px 28px', padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10, borderRadius:`${T.r+2}px ${T.r+2}px 0 0` }}>
+                                {['','Tier','Revenue','Accounts','SLA','Owning team',''].map((h,i) => (
+                                    <div key={i} style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign: i===3||i===4 ? 'right' : 'left', fontFamily:T.sans }}>{h}</div>
+                                ))}
+                            </div>
+                            {tiers.map((t,i) => (
+                                <div key={i} style={{ display:'grid', gridTemplateColumns:'28px 1.3fr 140px 90px 70px 130px 28px', padding:'12px 14px', gap:10, borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background:T.surface, fontSize:13, fontFamily:T.sans, position:'relative' }}>
+                                    <div><SPDrag/></div>
+
+                                    {/* Tier name — inline edit or display */}
+                                    <div>
+                                        {editingTierIdx === i ? (
+                                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                                <input type="color" value={editingTierVal.hex||t.hex} onChange={e => setEditingTierVal(p => ({ ...p, hex:e.target.value }))}
+                                                    style={{ width:24, height:24, border:`1px solid ${T.border}`, borderRadius:T.r, padding:1, cursor:'pointer', flexShrink:0 }}/>
+                                                <input value={editingTierVal.tier??t.tier} onChange={e => setEditingTierVal(p => ({ ...p, tier:e.target.value }))}
+                                                    autoFocus style={{ ...inpSm }} onKeyDown={e => { if (e.key==='Enter') handleEditTierSave(i); if (e.key==='Escape') { setEditingTierIdx(null); setEditingTierVal({}); } }}/>
+                                            </div>
+                                        ) : (
+                                            <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+                                                <span style={{ width:10, height:10, background:t.hex, borderRadius:2, flexShrink:0 }}/>
+                                                <b>{t.tier}</b>
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* Revenue */}
+                                    <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>
+                                        {editingTierIdx === i
+                                            ? <input value={editingTierVal.range??t.range} onChange={e => setEditingTierVal(p => ({ ...p, range:e.target.value }))} style={{ ...inpSm, fontFamily:'ui-monospace,Menlo,monospace' }}/>
+                                            : t.range}
+                                    </div>
+
+                                    {/* Accounts */}
+                                    <div style={{ textAlign:'right', fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:14, color:T.ink }}>{t.count}</div>
+
+                                    {/* SLA */}
+                                    <div style={{ textAlign:'right', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>
+                                        {editingTierIdx === i
+                                            ? <input value={editingTierVal.sla??t.sla} onChange={e => setEditingTierVal(p => ({ ...p, sla:e.target.value }))} style={{ ...inpSm, textAlign:'right', fontFamily:'ui-monospace,Menlo,monospace', width:56 }}/>
+                                            : t.sla}
+                                    </div>
+
+                                    {/* Owning team */}
+                                    <div style={{ color:T.inkMid, fontSize:12 }}>
+                                        {editingTierIdx === i
+                                            ? <input value={editingTierVal.owner??t.owner} onChange={e => setEditingTierVal(p => ({ ...p, owner:e.target.value }))} style={{ ...inpSm }}/>
+                                            : t.owner}
+                                    </div>
+
+                                    {/* Kebab */}
+                                    <div style={{ position:'relative' }}>
+                                        {editingTierIdx === i ? (
+                                            <button onClick={() => handleEditTierSave(i)}
+                                                style={{ background:T.ok, border:'none', color:'#fff', borderRadius:T.r, padding:'3px 8px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>✓</button>
+                                        ) : (
+                                            <>
+                                                <button onClick={e => { e.stopPropagation(); setOpenTierKebab(openTierKebab===i ? null : i); }}
+                                                    style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:0, lineHeight:1 }}>⋯</button>
+                                                {openTierKebab === i && (
+                                                    <div onClick={e => e.stopPropagation()}
+                                                        style={{ position:'absolute', right:0, top:'100%', zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200, overflow:'hidden' }}>
+                                                        {[
+                                                            { label:'Edit tier', action: () => { setEditingTierIdx(i); setEditingTierVal({}); setOpenTierKebab(null); } },
+                                                            { label:'Duplicate',  action: () => handleDuplicateTier(i) },
+                                                            { label:`View ${t.count} accounts`, note:'Filter Accounts tab by this tier', action: () => setOpenTierKebab(null) },
+                                                            { label:'Where this is used', note: AUTO_CLASS_RULES.filter(r => r.then === t.tier).length > 0 ? `${AUTO_CLASS_RULES.filter(r => r.then === t.tier).length} auto-classification rule${AUTO_CLASS_RULES.filter(r => r.then === t.tier).length!==1?'s':''}` : 'No rules reference this tier', action: () => setOpenTierKebab(null) },
+                                                            { label:'Delete', danger:true, disabled: SYSTEM_TIERS.has(t.tier), note: SYSTEM_TIERS.has(t.tier) ? 'System tier' : null, action: () => { if (!SYSTEM_TIERS.has(t.tier)) handleDeleteTier(i); } },
+                                                        ].map((item, mi) => (
+                                                            <button key={mi} onClick={item.action} disabled={item.disabled}
+                                                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.disabled ? T.inkMuted : item.danger ? T.danger : T.ink, cursor: item.disabled ? 'default' : 'pointer', fontFamily:T.sans, opacity: item.disabled ? 0.5 : 1 }}
+                                                                onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background = item.danger ? 'rgba(156,58,46,0.06)' : T.surface2; }}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                                <div>{item.label}</div>
+                                                                {item.note && <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{item.note}</div>}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </CSectionCard>
 
                     <CSectionCard title="Auto-classification" description="Rules that assign a tier when an account is created or revenue changes.">
