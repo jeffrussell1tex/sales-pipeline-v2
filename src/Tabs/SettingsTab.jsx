@@ -3398,6 +3398,25 @@ const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
     const toggleTrigger = (i) => { setTriggers(prev => prev.map((t,ti) => ti===i ? { ...t, on:!t.on } : t)); setDirty(true); };
     const toneForIdx = (i) => ['rep','mgr','vp','cfo'][i] || 'neutral';
 
+    // ── Live approval stats ──────────────────────────────────
+    const [approvalStats, setApprovalStats] = useState(null);
+    const [statsLoading, setStatsLoading]   = useState(false);
+
+    React.useEffect(() => {
+        let cancelled = false;
+        const fetchStats = async () => {
+            setStatsLoading(true);
+            try {
+                const res = await dbFetch('/.netlify/functions/quotes?approvalStats=true');
+                const data = await res.json();
+                if (!cancelled && data.approvalStats) setApprovalStats(data.approvalStats);
+            } catch(e) { console.error('fetch approval stats', e); }
+            if (!cancelled) setStatsLoading(false);
+        };
+        fetchStats();
+        return () => { cancelled = true; };
+    }, []);
+
     // ── Tier kebab state ─────────────────────────────────────
     const [openTierMenu,    setOpenTierMenu]    = useState(null);  // tier index
     const [editingField,    setEditingField]    = useState(null);  // { idx, field } for inline edit
@@ -3694,13 +3713,16 @@ const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                 {/* ── RIGHT COLUMN ────────────────────────────────── */}
                 <div>
                     <div style={{ position:'sticky', top:20 }}>
-                        {/* Last 90 days — derived from current tiers */}
+                        {/* Last 90 days — live from quotes API */}
                         <CSectionCard title="Last 90 days" description="How approvals are flowing in practice.">
-                            {tiers.map((t,i) => {
+                            {statsLoading && (
+                                <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans, padding:'8px 0' }}>Loading…</div>
+                            )}
+                            {!statsLoading && tiers.map((t,i) => {
                                 const tones = ['rep','mgr','vp','cfo'];
                                 const tone = tones[i] || 'neutral';
-                                // Match usage stats to tier by index
-                                const u = APPROVAL_TIER_USAGE[i] || { quotes:0, approved:0, declined:0, pending:0, avgHours:0 };
+                                // Match live stats to tier by label, fall back to zeros
+                                const u = approvalStats?.find(s => s.tier === t.label) || { quotes:0, approved:0, declined:0, pending:0, avgHours:0 };
                                 return (
                                     <div key={t.id} style={{ padding:'10px 0', borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none' }}>
                                         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
@@ -3718,6 +3740,9 @@ const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                                     </div>
                                 );
                             })}
+                            {!statsLoading && approvalStats && approvalStats.every(s => s.quotes === 0) && (
+                                <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans, padding:'8px 0' }}>No approval activity in the last 90 days.</div>
+                            )}
                         </CSectionCard>
 
                         {/* Try a deal — live simulator */}

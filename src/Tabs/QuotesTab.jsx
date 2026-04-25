@@ -40,16 +40,33 @@ const relDate = (iso) => {
 function genQuoteId() { return 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7); }
 
 // ─── Approval tiers ───────────────────────────────────────────
-const APPROVAL_TIERS = [
-    { maxDiscount: 0.10, approver: null,            label: 'Rep authority', color: T.ok },
-    { maxDiscount: 0.20, approver: 'Sales Manager', label: 'Mgr approval',  color: T.warn },
+// Fallback used before settings load or when not configured
+const DEFAULT_APPROVAL_TIERS = [
+    { maxDiscount: 0.10, approver: null,            label: 'Rep authority', color: T.ok      },
+    { maxDiscount: 0.20, approver: 'Sales Manager', label: 'Mgr approval',  color: T.warn    },
     { maxDiscount: 0.30, approver: 'VP Sales',      label: 'VP approval',   color: '#b55634' },
-    { maxDiscount: 1.00, approver: 'CFO',           label: 'CFO approval',  color: T.danger },
+    { maxDiscount: 1.00, approver: 'CFO',           label: 'CFO approval',  color: T.danger  },
 ];
-const tierForDiscount = (d) => {
-    for (const t of APPROVAL_TIERS) if (d <= t.maxDiscount) return t;
-    return APPROVAL_TIERS[APPROVAL_TIERS.length - 1];
+// Used throughout the file — will be overridden per-component from settings
+let APPROVAL_TIERS = DEFAULT_APPROVAL_TIERS;
+
+const tierForDiscount = (d, tiers = APPROVAL_TIERS) => {
+    for (const t of tiers) if (d <= t.maxDiscount) return t;
+    return tiers[tiers.length - 1];
 };
+
+function buildApprovalTiers(settingsApprovalTiers) {
+    if (!Array.isArray(settingsApprovalTiers) || settingsApprovalTiers.length === 0) {
+        return DEFAULT_APPROVAL_TIERS;
+    }
+    const colorFallbacks = [T.ok, T.warn, '#b55634', T.danger];
+    return settingsApprovalTiers.map((t, i) => ({
+        maxDiscount: typeof t.maxDiscount === 'number' ? t.maxDiscount : parseFloat(t.maxDiscount) || 1,
+        approver:    t.approver || null,
+        label:       t.label || `Tier ${i+1}`,
+        color:       t.color || colorFallbacks[i] || T.inkMid,
+    }));
+}
 
 // ─── Quote math ───────────────────────────────────────────────
 function calcLineTotals(lineItems = [], products = []) {
@@ -1218,6 +1235,11 @@ export default function QuotesTab() {
     }, [quotesDeepLinkOppId]);
 
     // ── Visibility filter ─────────────────────────────────────
+    // Build approval tiers from settings, overriding the module-level fallback
+    const approvalTiers = useMemo(() => buildApprovalTiers(settings?.approvalTiers), [settings?.approvalTiers]);
+    // Keep module-level reference in sync for components that use APPROVAL_TIERS directly
+    React.useEffect(() => { APPROVAL_TIERS = approvalTiers; }, [approvalTiers]);
+
     const managedReps = useMemo(() => new Set((settings?.users || []).filter(u => u.managedBy === currentUser || u.manager === currentUser).map(u => u.name)), [settings, currentUser]);
 
     const visibleQuotes = useMemo(() => (quotes || []).filter(q => {
