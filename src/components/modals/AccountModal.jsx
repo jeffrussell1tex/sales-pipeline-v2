@@ -66,7 +66,7 @@ export default function AccountModal({
         address: '', address2: '',
         city: '', state: '', zip: '', country: '',
         website: '', phone: '',
-        doNotContact: false, customerTypes: [],
+        doNotContact: false, customerTypes: [], accountSegment: '', accountSegment: '',
         // Account Details fields
         description: '', totalEmployees: '', annualRevenue: '',
         fiscalYearEnd: '', foundedYear: '', linkedInUrl: '',
@@ -109,19 +109,25 @@ export default function AccountModal({
     // Industry list: preserve parent→sub hierarchy from settings, sorted alphabetically at each level.
     // Falls back to flat built-in list when settings has no verticalMarkets defined.
     const verticalMarkets = React.useMemo(() => {
+        // Prefer settings.industries (new structured format from Industries settings page)
+        const fromIndustries = settings?.industries;
+        if (Array.isArray(fromIndustries) && fromIndustries.length > 0 && typeof fromIndustries[0] === 'object' && fromIndustries[0].k) {
+            return fromIndustries
+                .filter(ind => !ind.hidden)
+                .map(ind => ({ name: ind.k, subs: (ind.subs || []).slice().sort((a, b) => a.localeCompare(b)) }))
+                .sort((a, b) => a.name.localeCompare(b.name));
+        }
         const raw = settings?.verticalMarkets || [];
         if (raw.length === 0) {
-            // Flat fallback list — already sorted
             return INDUSTRIES.map(name => ({ name, subs: [] }));
         }
-        // Normalise to { name, subs[] } objects, sort parents then subs
         const groups = raw.map(m =>
             typeof m === 'string'
                 ? { name: m, subs: [] }
                 : { name: m.name || '', subs: (m.subs || []).slice().sort((a, b) => a.localeCompare(b)) }
         );
         return groups.sort((a, b) => a.name.localeCompare(b.name));
-    }, [settings?.verticalMarkets]);
+    }, [settings?.industries, settings?.verticalMarkets]);
 
     // ── handlers ─────────────────────────────────────────────────────────────
     const handleChange = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
@@ -138,6 +144,8 @@ export default function AccountModal({
             accountTier:       derivedTier,
             doNotContact:      formData.doNotContact === true,
             customerTypes:     formData.customerTypes || [],
+            accountSegment:    formData.accountSegment || '',
+            accountSegment:    formData.accountSegment || '',
         };
 
         // Fuzzy duplicate check
@@ -515,6 +523,46 @@ export default function AccountModal({
                                 )}
                             </div>
 
+                            {/* ── Segment ── */}
+                            <div className="form-group full">
+                                <label>Segment</label>
+                                <select
+                                    value={formData.accountSegment || ''}
+                                    onChange={e => setFormData(prev => ({ ...prev, accountSegment: e.target.value }))}
+                                    style={{ width:'100%' }}
+                                >
+                                    <option value="">— Not set —</option>
+                                    {(() => {
+                                        const tiers = settings?.customerTypeTiers;
+                                        if (Array.isArray(tiers) && tiers.length > 0 && typeof tiers[0] === 'object') {
+                                            return [...tiers].sort((a,b) => a.tier.localeCompare(b.tier)).map(t => <option key={t.tier} value={t.tier}>{t.tier}</option>);
+                                        }
+                                        return ['Enterprise','Mid-Market','Partner','SMB','Strategic'].map(t => <option key={t} value={t}>{t}</option>);
+                                    })()}
+                                </select>
+                                <span className="field-hint">Account segment — size or revenue classification</span>
+                            </div>
+
+                            {/* ── Segment ── */}
+                            <div className="form-group full">
+                                <label>Segment</label>
+                                <select
+                                    value={formData.accountSegment || ''}
+                                    onChange={e => setFormData(prev => ({ ...prev, accountSegment: e.target.value }))}
+                                    style={{ width:'100%' }}
+                                >
+                                    <option value="">— Not set —</option>
+                                    {(() => {
+                                        const tiers = settings?.customerTypeTiers;
+                                        if (Array.isArray(tiers) && tiers.length > 0 && typeof tiers[0] === 'object') {
+                                            return [...tiers].sort((a,b) => a.tier.localeCompare(b.tier)).map(t => <option key={t.tier} value={t.tier}>{t.tier}</option>);
+                                        }
+                                        return ['Enterprise','Mid-Market','Partner','SMB','Strategic'].map(t => <option key={t} value={t}>{t}</option>);
+                                    })()}
+                                </select>
+                                <span className="field-hint">Account segment — size or revenue classification</span>
+                            </div>
+
                             {/* ── Customer Types ── */}
                             <div className="form-group full" style={{ position: 'relative' }}>
                                 <label>Account Type</label>
@@ -750,7 +798,7 @@ export default function AccountModal({
                                     onClick={() => {
                                         setDuplicateWarning(null);
                                         const p2 = (existingAccounts || []).find(a => a.name === parentSearch);
-                                        onSave({ ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: p2 ? p2.id : (formData.parentAccountId || null), accountTier: derivedTier, doNotContact: formData.doNotContact === true, customerTypes: formData.customerTypes || [] });
+                                        onSave({ ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: p2 ? p2.id : (formData.parentAccountId || null), accountTier: derivedTier, doNotContact: formData.doNotContact === true, customerTypes: formData.customerTypes || [], accountSegment: formData.accountSegment || '' });
                                     }}
                                     style={{ padding: '0.375rem 0.75rem', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit' }}>
                                     Create Anyway

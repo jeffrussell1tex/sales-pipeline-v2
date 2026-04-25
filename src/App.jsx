@@ -111,6 +111,7 @@ function App() {
     // Destructure for use in this component
     const {
         activeTab, setActiveTab, activePipelineId, setActivePipelineId,
+        accountsDeepFilter, setAccountsDeepFilter,
         isMobile, setIsMobile,
         quickLogOpen, setQuickLogOpen, quickLogForm, setQuickLogForm,
         quickLogContactResults, setQuickLogContactResults,
@@ -540,7 +541,15 @@ dbFetch('/.netlify/functions/users?me=true')
     const visibleOpportunities = applyViewingFilter(
         (opportunities || [])
         .filter(opp => isRepVisible(opp.salesRep))
-        .filter(opp => (opp.pipelineId || 'default') === activePipeline.id)
+        .filter(opp => {
+            // Deals with no pipelineId or the legacy 'default' string belong to
+            // whichever pipeline is marked isDefault, or the first pipeline.
+            const defaultPipeline = allPipelines.find(p => p.isDefault) || allPipelines[0];
+            const oppPipelineId = (!opp.pipelineId || opp.pipelineId === 'default')
+                ? defaultPipeline.id
+                : opp.pipelineId;
+            return oppPipelineId === activePipeline.id;
+        })
     );
     const visibleAccounts = (accounts || [])
         .filter(acc => isRepVisible(acc.accountOwner))
@@ -1336,6 +1345,7 @@ dbFetch('/.netlify/functions/users?me=true')
         fetchCalendarEvents,
         // Navigation
         activeTab, setActiveTab,
+        accountsDeepFilter, setAccountsDeepFilter,
         activePipelineId, setActivePipelineId,
         allRepNames,
         allTeamNames,
@@ -1495,7 +1505,11 @@ dbFetch('/.netlify/functions/users?me=true')
 
             {activeTab === 'accounts' && (
                 <ErrorBoundary tabName="Accounts">
-                    <AccountsTab />
+                    <AccountsTab
+                        initialAccountSegmentFilter={accountsDeepFilter?.accountSegment || '__all__'}
+                        initialIndustryFilter={accountsDeepFilter?.industry || '__all__'}
+                        onDeepFilterConsumed={() => setAccountsDeepFilter(null)}
+                    />
                 </ErrorBoundary>
             )}
 

@@ -1,5 +1,5 @@
 import { db } from '../../db/index.js';
-import { quotes, opportunities } from '../../db/schema.js';
+import { quotes, opportunities, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and, desc } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 
@@ -15,7 +15,7 @@ const ALLOWED_FIELDS = [
     'id', 'opportunityId', 'quoteNumber', 'version', 'name', 'status',
     'validUntil', 'paymentTerms', 'billingContact', 'lineItems',
     'subtotal', 'dealDiscount', 'totalValue', 'recurringValue', 'oneTimeValue',
-    'notes', 'approvalNote', 'createdBy',
+    'notes', 'approvalNote', 'approvalTier', 'approvalReason', 'createdBy',
 ];
 
 function sanitize(data) {
@@ -56,12 +56,42 @@ function calcTotals(lineItems = [], dealDiscountPct = 0) {
 }
 
 // When a quote is accepted, push its totalValue to the linked opportunity's arr field
+// ── Compute which approval tier applies ──────────────────────────────────────
+const DEFAULT_APPROVAL_TIERS = [
+    { maxDiscount: 0.10, label: 'Rep',          approver: null           },
+    { maxDiscount: 0.20, label: 'Mgr approval', approver: 'Sales Manager'},
+    { maxDiscount: 0.30, label: 'VP approval',  approver: 'VP Sales'     },
+    { maxDiscount: 1.00, label: 'CFO approval', approver: 'CFO'          },
+];
+
+async function getApprovalTiers(orgId) {
+    try {
+        const rows = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
+        const extra = rows[0]?.extra;
+        if (extra?.approvalTiers?.length) return extra.approvalTiers;
+    } catch(e) { /* fallback */ }
+    return DEFAULT_APPROVAL_TIERS;
+}
+
+function computeApprovalTier(avgDiscountPct, tiers) {
+    // avgDiscountPct is 0-100 (e.g. 22 means 22%)
+    const ratio = avgDiscountPct / 100;
+    for (const tier of tiers) {
+        if (ratio <= tier.maxDiscount) return tier;
+    }
+    return tiers[tiers.length - 1];
+}
+
 async function syncToOpportunity(orgId, opportunityId, totalValue) {
     if (!opportunityId) return;
     await db.update(opportunities)
         .set({ arr: String(totalValue), updatedAt: new Date() })
         .where(and(eq(opportunities.id, opportunityId), eq(opportunities.orgId, orgId)));
 }
+
+// ── Approval stats helper (used by Settings → Approval tiers) ───────────────
+// GET /.netlify/functions/quotes?approvalStats=true
+// Returns counts grouped by approvalTier for the last 90 days
 
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
@@ -90,6 +120,30 @@ export const handler = async (event) => {
                     .where(eq(quotes.orgId, orgId))
                     .orderBy(desc(quotes.createdAt));
             }
+
+            // Approval stats — grouped by tier for the last 90 days
+            if (event.queryStringParameters?.approvalStats === 'true') {
+                const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+                const allQuotes = await db.select().from(quotes).where(eq(quotes.orgId, orgId));
+                const recent = allQuotes.filter(q => new Date(q.updatedAt) >= ninetyDaysAgo);
+                // Get org's approval tiers to ensure all tiers are represented
+                const tiers = await getApprovalTiers(orgId);
+                const stats = tiers.map(tier => {
+                    const tierQuotes = recent.filter(q => q.approvalTier === tier.label);
+                    const approved   = tierQuotes.filter(q => q.status === 'Approved').length;
+                    const declined   = tierQuotes.filter(q => q.status === 'Declined').length;
+                    const pending    = tierQuotes.filter(q => q.status === 'Pending Approval').length;
+                    // Avg hours from submission to approval
+                    const times = tierQuotes
+                        .filter(q => q.approvedAt && q.updatedAt)
+                        .map(q => (new Date(q.approvedAt) - new Date(q.updatedAt)) / 3600000);
+                    const avgHours = times.length > 0 ? Math.round(times.reduce((a,b) => a+b,0) / times.length) : 0;
+                    return { tier: tier.label, quotes: tierQuotes.length, approved, declined, pending, avgHours };
+                });
+                // Also count Rep tier (no approval needed — all non-pending quotes)
+                return { statusCode: 200, headers, body: JSON.stringify({ approvalStats: stats }) };
+            }
+
             return { statusCode: 200, headers, body: JSON.stringify({ quotes: rows }) };
         }
 
@@ -129,6 +183,23 @@ export const handler = async (event) => {
 
             // Approval / acceptance logic
             const statusUpdates = {};
+            if (data.status === 'Pending Approval') {
+                // Calculate which approval tier applies based on avg discount across line items
+                const tiers = await getApprovalTiers(orgId);
+                const lineItems = Array.isArray(data.lineItems) ? data.lineItems : [];
+                let avgDisc = 0;
+                if (lineItems.length > 0) {
+                    avgDisc = lineItems.reduce((s, item) => s + (Number(item.discountPct) || 0), 0) / lineItems.length;
+                }
+                // Also check deal-level discount
+                const dealDisc = Number(data.dealDiscount) || 0;
+                const effectiveDisc = Math.max(avgDisc, dealDisc);
+                const matchedTier = computeApprovalTier(effectiveDisc, tiers);
+                const prevTier = tiers[tiers.indexOf(matchedTier) - 1];
+                const threshold = prevTier ? Math.round(prevTier.maxDiscount * 100) : 0;
+                statusUpdates.approvalTier   = matchedTier.label;
+                statusUpdates.approvalReason = `Avg discount ${Math.round(effectiveDisc)}% > ${threshold}% ${prevTier?.label || 'rep'} tier`;
+            }
             if (data.status === 'Approved' && (isAdmin || isManager)) {
                 statusUpdates.approvedBy = auth.userId;
                 statusUpdates.approvedAt = new Date();

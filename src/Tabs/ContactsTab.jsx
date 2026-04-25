@@ -690,14 +690,6 @@ export default function ContactsTab() {
                         </button>
                     )}
 
-                    {/* Select toggle */}
-                    {canEdit && (
-                        <button onClick={() => { setSelectMode(m => !m); setSelectedIds([]); }}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', background: selectMode ? T.surface2 : 'transparent', border: `1px solid ${selectMode ? T.borderStrong : T.border}`, color: T.inkMid, fontSize: 12, fontWeight: selectMode ? 600 : 400, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
-                            {selectMode ? 'Cancel' : 'Select'}
-                        </button>
-                    )}
-
                     {/* Import */}
                     {canEdit && (
                         <button
@@ -719,6 +711,14 @@ export default function ContactsTab() {
                         <Icon name="export" size={12} color={T.inkMid} />
                         {exportingCSV === 'contacts' ? 'Exporting…' : 'Export'}
                     </button>
+
+                    {/* Select toggle */}
+                    {canEdit && (
+                        <button onClick={() => { setSelectMode(m => !m); setSelectedIds([]); }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 11px', background: selectMode ? T.surface2 : 'transparent', border: `1px solid ${selectMode ? T.borderStrong : T.border}`, color: T.inkMid, fontSize: 12, fontWeight: selectMode ? 600 : 400, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                            {selectMode ? 'Cancel' : 'Select'}
+                        </button>
+                    )}
 
                     {/* New contact */}
                     {canEdit && (

@@ -31,6 +31,7 @@ export const handler = async (event) => {
         notes:             d.notes             || null,
         doNotContact:      d.doNotContact      === true ? true : false,
         customerTypes:     Array.isArray(d.customerTypes) ? d.customerTypes : [],
+        accountSegment:    d.accountSegment     || null,
         // Account Details tab fields
         description:       d.description       || null,
         totalEmployees:    d.totalEmployees     || null,

@@ -27,10 +27,10 @@ export const handler = async (event) => {
                 companyName:      row.companyName     || '',
                 companyLogo:      row.companyLogo     || '',
                 fiscalYearStart:  row.fiscalYearStart || '',
-                funnelStages:     row.stages          || [],
+                funnelStages:     row.extra?.funnelStages || row.stages || [],
                 products:         row.extra?.products        || [],
                 taskTypes:        row.taskTypes       || ['Call', 'Meeting', 'Email'],
-                painPoints:       row.painPoints      || [],
+                painPoints:       row.extra?.painPoints || row.painPoints || [],
                 verticalMarkets:  row.verticalMarkets || [],
                 fieldVisibility:  row.fieldVisibility || {},
                 // Extended fields — stored in the extra jsonb blob column
@@ -50,6 +50,28 @@ export const handler = async (event) => {
                 customerTypes:    row.extra?.customerTypes    || [],
                 companyProfile:   row.extra?.companyProfile   || null,
                 leadConvBenchmarks: row.extra?.leadConvBenchmarks || null,
+                // Company profile detail fields
+                companyDisplayName:   row.extra?.companyDisplayName   || row.companyName || '',
+                companyLegalName:     row.extra?.companyLegalName     || '',
+                companyBrandColor:    row.extra?.companyBrandColor    || '#7a6a48',
+                companyAddress:       row.extra?.companyAddress       || '',
+                companyCity:          row.extra?.companyCity          || '',
+                companyState:         row.extra?.companyState         || '',
+                companyZip:           row.extra?.companyZip           || '',
+                companyCountry:       row.extra?.companyCountry       || 'United States',
+                companyPhone:         row.extra?.companyPhone         || '',
+                companySupportEmail:  row.extra?.companySupportEmail  || '',
+                quoteHeader:          row.extra?.quoteHeader          || '',
+                // Company calendar
+                customHolidays:       row.extra?.customHolidays       || [],
+                federalHolidays:      row.extra?.federalHolidays      || [],
+                // Sales process Group 1
+                kpiThresholds:        row.extra?.kpiThresholds        || null,
+                assignmentRules:      row.extra?.assignmentRules      || null,
+                // Sales process Group 2
+                customFieldsByObject: row.extra?.customFieldsByObject || null,
+                customerTypeTiers:    row.extra?.customerTypeTiers    || null,
+                industries:           row.extra?.industries            || null,
                 // BYOK: send back the plaintext key so the UI can display it,
                 // but NEVER log or expose it in error responses
                 anthropicApiKey:  decryptedKey || null,
@@ -98,7 +120,37 @@ export const handler = async (event) => {
                 leadsEnabled:     'leadsEnabled'     in data ? !!data.leadsEnabled     : existingExtra.leadsEnabled     ?? true,
                 customerTypes:    'customerTypes'    in data ? (data.customerTypes    || [])   : existingExtra.customerTypes    || [],
                 companyProfile:   'companyProfile'   in data ? (data.companyProfile   || null) : existingExtra.companyProfile   || null,
-                leadConvBenchmarks: 'leadConvBenchmarks' in data ? (data.leadConvBenchmarks || null) : existingExtra.leadConvBenchmarks || null,
+                leadConvBenchmarks:   'leadConvBenchmarks'   in data ? (data.leadConvBenchmarks   || null) : existingExtra.leadConvBenchmarks   || null,
+                // Company profile detail fields
+                companyDisplayName:   'companyDisplayName'   in data ? (data.companyDisplayName   || null) : existingExtra.companyDisplayName   || null,
+                companyLegalName:     'companyLegalName'     in data ? (data.companyLegalName     || null) : existingExtra.companyLegalName     || null,
+                companyBrandColor:    'companyBrandColor'    in data ? (data.companyBrandColor    || null) : existingExtra.companyBrandColor    || null,
+                companyAddress:       'companyAddress'       in data ? (data.companyAddress       || null) : existingExtra.companyAddress       || null,
+                companyCity:          'companyCity'          in data ? (data.companyCity          || null) : existingExtra.companyCity          || null,
+                companyState:         'companyState'         in data ? (data.companyState         || null) : existingExtra.companyState         || null,
+                companyZip:           'companyZip'           in data ? (data.companyZip           || null) : existingExtra.companyZip           || null,
+                companyCountry:       'companyCountry'       in data ? (data.companyCountry       || null) : existingExtra.companyCountry       || null,
+                companyPhone:         'companyPhone'         in data ? (data.companyPhone         || null) : existingExtra.companyPhone         || null,
+                companySupportEmail:  'companySupportEmail'  in data ? (data.companySupportEmail  || null) : existingExtra.companySupportEmail  || null,
+                quoteHeader:          'quoteHeader'          in data ? (data.quoteHeader          || null) : existingExtra.quoteHeader          || null,
+                // Company calendar
+                customHolidays:       'customHolidays'       in data ? (data.customHolidays       || [])   : existingExtra.customHolidays       || [],
+                federalHolidays:      'federalHolidays'      in data ? (data.federalHolidays      || [])   : existingExtra.federalHolidays      || [],
+                // Quoting
+                approvalTiers:        row.extra?.approvalTiers        || null,
+                approvalTriggers:     row.extra?.approvalTriggers     || null,
+                // Quoting
+                approvalTiers:        'approvalTiers'        in data ? (data.approvalTiers        || null) : existingExtra.approvalTiers        || null,
+                approvalTriggers:     'approvalTriggers'     in data ? (data.approvalTriggers     || null) : existingExtra.approvalTriggers     || null,
+                // Sales process Group 1
+                funnelStages:         'funnelStages'         in data ? (data.funnelStages         || [])   : existingExtra.funnelStages         || [],
+                kpiThresholds:        'kpiThresholds'        in data ? (data.kpiThresholds        || null) : existingExtra.kpiThresholds        || null,
+                assignmentRules:      'assignmentRules'      in data ? (data.assignmentRules      || null) : existingExtra.assignmentRules      || null,
+                // Sales process Group 2
+                customFieldsByObject: 'customFieldsByObject' in data ? (data.customFieldsByObject || null) : existingExtra.customFieldsByObject || null,
+                customerTypeTiers:    'customerTypeTiers'    in data ? (data.customerTypeTiers    || null) : existingExtra.customerTypeTiers    || null,
+                industries:           'industries'           in data ? (data.industries           || null) : existingExtra.industries           || null,
+                painPoints:           'painPoints'           in data ? (data.painPoints           || [])   : existingExtra.painPoints           || [],
                 // Store encrypted ciphertext — never the plaintext key
                 anthropicApiKey:  encryptedApiKey,
             };

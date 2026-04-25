@@ -66,6 +66,9 @@ export function useUIState() {
     const [auditEntityFilter, setAuditEntityFilter] = useState('all');
     const [auditActionFilter, setAuditActionFilter] = useState('all');
 
+    // Cross-tab deep link filters
+    const [accountsDeepFilter, setAccountsDeepFilter] = useState(null); // e.g. { accountType: 'Enterprise' }
+
     // Export/import
     const [exportingCSV, setExportingCSV] = useState(null);
     const [exportingBackup, setExportingBackup] = useState(false);
@@ -118,6 +121,7 @@ export function useUIState() {
         auditSearch, setAuditSearch,
         auditEntityFilter, setAuditEntityFilter,
         auditActionFilter, setAuditActionFilter,
+        accountsDeepFilter, setAccountsDeepFilter,
         exportingCSV, setExportingCSV,
         exportingBackup, setExportingBackup,
         restoringBackup, setRestoringBackup,

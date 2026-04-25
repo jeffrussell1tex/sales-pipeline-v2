@@ -48,6 +48,7 @@ export const accounts = pgTable('accounts', {
     notes:             text('notes'),
     doNotContact:      boolean('do_not_contact').default(false),
     customerTypes:     jsonb('customer_types').default('[]'),
+    accountSegment:    varchar('account_segment', { length: 100 }),  // SMB / Mid-Market / Enterprise etc.
     // Account Details tab fields
     description:       text('description'),
     totalEmployees:    varchar('total_employees', { length: 20 }),
@@ -372,6 +373,8 @@ export const quotes = pgTable('quotes', {
     oneTimeValue:    decimal('one_time_value', { precision: 12, scale: 2 }),
     notes:           text('notes'),
     approvalNote:    text('approval_note'),
+    approvalTier:    varchar('approval_tier', { length: 100 }),   // e.g. 'Mgr approval'
+    approvalReason:  text('approval_reason'),                      // e.g. 'Avg discount 22% > 20% threshold'
     approvedBy:      varchar('approved_by', { length: 255 }),
     approvedAt:      timestamp('approved_at'),
     sentAt:          timestamp('sent_at'),

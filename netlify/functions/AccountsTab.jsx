@@ -555,7 +555,7 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
 }
 
 // ── Main AccountsTab ──────────────────────────────────────────
-export default function AccountsTab({ initialAccountSegmentFilter = '__all__', initialIndustryFilter = '__all__', onDeepFilterConsumed } = {}) {
+export default function AccountsTab({ initialAccountSegmentFilter = '__all__', onDeepFilterConsumed } = {}) {
     const {
         accounts, setAccounts,
         opportunities, contacts, activities, settings,
@@ -586,14 +586,14 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
     const [expandedIds, setExpandedIds] = useState({});  // { [accountId]: bool }
     const [filterOpen, setFilterOpen]   = useState(false);
     const [panelFilters, setPanelFilters] = useState(() => ({
-        industry: initialIndustryFilter || '__all__', owner: '__all__', hasPipe: '__all__',
+        industry: '__all__', owner: '__all__', hasPipe: '__all__',
         accountType: '__all__',
         accountSegment: initialAccountSegmentFilter || '__all__',
     }));
 
     // Consume the deep filter once on mount so navigating back doesn't re-apply it
     React.useEffect(() => {
-        if ((initialAccountSegmentFilter && initialAccountSegmentFilter !== '__all__') || (initialIndustryFilter && initialIndustryFilter !== '__all__')) {
+        if (initialAccountSegmentFilter && initialAccountSegmentFilter !== '__all__') {
             if (typeof onDeepFilterConsumed === 'function') onDeepFilterConsumed();
         }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps

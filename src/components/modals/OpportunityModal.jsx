@@ -1709,6 +1709,15 @@ export default function OpportunityModal({
                                         <label style={fieldLabelStyle}>Pain Points</label>
                                         {(() => {
                                             const selectedPainPoints = formData.painPoints ? formData.painPoints.split(', ').filter(p => p) : [];
+
+                                            // settings.painPoints is grouped: [{ cat, items }]
+                                            // Fall back to a flat default list if not configured
+                                            const rawPainPoints = settings?.painPoints;
+                                            const isGrouped = Array.isArray(rawPainPoints) && rawPainPoints.length > 0 && typeof rawPainPoints[0] === 'object' && rawPainPoints[0].cat;
+                                            const groups = isGrouped
+                                                ? rawPainPoints
+                                                : [{ cat: 'Pain Points', items: rawPainPoints?.length ? rawPainPoints : ['High Turnover', 'Scheduling Complexity', 'Compliance Issues', 'Manual Processes', 'Poor Visibility'] }];
+
                                             return (
                                                 <>
                                                     {selectedPainPoints.length > 0 && (
@@ -1727,9 +1736,15 @@ export default function OpportunityModal({
                                                         if (value && !selectedPainPoints.includes(value))
                                                             handleChange('painPoints', [...selectedPainPoints, value].join(', '));
                                                     }} style={{ ...inputStyle(false), cursor: 'pointer' }}>
-                                                        <option value="">Click to add a pain point…</option>
-                                                        {(settings?.painPoints || ['High Turnover', 'Scheduling Complexity', 'Compliance Issues', 'Manual Processes', 'Poor Visibility']).map(pp => (
-                                                            <option key={pp} value={pp} disabled={selectedPainPoints.includes(pp)}>{pp}{selectedPainPoints.includes(pp) ? ' (already added)' : ''}</option>
+                                                        <option value="">Add a pain point…</option>
+                                                        {groups.map((g, gi) => (
+                                                            <optgroup key={gi} label={g.cat}>
+                                                                {(g.items || []).map(pp => (
+                                                                    <option key={pp} value={pp} disabled={selectedPainPoints.includes(pp)}>
+                                                                        {pp}{selectedPainPoints.includes(pp) ? ' ✓' : ''}
+                                                                    </option>
+                                                                ))}
+                                                            </optgroup>
                                                         ))}
                                                     </select>
                                                 </>
