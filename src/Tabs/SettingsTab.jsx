@@ -3398,6 +3398,59 @@ const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
     const toggleTrigger = (i) => { setTriggers(prev => prev.map((t,ti) => ti===i ? { ...t, on:!t.on } : t)); setDirty(true); };
     const toneForIdx = (i) => ['rep','mgr','vp','cfo'][i] || 'neutral';
 
+    // ── Tier kebab state ─────────────────────────────────────
+    const [openTierMenu,    setOpenTierMenu]    = useState(null);  // tier index
+    const [editingField,    setEditingField]    = useState(null);  // { idx, field } for inline edit
+    const [editingVal,      setEditingVal]      = useState('');
+
+    // Close on click-outside
+    React.useEffect(() => {
+        if (openTierMenu === null) return;
+        const h = () => setOpenTierMenu(null);
+        document.addEventListener('click', h);
+        return () => document.removeEventListener('click', h);
+    }, [openTierMenu]);
+
+    // ── Tier kebab handlers ───────────────────────────────────
+    const handleDuplicateTier = (i) => {
+        const clone = { ...tiers[i], id: tiers[i].id + '_copy', label: tiers[i].label + ' (copy)' };
+        setTiers(prev => { const n = [...prev]; n.splice(i+1, 0, clone); return n; });
+        setDirty(true); setOpenTierMenu(null);
+    };
+    const handleInsertTierAbove = (i) => {
+        const prev_max = i===0 ? 0 : tiers[i-1].maxDiscount;
+        const blank = { id:`tier_${Date.now()}`, label:'New tier', color:'#7a6a48', maxDiscount: parseFloat(((prev_max + tiers[i].maxDiscount)/2).toFixed(2)), approver:'', sla:'', fallback:'', active:true };
+        setTiers(prev => { const n=[...prev]; n.splice(i,0,blank); return n; });
+        setDirty(true); setOpenTierMenu(null);
+    };
+    const handleInsertTierBelow = (i) => {
+        const this_max = tiers[i].maxDiscount;
+        const next_max = tiers[i+1]?.maxDiscount ?? 1.0;
+        const blank = { id:`tier_${Date.now()}`, label:'New tier', color:'#7a6a48', maxDiscount: parseFloat(((this_max + next_max)/2).toFixed(2)), approver:'', sla:'', fallback:'', active:true };
+        setTiers(prev => { const n=[...prev]; n.splice(i+1,0,blank); return n; });
+        setDirty(true); setOpenTierMenu(null);
+    };
+    const handleNewTierFromThis = (i) => {
+        const t = tiers[i];
+        const clone = { ...t, id:`tier_${Date.now()}`, label: t.label + ' (new)', maxDiscount: Math.min(1, parseFloat((t.maxDiscount + 0.1).toFixed(2))) };
+        setTiers(prev => [...prev, clone]);
+        setDirty(true); setOpenTierMenu(null);
+    };
+    const commitFieldEdit = (i, field, val) => {
+        setTiers(prev => prev.map((t,ti) => {
+            if (ti !== i) return t;
+            if (field === 'maxDiscount') {
+                const n = parseFloat(val) / 100;
+                return isNaN(n) ? t : { ...t, maxDiscount: Math.max(0.01, Math.min(1, n)) };
+            }
+            return { ...t, [field]: val };
+        }));
+        setDirty(true); setEditingField(null); setEditingVal('');
+    };
+    const startEdit = (i, field, currentVal) => {
+        setEditingField({ idx:i, field }); setEditingVal(currentVal); setOpenTierMenu(null);
+    };
+
     return (
         <SPDetailPageChrome
             crumb="Approval tiers" title="Approval tiers"
@@ -3430,20 +3483,52 @@ const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                             {tiers.map((t,i) => {
                                 const lo = i===0 ? 0 : tiers[i-1].maxDiscount;
                                 const hi = t.maxDiscount;
+                                const ef = editingField?.idx === i ? editingField.field : null;
+                                const inpSt = { padding:'3px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface };
                                 return (
-                                    <div key={t.id} style={{ display:'grid', gridTemplateColumns:'28px 1.4fr 170px 1.2fr 80px 1fr 70px 30px', padding:'12px 14px', gap:10, borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background:T.surface, fontSize:13, fontFamily:T.sans }}>
+                                    <div key={t.id} style={{ display:'grid', gridTemplateColumns:'28px 1.4fr 170px 1.2fr 80px 1fr 70px 30px', padding:'12px 14px', gap:10, borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', background:T.surface, fontSize:13, fontFamily:T.sans, position:'relative' }}>
                                         <div><SPDrag/></div>
+
+                                        {/* Tier label */}
                                         <div>
-                                            <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
-                                                <span style={{ width:10, height:10, background:t.color, borderRadius:2, flexShrink:0 }}/>
-                                                <b style={{ fontFamily:T.sans }}>{t.label}</b>
-                                            </span>
+                                            {ef === 'label' ? (
+                                                <input autoFocus value={editingVal} onChange={e => setEditingVal(e.target.value)}
+                                                    onBlur={() => commitFieldEdit(i,'label',editingVal)}
+                                                    onKeyDown={e => { if(e.key==='Enter') commitFieldEdit(i,'label',editingVal); if(e.key==='Escape') { setEditingField(null); } }}
+                                                    style={{ ...inpSt, fontFamily:T.sans, fontWeight:700, width:'90%' }}/>
+                                            ) : (
+                                                <span style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+                                                    <span style={{ width:10, height:10, background:t.color, borderRadius:2, flexShrink:0 }}/>
+                                                    <b style={{ fontFamily:T.sans }}>{t.label}</b>
+                                                </span>
+                                            )}
                                         </div>
+
+                                        {/* Discount range — click to edit max */}
                                         <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>
-                                            {Math.round(lo*100)}% – {Math.round(hi*100)}%
+                                            {ef === 'maxDiscount' ? (
+                                                <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                                                    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{Math.round(lo*100)}% – </span>
+                                                    <input autoFocus type="number" min={Math.round(lo*100)+1} max={100} value={editingVal}
+                                                        onChange={e => setEditingVal(e.target.value)}
+                                                        onBlur={() => commitFieldEdit(i,'maxDiscount',editingVal)}
+                                                        onKeyDown={e => { if(e.key==='Enter') commitFieldEdit(i,'maxDiscount',editingVal); if(e.key==='Escape') setEditingField(null); }}
+                                                        style={{ ...inpSt, width:52 }}/>
+                                                    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>%</span>
+                                                </div>
+                                            ) : (
+                                                `${Math.round(lo*100)}% – ${Math.round(hi*100)}%`
+                                            )}
                                         </div>
+
+                                        {/* Approver */}
                                         <div>
-                                            {t.approver ? (
+                                            {ef === 'approver' ? (
+                                                <input autoFocus value={editingVal} onChange={e => setEditingVal(e.target.value)}
+                                                    onBlur={() => commitFieldEdit(i,'approver',editingVal)}
+                                                    onKeyDown={e => { if(e.key==='Enter') commitFieldEdit(i,'approver',editingVal); if(e.key==='Escape') setEditingField(null); }}
+                                                    style={{ ...inpSt, fontFamily:T.sans, width:'90%' }} placeholder="Approver name"/>
+                                            ) : t.approver ? (
                                                 <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
                                                     <span style={{ width:22, height:22, borderRadius:'50%', background:T.surface2, border:`1px solid ${T.border}`, fontSize:10, color:T.inkMid, display:'inline-flex', alignItems:'center', justifyContent:'center', fontWeight:700 }}>
                                                         {t.approver.split(' ').map(s=>s[0]).slice(0,2).join('')}
@@ -3454,10 +3539,103 @@ const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                                                 <span style={{ color:T.inkMuted, fontStyle:'italic', fontSize:12 }}>No approval needed</span>
                                             )}
                                         </div>
-                                        <div style={{ textAlign:'right', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{t.sla || '—'}</div>
-                                        <div style={{ color:T.inkMid, fontSize:12 }}>{t.fallback || '—'}</div>
+
+                                        {/* SLA */}
+                                        <div style={{ textAlign:'right', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>
+                                            {ef === 'sla' ? (
+                                                <input autoFocus value={editingVal} onChange={e => setEditingVal(e.target.value)}
+                                                    onBlur={() => commitFieldEdit(i,'sla',editingVal)}
+                                                    onKeyDown={e => { if(e.key==='Enter') commitFieldEdit(i,'sla',editingVal); if(e.key==='Escape') setEditingField(null); }}
+                                                    style={{ ...inpSt, width:56, textAlign:'right' }} placeholder="e.g. 8h"/>
+                                            ) : t.sla || '—'}
+                                        </div>
+
+                                        {/* Fallback */}
+                                        <div style={{ color:T.inkMid, fontSize:12 }}>
+                                            {ef === 'fallback' ? (
+                                                <input autoFocus value={editingVal} onChange={e => setEditingVal(e.target.value)}
+                                                    onBlur={() => commitFieldEdit(i,'fallback',editingVal)}
+                                                    onKeyDown={e => { if(e.key==='Enter') commitFieldEdit(i,'fallback',editingVal); if(e.key==='Escape') setEditingField(null); }}
+                                                    style={{ ...inpSt, fontFamily:T.sans, width:'90%' }} placeholder="e.g. CEO"/>
+                                            ) : t.fallback || '—'}
+                                        </div>
+
                                         <div style={{ textAlign:'right' }}><QPill tone={toneForIdx(i)} dot>Active</QPill></div>
-                                        <div style={{ textAlign:'right', color:T.inkMuted, cursor:'pointer', fontSize:16 }}>⋯</div>
+
+                                        {/* Kebab */}
+                                        <div style={{ position:'relative', textAlign:'right' }} onClick={e => e.stopPropagation()}>
+                                            <button onClick={() => setOpenTierMenu(openTierMenu===i ? null : i)}
+                                                style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:0, lineHeight:1 }}>⋯</button>
+
+                                            {openTierMenu === i && (
+                                                <div style={{ position:'absolute', right:0, zIndex:500, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 20px rgba(42,38,34,0.14)', minWidth:230, overflow:'hidden',
+                                                    ...(i >= tiers.length - 2 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }) }}>
+
+                                                    {/* Edit group */}
+                                                    {[
+                                                        { label:'Edit tier',  sub:'Name, color, discount cap', action:() => startEdit(i,'label',t.label) },
+                                                        { label:'Duplicate',  sub:'Clone as a new editable tier', action:() => handleDuplicateTier(i) },
+                                                        { label:'Move…',      sub:'Reorder this tier', action:() => setOpenTierMenu(null), muted:true },
+                                                    ].map((item,mi) => (
+                                                        <button key={mi} onClick={item.action}
+                                                            style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0?`1px solid ${T.border}`:'none', textAlign:'left', cursor:item.muted?'default':'pointer', fontFamily:T.sans }}
+                                                            onMouseEnter={e => { if(!item.muted) e.currentTarget.style.background=T.surface2; }}
+                                                            onMouseLeave={e => e.currentTarget.style.background='none'}>
+                                                            <div style={{ fontSize:13, color:item.muted?T.inkMuted:T.ink }}>{item.label}</div>
+                                                            {item.sub && <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{item.sub}</div>}
+                                                        </button>
+                                                    ))}
+
+                                                    {/* Add New Tier group */}
+                                                    <div style={{ padding:'5px 14px 3px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', borderTop:`1px solid ${T.border}`, background:T.surface2, fontFamily:T.sans }}>Add new tier</div>
+                                                    {[
+                                                        { label:'Insert tier above', sub:`New tier just above ${t.label}`, action:() => handleInsertTierAbove(i) },
+                                                        { label:'Insert tier below', sub:'Catch-all above 100%', action:() => handleInsertTierBelow(i) },
+                                                        { label:'New tier from this…', sub:`Pre-fill color, SLA, approver`, action:() => handleNewTierFromThis(i) },
+                                                    ].map((item,mi) => (
+                                                        <button key={mi} onClick={item.action}
+                                                            style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', cursor:'pointer', fontFamily:T.sans }}
+                                                            onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                                            onMouseLeave={e => e.currentTarget.style.background='none'}>
+                                                            <div style={{ fontSize:13, color:T.ink }}>{item.label}</div>
+                                                            {item.sub && <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{item.sub}</div>}
+                                                        </button>
+                                                    ))}
+
+                                                    {/* Approver Chain group */}
+                                                    <div style={{ padding:'5px 14px 3px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', borderTop:`1px solid ${T.border}`, background:T.surface2, fontFamily:T.sans }}>Approver chain</div>
+                                                    {[
+                                                        { label:'Change approver…',  sub:t.approver?`${t.approver} — someone else`:'Set an approver', action:() => startEdit(i,'approver',t.approver||'') },
+                                                        { label:'Edit SLA',           sub:`Currently ${t.sla||'not set'}`, action:() => startEdit(i,'sla',t.sla||'') },
+                                                        { label:'Edit fallback',      sub:`${t.fallback||'Not set'} after SLA breach`, action:() => startEdit(i,'fallback',t.fallback||'') },
+                                                        { label:'Add co-approver',    sub:'Require both signatures', action:() => setOpenTierMenu(null), muted:true },
+                                                    ].map((item,mi) => (
+                                                        <button key={mi} onClick={item.action}
+                                                            style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', cursor:item.muted?'default':'pointer', fontFamily:T.sans }}
+                                                            onMouseEnter={e => { if(!item.muted) e.currentTarget.style.background=T.surface2; }}
+                                                            onMouseLeave={e => e.currentTarget.style.background='none'}>
+                                                            <div style={{ fontSize:13, color:item.muted?T.inkMuted:T.ink }}>{item.label}</div>
+                                                            {item.sub && <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{item.sub}</div>}
+                                                        </button>
+                                                    ))}
+
+                                                    {/* Active Quotes group */}
+                                                    <div style={{ padding:'5px 14px 3px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', borderTop:`1px solid ${T.border}`, background:T.surface2, fontFamily:T.sans }}>Active quotes</div>
+                                                    {[
+                                                        { label:'View quotes routed',   sub:`All quotes at ${t.label}`, action:() => setOpenTierMenu(null) },
+                                                        { label:'View pending now',      sub:`Awaiting ${t.approver||'approval'} sign-off`, action:() => setOpenTierMenu(null) },
+                                                    ].map((item,mi) => (
+                                                        <button key={mi} onClick={item.action}
+                                                            style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', cursor:'pointer', fontFamily:T.sans }}
+                                                            onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                                            onMouseLeave={e => e.currentTarget.style.background='none'}>
+                                                            <div style={{ fontSize:13, color:T.ink }}>{item.label}</div>
+                                                            {item.sub && <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{item.sub}</div>}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 );
                             })}
