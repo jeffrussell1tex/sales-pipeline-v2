@@ -48,6 +48,7 @@ export const accounts = pgTable('accounts', {
     notes:             text('notes'),
     doNotContact:      boolean('do_not_contact').default(false),
     customerTypes:     jsonb('customer_types').default('[]'),
+    accountSegment:    varchar('account_segment', { length: 100 }),  // SMB / Mid-Market / Enterprise etc.
     // Account Details tab fields
     description:       text('description'),
     totalEmployees:    varchar('total_employees', { length: 20 }),
