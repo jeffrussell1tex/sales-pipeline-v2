@@ -66,7 +66,7 @@ export default function AccountModal({
         address: '', address2: '',
         city: '', state: '', zip: '', country: '',
         website: '', phone: '',
-        doNotContact: false, customerTypes: [],
+        doNotContact: false, customerTypes: [], accountSegment: '',
         // Account Details fields
         description: '', totalEmployees: '', annualRevenue: '',
         fiscalYearEnd: '', foundedYear: '', linkedInUrl: '',
@@ -138,6 +138,7 @@ export default function AccountModal({
             accountTier:       derivedTier,
             doNotContact:      formData.doNotContact === true,
             customerTypes:     formData.customerTypes || [],
+            accountSegment:    formData.accountSegment || '',
         };
 
         // Fuzzy duplicate check
@@ -515,6 +516,27 @@ export default function AccountModal({
                                 )}
                             </div>
 
+                            {/* ── Segment (SMB / Mid-Market / Enterprise etc.) ── */}
+                            <div className="form-group full">
+                                <label>Segment</label>
+                                <select
+                                    value={formData.accountSegment || ''}
+                                    onChange={e => setFormData(prev => ({ ...prev, accountSegment: e.target.value }))}
+                                    style={{ width:'100%' }}
+                                >
+                                    <option value="">— Not set —</option>
+                                    {(() => {
+                                        const tiers = settings?.customerTypeTiers;
+                                        if (Array.isArray(tiers) && tiers.length > 0 && typeof tiers[0] === 'object') {
+                                            return tiers.map(t => <option key={t.tier} value={t.tier}>{t.tier}</option>);
+                                        }
+                                        // Fallback to default segments
+                                        return ['SMB','Mid-Market','Enterprise','Strategic','Partner'].map(t => <option key={t} value={t}>{t}</option>);
+                                    })()}
+                                </select>
+                                <span className="field-hint">Account segment — size or revenue classification</span>
+                            </div>
+
                             {/* ── Customer Types ── */}
                             <div className="form-group full" style={{ position: 'relative' }}>
                                 <label>Account Type</label>
@@ -750,7 +772,7 @@ export default function AccountModal({
                                     onClick={() => {
                                         setDuplicateWarning(null);
                                         const p2 = (existingAccounts || []).find(a => a.name === parentSearch);
-                                        onSave({ ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: p2 ? p2.id : (formData.parentAccountId || null), accountTier: derivedTier, doNotContact: formData.doNotContact === true, customerTypes: formData.customerTypes || [] });
+                                        onSave({ ...formData, verticalMarket: verticalSearch, assignedRep: repSearch, assignedTerritory: territorySearch, parentAccountId: p2 ? p2.id : (formData.parentAccountId || null), accountTier: derivedTier, doNotContact: formData.doNotContact === true, customerTypes: formData.customerTypes || [], accountSegment: formData.accountSegment || '' });
                                     }}
                                     style={{ padding: '0.375rem 0.75rem', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '700', cursor: 'pointer', fontSize: '0.8125rem', fontFamily: 'inherit' }}>
                                     Create Anyway

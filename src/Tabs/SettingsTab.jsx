@@ -2937,7 +2937,7 @@ const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTab, setA
                                                             { label:`View ${t.count} accounts`, note:'Filter Accounts tab by this tier', action: () => {
                                                                 setOpenTierKebab(null);
                                                                 if (setAccountsDeepFilter && setActiveTab) {
-                                                                    setAccountsDeepFilter({ accountType: t.tier });
+                                                                    setAccountsDeepFilter({ accountSegment: t.tier });
                                                                     setActiveTab('accounts');
                                                                 }
                                                             }},

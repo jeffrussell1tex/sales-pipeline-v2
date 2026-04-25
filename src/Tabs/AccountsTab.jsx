@@ -432,7 +432,8 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
     const [industry,    setIndustry]    = useState(currentFilters.industry    || '__all__');
     const [owner,       setOwner]       = useState(currentFilters.owner       || '__all__');
     const [hasPipe,     setHasPipe]     = useState(currentFilters.hasPipe     || '__all__');
-    const [accountType, setAccountType] = useState(currentFilters.accountType || '__all__');
+    const [accountType,    setAccountType]    = useState(currentFilters.accountType    || '__all__');
+    const [accountSegment, setAccountSegment] = useState(currentFilters.accountSegment || '__all__');
 
     // Re-sync when panel opens
     React.useEffect(() => {
@@ -440,7 +441,8 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
             setIndustry(currentFilters.industry       || '__all__');
             setOwner(currentFilters.owner             || '__all__');
             setHasPipe(currentFilters.hasPipe         || '__all__');
-            setAccountType(currentFilters.accountType || '__all__');
+            setAccountType(currentFilters.accountType       || '__all__');
+            setAccountSegment(currentFilters.accountSegment || '__all__');
         }
     }, [open]);
 
@@ -463,10 +465,17 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
     };
     const lbl = { fontSize: 11, fontWeight: 600, color: T.inkMid, marginBottom: 5, display: 'block', fontFamily: T.sans };
 
-    const accountTypes = [...new Set((settings?.customerTypes || []).filter(Boolean))].sort();
+    // Build account type list from the new customerTypeTiers structure, fall back to old customerTypes flat array
+    const accountTypes = (() => {
+        const tiers = settings?.customerTypeTiers;
+        if (Array.isArray(tiers) && tiers.length > 0 && typeof tiers[0] === 'object') {
+            return tiers.map(t => t.tier).filter(Boolean);
+        }
+        return [...new Set((settings?.customerTypes || []).filter(Boolean))].sort();
+    })();
 
     const handleApply = () => {
-        onApply({ industry, owner, hasPipe, accountType });
+        onApply({ industry, owner, hasPipe, accountType, accountSegment });
         onClose();
     };
     const handleReset = () => {
@@ -474,6 +483,7 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
         setOwner('__all__');
         setHasPipe('__all__');
         setAccountType('__all__');
+        setAccountSegment('__all__');
     };
 
     return (
@@ -514,6 +524,20 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
                 </div>
 
                 <div style={{ marginBottom: 16 }}>
+                    <label style={lbl}>Segment</label>
+                    <select value={accountSegment} onChange={e => setAccountSegment(e.target.value)} style={selStyle}>
+                        <option value="__all__">All segments</option>
+                        {(() => {
+                            const tiers = settings?.customerTypeTiers;
+                            if (Array.isArray(tiers) && tiers.length > 0 && typeof tiers[0] === 'object') {
+                                return tiers.map(t => <option key={t.tier} value={t.tier}>{t.tier}</option>);
+                            }
+                            return ['SMB','Mid-Market','Enterprise','Strategic','Partner'].map(t => <option key={t} value={t}>{t}</option>);
+                        })()}
+                    </select>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
                     <label style={lbl}>Account Type</label>
                     <select value={accountType} onChange={e => setAccountType(e.target.value)} style={selStyle}>
                         <option value="__all__">All types</option>
@@ -531,7 +555,7 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
 }
 
 // ── Main AccountsTab ──────────────────────────────────────────
-export default function AccountsTab({ initialAccountTypeFilter = '__all__', onDeepFilterConsumed } = {}) {
+export default function AccountsTab({ initialAccountSegmentFilter = '__all__', onDeepFilterConsumed } = {}) {
     const {
         accounts, setAccounts,
         opportunities, contacts, activities, settings,
@@ -563,12 +587,13 @@ export default function AccountsTab({ initialAccountTypeFilter = '__all__', onDe
     const [filterOpen, setFilterOpen]   = useState(false);
     const [panelFilters, setPanelFilters] = useState(() => ({
         industry: '__all__', owner: '__all__', hasPipe: '__all__',
-        accountType: initialAccountTypeFilter || '__all__',
+        accountType: '__all__',
+        accountSegment: initialAccountSegmentFilter || '__all__',
     }));
 
     // Consume the deep filter once on mount so navigating back doesn't re-apply it
     React.useEffect(() => {
-        if (initialAccountTypeFilter && initialAccountTypeFilter !== '__all__') {
+        if (initialAccountSegmentFilter && initialAccountSegmentFilter !== '__all__') {
             if (typeof onDeepFilterConsumed === 'function') onDeepFilterConsumed();
         }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -579,7 +604,8 @@ export default function AccountsTab({ initialAccountTypeFilter = '__all__', onDe
         panelFilters.industry    !== '__all__',
         panelFilters.owner       !== '__all__',
         panelFilters.hasPipe     !== '__all__',
-        panelFilters.accountType !== '__all__',
+        panelFilters.accountType   !== '__all__',
+        panelFilters.accountSegment !== '__all__',
     ].filter(Boolean).length;
 
     const setViewPersist = v => { setView(v); localStorage.setItem('accounts:view', v); };
@@ -633,7 +659,14 @@ export default function AccountsTab({ initialAccountTypeFilter = '__all__', onDe
             list = list.filter(a => (warmthMap[a.id]?.pipeline || 0) === 0);
         }
         if (panelFilters.accountType !== '__all__') {
-            list = list.filter(a => (a.customerTypes || []).includes(panelFilters.accountType));
+            list = list.filter(a => {
+                // Support both array (customerTypes) and string (customerType) storage formats
+                const types = a.customerTypes || (a.customerType ? [a.customerType] : []);
+                return types.includes(panelFilters.accountType);
+            });
+        }
+        if (panelFilters.accountSegment !== '__all__') {
+            list = list.filter(a => a.accountSegment === panelFilters.accountSegment);
         }
 
         return list;
