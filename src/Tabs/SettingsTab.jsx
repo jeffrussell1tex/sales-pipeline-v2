@@ -3473,9 +3473,9 @@ const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                             </button>
                         }
                     >
-                        <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r+2, overflow:'hidden' }}>
+                        <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r+2, overflow:'visible' }}>
                             {/* Header */}
-                            <div style={{ display:'grid', gridTemplateColumns:'28px 1.4fr 170px 1.2fr 80px 1fr 70px 30px', padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10 }}>
+                            <div style={{ display:'grid', gridTemplateColumns:'28px 1.4fr 170px 1.2fr 80px 1fr 70px 30px', padding:'9px 14px', borderBottom:`1px solid ${T.border}`, background:T.surface2, gap:10, borderRadius:`${T.r+2}px ${T.r+2}px 0 0` }}>
                                 {['','Tier','Discount range','Approver','SLA','Fallback','',''].map((h,i) => (
                                     <div key={i} style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign: i>=4&&i<=5 ? 'right' : 'left', fontFamily:T.sans }}>{h}</div>
                                 ))}
@@ -3660,9 +3660,13 @@ const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                                     });
                                 })()}
                             </div>
-                            <div style={{ display:'flex', justifyContent:'space-between', marginTop:4, fontSize:10, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>
-                                <span>0%</span>
-                                {tiers.map((t,i) => <span key={i}>{Math.round(t.maxDiscount*100)}%</span>)}
+                            <div style={{ position:'relative', height:14, marginTop:4 }}>
+                                <span style={{ position:'absolute', left:0, fontSize:10, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', transform:'translateX(-50%)' }}>0%</span>
+                                {tiers.map((t,i) => (
+                                    <span key={i} style={{ position:'absolute', left:`${t.maxDiscount*100}%`, fontSize:10, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', transform:'translateX(-50%)' }}>
+                                        {Math.round(t.maxDiscount*100)}%
+                                    </span>
+                                ))}
                             </div>
                         </div>
                     </CSectionCard>
@@ -3690,24 +3694,30 @@ const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
                 {/* ── RIGHT COLUMN ────────────────────────────────── */}
                 <div>
                     <div style={{ position:'sticky', top:20 }}>
-                        {/* Last 90 days */}
+                        {/* Last 90 days — derived from current tiers */}
                         <CSectionCard title="Last 90 days" description="How approvals are flowing in practice.">
-                            {APPROVAL_TIER_USAGE.map((u,i) => (
-                                <div key={i} style={{ padding:'10px 0', borderBottom: i<APPROVAL_TIER_USAGE.length-1 ? `1px solid ${T.border}` : 'none' }}>
-                                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-                                        <QPill tone={u.tone}>{u.tier}</QPill>
-                                        <div style={{ flex:1 }}/>
-                                        <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:14, color:T.ink }}>{u.quotes}</span>
-                                        <span style={{ fontSize:10, color:T.inkMuted, fontFamily:T.sans }}>quotes</span>
+                            {tiers.map((t,i) => {
+                                const tones = ['rep','mgr','vp','cfo'];
+                                const tone = tones[i] || 'neutral';
+                                // Match usage stats to tier by index
+                                const u = APPROVAL_TIER_USAGE[i] || { quotes:0, approved:0, declined:0, pending:0, avgHours:0 };
+                                return (
+                                    <div key={t.id} style={{ padding:'10px 0', borderBottom: i<tiers.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                                            <QPill tone={tone}>{t.label}</QPill>
+                                            <div style={{ flex:1 }}/>
+                                            <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:14, color:T.ink }}>{u.quotes}</span>
+                                            <span style={{ fontSize:10, color:T.inkMuted, fontFamily:T.sans }}>quotes</span>
+                                        </div>
+                                        <div style={{ fontSize:11, color:T.inkMid, display:'flex', gap:12, fontFamily:T.sans }}>
+                                            <span>✓ {u.approved}</span>
+                                            {u.declined > 0 && <span style={{ color:T.danger }}>✗ {u.declined}</span>}
+                                            {u.pending  > 0 && <span style={{ color:T.warn }}>● {u.pending} pending</span>}
+                                            {u.avgHours > 0 && <span style={{ marginLeft:'auto', color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>~{u.avgHours}h avg</span>}
+                                        </div>
                                     </div>
-                                    <div style={{ fontSize:11, color:T.inkMid, display:'flex', gap:12, fontFamily:T.sans }}>
-                                        <span>✓ {u.approved}</span>
-                                        {u.declined > 0 && <span style={{ color:T.danger }}>✗ {u.declined}</span>}
-                                        {u.pending  > 0 && <span style={{ color:T.warn }}>● {u.pending} pending</span>}
-                                        {u.avgHours > 0 && <span style={{ marginLeft:'auto', color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>~{u.avgHours}h avg</span>}
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </CSectionCard>
 
                         {/* Try a deal — live simulator */}
