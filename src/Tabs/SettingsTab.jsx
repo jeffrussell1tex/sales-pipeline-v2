@@ -2771,7 +2771,7 @@ const AUTO_CLASS_RULES = [
     { when:'Account type = Partner',     then:'Partner' },
 ];
 
-const CustomerTypesDetail = ({ settings, setSettings, onBack }) => {
+const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTab, setAccountsDeepFilter }) => {
     const saved    = settings?.customerTypeTiers?.length ? settings.customerTypeTiers : DEFAULT_CUST_TYPES;
     const [tiers, setTiers]     = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
@@ -2934,7 +2934,13 @@ const CustomerTypesDetail = ({ settings, setSettings, onBack }) => {
                                                         {[
                                                             { label:'Edit tier', action: () => { setEditingTierIdx(i); setEditingTierVal({}); setOpenTierKebab(null); } },
                                                             { label:'Duplicate',  action: () => handleDuplicateTier(i) },
-                                                            { label:`View ${t.count} accounts`, note:'Filter Accounts tab by this tier', action: () => setOpenTierKebab(null) },
+                                                            { label:`View ${t.count} accounts`, note:'Filter Accounts tab by this tier', action: () => {
+                                                                setOpenTierKebab(null);
+                                                                if (setAccountsDeepFilter && setActiveTab) {
+                                                                    setAccountsDeepFilter({ accountType: t.tier });
+                                                                    setActiveTab('accounts');
+                                                                }
+                                                            }},
                                                             { label:'Where this is used', note: AUTO_CLASS_RULES.filter(r => r.then === t.tier).length > 0 ? `${AUTO_CLASS_RULES.filter(r => r.then === t.tier).length} auto-classification rule${AUTO_CLASS_RULES.filter(r => r.then === t.tier).length!==1?'s':''}` : 'No rules reference this tier', action: () => setOpenTierKebab(null) },
                                                             { label:'Delete', danger:true, disabled: SYSTEM_TIERS.has(t.tier), note: SYSTEM_TIERS.has(t.tier) ? 'System tier' : null, action: () => { if (!SYSTEM_TIERS.has(t.tier)) handleDeleteTier(i); } },
                                                         ].map((item, mi) => (
@@ -3158,7 +3164,7 @@ const IndustriesDetail = ({ settings, setSettings, onBack }) => {
 
 // ADMIN WORKSPACE VIEW
 // ─────────────────────────────────────────────────────────────
-const AdminView = ({ settings, setSettings, currentUser }) => {
+const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter }) => {
     const [scope, setScope] = useState('workspace');
     const [tab,   setTab  ] = useState('All');
     const [search, setSearch] = useState('');
@@ -3199,7 +3205,7 @@ const AdminView = ({ settings, setSettings, currentUser }) => {
         // Sales process Group 2 detail pages
         if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'pain-points')     return <PainPointsDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
         if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Generic wrapper for all other panels
@@ -3390,6 +3396,7 @@ export default function SettingsTab() {
     const {
         settings, setSettings,
         currentUser, userRole,
+        setActiveTab, setAccountsDeepFilter,
     } = useApp();
 
     const isAdmin   = userRole === 'Admin';
@@ -3414,7 +3421,7 @@ export default function SettingsTab() {
 
             {/* Body — role-gated */}
             {canAdmin ? (
-                <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser}/>
+                <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>
             ) : (
                 <PersonalView settings={settings} setSettings={setSettings} currentUser={currentUser} isAdmin={false}/>
             )}

@@ -531,7 +531,7 @@ function FilterPanel({ open, onClose, accounts, settings, onApply, currentFilter
 }
 
 // ── Main AccountsTab ──────────────────────────────────────────
-export default function AccountsTab() {
+export default function AccountsTab({ initialAccountTypeFilter = '__all__', onDeepFilterConsumed } = {}) {
     const {
         accounts, setAccounts,
         opportunities, contacts, activities, settings,
@@ -561,7 +561,17 @@ export default function AccountsTab() {
     const [sortDir,   setSortDir]   = useState('asc');
     const [expandedIds, setExpandedIds] = useState({});  // { [accountId]: bool }
     const [filterOpen, setFilterOpen]   = useState(false);
-    const [panelFilters, setPanelFilters] = useState({ industry: '__all__', owner: '__all__', hasPipe: '__all__', accountType: '__all__' });
+    const [panelFilters, setPanelFilters] = useState(() => ({
+        industry: '__all__', owner: '__all__', hasPipe: '__all__',
+        accountType: initialAccountTypeFilter || '__all__',
+    }));
+
+    // Consume the deep filter once on mount so navigating back doesn't re-apply it
+    React.useEffect(() => {
+        if (initialAccountTypeFilter && initialAccountTypeFilter !== '__all__') {
+            if (typeof onDeepFilterConsumed === 'function') onDeepFilterConsumed();
+        }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
     const [drawerAccount, setDrawerAccount] = useState(null); // account whose subs are shown in side drawer
     const searchRef = useRef(null);
 

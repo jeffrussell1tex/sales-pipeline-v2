@@ -111,6 +111,7 @@ function App() {
     // Destructure for use in this component
     const {
         activeTab, setActiveTab, activePipelineId, setActivePipelineId,
+        accountsDeepFilter, setAccountsDeepFilter,
         isMobile, setIsMobile,
         quickLogOpen, setQuickLogOpen, quickLogForm, setQuickLogForm,
         quickLogContactResults, setQuickLogContactResults,
@@ -1344,6 +1345,7 @@ dbFetch('/.netlify/functions/users?me=true')
         fetchCalendarEvents,
         // Navigation
         activeTab, setActiveTab,
+        accountsDeepFilter, setAccountsDeepFilter,
         activePipelineId, setActivePipelineId,
         allRepNames,
         allTeamNames,
@@ -1503,7 +1505,10 @@ dbFetch('/.netlify/functions/users?me=true')
 
             {activeTab === 'accounts' && (
                 <ErrorBoundary tabName="Accounts">
-                    <AccountsTab />
+                    <AccountsTab
+                        initialAccountTypeFilter={accountsDeepFilter?.accountType || '__all__'}
+                        onDeepFilterConsumed={() => setAccountsDeepFilter(null)}
+                    />
                 </ErrorBoundary>
             )}
 
