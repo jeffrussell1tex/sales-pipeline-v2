@@ -3859,12 +3859,14 @@ const MiniQuoteDoc = ({ scale = 0.32 }) => {
 };
 
 // Template card — with hover edit affordance, lock icon, overflow menu, ownership stamp
-const TplLibCard = ({ t, isDefault, isSelected, onClick, onEdit, onDuplicate, onSetDefault, onDelete }) => {
+const TplLibCard = ({ t, isDefault, isSelected, isEditing, editingName, onEditingNameChange, onEditingCommit, onClick, onEdit, onDuplicate, onSetDefault, onDelete }) => {
     const [hover,    setHover]    = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [tooltip,  setTooltip]  = useState(false);
     const canEdit = canEditTemplate(t, CURRENT_USER);
     const menuRef = React.useRef(null);
+    // Prevents card onClick from firing when Edit button was mousedown'd
+    const editFired = React.useRef(false);
 
     // Close menu on outside click
     React.useEffect(() => {
@@ -3899,7 +3901,7 @@ const TplLibCard = ({ t, isDefault, isSelected, onClick, onEdit, onDuplicate, on
         <div
             onMouseEnter={() => setHover(true)}
             onMouseLeave={() => { setHover(false); setMenuOpen(false); setTooltip(false); }}
-            onClick={() => { if (!menuOpen) onClick && onClick(); }}
+            onClick={() => { if (!menuOpen && !editFired.current) { onClick && onClick(); } editFired.current = false; }}
             style={{
                 background:T.surface,
                 border:`1.5px solid ${isSelected ? T.goldInk : hover ? T.borderStrong : T.border}`,
@@ -3924,7 +3926,7 @@ const TplLibCard = ({ t, isDefault, isSelected, onClick, onEdit, onDuplicate, on
                 {/* Edit button — top-right, hover + editable */}
                 {hover && canEdit && (
                     <button
-                        onClick={e => { e.stopPropagation(); onEdit && onEdit(); }}
+                        onMouseDown={e => { e.stopPropagation(); e.preventDefault(); editFired.current = true; onEdit && onEdit(); }}
                         style={{
                             position:'absolute', top:8, right:8,
                             display:'inline-flex', alignItems:'center', gap:4,
@@ -3975,7 +3977,25 @@ const TplLibCard = ({ t, isDefault, isSelected, onClick, onEdit, onDuplicate, on
 
                 {/* Title row + overflow menu activator */}
                 <div style={{ display:'flex', alignItems:'flex-start', gap:6, marginBottom:4 }}>
-                    <div style={{ fontSize:13, fontWeight:700, color:T.ink, flex:1, lineHeight:1.3 }}>{t.name}</div>
+                    {isEditing ? (
+                        <input
+                            autoFocus
+                            value={editingName}
+                            onChange={e => onEditingNameChange(e.target.value)}
+                            onBlur={onEditingCommit}
+                            onKeyDown={e => { if (e.key==='Enter') onEditingCommit(); if (e.key==='Escape') onEditingCommit(); }}
+                            onClick={e => e.stopPropagation()}
+                            style={{
+                                flex:1, fontSize:13, fontWeight:700, color:T.ink,
+                                border:`1.5px solid ${T.goldInk}`, borderRadius:4,
+                                padding:'2px 6px', fontFamily:T.sans,
+                                background:T.surface, outline:'none',
+                                lineHeight:1.3, width:'100%', boxSizing:'border-box',
+                            }}
+                        />
+                    ) : (
+                        <div style={{ fontSize:13, fontWeight:700, color:T.ink, flex:1, lineHeight:1.3 }}>{t.name}</div>
+                    )}
                     {/* ⋯ activator — shows on hover */}
                     {hover && (
                         <div ref={menuRef} style={{ position:'relative', flexShrink:0 }}>
@@ -4314,6 +4334,46 @@ const BlankUseCasePicker = ({ useCase, setUseCase }) => (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
+// NTMFooter — module-level component (NOT inside NewTemplateModal) so React never
+// unmounts/remounts the input between keystrokes, preventing the focus-loss bug.
+const NTMFooter = ({ newName, setNewName, visibleTo, setVisibleTo, setAsDefault, setSetAsDefault }) => (
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 160px 160px', gap:10, marginBottom:12, padding:'12px 14px', background:T.surface2, borderRadius:6, border:`1px solid ${T.border}` }}>
+        {/* Template name */}
+        <div>
+            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, letterSpacing:0.1, fontFamily:T.sans }}>Template name</label>
+            <input
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                placeholder="e.g. Q4 partner deals"
+                style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r+1, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}
+                onFocus={e => e.currentTarget.style.borderColor=T.goldInk}
+                onBlur={e => e.currentTarget.style.borderColor=T.border}
+            />
+        </div>
+        {/* Visible to */}
+        <div>
+            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, letterSpacing:0.1, fontFamily:T.sans }}>Visible to</label>
+            <select value={visibleTo} onChange={e => setVisibleTo(e.target.value)}
+                style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r+1, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer', appearance:'none',
+                    backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+                    backgroundRepeat:'no-repeat', backgroundPosition:'right 8px center', paddingRight:26 }}>
+                <option>Everyone in Sales</option>
+                <option>Managers only</option>
+                <option>Admins only</option>
+                <option>My team only</option>
+            </select>
+        </div>
+        {/* Set as default */}
+        <div>
+            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, letterSpacing:0.1, fontFamily:T.sans }}>Set as default?</label>
+            <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:6 }}>
+                <ATToggle on={setAsDefault} onChange={() => setSetAsDefault(v => !v)}/>
+                <span style={{ fontSize:12.5, color:T.inkMuted }}>{setAsDefault ? 'Yes' : 'No'}</span>
+            </div>
+        </div>
+    </div>
+);
+
 // NEW TEMPLATE MODAL — main component
 // ─────────────────────────────────────────────────────────────────────────────
 const NewTemplateModal = ({ templates, onClose, onCreate }) => {
@@ -4434,43 +4494,7 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
     ];
 
     // Shared footer name row (spec: 3-col grid 1fr 160px 160px)
-    const FooterNameRow = () => (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 160px 160px', gap:10, marginBottom:12, padding:'12px 14px', background:T.surface2, borderRadius:6, border:`1px solid ${T.border}` }}>
-            {/* Template name */}
-            <div>
-                <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, letterSpacing:0.1, fontFamily:T.sans }}>Template name</label>
-                <input
-                    value={newName}
-                    onChange={e => setNewName(e.target.value)}
-                    placeholder="e.g. Q4 partner deals"
-                    style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r+1, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}
-                    onFocus={e => e.currentTarget.style.borderColor=T.goldInk}
-                    onBlur={e => e.currentTarget.style.borderColor=T.border}
-                />
-            </div>
-            {/* Visible to */}
-            <div>
-                <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, letterSpacing:0.1, fontFamily:T.sans }}>Visible to</label>
-                <select value={visibleTo} onChange={e => setVisibleTo(e.target.value)}
-                    style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r+1, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer', appearance:'none',
-                        backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
-                        backgroundRepeat:'no-repeat', backgroundPosition:'right 8px center', paddingRight:26 }}>
-                    <option>Everyone in Sales</option>
-                    <option>Managers only</option>
-                    <option>Admins only</option>
-                    <option>My team only</option>
-                </select>
-            </div>
-            {/* Set as default */}
-            <div>
-                <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, letterSpacing:0.1, fontFamily:T.sans }}>Set as default?</label>
-                <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:6 }}>
-                    <ATToggle on={setAsDefault} onChange={() => setSetAsDefault(v => !v)}/>
-                    <span style={{ fontSize:12.5, color:T.inkMuted }}>{setAsDefault ? 'Yes' : 'No'}</span>
-                </div>
-            </div>
-        </div>
-    );
+    // FooterNameRow lifted to module-level component (NTMFooter) to prevent focus-loss on re-render
 
     return (
         <div style={{ position:'fixed', inset:0, background:'rgba(20,16,12,0.45)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center' }}
@@ -4757,7 +4781,11 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
                 {/* ── Footer ── */}
                 {showFooter && (
                     <div style={{ borderTop:`1px solid ${T.border}`, padding:'14px 20px', flexShrink:0, background:T.bg }}>
-                        <FooterNameRow/>
+                        <NTMFooter
+                            newName={newName} setNewName={setNewName}
+                            visibleTo={visibleTo} setVisibleTo={setVisibleTo}
+                            setAsDefault={setAsDefault} setSetAsDefault={setSetAsDefault}
+                        />
                         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                             <span style={{ fontSize:11, color:T.inkMuted, fontStyle:'italic' }}>{footerHelper}</span>
                             <div style={{ display:'flex', gap:8 }}>
@@ -4791,9 +4819,23 @@ const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
     const [boilerplate,  setBoilerplate] = useState(savedBoilerplate);
     const [selectedId,   setSelectedId]  = useState(templates[0]?.id || null);
     const [showNewModal, setShowNewModal] = useState(false);
+    const [editingTplId, setEditingTplId] = useState(null);  // id of card in inline-name-edit mode
+    const [editingName,  setEditingName]  = useState('');
     const [dirty,        setDirty]       = useState(false);
     const [saving,       setSaving]      = useState(false);
     const [editBoilerplate, setEditBoilerplate] = useState(false);
+
+    // Commit inline name edit
+    const commitNameEdit = () => {
+        if (!editingTplId) return;
+        const trimmed = editingName.trim();
+        if (trimmed) {
+            setTemplates(prev => prev.map(t => t.id === editingTplId ? { ...t, name:trimmed } : t));
+            setDirty(true);
+        }
+        setEditingTplId(null);
+        setEditingName('');
+    };
 
     const handleCancel = () => { setTemplates(JSON.parse(JSON.stringify(savedTemplates))); setDefaults({ ...savedDefaults }); setBoilerplate(savedBoilerplate); setDirty(false); };
     const handleSave   = async () => {
@@ -4915,8 +4957,16 @@ const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
                                 <TplLibCard key={t.id} t={t}
                                     isDefault={i===0}
                                     isSelected={selectedId===t.id}
-                                    onClick={() => setSelectedId(t.id)}
-                                    onEdit={() => setSelectedId(t.id)}
+                                    isEditing={editingTplId===t.id}
+                                    editingName={editingTplId===t.id ? editingName : t.name}
+                                    onEditingNameChange={v => setEditingName(v)}
+                                    onEditingCommit={commitNameEdit}
+                                    onClick={() => { if (editingTplId) commitNameEdit(); setSelectedId(t.id); }}
+                                    onEdit={() => {
+                                        setSelectedId(t.id);
+                                        setEditingTplId(t.id);
+                                        setEditingName(t.name);
+                                    }}
                                     onDuplicate={() => {
                                         const copy = { ...t, id:`tpl_${Date.now()}`, name:`Copy of ${t.name}`, usedTimes:0, lastUsed:'Just created', avgWinRate:0, status:'draft', createdBy:CURRENT_USER.id, createdByName:CURRENT_USER.name, systemTemplate:false };
                                         setTemplates(prev => [...prev, copy]);
