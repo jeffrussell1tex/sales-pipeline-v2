@@ -3789,11 +3789,26 @@ const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
 // Settings → Quoting → Quote templates & branding
 // ─────────────────────────────────────────────────────────────
 
+// TODO: read currentUser from session/AppContext — hard-coded for dev
+const CURRENT_USER = { id:'u_42', name:'Bea Chen', role:'admin' };
+
+const canEditTemplate = (tpl, user) => {
+    if (tpl.systemTemplate) return false;
+    if (user.role === 'admin') return true;
+    return tpl.createdBy === user.id;
+};
+
+const lockReason = (tpl) => {
+    if (tpl.systemTemplate) return 'Accelerep starter — duplicate to edit';
+    if (tpl.createdByName)   return `Read-only — created by ${tpl.createdByName}`;
+    return 'Read-only';
+};
+
 const DEFAULT_QUOTE_TEMPLATES = [
-    { id:'tpl1', name:'SMB Starter — Annual',    desc:'Core + Pipeline + Reports + Basic onboarding. Ideal for 10–50 seats.',           usedTimes:47, lastUsed:'3 days ago',   avgWinRate:0.48 },
-    { id:'tpl2', name:'Growth Package',           desc:'Core + all core modules + white-glove services. 50–200 seats, 2-3 yr terms.',     usedTimes:28, lastUsed:'1 week ago',   avgWinRate:0.44 },
-    { id:'tpl3', name:'Enterprise — Multi-year',  desc:'Premium core + full module stack + dedicated CSM. 200+ seats.',                  usedTimes:9,  lastUsed:'2 weeks ago',  avgWinRate:0.57 },
-    { id:'tpl4', name:'Quick trial → paid',       desc:'Minimal Core + basic onboarding, annual. Conversion-from-trial template.',        usedTimes:19, lastUsed:'6 days ago',   avgWinRate:0.52 },
+    { id:'tpl1', name:'SMB Starter — Annual',   desc:'Core + Pipeline + Reports + Basic onboarding. Ideal for 10–50 seats.',          usedTimes:47, lastUsed:'3 days ago',  avgWinRate:0.48, createdBy:'u_42', createdByName:'Bea Chen',    createdAt:'2024-01-15', systemTemplate:false },
+    { id:'tpl2', name:'Growth Package',          desc:'Core + all core modules + white-glove services. 50–200 seats, 2-3 yr terms.',    usedTimes:28, lastUsed:'1 week ago',  avgWinRate:0.44, createdBy:'u_99', createdByName:'Raj Patel',    createdAt:'2024-03-02', systemTemplate:false },
+    { id:'tpl3', name:'Enterprise — Multi-year', desc:'Premium core + full module stack + dedicated CSM. 200+ seats.',                  usedTimes:9,  lastUsed:'2 weeks ago', avgWinRate:0.57, createdBy:'u_42', createdByName:'Bea Chen',    createdAt:'2024-05-18', systemTemplate:false },
+    { id:'tpl4', name:'Quick trial → paid',      desc:'Minimal Core + basic onboarding, annual. Conversion-from-trial template.',       usedTimes:19, lastUsed:'6 days ago',  avgWinRate:0.52, createdBy:null,   createdByName:null,           createdAt:'2023-11-01', systemTemplate:true  },
 ];
 
 const QT_BRANDING = {
@@ -3843,30 +3858,209 @@ const MiniQuoteDoc = ({ scale = 0.32 }) => {
     );
 };
 
-// Template card
-const TplLibCard = ({ t, isDefault, isSelected, onClick }) => (
-    <div onClick={onClick} style={{ background:T.surface, border:`1.5px solid ${isSelected ? T.goldInk : T.border}`, borderRadius:T.r+2, overflow:'hidden', cursor:'pointer', display:'flex', flexDirection:'column', transition:'border-color 120ms' }}>
-        <div style={{ height:130, background:'linear-gradient(180deg, #f4ede0 0%, #ede4d2 100%)', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
-            <div style={{ transform:'scale(0.32)', transformOrigin:'center' }}>
-                <MiniQuoteDoc/>
+// Template card — with hover edit affordance, lock icon, overflow menu, ownership stamp
+const TplLibCard = ({ t, isDefault, isSelected, onClick, onEdit, onDuplicate, onSetDefault, onDelete }) => {
+    const [hover,    setHover]    = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [tooltip,  setTooltip]  = useState(false);
+    const canEdit = canEditTemplate(t, CURRENT_USER);
+    const menuRef = React.useRef(null);
+
+    // Close menu on outside click
+    React.useEffect(() => {
+        if (!menuOpen) return;
+        const handler = (e) => {
+            if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [menuOpen]);
+
+    const editableMenuItems = [
+        { label:'✎  Edit template',   action: onEdit,       danger:false },
+        { label:'⊕  Duplicate',        action: onDuplicate,  danger:false },
+        isDefault
+            ? { label:'✓  Default',    action:null,          danger:false, disabled:true }
+            : { label:'◈  Set as default', action: onSetDefault, danger:false },
+        { label:'Rename',              action: null,         danger:false, divider:true },
+        { label:'Delete',              action: onDelete,     danger:true  },
+    ];
+
+    const readOnlyMenuItems = [
+        { label:'👁  Open preview',       action: onClick,    danger:false },
+        { label:'⊕  Duplicate to edit',   action: onDuplicate,danger:false },
+        { label:'Edit',                   action: null,       danger:false, disabled:true, divider:true },
+        { label:'Delete',                 action: null,       danger:true,  disabled:true  },
+    ];
+
+    const menuItems = canEdit ? editableMenuItems : readOnlyMenuItems;
+
+    return (
+        <div
+            onMouseEnter={() => setHover(true)}
+            onMouseLeave={() => { setHover(false); setMenuOpen(false); setTooltip(false); }}
+            onClick={() => { if (!menuOpen) onClick && onClick(); }}
+            style={{
+                background:T.surface,
+                border:`1.5px solid ${isSelected ? T.goldInk : hover ? T.borderStrong : T.border}`,
+                borderRadius:T.r+2, overflow:'hidden', cursor:'pointer',
+                display:'flex', flexDirection:'column',
+                transition:'border-color 120ms, box-shadow 120ms',
+                boxShadow: hover ? '0 6px 18px rgba(0,0,0,0.06)' : 'none',
+                position:'relative',
+            }}>
+
+            {/* Preview tile */}
+            <div style={{ height:130, background:'linear-gradient(180deg, #f4ede0 0%, #ede4d2 100%)', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
+                <div style={{ transform:'scale(0.32)', transformOrigin:'center' }}>
+                    <MiniQuoteDoc/>
+                </div>
+
+                {/* DEFAULT pill — top-left */}
+                {isDefault && (
+                    <span style={{ position:'absolute', top:8, left:8, padding:'2px 7px', background:'rgba(0,0,0,0.72)', color:'#fff', fontSize:9, fontWeight:700, letterSpacing:0.6, borderRadius:2, textTransform:'uppercase', zIndex:1 }}>Default</span>
+                )}
+
+                {/* Edit button — top-right, hover + editable */}
+                {hover && canEdit && (
+                    <button
+                        onClick={e => { e.stopPropagation(); onEdit && onEdit(); }}
+                        style={{
+                            position:'absolute', top:8, right:8,
+                            display:'inline-flex', alignItems:'center', gap:4,
+                            padding:'4px 10px', fontSize:11, fontWeight:600,
+                            background:'rgba(255,255,255,0.92)',
+                            border:`1px solid ${T.border}`,
+                            borderRadius:4, cursor:'pointer', fontFamily:T.sans,
+                            boxShadow:'0 2px 6px rgba(0,0,0,0.10)',
+                            zIndex:2,
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor=T.goldInk; e.currentTarget.style.background='#fff'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor=T.border; e.currentTarget.style.background='rgba(255,255,255,0.92)'; }}>
+                        <span style={{ fontSize:10 }}>✎</span> Edit
+                    </button>
+                )}
+
+                {/* Lock icon — top-right, always visible when not editable */}
+                {!canEdit && (
+                    <div
+                        onMouseEnter={() => setTooltip(true)}
+                        onMouseLeave={() => setTooltip(false)}
+                        style={{ position:'absolute', top:8, right:8, zIndex:2 }}>
+                        <div style={{
+                            width:22, height:22, display:'flex', alignItems:'center', justifyContent:'center',
+                            background:'rgba(255,255,255,0.88)', borderRadius:4, border:`1px solid ${T.border}`,
+                            boxShadow:'0 1px 4px rgba(0,0,0,0.08)',
+                        }}>
+                            <LIcon name="lock" size={12} color={T.inkMuted}/>
+                        </div>
+                        {/* Tooltip */}
+                        {tooltip && (
+                            <div style={{
+                                position:'absolute', top:28, right:0, zIndex:10,
+                                background:T.ink, color:'#fbf8f3', fontSize:11, fontWeight:500,
+                                padding:'5px 9px', borderRadius:5, whiteSpace:'nowrap',
+                                boxShadow:'0 4px 12px rgba(0,0,0,0.18)',
+                                pointerEvents:'none',
+                            }}>
+                                {lockReason(t)}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
-            {isDefault && (
-                <span style={{ position:'absolute', top:8, left:8, padding:'2px 7px', background:'rgba(0,0,0,0.7)', color:'#fff', fontSize:9, fontWeight:700, letterSpacing:0.6, borderRadius:2, textTransform:'uppercase' }}>Default</span>
-            )}
-        </div>
-        <div style={{ padding:12, flex:1, display:'flex', flexDirection:'column' }}>
-            <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:4 }}>{t.name}</div>
-            <div style={{ fontSize:11, color:T.inkMuted, marginBottom:10, lineHeight:1.5, height:32, overflow:'hidden' }}>{t.desc}</div>
-            <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:10.5, color:T.inkMid, marginTop:'auto' }}>
-                <span><b style={{ color:T.ink, fontFamily:T.serif, fontStyle:'italic', fontSize:13 }}>{t.usedTimes}</b> uses</span>
-                <span style={{ color:T.inkMuted }}>·</span>
-                <span>Last: {t.lastUsed}</span>
-                <div style={{ flex:1 }}/>
-                <QPill tone="rep" dot>{Math.round(t.avgWinRate*100)}% win</QPill>
+
+            {/* Card body */}
+            <div style={{ padding:12, flex:1, display:'flex', flexDirection:'column', position:'relative' }}>
+
+                {/* Title row + overflow menu activator */}
+                <div style={{ display:'flex', alignItems:'flex-start', gap:6, marginBottom:4 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:T.ink, flex:1, lineHeight:1.3 }}>{t.name}</div>
+                    {/* ⋯ activator — shows on hover */}
+                    {hover && (
+                        <div ref={menuRef} style={{ position:'relative', flexShrink:0 }}>
+                            <button
+                                onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); }}
+                                style={{
+                                    padding:'2px 6px', fontSize:14, lineHeight:1, fontWeight:700,
+                                    background: menuOpen ? T.surface2 : 'transparent',
+                                    border:`1px solid ${menuOpen ? T.border : 'transparent'}`,
+                                    borderRadius:4, cursor:'pointer', color:T.inkMid, fontFamily:T.sans,
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background='transparent'; }}>
+                                ⋯
+                            </button>
+
+                            {/* Dropdown menu */}
+                            {menuOpen && (
+                                <div style={{
+                                    position:'absolute', top:'100%', right:0, marginTop:4,
+                                    background:T.surface, border:`1px solid ${T.border}`,
+                                    borderRadius:6, minWidth:186,
+                                    boxShadow:'0 8px 24px rgba(0,0,0,0.12)',
+                                    zIndex:20, overflow:'hidden',
+                                }}>
+                                    {menuItems.map((item, i) => (
+                                        <React.Fragment key={i}>
+                                            {item.divider && <div style={{ height:1, background:T.border, margin:'2px 0' }}/>}
+                                            <div
+                                                onClick={e => { e.stopPropagation(); if (!item.disabled && item.action) { item.action(); setMenuOpen(false); } }}
+                                                style={{
+                                                    padding:'8px 14px', fontSize:12.5, fontWeight: i===0 ? 600 : 500,
+                                                    color: item.disabled ? T.inkMuted : item.danger ? T.danger : T.ink,
+                                                    cursor: item.disabled ? 'default' : 'pointer',
+                                                    background: i===0 && !item.disabled ? 'rgba(200,185,154,0.10)' : 'transparent',
+                                                    fontFamily:T.sans,
+                                                }}
+                                                onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background=item.danger ? 'rgba(156,58,46,0.06)' : T.surface2; }}
+                                                onMouseLeave={e => { e.currentTarget.style.background = (i===0 && !item.disabled) ? 'rgba(200,185,154,0.10)' : 'transparent'; }}>
+                                                {item.label}
+                                                {item.disabled && <span style={{ marginLeft:6, fontSize:10, color:T.inkMuted }}>(no permission)</span>}
+                                            </div>
+                                        </React.Fragment>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div style={{ fontSize:11, color:T.inkMuted, marginBottom:8, lineHeight:1.5, height:32, overflow:'hidden' }}>{t.desc}</div>
+
+                {/* Meta row */}
+                <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:10.5, color:T.inkMid, marginTop:'auto' }}>
+                    <span><b style={{ color:T.ink, fontFamily:T.serif, fontStyle:'italic', fontSize:13 }}>{t.usedTimes}</b> uses</span>
+                    <span style={{ color:T.inkMuted }}>·</span>
+                    <span>Last: {t.lastUsed}</span>
+                    <div style={{ flex:1 }}/>
+                    <QPill tone="rep" dot>{Math.round(t.avgWinRate*100)}% win</QPill>
+                </div>
+
+                {/* Ownership stamp */}
+                <div style={{ marginTop:8, paddingTop:8, borderTop:`1px dashed ${T.border}`, display:'flex', alignItems:'center', gap:6 }}>
+                    {t.systemTemplate ? (
+                        <>
+                            <span style={{ fontSize:10, color:T.goldInk, fontWeight:700, letterSpacing:0.3 }}>★</span>
+                            <span style={{ fontSize:10.5, color:T.inkMuted, fontStyle:'italic' }}>Accelerep starter</span>
+                        </>
+                    ) : t.createdByName ? (
+                        <>
+                            <div style={{ width:16, height:16, borderRadius:'50%', background:T.gold, display:'flex', alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:700, color:T.ink, flexShrink:0 }}>
+                                {t.createdByName.split(' ').map(w=>w[0]).join('').toUpperCase()}
+                            </div>
+                            <span style={{ fontSize:10.5, color:T.inkMuted }}>
+                                {canEdit && t.createdBy !== CURRENT_USER.id ? 'Admin edit' : 'Created by'} <b style={{ color:T.inkMid, fontWeight:600 }}>{t.createdByName}</b>
+                            </span>
+                        </>
+                    ) : (
+                        <span style={{ fontSize:10.5, color:T.inkMuted }}>Created by removed user</span>
+                    )}
+                </div>
             </div>
         </div>
-    </div>
-);
+    );
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BLANK MODE — right-pane sub-views
@@ -4140,6 +4334,14 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
     // Blank/V4 — use case selection (default: pitch)
     const [useCase, setUseCase] = useState('pitch');
 
+    // V5 — live preview drawer (only active in blank+blocks mode)
+    const [showPreview, setShowPreview] = useState(false);
+
+    // Collapse preview when leaving blank/blocks
+    React.useEffect(() => {
+        if (mode !== 'blank' || blankVariant !== 'blocks') setShowPreview(false);
+    }, [mode, blankVariant]);
+
     // Duplicate mode state
     const [selectedTpl, setSelectedTpl] = useState(null);
 
@@ -4153,7 +4355,7 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
 
     // Footer helper text by variant
     const footerHelper = mode !== 'blank' ? `Step 1 of 2 · You'll edit content next`
-        : blankVariant === 'blocks'    ? 'Required blocks are always added. Toggles seed optional blocks.'
+        : blankVariant === 'blocks'    ? (showPreview ? 'Updates live as you toggle blocks.' : 'Required blocks are always added. Toggles seed optional blocks.')
         : blankVariant === 'pageSetup' ? 'Page setup is locked once content is added. Pick carefully.'
         : 'Each use case seeds a different starting block set.';
 
@@ -4274,7 +4476,7 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
         <div style={{ position:'fixed', inset:0, background:'rgba(20,16,12,0.45)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center' }}
             onClick={onClose}>
             <div onClick={e => e.stopPropagation()}
-                style={{ background:T.surface, borderRadius:12, width:820, maxHeight:'92vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 24px 64px rgba(20,16,12,0.28)', fontFamily:T.sans }}>
+                style={{ background:T.surface, borderRadius:12, width: showPreview ? 1140 : 820, maxHeight:'92vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 24px 64px rgba(20,16,12,0.28)', fontFamily:T.sans, transition:'width 220ms ease' }}>
 
                 {/* ── Header ── */}
                 <div style={{ padding:'20px 24px 16px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
@@ -4290,8 +4492,8 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
                     </div>
                 </div>
 
-                {/* ── Body: mode rail + content ── */}
-                <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', flex:1, minHeight:0 }}>
+                {/* ── Body: mode rail + content + optional preview drawer ── */}
+                <div style={{ display:'grid', gridTemplateColumns: showPreview ? '180px 1fr 320px' : '180px 1fr', flex:1, minHeight:0, transition:'grid-template-columns 220ms ease' }}>
 
                     {/* Left: mode rail */}
                     <div style={{ borderRight:`1px solid ${T.border}`, padding:'14px 10px', display:'flex', flexDirection:'column', gap:3, overflowY:'auto', flexShrink:0 }}>
@@ -4328,8 +4530,44 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
                             {/* ── BLANK MODE ── */}
                             {mode === 'blank' && (
                                 <div>
+                                    {/* Starting blocks eyebrow + Preview toggle button */}
+                                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+                                        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMid, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>
+                                            Starting blocks
+                                        </div>
+                                        {blankVariant === 'blocks' && (
+                                            <button
+                                                onClick={() => setShowPreview(v => !v)}
+                                                style={{
+                                                    display:'inline-flex', alignItems:'center', gap:5,
+                                                    padding:'4px 10px', fontSize:11.5, fontWeight:600,
+                                                    background: showPreview ? T.ink : T.surface,
+                                                    color: showPreview ? '#fbf8f3' : T.inkMid,
+                                                    border:`1px solid ${showPreview ? T.ink : T.border}`,
+                                                    borderRadius:5, cursor:'pointer', fontFamily:T.sans,
+                                                    transition:'background 120ms, color 120ms',
+                                                }}>
+                                                {showPreview ? (
+                                                    <>
+                                                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                                            <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>
+                                                        </svg>
+                                                        Hide preview
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                                            <path d="M1 12S5 4 12 4s11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>
+                                                        </svg>
+                                                        Preview
+                                                    </>
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
+
                                     {/* Sub-variant segmented control */}
-                                    <div style={{ display:'flex', gap:0, marginBottom:16, background:T.bg, border:`1px solid ${T.border}`, borderRadius:6, padding:3, width:'fit-content' }}>
+                                    <div style={{ display:'flex', gap:0, marginBottom:12, background:T.bg, border:`1px solid ${T.border}`, borderRadius:6, padding:3, width:'fit-content' }}>
                                         {[
                                             { key:'blocks',    label:'Required blocks' },
                                             { key:'pageSetup', label:'Page setup' },
@@ -4425,6 +4663,95 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
 
                         </div>
                     </div>
+
+                    {/* ── V5 Live Preview Drawer ── */}
+                    {showPreview && mode === 'blank' && blankVariant === 'blocks' && (
+                        <div style={{
+                            width:320, flexShrink:0,
+                            borderLeft:`1px solid ${T.border}`,
+                            display:'flex', flexDirection:'column',
+                            background:T.bg,
+                            overflow:'hidden',
+                        }}>
+                            {/* Drawer header */}
+                            <div style={{
+                                padding:'10px 14px', borderBottom:`1px solid ${T.border}`,
+                                display:'flex', alignItems:'center', justifyContent:'space-between',
+                                background:T.surface, flexShrink:0,
+                            }}>
+                                <div>
+                                    <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Live Preview · Page 1</div>
+                                </div>
+                                <button
+                                    onClick={() => setShowPreview(false)}
+                                    style={{ fontSize:11, fontWeight:600, color:T.inkMid, background:'none', border:`1px solid ${T.border}`, borderRadius:4, padding:'3px 8px', cursor:'pointer', fontFamily:T.sans }}
+                                    onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                    onMouseLeave={e => e.currentTarget.style.background='none'}>
+                                    Hide
+                                </button>
+                            </div>
+
+                            {/* Paper preview — scrollable */}
+                            <div style={{ flex:1, overflowY:'auto', padding:16, display:'flex', flexDirection:'column', alignItems:'center' }}>
+                                {/* Paper document */}
+                                <div style={{
+                                    width:260, background:'#fbf8f3',
+                                    border:`1px solid ${T.border}`,
+                                    borderRadius:4,
+                                    boxShadow:'0 4px 16px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)',
+                                    padding:'20px 18px',
+                                    fontFamily:T.sans,
+                                    minHeight:320,
+                                }}>
+                                    {/* Cover — always shown */}
+                                    <div style={{ marginBottom:16 }}>
+                                        <div style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:15, color:QT_BRANDING.ink, lineHeight:1.2, marginBottom:3 }}>
+                                            Proposal for Acme Co.
+                                        </div>
+                                        <div style={{ fontSize:10.5, color:T.inkMuted }}>
+                                            Valid until Dec 31 · Prepared by Sarah K.
+                                        </div>
+                                        <div style={{ height:1, background:QT_BRANDING.primary, opacity:0.4, margin:'10px 0' }}/>
+                                    </div>
+
+                                    {/* Block rows — always-required + toggled optionals */}
+                                    {(() => {
+                                        const activeBlocks = [
+                                            ...REQUIRED_BLOCKS,
+                                            ...optionalBlocks.filter(b => b.on),
+                                        ];
+                                        // Sort to natural document order
+                                        const ORDER = ['LOGO','META','HERO','SUMM','LINE','ADDN','TERM','SIGN'];
+                                        const sorted = [...activeBlocks].sort((a,b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind));
+                                        return sorted.map((block, i) => (
+                                            <div key={block.kind} style={{
+                                                display:'flex', alignItems:'center', gap:8,
+                                                padding:'7px 10px', marginBottom:5,
+                                                background: 'rgba(42,38,34,0.03)',
+                                                border:`1px solid ${T.border}`,
+                                                borderRadius:3,
+                                            }}>
+                                                <span style={{
+                                                    display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                                    width:36, flexShrink:0,
+                                                    fontSize:8.5, fontWeight:700, letterSpacing:0.4,
+                                                    color: block.color === '#4d6b3d' ? '#4d6b3d' : T.inkMuted,
+                                                    fontFamily:T.sans,
+                                                }}>{block.kind}</span>
+                                                <span style={{ fontSize:11, color:T.inkMid, flex:1 }}>{block.label}</span>
+                                            </div>
+                                        ));
+                                    })()}
+                                </div>
+
+                                {/* Live indicator */}
+                                <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:5, fontSize:10.5, color:T.inkMuted }}>
+                                    <span style={{ width:6, height:6, borderRadius:'50%', background:'#4d6b3d', display:'inline-block' }}/>
+                                    Updates live as you toggle blocks
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* ── Footer ── */}
@@ -4585,7 +4912,27 @@ const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
                     >
                         <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:14 }}>
                             {templates.map((t,i) => (
-                                <TplLibCard key={t.id} t={t} isDefault={i===0} isSelected={selectedId===t.id} onClick={() => setSelectedId(t.id)}/>
+                                <TplLibCard key={t.id} t={t}
+                                    isDefault={i===0}
+                                    isSelected={selectedId===t.id}
+                                    onClick={() => setSelectedId(t.id)}
+                                    onEdit={() => setSelectedId(t.id)}
+                                    onDuplicate={() => {
+                                        const copy = { ...t, id:`tpl_${Date.now()}`, name:`Copy of ${t.name}`, usedTimes:0, lastUsed:'Just created', avgWinRate:0, status:'draft', createdBy:CURRENT_USER.id, createdByName:CURRENT_USER.name, systemTemplate:false };
+                                        setTemplates(prev => [...prev, copy]);
+                                        setDirty(true);
+                                    }}
+                                    onSetDefault={() => {
+                                        setTemplates(prev => prev.map((x,j) => ({ ...x, isDefault: j===i })));
+                                        setDirty(true);
+                                    }}
+                                    onDelete={() => {
+                                        if (templates.length <= 1) return;
+                                        setTemplates(prev => prev.filter(x => x.id !== t.id));
+                                        if (selectedId === t.id) setSelectedId(templates.find(x => x.id !== t.id)?.id || null);
+                                        setDirty(true);
+                                    }}
+                                />
                             ))}
                             {/* New template CTA tile */}
                             <div onClick={() => setShowNewModal(true)}
