@@ -3789,11 +3789,26 @@ const ApprovalTiersDetail = ({ settings, setSettings, onBack }) => {
 // Settings → Quoting → Quote templates & branding
 // ─────────────────────────────────────────────────────────────
 
+// TODO: read currentUser from session/AppContext — hard-coded for dev
+const CURRENT_USER = { id:'u_42', name:'Bea Chen', role:'admin' };
+
+const canEditTemplate = (tpl, user) => {
+    if (tpl.systemTemplate) return false;
+    if (user.role === 'admin') return true;
+    return tpl.createdBy === user.id;
+};
+
+const lockReason = (tpl) => {
+    if (tpl.systemTemplate) return 'Accelerep starter — duplicate to edit';
+    if (tpl.createdByName)   return `Read-only — created by ${tpl.createdByName}`;
+    return 'Read-only';
+};
+
 const DEFAULT_QUOTE_TEMPLATES = [
-    { id:'tpl1', name:'SMB Starter — Annual',    desc:'Core + Pipeline + Reports + Basic onboarding. Ideal for 10–50 seats.',           usedTimes:47, lastUsed:'3 days ago',   avgWinRate:0.48 },
-    { id:'tpl2', name:'Growth Package',           desc:'Core + all core modules + white-glove services. 50–200 seats, 2-3 yr terms.',     usedTimes:28, lastUsed:'1 week ago',   avgWinRate:0.44 },
-    { id:'tpl3', name:'Enterprise — Multi-year',  desc:'Premium core + full module stack + dedicated CSM. 200+ seats.',                  usedTimes:9,  lastUsed:'2 weeks ago',  avgWinRate:0.57 },
-    { id:'tpl4', name:'Quick trial → paid',       desc:'Minimal Core + basic onboarding, annual. Conversion-from-trial template.',        usedTimes:19, lastUsed:'6 days ago',   avgWinRate:0.52 },
+    { id:'tpl1', name:'SMB Starter — Annual',   desc:'Core + Pipeline + Reports + Basic onboarding. Ideal for 10–50 seats.',          usedTimes:47, lastUsed:'3 days ago',  avgWinRate:0.48, createdBy:'u_42', createdByName:'Bea Chen',    createdAt:'2024-01-15', systemTemplate:false },
+    { id:'tpl2', name:'Growth Package',          desc:'Core + all core modules + white-glove services. 50–200 seats, 2-3 yr terms.',    usedTimes:28, lastUsed:'1 week ago',  avgWinRate:0.44, createdBy:'u_99', createdByName:'Raj Patel',    createdAt:'2024-03-02', systemTemplate:false },
+    { id:'tpl3', name:'Enterprise — Multi-year', desc:'Premium core + full module stack + dedicated CSM. 200+ seats.',                  usedTimes:9,  lastUsed:'2 weeks ago', avgWinRate:0.57, createdBy:'u_42', createdByName:'Bea Chen',    createdAt:'2024-05-18', systemTemplate:false },
+    { id:'tpl4', name:'Quick trial → paid',      desc:'Minimal Core + basic onboarding, annual. Conversion-from-trial template.',       usedTimes:19, lastUsed:'6 days ago',  avgWinRate:0.52, createdBy:null,   createdByName:null,           createdAt:'2023-11-01', systemTemplate:true  },
 ];
 
 const QT_BRANDING = {
@@ -3843,42 +3858,597 @@ const MiniQuoteDoc = ({ scale = 0.32 }) => {
     );
 };
 
-// Template card
-const TplLibCard = ({ t, isDefault, isSelected, onClick }) => (
-    <div onClick={onClick} style={{ background:T.surface, border:`1.5px solid ${isSelected ? T.goldInk : T.border}`, borderRadius:T.r+2, overflow:'hidden', cursor:'pointer', display:'flex', flexDirection:'column', transition:'border-color 120ms' }}>
-        <div style={{ height:130, background:'linear-gradient(180deg, #f4ede0 0%, #ede4d2 100%)', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
-            <div style={{ transform:'scale(0.32)', transformOrigin:'center' }}>
-                <MiniQuoteDoc/>
+// Template card — with hover edit affordance, lock icon, overflow menu, ownership stamp
+const TplLibCard = ({ t, isDefault, isSelected, isEditing, editingName, onEditingNameChange, onEditingCommit, onClick, onEdit, onDuplicate, onSetDefault, onDelete }) => {
+    const [hover,    setHover]    = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [tooltip,  setTooltip]  = useState(false);
+    const canEdit = canEditTemplate(t, CURRENT_USER);
+    const menuRef = React.useRef(null);
+    // Prevents card onClick from firing when Edit button was mousedown'd
+    const editFired = React.useRef(false);
+
+    // Close menu on outside click
+    React.useEffect(() => {
+        if (!menuOpen) return;
+        const handler = (e) => {
+            if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [menuOpen]);
+
+    const editableMenuItems = [
+        { label:'✎  Edit template',   action: onEdit,       danger:false },
+        { label:'⊕  Duplicate',        action: onDuplicate,  danger:false },
+        isDefault
+            ? { label:'✓  Default',    action:null,          danger:false, disabled:true }
+            : { label:'◈  Set as default', action: onSetDefault, danger:false },
+        { label:'Rename',              action: null,         danger:false, divider:true },
+        { label:'Delete',              action: onDelete,     danger:true  },
+    ];
+
+    const readOnlyMenuItems = [
+        { label:'👁  Open preview',       action: onClick,    danger:false },
+        { label:'⊕  Duplicate to edit',   action: onDuplicate,danger:false },
+        { label:'Edit',                   action: null,       danger:false, disabled:true, divider:true },
+        { label:'Delete',                 action: null,       danger:true,  disabled:true  },
+    ];
+
+    const menuItems = canEdit ? editableMenuItems : readOnlyMenuItems;
+
+    return (
+        <div
+            onMouseEnter={() => setHover(true)}
+            onMouseLeave={() => { setHover(false); setMenuOpen(false); setTooltip(false); }}
+            onClick={() => { if (!menuOpen && !editFired.current) { onClick && onClick(); } editFired.current = false; }}
+            style={{
+                background:T.surface,
+                border:`1.5px solid ${isSelected ? T.goldInk : hover ? T.borderStrong : T.border}`,
+                borderRadius:T.r+2, overflow:'hidden', cursor:'pointer',
+                display:'flex', flexDirection:'column',
+                transition:'border-color 120ms, box-shadow 120ms',
+                boxShadow: hover ? '0 6px 18px rgba(0,0,0,0.06)' : 'none',
+                position:'relative',
+            }}>
+
+            {/* Preview tile */}
+            <div style={{ height:130, background:'linear-gradient(180deg, #f4ede0 0%, #ede4d2 100%)', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', position:'relative', flexShrink:0 }}>
+                <div style={{ transform:'scale(0.32)', transformOrigin:'center' }}>
+                    <MiniQuoteDoc/>
+                </div>
+
+                {/* DEFAULT pill — top-left */}
+                {isDefault && (
+                    <span style={{ position:'absolute', top:8, left:8, padding:'2px 7px', background:'rgba(0,0,0,0.72)', color:'#fff', fontSize:9, fontWeight:700, letterSpacing:0.6, borderRadius:2, textTransform:'uppercase', zIndex:1 }}>Default</span>
+                )}
+
+                {/* Edit button — top-right, hover + editable */}
+                {hover && canEdit && (
+                    <button
+                        onMouseDown={e => { e.stopPropagation(); e.preventDefault(); editFired.current = true; onEdit && onEdit(); }}
+                        style={{
+                            position:'absolute', top:8, right:8,
+                            display:'inline-flex', alignItems:'center', gap:4,
+                            padding:'4px 10px', fontSize:11, fontWeight:600,
+                            background:'rgba(255,255,255,0.92)',
+                            border:`1px solid ${T.border}`,
+                            borderRadius:4, cursor:'pointer', fontFamily:T.sans,
+                            boxShadow:'0 2px 6px rgba(0,0,0,0.10)',
+                            zIndex:2,
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor=T.goldInk; e.currentTarget.style.background='#fff'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor=T.border; e.currentTarget.style.background='rgba(255,255,255,0.92)'; }}>
+                        <span style={{ fontSize:10 }}>✎</span> Edit
+                    </button>
+                )}
+
+                {/* Lock icon — top-right, always visible when not editable */}
+                {!canEdit && (
+                    <div
+                        onMouseEnter={() => setTooltip(true)}
+                        onMouseLeave={() => setTooltip(false)}
+                        style={{ position:'absolute', top:8, right:8, zIndex:2 }}>
+                        <div style={{
+                            width:22, height:22, display:'flex', alignItems:'center', justifyContent:'center',
+                            background:'rgba(255,255,255,0.88)', borderRadius:4, border:`1px solid ${T.border}`,
+                            boxShadow:'0 1px 4px rgba(0,0,0,0.08)',
+                        }}>
+                            <LIcon name="lock" size={12} color={T.inkMuted}/>
+                        </div>
+                        {/* Tooltip */}
+                        {tooltip && (
+                            <div style={{
+                                position:'absolute', top:28, right:0, zIndex:10,
+                                background:T.ink, color:'#fbf8f3', fontSize:11, fontWeight:500,
+                                padding:'5px 9px', borderRadius:5, whiteSpace:'nowrap',
+                                boxShadow:'0 4px 12px rgba(0,0,0,0.18)',
+                                pointerEvents:'none',
+                            }}>
+                                {lockReason(t)}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
-            {isDefault && (
-                <span style={{ position:'absolute', top:8, left:8, padding:'2px 7px', background:'rgba(0,0,0,0.7)', color:'#fff', fontSize:9, fontWeight:700, letterSpacing:0.6, borderRadius:2, textTransform:'uppercase' }}>Default</span>
-            )}
+
+            {/* Card body */}
+            <div style={{ padding:12, flex:1, display:'flex', flexDirection:'column', position:'relative' }}>
+
+                {/* Title row + overflow menu activator */}
+                <div style={{ display:'flex', alignItems:'flex-start', gap:6, marginBottom:4 }}>
+                    {isEditing ? (
+                        <input
+                            autoFocus
+                            value={editingName}
+                            onChange={e => onEditingNameChange(e.target.value)}
+                            onBlur={onEditingCommit}
+                            onKeyDown={e => { if (e.key==='Enter') onEditingCommit(); if (e.key==='Escape') onEditingCommit(); }}
+                            onClick={e => e.stopPropagation()}
+                            style={{
+                                flex:1, fontSize:13, fontWeight:700, color:T.ink,
+                                border:`1.5px solid ${T.goldInk}`, borderRadius:4,
+                                padding:'2px 6px', fontFamily:T.sans,
+                                background:T.surface, outline:'none',
+                                lineHeight:1.3, width:'100%', boxSizing:'border-box',
+                            }}
+                        />
+                    ) : (
+                        <div style={{ fontSize:13, fontWeight:700, color:T.ink, flex:1, lineHeight:1.3 }}>{t.name}</div>
+                    )}
+                    {/* ⋯ activator — shows on hover */}
+                    {hover && (
+                        <div ref={menuRef} style={{ position:'relative', flexShrink:0 }}>
+                            <button
+                                onClick={e => { e.stopPropagation(); setMenuOpen(v => !v); }}
+                                style={{
+                                    padding:'2px 6px', fontSize:14, lineHeight:1, fontWeight:700,
+                                    background: menuOpen ? T.surface2 : 'transparent',
+                                    border:`1px solid ${menuOpen ? T.border : 'transparent'}`,
+                                    borderRadius:4, cursor:'pointer', color:T.inkMid, fontFamily:T.sans,
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background='transparent'; }}>
+                                ⋯
+                            </button>
+
+                            {/* Dropdown menu */}
+                            {menuOpen && (
+                                <div style={{
+                                    position:'absolute', top:'100%', right:0, marginTop:4,
+                                    background:T.surface, border:`1px solid ${T.border}`,
+                                    borderRadius:6, minWidth:186,
+                                    boxShadow:'0 8px 24px rgba(0,0,0,0.12)',
+                                    zIndex:20, overflow:'hidden',
+                                }}>
+                                    {menuItems.map((item, i) => (
+                                        <React.Fragment key={i}>
+                                            {item.divider && <div style={{ height:1, background:T.border, margin:'2px 0' }}/>}
+                                            <div
+                                                onClick={e => { e.stopPropagation(); if (!item.disabled && item.action) { item.action(); setMenuOpen(false); } }}
+                                                style={{
+                                                    padding:'8px 14px', fontSize:12.5, fontWeight: i===0 ? 600 : 500,
+                                                    color: item.disabled ? T.inkMuted : item.danger ? T.danger : T.ink,
+                                                    cursor: item.disabled ? 'default' : 'pointer',
+                                                    background: i===0 && !item.disabled ? 'rgba(200,185,154,0.10)' : 'transparent',
+                                                    fontFamily:T.sans,
+                                                }}
+                                                onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background=item.danger ? 'rgba(156,58,46,0.06)' : T.surface2; }}
+                                                onMouseLeave={e => { e.currentTarget.style.background = (i===0 && !item.disabled) ? 'rgba(200,185,154,0.10)' : 'transparent'; }}>
+                                                {item.label}
+                                                {item.disabled && <span style={{ marginLeft:6, fontSize:10, color:T.inkMuted }}>(no permission)</span>}
+                                            </div>
+                                        </React.Fragment>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div style={{ fontSize:11, color:T.inkMuted, marginBottom:8, lineHeight:1.5, height:32, overflow:'hidden' }}>{t.desc}</div>
+
+                {/* Meta row */}
+                <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:10.5, color:T.inkMid, marginTop:'auto' }}>
+                    <span><b style={{ color:T.ink, fontFamily:T.serif, fontStyle:'italic', fontSize:13 }}>{t.usedTimes}</b> uses</span>
+                    <span style={{ color:T.inkMuted }}>·</span>
+                    <span>Last: {t.lastUsed}</span>
+                    <div style={{ flex:1 }}/>
+                    <QPill tone="rep" dot>{Math.round(t.avgWinRate*100)}% win</QPill>
+                </div>
+
+                {/* Ownership stamp */}
+                <div style={{ marginTop:8, paddingTop:8, borderTop:`1px dashed ${T.border}`, display:'flex', alignItems:'center', gap:6 }}>
+                    {t.systemTemplate ? (
+                        <>
+                            <span style={{ fontSize:10, color:T.goldInk, fontWeight:700, letterSpacing:0.3 }}>★</span>
+                            <span style={{ fontSize:10.5, color:T.inkMuted, fontStyle:'italic' }}>Accelerep starter</span>
+                        </>
+                    ) : t.createdByName ? (
+                        <>
+                            <div style={{ width:16, height:16, borderRadius:'50%', background:T.gold, display:'flex', alignItems:'center', justifyContent:'center', fontSize:8, fontWeight:700, color:T.ink, flexShrink:0 }}>
+                                {t.createdByName.split(' ').map(w=>w[0]).join('').toUpperCase()}
+                            </div>
+                            <span style={{ fontSize:10.5, color:T.inkMuted }}>
+                                {canEdit && t.createdBy !== CURRENT_USER.id ? 'Admin edit' : 'Created by'} <b style={{ color:T.inkMid, fontWeight:600 }}>{t.createdByName}</b>
+                            </span>
+                        </>
+                    ) : (
+                        <span style={{ fontSize:10.5, color:T.inkMuted }}>Created by removed user</span>
+                    )}
+                </div>
+            </div>
         </div>
-        <div style={{ padding:12, flex:1, display:'flex', flexDirection:'column' }}>
-            <div style={{ fontSize:13, fontWeight:700, color:T.ink, marginBottom:4 }}>{t.name}</div>
-            <div style={{ fontSize:11, color:T.inkMuted, marginBottom:10, lineHeight:1.5, height:32, overflow:'hidden' }}>{t.desc}</div>
-            <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:10.5, color:T.inkMid, marginTop:'auto' }}>
-                <span><b style={{ color:T.ink, fontFamily:T.serif, fontStyle:'italic', fontSize:13 }}>{t.usedTimes}</b> uses</span>
-                <span style={{ color:T.inkMuted }}>·</span>
-                <span>Last: {t.lastUsed}</span>
-                <div style={{ flex:1 }}/>
-                <QPill tone="rep" dot>{Math.round(t.avgWinRate*100)}% win</QPill>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BLANK MODE — right-pane sub-views
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Shared: coloured kind-tag badge used in Required blocks list and Use-case pills
+const KindTag = ({ kind, color = T.ink, size = 26 }) => (
+    <span style={{
+        display:'inline-flex', alignItems:'center', justifyContent:'center',
+        width:size, height:size, borderRadius:4,
+        background: color === T.ink ? 'rgba(42,38,34,0.08)' : `rgba(77,107,61,0.10)`,
+        border:`1px solid ${color === T.ink ? T.borderStrong : '#4d6b3d'}`,
+        color, fontWeight:700, fontSize:9, letterSpacing:0.5,
+        fontFamily:T.sans, flexShrink:0, userSelect:'none',
+    }}>{kind}</span>
+);
+
+// Small pill used inside use-case cards to show block sets
+const BlockPill = ({ kind }) => (
+    <span style={{
+        display:'inline-block', padding:'1px 5px', fontSize:9.5, fontWeight:700,
+        background:'rgba(42,38,34,0.06)', color:T.inkMid,
+        borderRadius:3, border:`1px solid ${T.border}`,
+        letterSpacing:0.4, fontFamily:T.sans,
+    }}>{kind}</span>
+);
+
+// ── V2: Required blocks ───────────────────────────────────────────────────────
+const REQUIRED_BLOCKS = [
+    { kind:'LOGO', label:'Logo + brand',      sub:'Pulled from Brand settings',           color: T.ink },
+    { kind:'META', label:'Quote metadata',    sub:'ID, date, customer, prepared-by',      color: T.ink },
+    { kind:'LINE', label:'Line items',        sub:'Standard layout · qty · unit · total', color: T.ink },
+    { kind:'TERM', label:'Terms',             sub:'Pulls boilerplate from Defaults',       color:'#4d6b3d' },
+    { kind:'SIGN', label:'Signature block',   sub:'DocuSign tags',                         color:'#4d6b3d' },
+];
+const OPTIONAL_BLOCKS_DEFAULT = [
+    { kind:'HERO', label:'Cover page',          sub:'Customer name + valid-until banner',   on:true  },
+    { kind:'SUMM', label:'Executive summary',   sub:'2-paragraph framing',                  on:false },
+    { kind:'ADDN', label:'Optional add-ons',    sub:'Greyed-out items rep can suggest',     on:false },
+];
+
+const BlankRequiredBlocks = ({ optionalBlocks, setOptionalBlocks }) => (
+    <div>
+        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMid, letterSpacing:0.7, textTransform:'uppercase', marginBottom:6, fontFamily:T.sans }}>
+            Starting blocks
+        </div>
+        <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:12, lineHeight:1.5 }}>
+            Every quote needs these 5 sends. Toggle off the rest if you don't need them — you can always add more in the editor.
+        </div>
+        {/* Scrollable block list */}
+        <div style={{ maxHeight:260, overflowY:'auto', display:'flex', flexDirection:'column', gap:0, border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+            {/* Required rows */}
+            {REQUIRED_BLOCKS.map((b, i) => (
+                <div key={b.kind} style={{
+                    display:'flex', alignItems:'center', gap:12, padding:'9px 12px',
+                    background:T.surface, borderBottom:`1px solid ${T.border}`,
+                }}>
+                    <KindTag kind={b.kind} color={b.color}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, lineHeight:1.2 }}>{b.label}</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:1 }}>{b.sub}</div>
+                    </div>
+                    <span style={{
+                        padding:'2px 8px', fontSize:10.5, fontWeight:700,
+                        background:'rgba(42,38,34,0.07)', color:T.inkMid,
+                        borderRadius:10, border:`1px solid ${T.borderStrong}`,
+                        letterSpacing:0.2, fontFamily:T.sans, flexShrink:0,
+                    }}>Required</span>
+                </div>
+            ))}
+            {/* Divider + Optional eyebrow */}
+            <div style={{ padding:'6px 12px 4px', background:T.bg, borderBottom:`1px solid ${T.border}` }}>
+                <span style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Optional</span>
+            </div>
+            {/* Optional rows */}
+            {optionalBlocks.map((b, i) => (
+                <div key={b.kind} style={{
+                    display:'flex', alignItems:'center', gap:12, padding:'9px 12px',
+                    background:T.surface,
+                    borderBottom: i < optionalBlocks.length - 1 ? `1px solid ${T.border}` : 'none',
+                }}>
+                    <KindTag kind={b.kind} color={T.ink}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, lineHeight:1.2 }}>{b.label}</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginTop:1 }}>{b.sub}</div>
+                    </div>
+                    <ATToggle on={b.on} onChange={() => setOptionalBlocks(prev =>
+                        prev.map(x => x.kind === b.kind ? { ...x, on:!x.on } : x)
+                    )}/>
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
+// ── V3: Page setup ────────────────────────────────────────────────────────────
+const PAGE_SIZES = [
+    { key:'letter',  label:'US Letter', sub:'8.5 × 11 in',   h:80 },
+    { key:'a4',      label:'A4',        sub:'210 × 297 mm',   h:80 },
+    { key:'legal',   label:'US Legal',  sub:'8.5 × 14 in',   h:96 },
+    { key:'custom',  label:'Custom',    sub:'Set size',       h:70 },
+];
+
+const PageTile = ({ size, selected, onClick }) => (
+    <div onClick={onClick} style={{
+        border:`1.5px solid ${selected ? T.goldInk : T.border}`,
+        borderRadius:6, padding:'10px 8px 8px', cursor:'pointer', textAlign:'center',
+        background: selected ? 'rgba(200,185,154,0.10)' : T.surface,
+        display:'flex', flexDirection:'column', alignItems:'center', gap:6,
+        transition:'border-color 100ms, background 100ms',
+    }}>
+        {/* Paper rectangle preview */}
+        <div style={{
+            width: size.key === 'legal' ? 36 : 40,
+            height: size.h * 0.55,
+            background: selected ? 'rgba(122,106,72,0.08)' : T.bg,
+            border:`1px solid ${selected ? T.goldInk : T.borderStrong}`,
+            borderRadius:2, flexShrink:0,
+            display:'flex', alignItems:'center', justifyContent:'center',
+        }}>
+            {/* Simulated content lines */}
+            <div style={{ width:'70%', display:'flex', flexDirection:'column', gap:2 }}>
+                {[1,0.6,0.6,0.4].map((w, i) => (
+                    <div key={i} style={{ height:2, width:`${w*100}%`, background: selected ? T.goldInk : T.borderStrong, borderRadius:1, opacity:0.6 }}/>
+                ))}
+            </div>
+        </div>
+        <div style={{ fontSize:11.5, fontWeight:700, color: selected ? T.ink : T.inkMid, lineHeight:1.2 }}>{size.label}</div>
+        <div style={{ fontSize:10, color:T.inkMuted }}>{size.sub}</div>
+    </div>
+);
+
+// Segmented control shared by Orientation + Density
+const SegCtrl = ({ options, value, onChange }) => (
+    <div style={{ display:'inline-flex', background:T.bg, border:`1px solid ${T.border}`, borderRadius:5, padding:2, gap:2 }}>
+        {options.map(opt => (
+            <button key={opt} onClick={() => onChange(opt)}
+                style={{
+                    padding:'5px 14px', fontSize:12, fontWeight:600, borderRadius:4, border:'none',
+                    cursor:'pointer', fontFamily:T.sans,
+                    background: value === opt ? T.ink : 'transparent',
+                    color: value === opt ? '#fbf8f3' : T.inkMid,
+                    transition:'background 100ms, color 100ms',
+                }}>{opt}</button>
+        ))}
+    </div>
+);
+
+const BlankPageSetup = ({ pageSetup, setPageSetup }) => (
+    <div>
+        {/* Page size tiles */}
+        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMid, letterSpacing:0.7, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>
+            Page size
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10, marginBottom:16 }}>
+            {PAGE_SIZES.map(size => (
+                <PageTile key={size.key} size={size}
+                    selected={pageSetup.size === size.key}
+                    onClick={() => setPageSetup(p => ({ ...p, size:size.key }))}/>
+            ))}
+        </div>
+        {/* Orientation + Density */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:4 }}>
+            <div>
+                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMid, letterSpacing:0.7, textTransform:'uppercase', marginBottom:8, fontFamily:T.sans }}>Orientation</div>
+                <SegCtrl options={['Portrait','Landscape']} value={pageSetup.orientation} onChange={v => setPageSetup(p => ({ ...p, orientation:v }))}/>
+            </div>
+            <div>
+                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMid, letterSpacing:0.7, textTransform:'uppercase', marginBottom:8, fontFamily:T.sans }}>Density</div>
+                <SegCtrl options={['Compact','Standard','Roomy']} value={pageSetup.density} onChange={v => setPageSetup(p => ({ ...p, density:v }))}/>
             </div>
         </div>
     </div>
 );
 
-// New template modal — matches target design: left mode rail with icons,
-// duplicate cards with full-width preview thumbnail, radio circles, footer name+toggle+CTA.
+// ── V4: Use-case picker ───────────────────────────────────────────────────────
+const USE_CASES = [
+    {
+        key:'plain',
+        icon:'◷', iconColor:T.inkMid,
+        label:'Plain quote',
+        sub:'Minimum required blocks. Good for short transactional deals.',
+        blocks:['LOGO','META','LINE','TERM','SIGN'],
+    },
+    {
+        key:'pitch',
+        icon:'◐', iconColor:T.goldInk,
+        label:'Pitch-style proposal',
+        sub:'Cover + exec summary + line items + ROI. Good for new logos.',
+        blocks:['LOGO','HERO','SUMM','LINE','ROI','TERM','SIGN'],
+    },
+    {
+        key:'renewal',
+        icon:'↻', iconColor:T.inkMid,
+        label:'Renewal',
+        sub:"Skip cover. Adds 'what's changed' + auto-renew clause.",
+        blocks:['LOGO','META','CHNG','LINE','TERM','SIGN'],
+    },
+    {
+        key:'multi',
+        icon:'≡', iconColor:T.inkMid,
+        label:'Multi-option',
+        sub:'Side-by-side good/better/best comparison.',
+        blocks:['LOGO','HERO','CMPR','LINE','TERM','SIGN'],
+    },
+];
+
+const BlankUseCasePicker = ({ useCase, setUseCase }) => (
+    <div>
+        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMid, letterSpacing:0.7, textTransform:'uppercase', marginBottom:6, fontFamily:T.sans }}>
+            What's this template for?
+        </div>
+        <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:12, lineHeight:1.5 }}>
+            Pick the scenario closest to your use case — we'll seed the right starting blocks. You can change everything after.
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+            {USE_CASES.map(uc => {
+                const sel = useCase === uc.key;
+                return (
+                    <div key={uc.key} onClick={() => setUseCase(uc.key)}
+                        style={{
+                            border:`1.5px solid ${sel ? T.goldInk : T.border}`,
+                            borderRadius:8, padding:'12px 14px', cursor:'pointer',
+                            background: sel ? 'rgba(200,185,154,0.10)' : T.surface,
+                            display:'flex', flexDirection:'column', gap:8,
+                            transition:'border-color 100ms, background 100ms',
+                        }}>
+                        {/* Icon + title row */}
+                        <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
+                            <div style={{
+                                width:32, height:32, borderRadius:6, flexShrink:0,
+                                background: sel ? 'rgba(122,106,72,0.14)' : 'rgba(42,38,34,0.06)',
+                                border:`1px solid ${sel ? T.goldInk : T.border}`,
+                                display:'flex', alignItems:'center', justifyContent:'center',
+                                fontSize:16, color: sel ? T.goldInk : uc.iconColor,
+                            }}>{uc.icon}</div>
+                            <div>
+                                <div style={{ fontSize:13, fontWeight:700, color:T.ink, lineHeight:1.2, marginBottom:3 }}>{uc.label}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, lineHeight:1.4 }}>{uc.sub}</div>
+                            </div>
+                        </div>
+                        {/* Block pills */}
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
+                            {uc.blocks.map(b => <BlockPill key={b} kind={b}/>)}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    </div>
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NTMFooter — module-level component (NOT inside NewTemplateModal) so React never
+// unmounts/remounts the input between keystrokes, preventing the focus-loss bug.
+const NTMFooter = ({ newName, setNewName, visibleTo, setVisibleTo, setAsDefault, setSetAsDefault }) => (
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 160px 160px', gap:10, marginBottom:12, padding:'12px 14px', background:T.surface2, borderRadius:6, border:`1px solid ${T.border}` }}>
+        {/* Template name */}
+        <div>
+            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, letterSpacing:0.1, fontFamily:T.sans }}>Template name</label>
+            <input
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                placeholder="e.g. Q4 partner deals"
+                style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r+1, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}
+                onFocus={e => e.currentTarget.style.borderColor=T.goldInk}
+                onBlur={e => e.currentTarget.style.borderColor=T.border}
+            />
+        </div>
+        {/* Visible to */}
+        <div>
+            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, letterSpacing:0.1, fontFamily:T.sans }}>Visible to</label>
+            <select value={visibleTo} onChange={e => setVisibleTo(e.target.value)}
+                style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r+1, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer', appearance:'none',
+                    backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+                    backgroundRepeat:'no-repeat', backgroundPosition:'right 8px center', paddingRight:26 }}>
+                <option>Everyone in Sales</option>
+                <option>Managers only</option>
+                <option>Admins only</option>
+                <option>My team only</option>
+            </select>
+        </div>
+        {/* Set as default */}
+        <div>
+            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, letterSpacing:0.1, fontFamily:T.sans }}>Set as default?</label>
+            <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:6 }}>
+                <ATToggle on={setAsDefault} onChange={() => setSetAsDefault(v => !v)}/>
+                <span style={{ fontSize:12.5, color:T.inkMuted }}>{setAsDefault ? 'Yes' : 'No'}</span>
+            </div>
+        </div>
+    </div>
+);
+
+// NEW TEMPLATE MODAL — main component
+// ─────────────────────────────────────────────────────────────────────────────
 const NewTemplateModal = ({ templates, onClose, onCreate }) => {
+    // Top-level mode (left rail)
     const [mode, setMode]               = useState('blank'); // blank | duplicate | import | library
+
+    // Blank sub-variant (segmented control inside right pane when mode===blank)
+    const [blankVariant, setBlankVariant] = useState('blocks'); // blocks | pageSetup | useCase
+
+    // Blank/V2 — optional block toggles
+    const [optionalBlocks, setOptionalBlocks] = useState(
+        OPTIONAL_BLOCKS_DEFAULT.map(b => ({ ...b }))
+    );
+
+    // Blank/V3 — page setup state
+    const [pageSetup, setPageSetup] = useState({ size:'letter', orientation:'Portrait', density:'Standard' });
+
+    // Blank/V4 — use case selection (default: pitch)
+    const [useCase, setUseCase] = useState('pitch');
+
+    // V5 — live preview drawer (only active in blank+blocks mode)
+    const [showPreview, setShowPreview] = useState(false);
+
+    // Collapse preview when leaving blank/blocks
+    React.useEffect(() => {
+        if (mode !== 'blank' || blankVariant !== 'blocks') setShowPreview(false);
+    }, [mode, blankVariant]);
+
+    // Duplicate mode state
     const [selectedTpl, setSelectedTpl] = useState(null);
-    const [newName, setNewName]         = useState('');
+
+    // Shared footer state
+    const [newName,      setNewName]      = useState('Untitled template');
+    const [visibleTo,    setVisibleTo]    = useState('Everyone in Sales');
     const [setAsDefault, setSetAsDefault] = useState(false);
 
+    // Footer always shown for blank; shown conditionally for others
     const showFooter = mode === 'blank' || (mode === 'duplicate' && selectedTpl) || mode === 'import';
 
-    // Mode rail — icon glyphs rendered inline as SVG paths to avoid external deps
+    // Footer helper text by variant
+    const footerHelper = mode !== 'blank' ? `Step 1 of 2 · You'll edit content next`
+        : blankVariant === 'blocks'    ? (showPreview ? 'Updates live as you toggle blocks.' : 'Required blocks are always added. Toggles seed optional blocks.')
+        : blankVariant === 'pageSetup' ? 'Page setup is locked once content is added. Pick carefully.'
+        : 'Each use case seeds a different starting block set.';
+
+    // Build the onCreate payload
+    const handleCreate = () => {
+        if (!newName.trim()) return;
+        const payload = {
+            name: newName.trim(),
+            mode,
+            sourceTpl: selectedTpl,
+            isDefault: setAsDefault,
+            visibleTo,
+        };
+        if (mode === 'blank') {
+            payload.blankVariant = blankVariant;
+            if (blankVariant === 'blocks') {
+                payload.blocks = [
+                    ...REQUIRED_BLOCKS.map(b => b.kind),
+                    ...optionalBlocks.filter(b => b.on).map(b => b.kind),
+                ];
+            } else if (blankVariant === 'pageSetup') {
+                payload.pageSetup = { ...pageSetup };
+                payload.blocks = REQUIRED_BLOCKS.map(b => b.kind);
+            } else {
+                const uc = USE_CASES.find(u => u.key === useCase);
+                payload.blocks = uc ? [...uc.blocks] : REQUIRED_BLOCKS.map(b => b.kind);
+                payload.useCase = useCase;
+            }
+        }
+        onCreate(payload);
+    };
+
+    // ── Mode rail definition
     const modeOptions = [
         {
             key: 'blank',
@@ -3886,8 +4456,7 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
             sub: 'Start from scratch',
             icon: (active) => (
                 <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={active ? T.goldInk : T.inkMuted} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="9"/>
-                    <path d="M12 8v8M8 12h8"/>
+                    <circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>
                 </svg>
             ),
         },
@@ -3908,8 +4477,7 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
             sub: 'PDF · DOCX · .qtpl',
             icon: (active) => (
                 <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={active ? T.goldInk : T.inkMuted} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 16V4M6 10l6 6 6-6"/>
-                    <path d="M4 20h16"/>
+                    <path d="M12 16V4M6 10l6 6 6-6"/><path d="M4 20h16"/>
                 </svg>
             ),
         },
@@ -3925,38 +4493,39 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
         },
     ];
 
+    // Shared footer name row (spec: 3-col grid 1fr 160px 160px)
+    // FooterNameRow lifted to module-level component (NTMFooter) to prevent focus-loss on re-render
+
     return (
-        <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.52)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center' }}
+        <div style={{ position:'fixed', inset:0, background:'rgba(20,16,12,0.45)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center' }}
             onClick={onClose}>
             <div onClick={e => e.stopPropagation()}
-                style={{ background:T.surface, borderRadius:12, width:680, maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 60px rgba(42,38,34,0.22)', fontFamily:T.sans }}>
+                style={{ background:T.surface, borderRadius:12, width: showPreview ? 1140 : 820, maxHeight:'92vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 24px 64px rgba(20,16,12,0.28)', fontFamily:T.sans, transition:'width 220ms ease' }}>
 
                 {/* ── Header ── */}
                 <div style={{ padding:'20px 24px 16px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
                     <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
                         <div>
-                            <div style={{ fontSize:18, fontWeight:700, color:T.ink, marginBottom:4, letterSpacing:-0.2 }}>New quote template</div>
-                            <div style={{ fontSize:12.5, color:T.inkMuted }}>Choose how to start, then name the template.</div>
+                            <div style={{ fontSize:18, fontWeight:700, color:T.ink, marginBottom:3, letterSpacing:-0.2, fontFamily:T.serif, fontStyle:'italic' }}>New quote template</div>
+                            <div style={{ fontSize:12.5, color:T.inkMuted, fontFamily:T.sans }}>Choose how to start, then name the template.</div>
                         </div>
                         <button onClick={onClose}
-                            style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:20, lineHeight:1, padding:'2px 4px', borderRadius:4 }}
+                            style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:20, lineHeight:1, padding:'2px 6px', borderRadius:4, fontFamily:T.sans }}
                             onMouseEnter={e => e.currentTarget.style.color=T.ink}
-                            onMouseLeave={e => e.currentTarget.style.color=T.inkMuted}>
-                            ×
-                        </button>
+                            onMouseLeave={e => e.currentTarget.style.color=T.inkMuted}>×</button>
                     </div>
                 </div>
 
-                {/* ── Body: mode rail + content ── */}
-                <div style={{ display:'grid', gridTemplateColumns:'184px 1fr', flex:1, overflow:'hidden' }}>
+                {/* ── Body: mode rail + content + optional preview drawer ── */}
+                <div style={{ display:'grid', gridTemplateColumns: showPreview ? '180px 1fr 320px' : '180px 1fr', flex:1, minHeight:0, transition:'grid-template-columns 220ms ease' }}>
 
                     {/* Left: mode rail */}
-                    <div style={{ borderRight:`1px solid ${T.border}`, padding:'14px 10px', display:'flex', flexDirection:'column', gap:3, overflowY:'auto' }}>
+                    <div style={{ borderRight:`1px solid ${T.border}`, padding:'14px 10px', display:'flex', flexDirection:'column', gap:3, overflowY:'auto', flexShrink:0 }}>
                         {modeOptions.map(opt => {
                             const active = mode === opt.key;
                             return (
                                 <div key={opt.key}
-                                    onClick={() => { setMode(opt.key); setSelectedTpl(null); if (opt.key !== 'duplicate') setNewName(''); }}
+                                    onClick={() => { setMode(opt.key); setSelectedTpl(null); }}
                                     style={{
                                         padding:'10px 12px', borderRadius:6, cursor:'pointer',
                                         background: active ? 'rgba(200,185,154,0.18)' : 'transparent',
@@ -3979,151 +4548,262 @@ const NewTemplateModal = ({ templates, onClose, onCreate }) => {
                     </div>
 
                     {/* Right: mode content */}
-                    <div style={{ padding:'16px 20px', overflowY:'auto' }}>
+                    <div style={{ overflowY:'auto', display:'flex', flexDirection:'column' }}>
+                        <div style={{ padding:'16px 20px', flex:1 }}>
 
-                        {/* BLANK */}
-                        {mode === 'blank' && (
-                            <div style={{ padding:24, border:`1.5px dashed ${T.border}`, borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:10, minHeight:140, cursor:'default' }}>
-                                <span style={{ fontSize:30, color:T.goldInk, lineHeight:1 }}>+</span>
-                                <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>Start from scratch</span>
-                                <span style={{ fontSize:11.5, color:T.inkMuted, textAlign:'center', maxWidth:240, lineHeight:1.5 }}>You'll be taken to the template editor after naming your template.</span>
-                            </div>
-                        )}
-
-                        {/* DUPLICATE */}
-                        {mode === 'duplicate' && (
-                            <div>
-                                <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.8, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>
-                                    Pick a template to duplicate
-                                </div>
-                                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                                    {templates.map((tpl) => {
-                                        const isSelected = selectedTpl?.id === tpl.id;
-                                        return (
-                                            <div key={tpl.id}
-                                                onClick={() => { setSelectedTpl(tpl); setNewName(tpl.name + ' — Q4 push'); }}
+                            {/* ── BLANK MODE ── */}
+                            {mode === 'blank' && (
+                                <div>
+                                    {/* Starting blocks eyebrow + Preview toggle button */}
+                                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+                                        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMid, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>
+                                            Starting blocks
+                                        </div>
+                                        {blankVariant === 'blocks' && (
+                                            <button
+                                                onClick={() => setShowPreview(v => !v)}
                                                 style={{
-                                                    border:`1.5px solid ${isSelected ? T.goldInk : T.border}`,
-                                                    borderRadius:8, cursor:'pointer',
-                                                    display:'flex', gap:0, alignItems:'stretch',
-                                                    background: isSelected ? 'rgba(200,185,154,0.08)' : T.surface,
-                                                    overflow:'hidden',
-                                                    transition:'border-color 100ms, background 100ms',
+                                                    display:'inline-flex', alignItems:'center', gap:5,
+                                                    padding:'4px 10px', fontSize:11.5, fontWeight:600,
+                                                    background: showPreview ? T.ink : T.surface,
+                                                    color: showPreview ? '#fbf8f3' : T.inkMid,
+                                                    border:`1px solid ${showPreview ? T.ink : T.border}`,
+                                                    borderRadius:5, cursor:'pointer', fontFamily:T.sans,
+                                                    transition:'background 120ms, color 120ms',
                                                 }}>
-                                                {/* Thumbnail region */}
-                                                <div style={{
-                                                    width:72, flexShrink:0,
-                                                    background:'linear-gradient(180deg,#f4ede0 0%,#ede4d2 100%)',
-                                                    borderRight:`1px solid ${T.border}`,
-                                                    display:'flex', alignItems:'center', justifyContent:'center',
-                                                    padding:'8px 0',
-                                                }}>
-                                                    <div style={{ transform:'scale(0.16)', transformOrigin:'center', width:360, height:240, marginTop:-100, marginLeft:-130 }}>
-                                                        <MiniQuoteDoc scale={1}/>
-                                                    </div>
-                                                </div>
-                                                {/* Text content */}
-                                                <div style={{ flex:1, padding:'12px 14px', minWidth:0 }}>
-                                                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:3 }}>{tpl.name}</div>
-                                                    <div style={{ fontSize:11.5, color:T.inkMuted, lineHeight:1.5, marginBottom:8, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>{tpl.desc}</div>
-                                                    <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, color:T.inkMid }}>
-                                                        <span>
-                                                            <b style={{ fontFamily:T.serif, fontStyle:'italic', fontSize:13, color:T.ink }}>{tpl.usedTimes}</b> uses
-                                                        </span>
-                                                        <span style={{ color:T.inkMuted }}>·</span>
-                                                        <span>Last {tpl.lastUsed}</span>
-                                                        <div style={{ flex:1 }}/>
-                                                        <QPill tone="rep" dot>{Math.round(tpl.avgWinRate * 100)}% win</QPill>
-                                                    </div>
-                                                </div>
-                                                {/* Radio circle */}
-                                                <div style={{ padding:'12px 14px', display:'flex', alignItems:'center', flexShrink:0 }}>
-                                                    <div style={{
-                                                        width:18, height:18, borderRadius:'50%',
-                                                        border:`2px solid ${isSelected ? T.goldInk : T.borderStrong}`,
-                                                        display:'flex', alignItems:'center', justifyContent:'center',
-                                                        background: isSelected ? 'rgba(122,106,72,0.08)' : 'transparent',
-                                                        transition:'border-color 100ms',
-                                                        flexShrink:0,
+                                                {showPreview ? (
+                                                    <>
+                                                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                                            <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>
+                                                        </svg>
+                                                        Hide preview
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                                            <path d="M1 12S5 4 12 4s11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>
+                                                        </svg>
+                                                        Preview
+                                                    </>
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Sub-variant segmented control */}
+                                    <div style={{ display:'flex', gap:0, marginBottom:12, background:T.bg, border:`1px solid ${T.border}`, borderRadius:6, padding:3, width:'fit-content' }}>
+                                        {[
+                                            { key:'blocks',    label:'Required blocks' },
+                                            { key:'pageSetup', label:'Page setup' },
+                                            { key:'useCase',   label:'Use-case picker' },
+                                        ].map(v => (
+                                            <button key={v.key} onClick={() => setBlankVariant(v.key)}
+                                                style={{
+                                                    padding:'6px 14px', fontSize:12, fontWeight:600, borderRadius:4, border:'none',
+                                                    cursor:'pointer', fontFamily:T.sans,
+                                                    background: blankVariant === v.key ? T.ink : 'transparent',
+                                                    color: blankVariant === v.key ? '#fbf8f3' : T.inkMid,
+                                                    transition:'background 100ms, color 100ms',
+                                                }}>{v.label}</button>
+                                        ))}
+                                    </div>
+
+                                    {/* Sub-variant content */}
+                                    {blankVariant === 'blocks'    && <BlankRequiredBlocks optionalBlocks={optionalBlocks} setOptionalBlocks={setOptionalBlocks}/>}
+                                    {blankVariant === 'pageSetup' && <BlankPageSetup pageSetup={pageSetup} setPageSetup={setPageSetup}/>}
+                                    {blankVariant === 'useCase'   && <BlankUseCasePicker useCase={useCase} setUseCase={setUseCase}/>}
+                                </div>
+                            )}
+
+                            {/* ── DUPLICATE MODE ── */}
+                            {mode === 'duplicate' && (
+                                <div>
+                                    <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.8, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>
+                                        Pick a template to duplicate
+                                    </div>
+                                    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                                        {templates.map(tpl => {
+                                            const isSel = selectedTpl?.id === tpl.id;
+                                            return (
+                                                <div key={tpl.id}
+                                                    onClick={() => { setSelectedTpl(tpl); setNewName(tpl.name + ' — copy'); }}
+                                                    style={{
+                                                        border:`1.5px solid ${isSel ? T.goldInk : T.border}`,
+                                                        borderRadius:8, cursor:'pointer',
+                                                        display:'flex', alignItems:'stretch',
+                                                        background: isSel ? 'rgba(200,185,154,0.08)' : T.surface,
+                                                        overflow:'hidden', transition:'border-color 100ms, background 100ms',
                                                     }}>
-                                                        {isSelected && (
-                                                            <div style={{ width:9, height:9, borderRadius:'50%', background:T.goldInk }}/>
-                                                        )}
+                                                    {/* Thumbnail */}
+                                                    <div style={{ width:72, flexShrink:0, background:'linear-gradient(180deg,#f4ede0 0%,#ede4d2 100%)', borderRight:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', padding:'8px 0', overflow:'hidden' }}>
+                                                        <div style={{ transform:'scale(0.16)', transformOrigin:'center', width:360, height:240, marginTop:-100, marginLeft:-130 }}>
+                                                            <MiniQuoteDoc scale={1}/>
+                                                        </div>
+                                                    </div>
+                                                    {/* Text */}
+                                                    <div style={{ flex:1, padding:'12px 14px', minWidth:0 }}>
+                                                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:3 }}>{tpl.name}</div>
+                                                        <div style={{ fontSize:11.5, color:T.inkMuted, lineHeight:1.5, marginBottom:8 }}>{tpl.desc}</div>
+                                                        <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:11, color:T.inkMid }}>
+                                                            <span><b style={{ fontFamily:T.serif, fontStyle:'italic', fontSize:13, color:T.ink }}>{tpl.usedTimes}</b> uses</span>
+                                                            <span style={{ color:T.inkMuted }}>·</span>
+                                                            <span>Last {tpl.lastUsed}</span>
+                                                            <div style={{ flex:1 }}/>
+                                                            <QPill tone="rep" dot>{Math.round(tpl.avgWinRate * 100)}% win</QPill>
+                                                        </div>
+                                                    </div>
+                                                    {/* Radio */}
+                                                    <div style={{ padding:'12px 14px', display:'flex', alignItems:'center', flexShrink:0 }}>
+                                                        <div style={{ width:18, height:18, borderRadius:'50%', border:`2px solid ${isSel ? T.goldInk : T.borderStrong}`, display:'flex', alignItems:'center', justifyContent:'center', background: isSel ? 'rgba(122,106,72,0.08)' : 'transparent', transition:'border-color 100ms', flexShrink:0 }}>
+                                                            {isSel && <div style={{ width:9, height:9, borderRadius:'50%', background:T.goldInk }}/>}
+                                                        </div>
                                                     </div>
                                                 </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── IMPORT MODE ── */}
+                            {mode === 'import' && (
+                                <div style={{ padding:28, border:`1.5px dashed ${T.border}`, borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:10, minHeight:160, cursor:'pointer' }}
+                                    onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.06)'}
+                                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                    <LIcon name="upload" size={24} color={T.inkMuted}/>
+                                    <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>Drop file here or click to browse</span>
+                                    <span style={{ fontSize:11.5, color:T.inkMuted }}>PDF · DOCX · .qtpl — max 10 MB</span>
+                                </div>
+                            )}
+
+                            {/* ── LIBRARY MODE ── */}
+                            {mode === 'library' && (
+                                <div style={{ padding:28, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:8, minHeight:160 }}>
+                                    <span style={{ fontSize:28, color:T.goldInk }}>★</span>
+                                    <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>Accelerep starter templates</span>
+                                    <span style={{ fontSize:11.5, color:T.inkMuted, textAlign:'center', maxWidth:280, lineHeight:1.5 }}>Coming soon — curated layouts for common deal types.</span>
+                                </div>
+                            )}
+
+                        </div>
+                    </div>
+
+                    {/* ── V5 Live Preview Drawer ── */}
+                    {showPreview && mode === 'blank' && blankVariant === 'blocks' && (
+                        <div style={{
+                            width:320, flexShrink:0,
+                            borderLeft:`1px solid ${T.border}`,
+                            display:'flex', flexDirection:'column',
+                            background:T.bg,
+                            overflow:'hidden',
+                        }}>
+                            {/* Drawer header */}
+                            <div style={{
+                                padding:'10px 14px', borderBottom:`1px solid ${T.border}`,
+                                display:'flex', alignItems:'center', justifyContent:'space-between',
+                                background:T.surface, flexShrink:0,
+                            }}>
+                                <div>
+                                    <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Live Preview · Page 1</div>
+                                </div>
+                                <button
+                                    onClick={() => setShowPreview(false)}
+                                    style={{ fontSize:11, fontWeight:600, color:T.inkMid, background:'none', border:`1px solid ${T.border}`, borderRadius:4, padding:'3px 8px', cursor:'pointer', fontFamily:T.sans }}
+                                    onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                    onMouseLeave={e => e.currentTarget.style.background='none'}>
+                                    Hide
+                                </button>
+                            </div>
+
+                            {/* Paper preview — scrollable */}
+                            <div style={{ flex:1, overflowY:'auto', padding:16, display:'flex', flexDirection:'column', alignItems:'center' }}>
+                                {/* Paper document */}
+                                <div style={{
+                                    width:260, background:'#fbf8f3',
+                                    border:`1px solid ${T.border}`,
+                                    borderRadius:4,
+                                    boxShadow:'0 4px 16px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)',
+                                    padding:'20px 18px',
+                                    fontFamily:T.sans,
+                                    minHeight:320,
+                                }}>
+                                    {/* Cover — always shown */}
+                                    <div style={{ marginBottom:16 }}>
+                                        <div style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:15, color:QT_BRANDING.ink, lineHeight:1.2, marginBottom:3 }}>
+                                            Proposal for Acme Co.
+                                        </div>
+                                        <div style={{ fontSize:10.5, color:T.inkMuted }}>
+                                            Valid until Dec 31 · Prepared by Sarah K.
+                                        </div>
+                                        <div style={{ height:1, background:QT_BRANDING.primary, opacity:0.4, margin:'10px 0' }}/>
+                                    </div>
+
+                                    {/* Block rows — always-required + toggled optionals */}
+                                    {(() => {
+                                        const activeBlocks = [
+                                            ...REQUIRED_BLOCKS,
+                                            ...optionalBlocks.filter(b => b.on),
+                                        ];
+                                        // Sort to natural document order
+                                        const ORDER = ['LOGO','META','HERO','SUMM','LINE','ADDN','TERM','SIGN'];
+                                        const sorted = [...activeBlocks].sort((a,b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind));
+                                        return sorted.map((block, i) => (
+                                            <div key={block.kind} style={{
+                                                display:'flex', alignItems:'center', gap:8,
+                                                padding:'7px 10px', marginBottom:5,
+                                                background: 'rgba(42,38,34,0.03)',
+                                                border:`1px solid ${T.border}`,
+                                                borderRadius:3,
+                                            }}>
+                                                <span style={{
+                                                    display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                                    width:36, flexShrink:0,
+                                                    fontSize:8.5, fontWeight:700, letterSpacing:0.4,
+                                                    color: block.color === '#4d6b3d' ? '#4d6b3d' : T.inkMuted,
+                                                    fontFamily:T.sans,
+                                                }}>{block.kind}</span>
+                                                <span style={{ fontSize:11, color:T.inkMid, flex:1 }}>{block.label}</span>
                                             </div>
-                                        );
-                                    })}
+                                        ));
+                                    })()}
+                                </div>
+
+                                {/* Live indicator */}
+                                <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:5, fontSize:10.5, color:T.inkMuted }}>
+                                    <span style={{ width:6, height:6, borderRadius:'50%', background:'#4d6b3d', display:'inline-block' }}/>
+                                    Updates live as you toggle blocks
                                 </div>
                             </div>
-                        )}
-
-                        {/* IMPORT */}
-                        {mode === 'import' && (
-                            <div style={{ padding:24, border:`1.5px dashed ${T.border}`, borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:10, minHeight:140, cursor:'pointer' }}
-                                onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.06)'}
-                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                                <LIcon name="upload" size={24} color={T.inkMuted}/>
-                                <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>Drop file here or click to browse</span>
-                                <span style={{ fontSize:11.5, color:T.inkMuted }}>PDF · DOCX · .qtpl — max 10 MB</span>
-                            </div>
-                        )}
-
-                        {/* LIBRARY */}
-                        {mode === 'library' && (
-                            <div style={{ padding:24, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:8, minHeight:140, color:T.inkMuted }}>
-                                <span style={{ fontSize:24 }}>★</span>
-                                <span style={{ fontSize:13, fontWeight:600, color:T.inkMid }}>Accelerep starter templates</span>
-                                <span style={{ fontSize:11.5, color:T.inkMuted }}>Coming soon — curated layouts for common deal types.</span>
-                            </div>
-                        )}
-
-                    </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* ── Footer: name field + default toggle + action buttons ── */}
+                {/* ── Footer ── */}
                 {showFooter && (
-                    <div style={{ borderTop:`1px solid ${T.border}`, padding:'14px 20px', flexShrink:0 }}>
-                        <div style={{ display:'flex', gap:14, alignItems:'flex-end' }}>
-                            {/* Name field */}
-                            <div style={{ flex:1 }}>
-                                <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, letterSpacing:0.1 }}>New template name</label>
-                                <input
-                                    value={newName}
-                                    onChange={e => setNewName(e.target.value)}
-                                    placeholder="e.g. Growth Package — Q4 push"
-                                    style={{ width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r+1, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}
-                                    onFocus={e => e.currentTarget.style.borderColor=T.goldInk}
-                                    onBlur={e => e.currentTarget.style.borderColor=T.border}
-                                />
-                            </div>
-                            {/* Set as default toggle */}
-                            <div style={{ display:'flex', flexDirection:'column', gap:5, flexShrink:0 }}>
-                                <label style={{ fontSize:11, fontWeight:600, color:T.inkMid, letterSpacing:0.1 }}>Set as default?</label>
-                                <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                                    <ATToggle on={setAsDefault} onChange={() => setSetAsDefault(v => !v)}/>
-                                    <span style={{ fontSize:12, color:T.inkMuted, minWidth:18 }}>{setAsDefault ? 'Yes' : 'No'}</span>
-                                </div>
-                            </div>
-                            {/* Action buttons */}
-                            <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                    <div style={{ borderTop:`1px solid ${T.border}`, padding:'14px 20px', flexShrink:0, background:T.bg }}>
+                        <NTMFooter
+                            newName={newName} setNewName={setNewName}
+                            visibleTo={visibleTo} setVisibleTo={setVisibleTo}
+                            setAsDefault={setAsDefault} setSetAsDefault={setSetAsDefault}
+                        />
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                            <span style={{ fontSize:11, color:T.inkMuted, fontStyle:'italic' }}>{footerHelper}</span>
+                            <div style={{ display:'flex', gap:8 }}>
                                 <button onClick={onClose}
-                                    style={{ padding:'8px 18px', background:T.surface, color:T.inkMid, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+1, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                                    style={{ padding:'8px 20px', background:T.surface, color:T.inkMid, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+1, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
                                     onMouseEnter={e => e.currentTarget.style.background=T.surface2}
                                     onMouseLeave={e => e.currentTarget.style.background=T.surface}>
                                     Cancel
                                 </button>
-                                <button
-                                    onClick={() => { if (newName.trim()) onCreate({ name:newName.trim(), mode, sourceTpl:selectedTpl, isDefault:setAsDefault }); }}
-                                    disabled={!newName.trim()}
-                                    style={{ padding:'8px 18px', background: newName.trim() ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r+1, fontSize:12.5, fontWeight:600, cursor: newName.trim() ? 'pointer' : 'default', fontFamily:T.sans, transition:'background 100ms' }}>
+                                <button onClick={handleCreate} disabled={!newName.trim()}
+                                    style={{ padding:'8px 20px', background: newName.trim() ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r+1, fontSize:12.5, fontWeight:700, cursor: newName.trim() ? 'pointer' : 'default', fontFamily:T.sans, transition:'background 100ms' }}>
                                     Create draft
                                 </button>
                             </div>
                         </div>
-                        <div style={{ marginTop:10, fontSize:11, color:T.inkMuted }}>Step 1 of 2 · You'll edit content next</div>
                     </div>
                 )}
+
             </div>
         </div>
     );
@@ -4139,9 +4819,23 @@ const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
     const [boilerplate,  setBoilerplate] = useState(savedBoilerplate);
     const [selectedId,   setSelectedId]  = useState(templates[0]?.id || null);
     const [showNewModal, setShowNewModal] = useState(false);
+    const [editingTplId, setEditingTplId] = useState(null);  // id of card in inline-name-edit mode
+    const [editingName,  setEditingName]  = useState('');
     const [dirty,        setDirty]       = useState(false);
     const [saving,       setSaving]      = useState(false);
     const [editBoilerplate, setEditBoilerplate] = useState(false);
+
+    // Commit inline name edit
+    const commitNameEdit = () => {
+        if (!editingTplId) return;
+        const trimmed = editingName.trim();
+        if (trimmed) {
+            setTemplates(prev => prev.map(t => t.id === editingTplId ? { ...t, name:trimmed } : t));
+            setDirty(true);
+        }
+        setEditingTplId(null);
+        setEditingName('');
+    };
 
     const handleCancel = () => { setTemplates(JSON.parse(JSON.stringify(savedTemplates))); setDefaults({ ...savedDefaults }); setBoilerplate(savedBoilerplate); setDirty(false); };
     const handleSave   = async () => {
@@ -4152,15 +4846,30 @@ const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
         setSaving(false); setDirty(false);
     };
 
-    const handleCreateTemplate = ({ name, mode, sourceTpl, isDefault }) => {
+    const handleCreateTemplate = ({ name, mode, sourceTpl, isDefault, visibleTo, blocks, pageSetup, useCase, blankVariant }) => {
         const newTpl = {
-            id: `tpl_${Date.now()}`, name, desc:'New template — edit to add description.',
-            usedTimes:0, lastUsed:'Just created', avgWinRate:0,
+            id: `tpl_${Date.now()}`,
+            name,
+            desc: 'New template — edit to add description.',
+            usedTimes: 0,
+            lastUsed: 'Just created',
+            avgWinRate: 0,
+            status: 'draft',
+            ...(mode === 'blank' && {
+                blankVariant: blankVariant || 'blocks',
+                blocks: blocks || ['LOGO','META','LINE','TERM','SIGN'],
+                ...(pageSetup ? { pageSetup } : {}),
+                ...(useCase    ? { useCase  } : {}),
+            }),
+            ...(mode === 'duplicate' && sourceTpl ? { sourceTplId: sourceTpl.id } : {}),
+            visibleTo: visibleTo || 'Everyone in Sales',
         };
-        const updated = isDefault
-            ? [...templates.map(t => ({ ...t })), newTpl].map((t,i,arr) => ({ ...t, isDefault: t.id === newTpl.id }))
-            : [...templates, newTpl];
-        setTemplates(updated); setDirty(true); setShowNewModal(false); setSelectedId(newTpl.id);
+        const withoutOldDefault = templates.map(t => ({ ...t, ...(isDefault ? { isDefault:false } : {}) }));
+        const updated = [...withoutOldDefault, { ...newTpl, isDefault: !!isDefault }];
+        setTemplates(updated);
+        setDirty(true);
+        setShowNewModal(false);
+        setSelectedId(newTpl.id);
     };
 
     const setfd = (k, v) => { setDefaults(p => ({ ...p, [k]:v })); setDirty(true); };
@@ -4245,7 +4954,35 @@ const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
                     >
                         <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:14 }}>
                             {templates.map((t,i) => (
-                                <TplLibCard key={t.id} t={t} isDefault={i===0} isSelected={selectedId===t.id} onClick={() => setSelectedId(t.id)}/>
+                                <TplLibCard key={t.id} t={t}
+                                    isDefault={i===0}
+                                    isSelected={selectedId===t.id}
+                                    isEditing={editingTplId===t.id}
+                                    editingName={editingTplId===t.id ? editingName : t.name}
+                                    onEditingNameChange={v => setEditingName(v)}
+                                    onEditingCommit={commitNameEdit}
+                                    onClick={() => { if (editingTplId) commitNameEdit(); setSelectedId(t.id); }}
+                                    onEdit={() => {
+                                        setSelectedId(t.id);
+                                        setEditingTplId(t.id);
+                                        setEditingName(t.name);
+                                    }}
+                                    onDuplicate={() => {
+                                        const copy = { ...t, id:`tpl_${Date.now()}`, name:`Copy of ${t.name}`, usedTimes:0, lastUsed:'Just created', avgWinRate:0, status:'draft', createdBy:CURRENT_USER.id, createdByName:CURRENT_USER.name, systemTemplate:false };
+                                        setTemplates(prev => [...prev, copy]);
+                                        setDirty(true);
+                                    }}
+                                    onSetDefault={() => {
+                                        setTemplates(prev => prev.map((x,j) => ({ ...x, isDefault: j===i })));
+                                        setDirty(true);
+                                    }}
+                                    onDelete={() => {
+                                        if (templates.length <= 1) return;
+                                        setTemplates(prev => prev.filter(x => x.id !== t.id));
+                                        if (selectedId === t.id) setSelectedId(templates.find(x => x.id !== t.id)?.id || null);
+                                        setDirty(true);
+                                    }}
+                                />
                             ))}
                             {/* New template CTA tile */}
                             <div onClick={() => setShowNewModal(true)}
@@ -4300,6 +5037,4283 @@ const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
     );
 };
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRICE BOOK
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SEGMENTS = ['SMB','Mid-Market','Enterprise'];
+const REGIONS  = ['NA','EMEA','APAC','LATAM'];
+
+const DEFAULT_TIERS = [
+    { id:'t1', range:'1–24 seats',   price: null,  vsListPct: 0,    autoApply:'always' },
+    { id:'t2', range:'25–99 seats',  price: null,  vsListPct: -10,  autoApply:'Quantity ≥ 25' },
+    { id:'t3', range:'100–499 seats',price: null,  vsListPct: -20,  autoApply:'Quantity ≥ 100' },
+    { id:'t4', range:'500+ seats',   price: null,  vsListPct: -30,  autoApply:'Quantity ≥ 500 · CFO approval' },
+];
+
+const makeMatrix = () => {
+    const m = {};
+    SEGMENTS.forEach(s => { m[s] = {}; REGIONS.forEach(r => { m[s][r] = null; }); });
+    return m;
+};
+
+const PRICE_BOOK_PRODUCTS = [
+    { id:'p1',  sku:'AR-CORE',    name:'Accelerep Core',         category:'Platform', type:'Recurring', unit:'/seat/yr',   listPrice:720,   cost:210, active:true,  tags:['Rules'],
+      volumeTiers: DEFAULT_TIERS.map(t => ({ ...t })),
+      segMatrix: { SMB:{ NA:720, EMEA:720, APAC:760, LATAM:800 }, 'Mid-Market':{ NA:null,EMEA:null,APAC:null,LATAM:null }, Enterprise:{ NA:null,EMEA:null,APAC:null,LATAM:null } },
+      customRules: [{ id:'r1', when:'Deal > $100k', then:'Require VP approval before discount', tone:'warn' }] },
+    { id:'p2',  sku:'AR-CORE-P',  name:'Accelerep Core — Premium', category:'Platform', type:'Recurring', unit:'/seat/yr', listPrice:1060,  cost:250, active:true,  tags:['Value'],
+      volumeTiers: DEFAULT_TIERS.map(t => ({ ...t })), segMatrix: makeMatrix(), customRules: [] },
+    { id:'p3',  sku:'MOD-PIPE',   name:'Pipeline & Forecasting',  category:'Modules',  type:'Recurring', unit:'/seat/yr',  listPrice:240,   cost:40,  active:true,  tags:[],
+      volumeTiers: DEFAULT_TIERS.map(t => ({ ...t })), segMatrix: makeMatrix(), customRules: [] },
+    { id:'p4',  sku:'MOD-QUOT',   name:'Quoting & CPQ',           category:'Modules',  type:'Recurring', unit:'/seat/yr',  listPrice:180,   cost:30,  active:true,  tags:[],
+      volumeTiers: DEFAULT_TIERS.map(t => ({ ...t })), segMatrix: makeMatrix(), customRules: [] },
+    { id:'p5',  sku:'MOD-REP',    name:'Reports & Dashboards',     category:'Modules',  type:'Recurring', unit:'/seat/yr',  listPrice:156,   cost:33,  active:true,  tags:[],
+      volumeTiers: DEFAULT_TIERS.map(t => ({ ...t })), segMatrix: makeMatrix(), customRules: [] },
+    { id:'p6',  sku:'MOD-AI',     name:'AI Assistant',             category:'Modules',  type:'Recurring', unit:'/seat/yr',  listPrice:200,   cost:90,  active:true,  tags:['New'],
+      volumeTiers: DEFAULT_TIERS.map(t => ({ ...t })), segMatrix: makeMatrix(), customRules: [] },
+    { id:'p7',  sku:'MOD-MOB',    name:'Mobile offline pack',      category:'Modules',  type:'Recurring', unit:'/seat/yr',  listPrice:120,   cost:20,  active:true,  tags:[],
+      volumeTiers: DEFAULT_TIERS.map(t => ({ ...t })), segMatrix: makeMatrix(), customRules: [] },
+    { id:'p8',  sku:'SVC-ONB-B',  name:'Onboarding — Basic',       category:'Services', type:'One-time',  unit:'/project', listPrice:7500,  cost:980, active:true,  tags:[],
+      volumeTiers: [], segMatrix: makeMatrix(), customRules: [] },
+    { id:'p9',  sku:'SVC-ONB-W',  name:'Onboarding — White-glove', category:'Services', type:'One-time',  unit:'/project', listPrice:18500, cost:2400,active:true,  tags:[],
+      volumeTiers: [], segMatrix: makeMatrix(), customRules: [] },
+    { id:'p10', sku:'SVC-DATA',   name:'Data migration',           category:'Services', type:'One-time',  unit:'/project', listPrice:4200,  cost:1200,active:true,  tags:[],
+      volumeTiers: [], segMatrix: makeMatrix(), customRules: [] },
+    { id:'p11', sku:'SVC-TRAIN',  name:'Team training (full day)', category:'Services', type:'One-time',  unit:'/session', listPrice:1800,  cost:450, active:true,  tags:[],
+      volumeTiers: [], segMatrix: makeMatrix(), customRules: [] },
+    { id:'p12', sku:'HW-TERM',    name:'Countertop terminal',       category:'Hardware', type:'One-time',  unit:'unit',     listPrice:680,   cost:340, active:true,  tags:[],
+      volumeTiers: [], segMatrix: makeMatrix(), customRules: [] },
+    { id:'p13', sku:'HW-SCAN',    name:'Wireless scanner',           category:'Hardware', type:'One-time',  unit:'unit',     listPrice:220,   cost:110, active:true,  tags:[],
+      volumeTiers: [], segMatrix: makeMatrix(), customRules: [] },
+    { id:'p14', sku:'SUP-PREM',   name:'Premium support (24/7)',    category:'Support',  type:'Recurring', unit:'/account/yr',listPrice:4800, cost:1800,active:true,  tags:[],
+      volumeTiers: DEFAULT_TIERS.map(t => ({ ...t })), segMatrix: makeMatrix(), customRules: [] },
+];
+
+const PRICE_BOOK_BUNDLES = [
+    { name:'SMB Starter',    items:3, seats:'Under 50 seats', listTotal:15616, bundlePrice:13947, discPct:11 },
+    { name:'Growth Package', items:4, seats:'50–200 seats',   listTotal:31100, bundlePrice:25488, discPct:18 },
+    { name:'Enterprise',     items:5, seats:'200+ seats',     listTotal:109456,bundlePrice:92738, discPct:15 },
+];
+
+const fmt$ = (v) => '$' + Number(v).toLocaleString();
+const fmtPct = (list, cost) => Math.round((list - cost) / list * 100);
+
+// Category filter tabs
+const CAT_TABS = ['All','Platform','Modules','Services','Hardware','Support'];
+
+// ── Catalog row overflow menu ──────────────────────────────────
+const PBRowMenu = ({ product, onEdit, onDuplicate, onArchive }) => {
+    const [open, setOpen] = useState(false);
+    const ref = React.useRef(null);
+    React.useEffect(() => {
+        if (!open) return;
+        const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener('mousedown', h);
+        return () => document.removeEventListener('mousedown', h);
+    }, [open]);
+    return (
+        <div ref={ref} style={{ position:'relative', flexShrink:0 }}>
+            <button onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+                style={{ padding:'2px 7px', fontSize:15, fontWeight:700, color:T.inkMuted, background:'none', border:'none', cursor:'pointer', lineHeight:1, borderRadius:3 }}
+                onMouseEnter={e => e.currentTarget.style.color=T.ink}
+                onMouseLeave={e => e.currentTarget.style.color=T.inkMuted}>
+                ⋯
+            </button>
+            {open && (
+                <div style={{ position:'absolute', right:0, top:'100%', marginTop:4, background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', minWidth:200, zIndex:30, overflow:'hidden' }}>
+                    {[
+                        { label:'Edit pricing rules', action:() => { onEdit('tiers'); setOpen(false); } },
+                        { label:'Edit product',       action:() => { onEdit('top');   setOpen(false); } },
+                        { label:'Duplicate',          action:() => { onDuplicate();   setOpen(false); } },
+                        { label:'Archive',            action:() => { onArchive();     setOpen(false); }, danger:true, div:true },
+                    ].map((it,i) => (
+                        <React.Fragment key={i}>
+                            {it.div && <div style={{ height:1, background:T.border }}/>}
+                            <div onClick={e => { e.stopPropagation(); it.action(); }}
+                                style={{ padding:'8px 14px', fontSize:12.5, color: it.danger ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                {it.label}
+                            </div>
+                        </React.Fragment>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ── Product Add/Edit Modal ─────────────────────────────────────
+// Defined at module level — never recreated on parent re-render,
+// so all inputs retain focus between keystrokes.
+const PBProductModal = ({ mode, product, onClose, onSave }) => {
+    // Draft state
+    const blank = { sku:'', name:'', category:'Modules', type:'Recurring', unit:'/seat/yr', listPrice:'', cost:'', active:true,
+        volumeTiers: DEFAULT_TIERS.map(t => ({ ...t })), segMatrix: makeMatrix(), customRules: [] };
+    const init = mode === 'new' ? blank : { ...product, listPrice: String(product.listPrice), cost: String(product.cost) };
+
+    const [draft, setDraft] = useState(init);
+    const [dirty, setDirty] = useState(false);
+    const [scrollTarget, setScrollTarget] = useState(null);
+
+    const set = (k, v) => { setDraft(p => ({ ...p, [k]:v })); setDirty(true); };
+    const listN = parseFloat(draft.listPrice) || 0;
+    const costN  = parseFloat(draft.cost)      || 0;
+    const margin = listN > 0 ? fmtPct(listN, costN) : 0;
+    const marginGood = margin >= 60;
+
+    // Tier helpers
+    const addTier = () => {
+        const t = { id:`t${Date.now()}`, range:'', price:null, vsListPct:0, autoApply:'always' };
+        setDraft(p => ({ ...p, volumeTiers:[...p.volumeTiers, t] }));
+        setDirty(true);
+    };
+    const setTierField = (idx, k, v) => {
+        setDraft(p => {
+            const tiers = p.volumeTiers.map((t,i) => i === idx ? { ...t, [k]:v } : t);
+            return { ...p, volumeTiers:tiers };
+        });
+        setDirty(true);
+    };
+    const removeTier = (idx) => {
+        setDraft(p => ({ ...p, volumeTiers: p.volumeTiers.filter((_,i) => i !== idx) }));
+        setDirty(true);
+    };
+
+    // Matrix helper
+    const setMatrix = (seg, reg, v) => {
+        setDraft(p => ({
+            ...p,
+            segMatrix: { ...p.segMatrix, [seg]: { ...p.segMatrix[seg], [reg]: v === '' ? null : parseFloat(v) || null } }
+        }));
+        setDirty(true);
+    };
+
+    const handleSave = () => {
+        if (!draft.sku.trim() || !draft.name.trim()) return;
+        onSave({
+            ...draft,
+            listPrice: listN,
+            cost: costN,
+        });
+    };
+
+    const handleBackdrop = () => {
+        if (dirty) { if (!window.confirm('Discard unsaved changes?')) return; }
+        onClose();
+    };
+
+    const eyebrow = mode === 'new' ? 'NEW PRODUCT' : `EDIT PRODUCT · ${product?.sku || ''}`;
+    const title   = mode === 'new' ? 'New product' : `${product?.name || ''} — pricing rules`;
+    const cta     = mode === 'new' ? 'Create product' : 'Publish changes';
+    const statusText = mode === 'new' ? 'Drafted product · saves on Create' : `Last edited by Priya yesterday`;
+
+    // Input style helper
+    const inp = (extra={}) => ({
+        padding:'7px 10px', background:T.surface, border:`1px solid ${T.border}`,
+        borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans,
+        outline:'none', width:'100%', boxSizing:'border-box', ...extra,
+    });
+
+    return (
+        <div onClick={handleBackdrop}
+            style={{ position:'fixed', inset:0, background:'rgba(20,16,12,0.45)', zIndex:600, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:T.sans }}>
+            <div onClick={e => e.stopPropagation()}
+                style={{ background:T.surface, borderRadius:10, width:1100, maxHeight:'calc(100vh - 80px)', display:'flex', flexDirection:'column', boxShadow:'0 24px 64px rgba(20,16,12,0.28)', overflow:'hidden' }}>
+
+                {/* ── Modal header ── */}
+                <div style={{ padding:'18px 24px 14px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
+                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
+                        <div>
+                            <div style={{ ...eb(T.inkMuted), marginBottom:4 }}>{eyebrow}</div>
+                            <div style={{ fontFamily:T.serif, fontStyle:'italic', fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>{title}</div>
+                        </div>
+                        <button onClick={onClose}
+                            style={{ background:'none', border:'none', color:T.inkMuted, fontSize:22, cursor:'pointer', lineHeight:1, padding:'2px 6px', borderRadius:4 }}
+                            onMouseEnter={e => e.currentTarget.style.color=T.ink}
+                            onMouseLeave={e => e.currentTarget.style.color=T.inkMuted}>×</button>
+                    </div>
+                </div>
+
+                {/* ── Modal body — scrollable ── */}
+                <div style={{ flex:1, overflowY:'auto', padding:'20px 24px' }}>
+
+                    {/* 1. Identity row — 6-column grid */}
+                    <div style={{ display:'grid', gridTemplateColumns:'110px 1fr 1fr 130px 110px 100px', gap:12, marginBottom:18 }}>
+                        {/* SKU */}
+                        <div>
+                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4, fontFamily:T.sans }}>SKU</label>
+                            <input value={draft.sku} onChange={e => set('sku', e.target.value)}
+                                placeholder="AR-NEW" style={inp({ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 })}/>
+                        </div>
+                        {/* Product name */}
+                        <div>
+                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4, fontFamily:T.sans }}>Product name</label>
+                            <input value={draft.name} onChange={e => set('name', e.target.value)}
+                                placeholder="e.g. Pipeline & Forecasting" style={inp()}/>
+                        </div>
+                        {/* Category */}
+                        <div>
+                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4, fontFamily:T.sans }}>Category</label>
+                            <select value={draft.category} onChange={e => set('category', e.target.value)} style={{ ...inp(), appearance:'none', cursor:'pointer',
+                                backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+                                backgroundRepeat:'no-repeat', backgroundPosition:'right 9px center', paddingRight:26 }}>
+                                {['Platform','Modules','Services','Hardware','Support'].map(c => <option key={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        {/* Type */}
+                        <div>
+                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4, fontFamily:T.sans }}>Type</label>
+                            <select value={draft.type} onChange={e => set('type', e.target.value)} style={{ ...inp(), appearance:'none', cursor:'pointer',
+                                backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+                                backgroundRepeat:'no-repeat', backgroundPosition:'right 9px center', paddingRight:26 }}>
+                                {['Recurring','One-time'].map(c => <option key={c}>{c}</option>)}
+                            </select>
+                        </div>
+                        {/* Unit */}
+                        <div>
+                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4, fontFamily:T.sans }}>Unit</label>
+                            <input value={draft.unit} onChange={e => set('unit', e.target.value)}
+                                placeholder="/seat/yr" style={inp({ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 })}/>
+                        </div>
+                        {/* Active toggle */}
+                        <div>
+                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4, fontFamily:T.sans }}>Active</label>
+                            <div style={{ display:'flex', alignItems:'center', gap:7, paddingTop:8 }}>
+                                <ATToggle on={draft.active} onChange={() => set('active', !draft.active)}/>
+                                <span style={{ fontSize:12, color:T.inkMuted }}>{draft.active ? 'Yes' : 'No'}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 2. Pricing summary cards */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:22 }}>
+                        {/* List price */}
+                        <div style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:8, padding:'14px 18px' }}>
+                            <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans, marginBottom:8 }}>List price</div>
+                            <div style={{ display:'flex', alignItems:'baseline', gap:4 }}>
+                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>$</span>
+                                <input value={draft.listPrice} onChange={e => set('listPrice', e.target.value)}
+                                    style={{ fontSize:26, fontWeight:700, color:T.ink, fontFamily:T.serif, fontStyle:'italic', border:'none', background:'transparent', outline:'none', width:'100%', padding:0 }}
+                                    placeholder="0"/>
+                                <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans, whiteSpace:'nowrap' }}>{draft.unit}</span>
+                            </div>
+                        </div>
+                        {/* Cost */}
+                        <div style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:8, padding:'14px 18px' }}>
+                            <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans, marginBottom:8 }}>Cost</div>
+                            <div style={{ display:'flex', alignItems:'baseline', gap:4 }}>
+                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>$</span>
+                                <input value={draft.cost} onChange={e => set('cost', e.target.value)}
+                                    style={{ fontSize:26, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', border:'none', background:'transparent', outline:'none', width:'100%', padding:0 }}
+                                    placeholder="0"/>
+                            </div>
+                        </div>
+                        {/* Margin — computed */}
+                        <div style={{ background:T.bg, border:`1px solid ${marginGood ? T.ok : T.warn}`, borderRadius:8, padding:'14px 18px' }}>
+                            <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans, marginBottom:8 }}>Margin</div>
+                            <div style={{ fontSize:26, fontWeight:700, color: marginGood ? T.ok : T.warn, fontFamily:'ui-monospace,Menlo,monospace' }}>
+                                {listN > 0 ? `${margin}%` : '—'}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 3. Volume tiers */}
+                    <div style={{ marginBottom:22 }}>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+                            <div>
+                                <div style={{ fontSize:15, fontWeight:700, color:T.ink, fontFamily:T.sans }}>Volume tiers</div>
+                                <div style={{ fontSize:12, color:T.inkMid, marginTop:2, fontFamily:T.sans }}>Per seat list price changes by quantity. Stacks with segment override.</div>
+                            </div>
+                            <button onClick={addTier}
+                                style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'5px 12px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                onMouseLeave={e => e.currentTarget.style.background=T.surface}>
+                                + Add tier
+                            </button>
+                        </div>
+                        {draft.volumeTiers.length === 0 ? (
+                            <div style={{ padding:'20px 14px', border:`1.5px dashed ${T.border}`, borderRadius:6, textAlign:'center', color:T.inkMuted, fontSize:12.5 }}>
+                                No tiers — list price applies to all quantities.
+                                <button onClick={addTier} style={{ marginLeft:8, color:T.goldInk, fontWeight:600, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, fontSize:12.5 }}>Add first tier →</button>
+                            </div>
+                        ) : (
+                            <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                                {/* Header */}
+                                <div style={{ display:'grid', gridTemplateColumns:'1fr 160px 100px 1fr 32px', padding:'8px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}`, gap:10 }}>
+                                    {['Quantity Range','Price / Seat / Yr','vs List','Auto-apply when',''].map((h,i) => (
+                                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                                    ))}
+                                </div>
+                                {draft.volumeTiers.map((tier, idx) => {
+                                    const tierPrice = tier.vsListPct !== 0 && listN > 0
+                                        ? Math.round(listN * (1 + tier.vsListPct / 100))
+                                        : (tier.price || listN || 0);
+                                    return (
+                                        <div key={tier.id} style={{ display:'grid', gridTemplateColumns:'1fr 160px 100px 1fr 32px', padding:'9px 14px', borderBottom:`1px solid ${T.border}`, gap:10, alignItems:'center' }}>
+                                            {/* Range */}
+                                            <input value={tier.range} onChange={e => setTierField(idx,'range',e.target.value)}
+                                                placeholder="e.g. 1–24 seats"
+                                                style={{ padding:'5px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface }}/>
+                                            {/* Price display */}
+                                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, color:T.ink }}>
+                                                {tierPrice > 0 ? fmt$(tierPrice) : '—'}
+                                            </div>
+                                            {/* vs List pct */}
+                                            <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                                                <input type="number" value={tier.vsListPct} onChange={e => setTierField(idx,'vsListPct',Number(e.target.value))}
+                                                    style={{ width:54, padding:'4px 6px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color: tier.vsListPct < 0 ? T.danger : T.ok, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, textAlign:'right' }}/>
+                                                <span style={{ fontSize:12, color:T.inkMuted }}>%</span>
+                                            </div>
+                                            {/* Auto-apply */}
+                                            <input value={tier.autoApply} onChange={e => setTierField(idx,'autoApply',e.target.value)}
+                                                placeholder="always"
+                                                style={{ padding:'5px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface }}/>
+                                            {/* Remove */}
+                                            <button onClick={() => removeTier(idx)}
+                                                style={{ width:24, height:24, display:'flex', alignItems:'center', justifyContent:'center', background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:16, borderRadius:3 }}
+                                                onMouseEnter={e => e.currentTarget.style.color=T.danger}
+                                                onMouseLeave={e => e.currentTarget.style.color=T.inkMuted}>×</button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 4. Segment × region matrix */}
+                    <div style={{ marginBottom:22 }}>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+                            <div>
+                                <div style={{ fontSize:15, fontWeight:700, color:T.ink, fontFamily:T.sans }}>Segment × region matrix</div>
+                                <div style={{ fontSize:12, color:T.inkMid, marginTop:2, fontFamily:T.sans }}>Override list price by combining customer segment and region. Empty cells inherit list.</div>
+                            </div>
+                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Highlight:</span>
+                                <span style={{ fontSize:12, fontWeight:600, color:T.goldInk, fontFamily:T.sans }}>Deviations from list ▾</span>
+                            </div>
+                        </div>
+                        <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                            {/* Header row */}
+                            <div style={{ display:'grid', gridTemplateColumns:`160px repeat(${REGIONS.length}, 1fr)`, background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                                <div style={{ padding:'8px 12px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>Segment / Region</div>
+                                {REGIONS.map(r => (
+                                    <div key={r} style={{ padding:'8px 12px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans, textAlign:'center' }}>{r}</div>
+                                ))}
+                            </div>
+                            {/* Data rows */}
+                            {SEGMENTS.map((seg, si) => (
+                                <div key={seg} style={{ display:'grid', gridTemplateColumns:`160px repeat(${REGIONS.length}, 1fr)`, borderBottom: si < SEGMENTS.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                                    <div style={{ padding:'10px 12px', fontSize:13, fontWeight:600, color:T.inkMid, fontFamily:T.sans, borderRight:`1px solid ${T.border}`, background:T.surface2 }}>{seg}</div>
+                                    {REGIONS.map(reg => {
+                                        const val = draft.segMatrix?.[seg]?.[reg];
+                                        const devFromList = val !== null && val !== undefined && listN > 0 && val !== listN;
+                                        const devPct = devFromList ? Math.round((val - listN) / listN * 100) : null;
+                                        return (
+                                            <MatrixCell key={reg} value={val} listPrice={listN} devPct={devPct}
+                                                onChange={v => setMatrix(seg, reg, v)}/>
+                                        );
+                                    })}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* 5. Custom rules */}
+                    <div style={{ marginBottom:8 }}>
+                        <div style={{ fontSize:15, fontWeight:700, color:T.ink, fontFamily:T.sans, marginBottom:4 }}>Custom rules</div>
+                        {draft.customRules.length === 0 ? (
+                            <div style={{ padding:'18px 14px', border:`1.5px dashed ${T.border}`, borderRadius:6, fontSize:12.5, color:T.inkMuted, textAlign:'center' }}>
+                                No custom rules yet —{' '}
+                                <button onClick={() => {
+                                    setDraft(p => ({ ...p, customRules:[...p.customRules, { id:`r${Date.now()}`, when:'', then:'', tone:'info' }] }));
+                                    setDirty(true);
+                                }} style={{ color:T.goldInk, fontWeight:600, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, fontSize:12.5 }}>
+                                    Add your first rule →
+                                </button>
+                            </div>
+                        ) : (
+                            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                                {draft.customRules.map((rule, ri) => (
+                                    <div key={rule.id} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 100px 28px', gap:10, padding:'10px 12px', background:T.bg, border:`1px solid ${T.border}`, borderRadius:6, alignItems:'center' }}>
+                                        <div>
+                                            <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:3, fontFamily:T.sans }}>When</div>
+                                            <input value={rule.when} onChange={e => {
+                                                    setDraft(p => ({ ...p, customRules: p.customRules.map((r,i) => i===ri ? {...r, when:e.target.value} : r) }));
+                                                    setDirty(true);
+                                                }}
+                                                placeholder="e.g. Deal > $100k"
+                                                style={{ width:'100%', padding:'5px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' }}/>
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:3, fontFamily:T.sans }}>Then</div>
+                                            <input value={rule.then} onChange={e => {
+                                                    setDraft(p => ({ ...p, customRules: p.customRules.map((r,i) => i===ri ? {...r, then:e.target.value} : r) }));
+                                                    setDirty(true);
+                                                }}
+                                                placeholder="e.g. Require VP approval"
+                                                style={{ width:'100%', padding:'5px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' }}/>
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:3, fontFamily:T.sans }}>Tone</div>
+                                            <select value={rule.tone} onChange={e => {
+                                                    setDraft(p => ({ ...p, customRules: p.customRules.map((r,i) => i===ri ? {...r, tone:e.target.value} : r) }));
+                                                    setDirty(true);
+                                                }}
+                                                style={{ width:'100%', padding:'5px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer' }}>
+                                                <option value="info">Info</option>
+                                                <option value="warn">Warn</option>
+                                                <option value="gold">Gold</option>
+                                            </select>
+                                        </div>
+                                        <button onClick={() => { setDraft(p => ({ ...p, customRules: p.customRules.filter((_,i) => i!==ri) })); setDirty(true); }}
+                                            style={{ width:24, height:24, display:'flex', alignItems:'center', justifyContent:'center', background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:16, borderRadius:3 }}
+                                            onMouseEnter={e => e.currentTarget.style.color=T.danger}
+                                            onMouseLeave={e => e.currentTarget.style.color=T.inkMuted}>×</button>
+                                    </div>
+                                ))}
+                                <button onClick={() => { setDraft(p => ({ ...p, customRules:[...p.customRules, { id:`r${Date.now()}`, when:'', then:'', tone:'info' }] })); setDirty(true); }}
+                                    style={{ alignSelf:'flex-start', padding:'5px 12px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, fontWeight:600, color:T.ink, cursor:'pointer', fontFamily:T.sans }}>
+                                    + Add rule
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* ── Modal footer — sticky ── */}
+                <div style={{ borderTop:`1px solid ${T.border}`, padding:'12px 24px', background:T.surface2, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+                    <span style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>{statusText}</span>
+                    <div style={{ display:'flex', gap:8 }}>
+                        <button style={{ padding:'8px 16px', background:T.surface, color:T.inkMid, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                            onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                            onMouseLeave={e => e.currentTarget.style.background=T.surface}>
+                            Test on quote
+                        </button>
+                        <button onClick={() => { if (dirty) { if (!window.confirm('Discard unsaved changes?')) return; } onClose(); }}
+                            style={{ padding:'8px 16px', background:T.surface, color:T.inkMid, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                            onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                            onMouseLeave={e => e.currentTarget.style.background=T.surface}>
+                            Cancel
+                        </button>
+                        <button onClick={handleSave}
+                            disabled={!draft.sku.trim() || !draft.name.trim()}
+                            style={{ padding:'8px 20px', background: (draft.sku.trim() && draft.name.trim()) ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor: (draft.sku.trim() && draft.name.trim()) ? 'pointer' : 'default', fontFamily:T.sans, transition:'background 100ms' }}>
+                            {cta}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Matrix cell — click-to-edit inline; defined at module level for stable identity
+const MatrixCell = ({ value, listPrice, devPct, onChange }) => {
+    const [editing, setEditing] = useState(false);
+    const [local, setLocal] = useState('');
+    const hasOverride = value !== null && value !== undefined;
+    const commit = () => { setEditing(false); onChange(local); };
+    return (
+        <div onClick={() => { if (!editing) { setLocal(hasOverride ? String(value) : ''); setEditing(true); } }}
+            style={{ padding:'10px 12px', borderLeft:`1px solid ${T.border}`, textAlign:'center', cursor:'pointer', position:'relative',
+                background: hasOverride && devPct !== 0 ? 'rgba(200,185,154,0.10)' : 'transparent' }}>
+            {editing ? (
+                <input autoFocus value={local} onChange={e => setLocal(e.target.value)}
+                    onBlur={commit}
+                    onKeyDown={e => { if (e.key==='Enter') commit(); if (e.key==='Escape') setEditing(false); }}
+                    style={{ width:'80px', padding:'3px 6px', border:`1.5px solid ${T.goldInk}`, borderRadius:T.r, fontSize:13, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', textAlign:'center', background:T.surface, color:T.ink }}/>
+            ) : hasOverride ? (
+                <div>
+                    <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, color:T.ink }}>{fmt$(value)}</div>
+                    {devPct !== null && devPct !== 0 && (
+                        <div style={{ fontSize:10, fontWeight:700, color: devPct > 0 ? T.danger : T.ok, marginTop:2 }}>
+                            {devPct > 0 ? '+' : ''}{devPct}%
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <span style={{ fontSize:11, color:T.inkMuted, fontStyle:'italic' }}>·</span>
+            )}
+        </div>
+    );
+};
+
+// ── Price Book Detail Page ─────────────────────────────────────
+const PriceBookDetail = ({ settings, setSettings, onBack }) => {
+    const savedProducts = settings?.priceBookProducts?.length ? settings.priceBookProducts : PRICE_BOOK_PRODUCTS;
+    const [products, setProducts] = useState(() => JSON.parse(JSON.stringify(savedProducts)));
+    const [catFilter, setCatFilter]   = useState('All');
+    const [search,    setSearch]      = useState('');
+    const [dirty,     setDirty]       = useState(false);
+    const [saving,    setSaving]       = useState(false);
+    const [modal, setModal] = useState(null); // null | { mode:'new'|'edit', product, scrollTo }
+
+    const filtered = products.filter(p => {
+        const matchCat = catFilter === 'All' || p.category === catFilter;
+        const q = search.toLowerCase();
+        const matchQ = !q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.category.toLowerCase().includes(q);
+        return matchCat && matchQ;
+    });
+
+    const openNew = () => setModal({ mode:'new', product:null });
+    const openEdit = (product, scrollTo='top') => setModal({ mode:'edit', product, scrollTo });
+
+    const handleSave = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, priceBookProducts: products }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ priceBookProducts: products }) }); }
+        catch(e) { console.error('price book save', e); }
+        setSaving(false); setDirty(false);
+    };
+
+    const handleModalSave = (saved) => {
+        if (modal.mode === 'new') {
+            const newP = { ...saved, id:`p${Date.now()}` };
+            setProducts(prev => [...prev, newP]);
+        } else {
+            setProducts(prev => prev.map(p => p.id === saved.id ? saved : p));
+        }
+        setDirty(true);
+        setModal(null);
+    };
+
+    const handleDuplicate = (product) => {
+        const copy = { ...product, id:`p${Date.now()}`, sku:'', name:`Copy of ${product.name}` };
+        setModal({ mode:'new', product: copy });
+    };
+
+    const handleArchive = (product) => {
+        if (!window.confirm(`Archive "${product.name}"? It will no longer appear in new quotes.`)) return;
+        setProducts(prev => prev.map(p => p.id === product.id ? { ...p, active:false } : p));
+        setDirty(true);
+    };
+
+    // Catalog health stats
+    const activeCount = products.filter(p => p.active).length;
+    const avgMargin = Math.round(products.reduce((sum, p) => sum + fmtPct(p.listPrice, p.cost), 0) / products.length);
+    const mostUsed  = [...products].sort((a,b) => (b.usedTimes||0) - (a.usedTimes||0))[0];
+    const lowestUsed = [...products].sort((a,b) => (a.usedTimes||0) - (b.usedTimes||0))[0];
+
+    // Category counts for filter tabs
+    const catCounts = CAT_TABS.reduce((acc, c) => {
+        acc[c] = c === 'All' ? products.length : products.filter(p => p.category === c).length;
+        return acc;
+    }, {});
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {/* Modal */}
+            {modal && (
+                <PBProductModal
+                    mode={modal.mode}
+                    product={modal.product}
+                    onClose={() => setModal(null)}
+                    onSave={handleModalSave}
+                />
+            )}
+
+            {/* Breadcrumb + title band */}
+            <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
+                <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+                <span>/</span>
+                <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Quoting</button>
+                <span>/</span>
+                <span style={{ color:T.ink, fontWeight:600 }}>Price book</span>
+            </div>
+            <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:18 }}>
+                <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+                    <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3, fontFamily:T.sans }}>
+                        Price book
+                        {dirty && <span style={{ fontSize:12, fontWeight:500, color:T.warn, marginLeft:12 }}>● Unsaved</span>}
+                    </div>
+                    <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', fontFamily:T.sans }}>
+                        <span>Products, services, list prices, and pricing rules</span>
+                        <span style={{ color:T.inkMuted }}>•</span>
+                        <span style={{ display:'inline-flex', alignItems:'center', gap:4 }}>
+                            <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
+                            <span>{activeCount} active SKUs · 3 bundles · USD</span>
+                        </span>
+                        <span style={{ color:T.inkMuted }}>•</span>
+                        <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited yesterday by <b style={{ color:T.inkMid, fontWeight:500 }}>Priya</b></span>
+                    </div>
+                </div>
+                <div style={{ display:'flex', gap:8 }}>
+                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                        onMouseLeave={e => e.currentTarget.style.background=T.surface}>
+                        Import CSV
+                    </button>
+                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                        onMouseLeave={e => e.currentTarget.style.background=T.surface}>
+                        Export
+                    </button>
+                    <button onClick={openNew}
+                        style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>
+                        + New product
+                    </button>
+                </div>
+            </div>
+
+            {/* Filter tabs + search + two-col layout */}
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+                <span style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>Filter:</span>
+                <div style={{ display:'flex', gap:4 }}>
+                    {CAT_TABS.map(cat => {
+                        const active = catFilter === cat;
+                        return (
+                            <button key={cat} onClick={() => setCatFilter(cat)}
+                                style={{
+                                    padding:'4px 10px', fontSize:12, fontWeight:600, borderRadius:12,
+                                    border:`1px solid ${active ? T.ink : T.border}`,
+                                    background: active ? T.ink : 'transparent',
+                                    color: active ? '#fbf8f3' : T.inkMid,
+                                    cursor:'pointer', fontFamily:T.sans,
+                                }}>
+                                {cat} {catCounts[cat] > 0 && <span style={{ opacity:0.7 }}>{catCounts[cat]}</span>}
+                            </button>
+                        );
+                    })}
+                </div>
+                <div style={{ flex:1 }}/>
+                <input value={search} onChange={e => setSearch(e.target.value)}
+                    placeholder="Search SKUs, names, categories…"
+                    style={{ padding:'6px 12px', fontSize:12.5, border:`1px solid ${T.border}`, borderRadius:16, outline:'none', width:240, fontFamily:T.sans, background:T.surface, color:T.ink }}/>
+            </div>
+
+            {/* Main two-column layout */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:18, alignItems:'start' }}>
+
+                {/* Left: Catalog table */}
+                <div>
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                        <div style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}` }}>
+                            <div style={{ fontSize:14, fontWeight:700, color:T.ink, fontFamily:T.sans }}>Catalog</div>
+                            <div style={{ fontSize:12, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>The full product list. Inline-edit list price; bulk actions for archive, deprecate, or re-categorize.</div>
+                        </div>
+                        {/* Table header */}
+                        <div style={{ display:'grid', gridTemplateColumns:'24px 100px 1fr 90px 80px 60px 90px 70px 72px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                            {[{l:'',w:'24px'},{l:'SKU',w:'100px'},{l:'Product',w:'1fr'},{l:'Category',w:'90px'},{l:'Type',w:'80px'},{l:'Unit',w:'60px'},{l:'List Price',w:'90px'},{l:'Cost',w:'70px'},{l:'Margin',w:'72px'},{l:'',w:'32px'}].map((h,i) => (
+                                <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h.l}</div>
+                            ))}
+                        </div>
+                        {/* Table rows */}
+                        {filtered.length === 0 ? (
+                            <div style={{ padding:'28px 16px', textAlign:'center', color:T.inkMuted, fontSize:13 }}>No products match the current filter.</div>
+                        ) : filtered.map((product, i) => {
+                            const mg = fmtPct(product.listPrice, product.cost);
+                            return (
+                                <div key={product.id}
+                                    onClick={() => openEdit(product)}
+                                    style={{ display:'grid', gridTemplateColumns:'24px 100px 1fr 90px 80px 60px 90px 70px 72px 32px', gap:8, padding:'10px 16px', borderBottom: i < filtered.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
+                                    onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                    {/* Drag handle */}
+                                    <span style={{ color:T.border, fontSize:14, cursor:'grab' }}>⠿</span>
+                                    {/* SKU */}
+                                    <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMid }}>{product.sku}</div>
+                                    {/* Name + tags */}
+                                    <div style={{ display:'flex', alignItems:'center', gap:6, minWidth:0 }}>
+                                        <span style={{ fontSize:13, fontWeight:600, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{product.name}</span>
+                                        {(product.tags||[]).map(tag => (
+                                            <span key={tag} style={{ padding:'1px 6px', fontSize:9.5, fontWeight:700, borderRadius:10, background:'rgba(58,90,122,0.10)', color:T.info, letterSpacing:0.3, flexShrink:0 }}>{tag}</span>
+                                        ))}
+                                    </div>
+                                    {/* Category */}
+                                    <div style={{ fontSize:12, color:T.inkMid }}>{product.category}</div>
+                                    {/* Type */}
+                                    <div style={{ fontSize:12, color:T.inkMuted }}>{product.type}</div>
+                                    {/* Unit */}
+                                    <div style={{ fontSize:11, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{product.unit}</div>
+                                    {/* List price */}
+                                    <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, fontWeight:600, color:T.ink }}>{fmt$(product.listPrice)}</div>
+                                    {/* Cost */}
+                                    <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMuted }}>{fmt$(product.cost)}</div>
+                                    {/* Margin chip */}
+                                    <div style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 7px', borderRadius:10,
+                                        background: mg >= 60 ? 'rgba(77,107,61,0.10)' : 'rgba(184,115,51,0.12)',
+                                        color: mg >= 60 ? T.ok : T.warn, fontSize:11.5, fontWeight:700 }}>
+                                        {mg}%
+                                    </div>
+                                    {/* Row menu */}
+                                    <div onClick={e => e.stopPropagation()}>
+                                        <PBRowMenu product={product}
+                                            onEdit={(scrollTo) => openEdit(product, scrollTo)}
+                                            onDuplicate={() => handleDuplicate(product)}
+                                            onArchive={() => handleArchive(product)}/>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    {/* Save bar */}
+                    {dirty && (
+                        <div style={{ marginTop:12, display:'flex', justifyContent:'flex-end', gap:8 }}>
+                            <button onClick={() => { setProducts(JSON.parse(JSON.stringify(savedProducts))); setDirty(false); }}
+                                style={{ padding:'8px 16px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                                Discard changes
+                            </button>
+                            <button onClick={handleSave}
+                                style={{ padding:'8px 20px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>
+                                {saving ? 'Saving…' : 'Save changes'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* Right rail — Bundles + Catalog health */}
+                <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                    {/* Bundles */}
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+                            <div>
+                                <div style={{ fontSize:14, fontWeight:700, color:T.ink, fontFamily:T.sans }}>Bundles</div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2, lineHeight:1.4, fontFamily:T.sans }}>Pre-priced kits reps can drop into a quote in one click.</div>
+                            </div>
+                            <button style={{ padding:'4px 10px', fontSize:11.5, fontWeight:600, background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans, whiteSpace:'nowrap' }}
+                                onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                onMouseLeave={e => e.currentTarget.style.background=T.surface}>
+                                + New bundle
+                            </button>
+                        </div>
+                        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                            {PRICE_BOOK_BUNDLES.map((b,i) => (
+                                <div key={i} style={{ padding:'10px 12px', background:T.bg, borderRadius:6, border:`1px solid ${T.border}` }}>
+                                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:3 }}>
+                                        <span style={{ fontSize:13, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{b.name}</span>
+                                        <span style={{ fontSize:11, fontWeight:700, padding:'1px 6px', borderRadius:10,
+                                            background:'rgba(156,58,46,0.10)', color:T.danger }}>
+                                            -{b.discPct}%
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, marginBottom:6, fontFamily:T.sans }}>{b.items} items · {b.seats}</div>
+                                    <div style={{ display:'flex', alignItems:'baseline', gap:6 }}>
+                                        <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>List: {fmt$(b.listTotal)}</span>
+                                        <span style={{ fontSize:11, color:T.inkMuted }}>·</span>
+                                        <span style={{ fontSize:13, fontWeight:700, color:T.goldInk, fontFamily:'ui-monospace,Menlo,monospace' }}>Bundle {fmt$(b.bundlePrice)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Catalog health */}
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
+                        <div style={{ fontSize:14, fontWeight:700, color:T.ink, fontFamily:T.sans, marginBottom:10 }}>Catalog health</div>
+                        <div style={{ fontSize:11, color:T.inkMuted, marginBottom:12, fontFamily:T.sans }}>Last 90 days of quote usage.</div>
+                        {[
+                            { label:'Active SKUs',       value:activeCount, mono:true, suffix:'' },
+                            { label:'Avg margin',        value:`${avgMargin}%`, sub:'weighted', color: avgMargin >= 60 ? T.ok : T.warn },
+                            { label:'Most-used SKU',     value: mostUsed?.sku  || '—', sub:`${mostUsed?.usedTimes||'99%'} attach`, mono:true },
+                            { label:'Lowest used',       value: lowestUsed?.sku || '—', sub:`${lowestUsed?.usedTimes||'14%'} attach`, mono:true },
+                            { label:'Deprecated/unused', value:'1', sub:'MOD-LEG', color:T.inkMuted },
+                        ].map((row,i) => (
+                            <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'7px 0', borderBottom: i < 4 ? `1px solid ${T.border}` : 'none' }}>
+                                <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{row.label}</span>
+                                <div style={{ textAlign:'right' }}>
+                                    <div style={{ fontSize: row.large ? 18 : 13, fontWeight:700, color: row.color || T.ink, fontFamily: row.mono ? 'ui-monospace,Menlo,monospace' : T.sans }}>{row.value}</div>
+                                    {row.sub && <div style={{ fontSize:10.5, color:T.inkMuted, fontFamily:T.sans }}>{row.sub}</div>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PEOPLE & TEAMS — data + shared primitives
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Deterministic avatar color from initials
+const AVATAR_COLORS = ['#4d6b3d','#3a5a7a','#7a6a48','#9c5a3a','#5e4e7a','#3a6a6a','#6b2a22','#4a6b5a'];
+const avatarColor = (name='') => AVATAR_COLORS[(name.charCodeAt(0)||0) % AVATAR_COLORS.length];
+const initials   = (name='') => name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+
+const UserAvatar = ({ name, size=24 }) => (
+    <span style={{
+        display:'inline-flex', alignItems:'center', justifyContent:'center',
+        width:size, height:size, borderRadius:'50%',
+        background: avatarColor(name), color:'#fff',
+        fontSize: size*0.38, fontWeight:700, fontFamily:T.sans,
+        flexShrink:0, letterSpacing:0,
+    }}>{initials(name)}</span>
+);
+
+const RolePill = ({ role }) => {
+    const map = {
+        'Admin':         { bg:'rgba(42,38,34,0.85)',  fg:'#fbf8f3' },
+        'Sales Manager': { bg:'rgba(58,90,122,0.14)', fg:'#3a5a7a' },
+        'Sales Rep':     { bg:'rgba(77,107,61,0.12)', fg:'#4d6b3d' },
+        'CS':            { bg:'rgba(94,78,122,0.12)', fg:'#5e4e7a' },
+        'Finance':       { bg:'rgba(184,115,51,0.12)',fg:'#b87333' },
+    };
+    const c = map[role] || { bg:'rgba(138,131,120,0.14)', fg:'#5a544c' };
+    return (
+        <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:3, fontSize:11.5, fontWeight:700, background:c.bg, color:c.fg, fontFamily:T.sans, letterSpacing:0.1, whiteSpace:'nowrap' }}>
+            {role}
+        </span>
+    );
+};
+
+// Scope badge for permission matrix — VIEW / SHARE columns
+const ScopeBadge = ({ scope }) => {
+    const map = {
+        'ALL':  { bg:'rgba(77,107,61,0.12)',   fg:'#4d6b3d' },
+        'TEAM': { bg:'rgba(58,90,122,0.12)',   fg:'#3a5a7a' },
+        'OWN':  { bg:'rgba(184,115,51,0.12)',  fg:'#b87333' },
+        '—':    { bg:'transparent',            fg:T.inkMuted },
+    };
+    const c = map[scope] || map['—'];
+    return (
+        <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:3, fontSize:10.5, fontWeight:700, background:c.bg, color:c.fg, fontFamily:T.sans, letterSpacing:0.4 }}>
+            {scope}
+        </span>
+    );
+};
+
+// Permission dot — filled green for true, dash for false
+const PermDot = ({ on }) => on
+    ? <span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:T.ok }}/>
+    : <span style={{ color:T.border, fontSize:14, lineHeight:1 }}>—</span>;
+
+// Attainment progress bar
+const AttainBar = ({ pct }) => {
+    const color = pct >= 100 ? T.ok : pct >= 60 ? T.warn : T.danger;
+    return (
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <div style={{ width:60, height:5, background:T.border, borderRadius:3, overflow:'hidden', flexShrink:0 }}>
+                <div style={{ width:`${Math.min(pct,100)}%`, height:'100%', background:color, borderRadius:3 }}/>
+            </div>
+            <span style={{ fontSize:11.5, fontWeight:700, color, fontFamily:'ui-monospace,Menlo,monospace', minWidth:28 }}>{pct}%</span>
+        </div>
+    );
+};
+
+// ── Data ──────────────────────────────────────────────────────
+const PT_USERS = [
+    { id:'u1',  initials:'MR', name:'Morgan Reyes',   email:'morgan@accelerep.com',  role:'Admin',         team:'Leadership', manager:'—',            lastActive:'4 minutes ago',  mfa:true,  status:'Active' },
+    { id:'u2',  initials:'PS', name:'Priya Sharma',   email:'priya@accelerep.com',   role:'Admin',         team:'RevOps',     manager:'Morgan Reyes', lastActive:'12 minutes ago', mfa:true,  status:'Active' },
+    { id:'u3',  initials:'JH', name:'Jeff Hammond',   email:'jeff@accelerep.com',    role:'Sales Manager', team:'SMB West',   manager:'Morgan Reyes', lastActive:'1 hour ago',     mfa:true,  status:'Active' },
+    { id:'u4',  initials:'DP', name:'Devon Park',     email:'devon@accelerep.com',   role:'Sales Manager', team:'SMB East',   manager:'Morgan Reyes', lastActive:'3 hours ago',    mfa:true,  status:'Active' },
+    { id:'u5',  initials:'NT', name:'Naomi Tran',     email:'naomi@accelerep.com',   role:'Sales Manager', team:'Mid-Market', manager:'Morgan Reyes', lastActive:'today, 9:14am',  mfa:true,  status:'Active' },
+    { id:'u6',  initials:'BW', name:'Ben Whitaker',   email:'ben@accelerep.com',     role:'Sales Manager', team:'EMEA',       manager:'Morgan Reyes', lastActive:'yesterday',      mfa:true,  status:'Active' },
+    { id:'u7',  initials:'CV', name:'Camila Vega',    email:'camila@accelerep.com',  role:'Sales Rep',     team:'SMB West',   manager:'Jeff Hammond', lastActive:'8 minutes ago',  mfa:true,  status:'Active' },
+    { id:'u8',  initials:'AP', name:'Aiden Park',     email:'aiden@accelerep.com',   role:'Sales Rep',     team:'SMB West',   manager:'Jeff Hammond', lastActive:'today, 11:02am', mfa:true,  status:'Active' },
+    { id:'u9',  initials:'RC', name:'Riley Chen',     email:'riley@accelerep.com',   role:'Sales Rep',     team:'SMB West',   manager:'Jeff Hammond', lastActive:'2 days ago',     mfa:false, status:'Active', staleMfa:true },
+    { id:'u10', initials:'HI', name:'Hassan Idris',   email:'hassan@accelerep.com',  role:'Sales Rep',     team:'SMB East',   manager:'Devon Park',   lastActive:'today, 8:21am',  mfa:true,  status:'Active' },
+    { id:'u11', initials:'SV', name:'Sasha Volkov',   email:'sasha@accelerep.com',   role:'Sales Rep',     team:'SMB East',   manager:'Devon Park',   lastActive:'5 days ago',     mfa:false, status:'Active', staleMfa:true },
+    { id:'u12', initials:'TR', name:'Tomás Rivera',   email:'tomas@accelerep.com',   role:'Sales Rep',     team:'SMB East',   manager:'Devon Park',   lastActive:'yesterday',      mfa:true,  status:'Active' },
+    { id:'u13', initials:'MG', name:'Maya Goldberg',  email:'maya@accelerep.com',    role:'Sales Rep',     team:'Mid-Market', manager:'Naomi Tran',   lastActive:'today, 10:48am', mfa:true,  status:'Active' },
+    { id:'u14', initials:'LW', name:'Lin Wei',        email:'lin@accelerep.com',     role:'Sales Rep',     team:'Mid-Market', manager:'Naomi Tran',   lastActive:'1 hour ago',     mfa:true,  status:'Active' },
+    { id:'u15', initials:'KO', name:'Kwame Osei',     email:'kwame@accelerep.com',   role:'Sales Rep',     team:'Mid-Market', manager:'Naomi Tran',   lastActive:'today, 9:55am',  mfa:true,  status:'Active' },
+    { id:'u16', initials:'FP', name:'Fatima Patel',   email:'fatima@accelerep.com',  role:'Sales Rep',     team:'EMEA',       manager:'Ben Whitaker', lastActive:'1 hour ago',     mfa:true,  status:'Active' },
+    { id:'u17', initials:'LC', name:'Luca Conti',     email:'luca@accelerep.com',    role:'Sales Rep',     team:'EMEA',       manager:'Ben Whitaker', lastActive:'3 hours ago',    mfa:true,  status:'Active' },
+    { id:'u18', initials:'AK', name:'Alia Karim',     email:'alia@accelerep.com',    role:'CS',            team:'Customer Success', manager:'Morgan Reyes', lastActive:'today',   mfa:true,  status:'Active' },
+    { id:'u19', initials:'TM', name:'Theo Mensah',    email:'theo@accelerep.com',    role:'Finance',       team:'Finance',    manager:'Morgan Reyes', lastActive:'2 days ago',     mfa:true,  status:'Active' },
+    { id:'u20', initials:'AB', name:'Anika Bose',     email:'anika@accelerep.com',   role:'Sales Rep',     team:null,         manager:null,           lastActive:null,             mfa:false, status:'Invited', invitedDaysAgo:1 },
+    { id:'u21', initials:'FB', name:'Felix Brandt',   email:'felix@accelerep.com',   role:'Sales Rep',     team:null,         manager:null,           lastActive:null,             mfa:false, status:'Invited', invitedDaysAgo:3 },
+];
+
+const PT_TEAMS = [
+    { id:'tm1', name:'Leadership',      color:'#2a2622', manager:'Morgan Reyes',  managerInit:'MR', members:1,  pipeline:'—',           quotaQ:null,  attainPct:null, region:'—' },
+    { id:'tm2', name:'RevOps',          color:'#5e4e7a', manager:'Priya Sharma',  managerInit:'PS', members:1,  pipeline:'—',           quotaQ:null,  attainPct:null, region:'—' },
+    { id:'tm3', name:'SMB West',        color:'#4d6b3d', manager:'Jeff Hammond',  managerInit:'JH', members:4,  pipeline:'New business', quotaQ:'$1.2M', attainPct:78, region:'NAM-West' },
+    { id:'tm4', name:'SMB East',        color:'#3a5a7a', manager:'Devon Park',    managerInit:'DP', members:4,  pipeline:'New business', quotaQ:'$1.2M', attainPct:92, region:'NAM-East' },
+    { id:'tm5', name:'Mid-Market',      color:'#7a6a48', manager:'Naomi Tran',    managerInit:'NT', members:4,  pipeline:'New business', quotaQ:'$2.4M', attainPct:104,region:'NAM-Strategic' },
+    { id:'tm6', name:'EMEA',            color:'#9c5a3a', manager:'Ben Whitaker',  managerInit:'BW', members:3,  pipeline:'New business', quotaQ:'$1.6M', attainPct:66, region:'EMEA' },
+    { id:'tm7', name:'Customer Success',color:'#3a6a6a', manager:'Alia Karim',    managerInit:'AK', members:3,  pipeline:'Renewals',     quotaQ:'$2.1M', attainPct:95, region:'Global' },
+    { id:'tm8', name:'Finance',         color:'#6b2a22', manager:'Theo Mensah',   managerInit:'TM', members:1,  pipeline:'—',           quotaQ:null,  attainPct:null, region:'—' },
+];
+
+const PT_TERRITORIES = [
+    { id:'tr1', name:'NAM West',    parent:'NAM',  rule:"State ∈ {CA, OR, WA, NV, AZ, UT, ID}", accounts:412, pipeline:'$2.4M', ownerInit:'JH', owner:'Jeff Hammond',  reps:4, status:'Active' },
+    { id:'tr2', name:'NAM East',    parent:'NAM',  rule:"State ∈ {NY, MA, PA, NJ, CT, VA, NC, DC, FL, GA}", accounts:386, pipeline:'$2.1M', ownerInit:'DP', owner:'Devon Park',   reps:4, status:'Active' },
+    { id:'tr3', name:'NAM Central', parent:'NAM',  rule:"State ∈ {TX, IL, OH, MI, MN, CO, MO}", accounts:264, pipeline:'$1.5M', ownerInit:'DP', owner:'Devon Park',   reps:2, status:'Active' },
+    { id:'tr4', name:'NAM Strategic',parent:'NAM', rule:'Account ∈ "Top 200 Named Accounts"',   accounts:200, pipeline:'$5.8M', ownerInit:'NT', owner:'Naomi Tran',   reps:4, status:'Active' },
+    { id:'tr5', name:'EMEA North',  parent:'EMEA', rule:"Country ∈ {UK, IE, DE, NL, SE, NO, DK, FI}", accounts:184, pipeline:'$1.0M', ownerInit:'BW', owner:'Ben Whitaker',reps:2, status:'Active' },
+    { id:'tr6', name:'EMEA South',  parent:'EMEA', rule:"Country ∈ {FR, ES, IT, PT}",           accounts:96,  pipeline:'$0.6M', ownerInit:'BW', owner:'Ben Whitaker',reps:1, status:'Active' },
+    { id:'tr7', name:'APAC',        parent:'—',    rule:'Region = APAC',                         accounts:41,  pipeline:'$0.2M', ownerInit:null,  owner:'Unassigned',   reps:0, status:'Unassigned' },
+    { id:'tr8', name:'LATAM',       parent:'—',    rule:'Region = LATAM',                        accounts:22,  pipeline:'$0.1M', ownerInit:null,  owner:'Unassigned',   reps:0, status:'Unassigned' },
+];
+
+const PT_ROLES = [
+    { id:'r1', name:'Admin',         userCount:2,  sys:true  },
+    { id:'r2', name:'Sales Manager', userCount:4,  sys:true  },
+    { id:'r3', name:'Sales Rep',     userCount:28, sys:true  },
+    { id:'r4', name:'Customer Success', userCount:6, sys:false },
+    { id:'r5', name:'Finance / CFO', userCount:2,  sys:true  },
+];
+
+const PT_PERM_OBJECTS = [
+    { id:'o1', name:'Leads',            sub:'Pre-qualified contacts in the funnel' },
+    { id:'o2', name:'Accounts',         sub:'Customer organizations' },
+    { id:'o3', name:'Contacts',         sub:'People at accounts' },
+    { id:'o4', name:'Opportunities',    sub:'Pipeline deals' },
+    { id:'o5', name:'Quotes',           sub:'Pricing & proposal documents' },
+    { id:'o6', name:'Price book',       sub:'Catalog, list prices, rules' },
+    { id:'o7', name:'Reports',          sub:'Saved reports & dashboards' },
+    { id:'o8', name:'Settings',         sub:'Workspace administration' },
+    { id:'o9', name:'Billing & contracts', sub:'Subscriptions, invoices, MRR' },
+];
+
+// Permissions matrix: role × object → { view, create, edit, delete, export, share, approve }
+// view/share use scope strings: 'ALL'|'TEAM'|'OWN'|'—'
+// others are boolean
+const PT_PERMS = {
+    // Admin
+    r1: {
+        o1:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o2:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o3:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o4:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o5:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o6:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o7:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o8:{ view:'ALL', create:true,  edit:true,  delete:true,  export:false, share:'—',   approve:false },
+        o9:{ view:'ALL', create:true,  edit:true,  delete:false, export:true,  share:'—',   approve:true  },
+    },
+    // Sales Manager
+    r2: {
+        o1:{ view:'TEAM', create:true, edit:true,  delete:false, export:true,  share:'TEAM', approve:false },
+        o2:{ view:'TEAM', create:true, edit:true,  delete:false, export:true,  share:'TEAM', approve:false },
+        o3:{ view:'TEAM', create:true, edit:true,  delete:false, export:true,  share:'TEAM', approve:false },
+        o4:{ view:'TEAM', create:true, edit:true,  delete:false, export:true,  share:'TEAM', approve:true  },
+        o5:{ view:'TEAM', create:true, edit:true,  delete:false, export:true,  share:'TEAM', approve:true  },
+        o6:{ view:'ALL',  create:false,edit:false, delete:false, export:false, share:'—',    approve:false },
+        o7:{ view:'TEAM', create:true, edit:true,  delete:false, export:true,  share:'TEAM', approve:false },
+        o8:{ view:'—',    create:false,edit:false, delete:false, export:false, share:'—',    approve:false },
+        o9:{ view:'—',    create:false,edit:false, delete:false, export:false, share:'—',    approve:false },
+    },
+    // Sales Rep
+    r3: {
+        o1:{ view:'OWN', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o2:{ view:'OWN', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o3:{ view:'OWN', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o4:{ view:'OWN', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o5:{ view:'OWN', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o6:{ view:'ALL', create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o7:{ view:'OWN', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o8:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o9:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+    },
+    // Customer Success
+    r4: {
+        o1:{ view:'ALL', create:false,edit:false, delete:false, export:false, share:'OWN', approve:false },
+        o2:{ view:'ALL', create:false,edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o3:{ view:'ALL', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o4:{ view:'ALL', create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o5:{ view:'ALL', create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o6:{ view:'ALL', create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o7:{ view:'ALL', create:false,edit:false, delete:false, export:true,  share:'OWN', approve:false },
+        o8:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o9:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+    },
+    // Finance / CFO
+    r5: {
+        o1:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o2:{ view:'ALL', create:false,edit:false, delete:false, export:true,  share:'—',   approve:false },
+        o3:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o4:{ view:'ALL', create:false,edit:false, delete:false, export:true,  share:'—',   approve:true  },
+        o5:{ view:'ALL', create:false,edit:false, delete:false, export:true,  share:'—',   approve:true  },
+        o6:{ view:'ALL', create:false,edit:true,  delete:false, export:true,  share:'—',   approve:false },
+        o7:{ view:'ALL', create:true, edit:true,  delete:false, export:true,  share:'ALL', approve:false },
+        o8:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o9:{ view:'ALL', create:true, edit:true,  delete:false, export:true,  share:'—',   approve:true  },
+    },
+};
+
+const PT_PERM_ACTIONS = ['view','create','edit','delete','export','share','approve'];
+
+// ── USERS detail page ─────────────────────────────────────────
+const UsersDetail = ({ settings, onBack }) => {
+    const [filter, setFilter]   = useState('All'); // All|Active|Invited|Deactivated|MFA off
+    const [search, setSearch]   = useState('');
+    const [selected, setSelected] = useState(new Set());
+
+    const filterTabs = [
+        { key:'All',        label:`All · ${PT_USERS.length}` },
+        { key:'Active',     label:`Active · ${PT_USERS.filter(u=>u.status==='Active').length}` },
+        { key:'Invited',    label:`Pending · ${PT_USERS.filter(u=>u.status==='Invited').length}` },
+        { key:'Deactivated',label:`Deactivated · 1` },
+        { key:'MFA off',    label:`MFA off · ${PT_USERS.filter(u=>!u.mfa).length}` },
+    ];
+
+    const visible = PT_USERS.filter(u => {
+        if (filter === 'Active'     && u.status !== 'Active')  return false;
+        if (filter === 'Invited'    && u.status !== 'Invited') return false;
+        if (filter === 'MFA off'    && u.mfa)                  return false;
+        if (filter === 'Deactivated'&& u.status !== 'Deactivated') return false;
+        const q = search.toLowerCase();
+        return !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.team||'').toLowerCase().includes(q);
+    });
+
+    const isStale = (s) => s && (s.includes('days ago') || s.includes('week'));
+
+    const activeCount = PT_USERS.filter(u=>u.status==='Active').length;
+    const invitedCount = PT_USERS.filter(u=>u.status==='Invited');
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {/* Breadcrumb */}
+            <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
+                <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+                <span>/</span>
+                <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>People & Teams</button>
+                <span>/</span>
+                <span style={{ color:T.ink, fontWeight:600 }}>Users</span>
+            </div>
+
+            {/* Title band */}
+            <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:18 }}>
+                <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+                    <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>Users</div>
+                    <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                        <span>Invite, deactivate, and assign roles & permissions</span>
+                        <span style={{ color:T.inkMuted }}>•</span>
+                        <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
+                        <span>{activeCount} active · {invitedCount.length} pending invite · 1 deactivated</span>
+                        <span style={{ color:T.inkMuted }}>•</span>
+                        <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited yesterday by <b style={{ color:T.inkMid, fontWeight:500 }}>Morgan</b></span>
+                    </div>
+                </div>
+                <div style={{ display:'flex', gap:8 }}>
+                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Import CSV</button>
+                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Export</button>
+                    <button style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>Invite users</button>
+                </div>
+            </div>
+
+            {/* Body: 1fr + 320px right rail */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:18, alignItems:'start' }}>
+
+                {/* Left: filter tabs + table */}
+                <div>
+                    {/* Filter strip */}
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+                        <div style={{ display:'flex', gap:0, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:3, overflow:'hidden' }}>
+                            {filterTabs.map(ft => (
+                                <button key={ft.key} onClick={() => setFilter(ft.key)}
+                                    style={{ padding:'5px 12px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans,
+                                        background: filter===ft.key ? T.ink : 'transparent',
+                                        color: filter===ft.key ? '#fbf8f3' : T.inkMid,
+                                        whiteSpace:'nowrap',
+                                    }}>{ft.label}</button>
+                            ))}
+                        </div>
+                        <input value={search} onChange={e=>setSearch(e.target.value)}
+                            placeholder="Search by name, email, team…"
+                            style={{ padding:'6px 12px', fontSize:12.5, border:`1px solid ${T.border}`, borderRadius:16, outline:'none', width:220, fontFamily:T.sans, background:T.surface, color:T.ink }}/>
+                    </div>
+
+                    {/* User table */}
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                        <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
+                            <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>All users</div>
+                            <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any row to open the user profile. Use bulk select for role changes, deactivation, or MFA enforcement.</div>
+                        </div>
+                        {/* Table header */}
+                        <div style={{ display:'grid', gridTemplateColumns:'32px 1fr 140px 120px 120px 120px 40px 90px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                            {['','NAME','ROLE','TEAM','MANAGER','LAST ACTIVE','MFA','STATUS',''].map((h,i) => (
+                                <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                            ))}
+                        </div>
+                        {visible.map((u, i) => (
+                            <div key={u.id}
+                                style={{ display:'grid', gridTemplateColumns:'32px 1fr 140px 120px 120px 120px 40px 90px 32px', gap:8, padding:'10px 16px', borderBottom: i<visible.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                                onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                {/* Checkbox */}
+                                <div onClick={e=>{ e.stopPropagation(); setSelected(prev => { const n=new Set(prev); n.has(u.id)?n.delete(u.id):n.add(u.id); return n; }); }}
+                                    style={{ width:14, height:14, border:`1.5px solid ${selected.has(u.id)?T.ink:T.border}`, borderRadius:2, background:selected.has(u.id)?T.ink:'transparent', cursor:'pointer', flexShrink:0 }}/>
+                                {/* Name + email */}
+                                <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
+                                    <UserAvatar name={u.name} size={26}/>
+                                    <div style={{ minWidth:0 }}>
+                                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{u.name}</div>
+                                        <div style={{ fontSize:11, color:T.inkMuted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{u.email}</div>
+                                    </div>
+                                </div>
+                                {/* Role */}
+                                <div><RolePill role={u.role}/></div>
+                                {/* Team */}
+                                <div style={{ fontSize:12.5, color:T.inkMid }}>{u.team || '—'}</div>
+                                {/* Manager */}
+                                <div style={{ fontSize:12.5, color:T.inkMid }}>{u.manager || '—'}</div>
+                                {/* Last active */}
+                                <div style={{ fontSize:12, color: isStale(u.lastActive) ? T.warn : T.inkMid }}>{u.lastActive || '—'}</div>
+                                {/* MFA */}
+                                <div style={{ textAlign:'center' }}>
+                                    {u.status === 'Active'
+                                        ? u.mfa ? <span style={{ color:T.ok, fontSize:14 }}>●</span> : <span style={{ color:T.border, fontSize:14 }}>○</span>
+                                        : <span style={{ color:T.border, fontSize:12 }}>—</span>}
+                                </div>
+                                {/* Status */}
+                                <div>
+                                    <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                        background: u.status==='Active' ? 'rgba(77,107,61,0.12)' : u.status==='Invited' ? 'rgba(184,115,51,0.12)' : 'rgba(138,131,120,0.14)',
+                                        color: u.status==='Active' ? T.ok : u.status==='Invited' ? T.warn : T.inkMuted }}>
+                                        {u.status}
+                                    </span>
+                                </div>
+                                {/* Kebab */}
+                                <button onClick={e=>e.stopPropagation()} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0, lineHeight:1 }}>⋯</button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Right rail */}
+                <div style={{ display:'flex', flexDirection:'column', gap:14, position:'sticky', top:0 }}>
+                    {/* Pending invites */}
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+                            <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Pending invites</div>
+                            <button style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Resend all</button>
+                        </div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:10 }}>Sent but not yet accepted.</div>
+                        {invitedCount.map(u => (
+                            <div key={u.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:`1px solid ${T.border}` }}>
+                                <UserAvatar name={u.name} size={28}/>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{u.name}</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.email}</div>
+                                </div>
+                                <span style={{ fontSize:11, color:T.warn, fontWeight:600, flexShrink:0 }}>{u.invitedDaysAgo === 1 ? 'yesterday' : `${u.invitedDaysAgo}d ago`}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Seat usage */}
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
+                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:4 }}>Seat usage</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:12 }}>Workspace limits.</div>
+                        {/* Main bar */}
+                        <div style={{ display:'flex', alignItems:'baseline', gap:4, marginBottom:6 }}>
+                            <span style={{ fontSize:18, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{activeCount}</span>
+                            <span style={{ fontSize:13, color:T.inkMuted }}>/ 50</span>
+                            <div style={{ flex:1 }}/>
+                            <span style={{ fontSize:11.5, fontWeight:600, color:T.ok }}>84%</span>
+                        </div>
+                        <div style={{ height:5, background:T.border, borderRadius:3, marginBottom:12, overflow:'hidden' }}>
+                            <div style={{ width:`${(activeCount/50)*100}%`, height:'100%', background:T.ok, borderRadius:3 }}/>
+                        </div>
+                        {[
+                            { label:'Reps',     value:PT_USERS.filter(u=>u.role==='Sales Rep').length },
+                            { label:'Managers', value:PT_USERS.filter(u=>u.role==='Sales Manager').length },
+                            { label:'Admins',   value:PT_USERS.filter(u=>u.role==='Admin').length },
+                            { label:'Pending',  value:invitedCount.length, sub:'expires in 7d', color:T.warn },
+                        ].map((row,i) => (
+                            <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'5px 0', borderTop:`1px solid ${T.border}` }}>
+                                <span style={{ fontSize:12.5, color:T.inkMid }}>{row.label}</span>
+                                <div style={{ textAlign:'right' }}>
+                                    <span style={{ fontSize:13, fontWeight:700, color:row.color||T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{row.value}</span>
+                                    {row.sub && <div style={{ fontSize:10.5, color:T.inkMuted }}>{row.sub}</div>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Security health */}
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
+                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:3 }}>Security health</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:12 }}>Last 30 days.</div>
+                        {[
+                            { label:'MFA on',       value:'17/21', sub:'4 off',   color:T.ok },
+                            { label:'SSO',          value:'On',    sub:'all',     color:T.ok },
+                            { label:'Stale sessions',value:'2',    sub:'≤30d',    color:T.warn },
+                        ].map((row,i) => (
+                            <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'7px 0', borderTop: i>0 ? `1px solid ${T.border}` : 'none' }}>
+                                <span style={{ fontSize:12.5, color:T.inkMid }}>{row.label}</span>
+                                <div style={{ textAlign:'right' }}>
+                                    <div style={{ fontSize:13.5, fontWeight:700, color:row.color, fontFamily:'ui-monospace,Menlo,monospace' }}>{row.value}</div>
+                                    <div style={{ fontSize:10.5, color:T.inkMuted }}>{row.sub}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── TEAMS detail page ─────────────────────────────────────────
+const TeamsDetail = ({ settings, onBack }) => (
+    <div style={{ fontFamily:T.sans }}>
+        {/* Breadcrumb */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+            <span>/</span>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>People & Teams</button>
+            <span>/</span>
+            <span style={{ color:T.ink, fontWeight:600 }}>Teams</span>
+        </div>
+
+        {/* Title band */}
+        <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>
+            <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+                <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>Teams & managers</div>
+                <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                    <span>Team structure, managers, and reporting hierarchy</span>
+                    <span style={{ color:T.inkMuted }}>•</span>
+                    <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
+                    <span>8 teams · 8 managers</span>
+                    <span style={{ color:T.inkMuted }}>•</span>
+                    <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited 2 weeks ago by <b style={{ color:T.inkMid, fontWeight:500 }}>Morgan</b></span>
+                </div>
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+                <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Switch to org chart</button>
+                <button style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>New team</button>
+            </div>
+        </div>
+
+        {/* All teams table */}
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:14 }}>
+            <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>All teams</div>
+                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Drag rows to reorder. Click any team to edit its members, manager, and quotas.</div>
+            </div>
+            {/* Header */}
+            <div style={{ display:'grid', gridTemplateColumns:'24px 1fr 180px 70px 130px 90px 120px 60px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                {['','TEAM','MANAGER','MEMBERS','PIPELINE','QUOTA Q','ATTAIN','REGION',''].map((h,i) => (
+                    <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                ))}
+            </div>
+            {PT_TEAMS.map((team, i) => (
+                <div key={team.id}
+                    style={{ display:'grid', gridTemplateColumns:'24px 1fr 180px 70px 130px 90px 120px 60px 32px', gap:8, padding:'11px 16px', borderBottom: i<PT_TEAMS.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    <span style={{ color:T.border, fontSize:14, cursor:'grab' }}>⠿</span>
+                    {/* Team name with color bar */}
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <span style={{ width:4, height:16, borderRadius:2, background:team.color, flexShrink:0 }}/>
+                        <span style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{team.name}</span>
+                    </div>
+                    {/* Manager */}
+                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <UserAvatar name={team.manager} size={20}/>
+                        <span style={{ fontSize:12.5, color:T.inkMid }}>{team.manager}</span>
+                    </div>
+                    {/* Members */}
+                    <div style={{ fontSize:13, color:T.ink }}>{team.members}</div>
+                    {/* Pipeline */}
+                    <div style={{ fontSize:12, color:T.inkMid }}>{team.pipeline}</div>
+                    {/* Quota Q */}
+                    <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{team.quotaQ || '—'}</div>
+                    {/* Attainment bar */}
+                    <div>{team.attainPct != null ? <AttainBar pct={team.attainPct}/> : <span style={{ color:T.border }}>—</span>}</div>
+                    {/* Region */}
+                    <div style={{ fontSize:11.5, color:T.inkMuted }}>{team.region}</div>
+                    {/* Kebab */}
+                    <button onClick={e=>e.stopPropagation()} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+                </div>
+            ))}
+        </div>
+
+        {/* Unassigned users */}
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
+            <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:3 }}>Unassigned users</div>
+            <div style={{ fontSize:12, color:T.inkMuted, marginBottom:8 }}>Active users not currently in a team.</div>
+            <div style={{ fontSize:12.5, color:T.ok }}>None — every active user is in a team. ✓</div>
+        </div>
+    </div>
+);
+
+// ── TERRITORIES detail page ───────────────────────────────────
+const TerritoriesDetail = ({ settings, onBack }) => (
+    <div style={{ fontFamily:T.sans }}>
+        {/* Breadcrumb */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+            <span>/</span>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>People & Teams</button>
+            <span>/</span>
+            <span style={{ color:T.ink, fontWeight:600 }}>Territories</span>
+        </div>
+
+        {/* Title band */}
+        <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>
+            <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+                <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>Territories</div>
+                <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                    <span>Sales territory definitions and rep assignments</span>
+                    <span style={{ color:T.inkMuted }}>•</span>
+                    <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
+                    <span>8 territories · <span style={{ color:T.warn, fontWeight:600 }}>2 unassigned</span></span>
+                    <span style={{ color:T.inkMuted }}>•</span>
+                    <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited 3 months ago by <b style={{ color:T.inkMid, fontWeight:500 }}>Morgan</b></span>
+                </div>
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+                <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Import CSV</button>
+                <button style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>New territory</button>
+            </div>
+        </div>
+
+        {/* Territory table */}
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+            <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>All territories</div>
+                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any row to edit its rule, owner, and rep assignments.</div>
+            </div>
+            {/* Header */}
+            <div style={{ display:'grid', gridTemplateColumns:'24px 130px 80px 1fr 70px 80px 160px 50px 100px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                {['','TERRITORY','PARENT','RULE','ACCOUNTS','PIPELINE','OWNER','REPS','STATUS',''].map((h,i) => (
+                    <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                ))}
+            </div>
+            {PT_TERRITORIES.map((tr, i) => (
+                <div key={tr.id}
+                    style={{ display:'grid', gridTemplateColumns:'24px 130px 80px 1fr 70px 80px 160px 50px 100px 32px', gap:8, padding:'10px 16px', borderBottom: i<PT_TERRITORIES.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    <span style={{ color:T.border, fontSize:14, cursor:'grab' }}>⠿</span>
+                    {/* Name */}
+                    <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{tr.name}</div>
+                    {/* Parent */}
+                    <div style={{ fontSize:12, color:T.inkMuted }}>{tr.parent}</div>
+                    {/* Rule — monospace pill */}
+                    <div style={{ overflow:'hidden' }}>
+                        <span style={{ display:'inline-block', padding:'2px 6px', background:'rgba(58,90,122,0.08)', border:`1px solid rgba(58,90,122,0.15)`, borderRadius:3, fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.info, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'100%' }}>{tr.rule}</span>
+                    </div>
+                    {/* Accounts */}
+                    <div style={{ fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{tr.accounts}</div>
+                    {/* Pipeline */}
+                    <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{tr.pipeline}</div>
+                    {/* Owner */}
+                    <div style={{ display:'flex', alignItems:'center', gap:6, minWidth:0 }}>
+                        {tr.ownerInit ? <UserAvatar name={tr.owner} size={20}/> : <span style={{ width:20, height:20, borderRadius:'50%', background:T.border, display:'inline-block', flexShrink:0 }}/>}
+                        <span style={{ fontSize:12, color: tr.status==='Unassigned' ? T.inkMuted : T.inkMid, fontStyle: tr.status==='Unassigned' ? 'italic' : 'normal', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{tr.owner}</span>
+                    </div>
+                    {/* Reps */}
+                    <div style={{ fontSize:13, color:T.ink }}>{tr.reps}</div>
+                    {/* Status */}
+                    <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                        background: tr.status==='Active' ? 'rgba(77,107,61,0.12)' : 'rgba(184,115,51,0.12)',
+                        color: tr.status==='Active' ? T.ok : T.warn }}>
+                        {tr.status}
+                    </span>
+                    {/* Kebab */}
+                    <button onClick={e=>e.stopPropagation()} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
+// ── ROLES & PERMISSIONS detail page ──────────────────────────
+const RolesDetail = ({ settings, onBack }) => {
+    const [activeRole, setActiveRole] = useState('r3'); // default: Sales Rep
+
+    const role   = PT_ROLES.find(r=>r.id===activeRole);
+    const perms  = PT_PERMS[activeRole] || {};
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {/* Breadcrumb */}
+            <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
+                <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+                <span>/</span>
+                <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>People & Teams</button>
+                <span>/</span>
+                <span style={{ color:T.ink, fontWeight:600 }}>Roles & permissions</span>
+            </div>
+
+            {/* Title band */}
+            <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>
+                <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+                    <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>Roles & permissions</div>
+                    <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                        <span>5 roles · 9 objects · 7 actions</span>
+                        <span style={{ color:T.inkMuted }}>•</span>
+                        <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
+                        <span>Editing — <b style={{ color:T.ink }}>{role?.name}</b></span>
+                        <span style={{ color:T.inkMuted }}>•</span>
+                        <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited last week by <b style={{ color:T.inkMid, fontWeight:500 }}>Morgan</b></span>
+                    </div>
+                </div>
+                <div style={{ display:'flex', gap:8 }}>
+                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Duplicate role</button>
+                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Compare</button>
+                    <button style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>New role</button>
+                </div>
+            </div>
+
+            {/* Role tabs */}
+            <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${T.border}`, marginBottom:18 }}>
+                {PT_ROLES.map(r => {
+                    const active = r.id === activeRole;
+                    return (
+                        <button key={r.id} onClick={() => setActiveRole(r.id)}
+                            style={{
+                                padding:'10px 20px', fontSize:13, fontWeight:600, border:'none', background:'transparent',
+                                cursor:'pointer', fontFamily:T.sans, position:'relative',
+                                color: active ? T.ink : T.inkMid,
+                                borderBottom: active ? `2px solid ${T.goldInk}` : '2px solid transparent',
+                                display:'flex', alignItems:'center', gap:6,
+                            }}>
+                            <span>{r.name}</span>
+                            <span style={{ fontSize:11, color:T.inkMuted }}>{r.userCount}</span>
+                            {r.sys && <span style={{ padding:'1px 4px', fontSize:9, fontWeight:800, background:'rgba(42,38,34,0.07)', color:T.inkMuted, borderRadius:2, letterSpacing:0.4 }}>SYS</span>}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Permission matrix */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                {/* Matrix header */}
+                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div>
+                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Permission matrix</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>
+                            Own pipelines, build quotes, send for approval. Toggle scope per object × action. Changes apply to {role?.userCount} users immediately.
+                        </div>
+                    </div>
+                    {/* Legend */}
+                    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:T.inkMuted }}>
+                        <span>Legend:</span>
+                        {['ALL','TEAM','OWN','—'].map(s => <ScopeBadge key={s} scope={s}/>)}
+                    </div>
+                </div>
+
+                {/* Table — use native table for proper column alignment */}
+                <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans }}>
+                    <thead>
+                        <tr style={{ background:T.surface2 }}>
+                            <th style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'left', borderBottom:`1px solid ${T.border}`, width:200 }}>OBJECT</th>
+                            {PT_PERM_ACTIONS.map(a => (
+                                <th key={a} style={{ padding:'8px 12px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'center', borderBottom:`1px solid ${T.border}` }}>{a}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {PT_PERM_OBJECTS.map((obj, oi) => {
+                            const p = perms[obj.id] || {};
+                            return (
+                                <tr key={obj.id} style={{ borderBottom: oi < PT_PERM_OBJECTS.length-1 ? `1px solid ${T.border}` : 'none' }}
+                                    onMouseEnter={e=>{ Array.from(e.currentTarget.cells).forEach(c=>c.style.background=T.surface2); }}
+                                    onMouseLeave={e=>{ Array.from(e.currentTarget.cells).forEach(c=>c.style.background='transparent'); }}>
+                                    <td style={{ padding:'11px 16px' }}>
+                                        <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{obj.name}</div>
+                                        <div style={{ fontSize:11, color:T.inkMuted }}>{obj.sub}</div>
+                                    </td>
+                                    {/* VIEW */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><ScopeBadge scope={p.view || '—'}/></td>
+                                    {/* CREATE */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.create}/></td>
+                                    {/* EDIT */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.edit}/></td>
+                                    {/* DELETE */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.delete}/></td>
+                                    {/* EXPORT */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.export}/></td>
+                                    {/* SHARE */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><ScopeBadge scope={p.share || '—'}/></td>
+                                    {/* APPROVE */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.approve}/></td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTEGRATIONS — data + shared primitives + four detail pages + four modals
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Shared primitives ─────────────────────────────────────────
+
+// Colored 36×36 app tile (initials or emoji)
+const AppTile = ({ name, color='#3a5a7a', size=36, emoji }) => (
+    <span style={{
+        display:'inline-flex', alignItems:'center', justifyContent:'center',
+        width:size, height:size, borderRadius:6,
+        background:color, color:'#fff',
+        fontSize: emoji ? size*0.55 : size*0.38, fontWeight:700, fontFamily:T.sans,
+        flexShrink:0, letterSpacing:0, userSelect:'none',
+    }}>{emoji || name.slice(0,2).toUpperCase()}</span>
+);
+
+// Traffic/status dot
+const StatusDot = ({ tone='ok', label }) => {
+    const c = { ok:T.ok, warn:T.warn, danger:T.danger, muted:T.inkMuted }[tone] || T.ok;
+    return (
+        <span style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:11.5, color:c, fontFamily:T.sans }}>
+            <span style={{ width:7, height:7, borderRadius:'50%', background:c, flexShrink:0 }}/>
+            {label}
+        </span>
+    );
+};
+
+// Masked API key: acc_live_••••••••xK3p
+const KeyMono = ({ prefix='acc_live_', tail='xK3p' }) => (
+    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid, letterSpacing:0.3 }}>
+        {prefix}<span style={{ opacity:0.5 }}>{'•'.repeat(8)}</span>{tail}
+    </span>
+);
+
+// 7-bar mini sparkline for API traffic / automation runs
+const MiniSpark = ({ data=[], color=T.ok }) => {
+    const max = Math.max(...data, 1);
+    return (
+        <div style={{ display:'inline-flex', alignItems:'flex-end', gap:2, height:20 }}>
+            {data.map((v,i) => (
+                <div key={i} style={{ width:4, height:Math.max(3, (v/max)*18), background: color, borderRadius:1, opacity: i===data.length-1 ? 1 : 0.55 }}/>
+            ))}
+        </div>
+    );
+};
+
+// Health bar: success rate + attempts count
+const HealthBar = ({ pct, attempts }) => {
+    const c = pct >= 98 ? T.ok : pct >= 90 ? T.warn : T.danger;
+    return (
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <div style={{ width:52, height:5, background:T.border, borderRadius:3, overflow:'hidden', flexShrink:0 }}>
+                <div style={{ width:`${pct}%`, height:'100%', background:c, borderRadius:3 }}/>
+            </div>
+            <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{attempts} tries</span>
+        </div>
+    );
+};
+
+// HTTP status code pill
+const StatusCode = ({ code }) => {
+    const c = code < 300 ? { bg:'rgba(77,107,61,0.12)', fg:T.ok }
+            : code < 500 ? { bg:'rgba(184,115,51,0.12)', fg:T.warn }
+            :               { bg:'rgba(156,58,46,0.12)', fg:T.danger };
+    return <span style={{ padding:'2px 7px', borderRadius:3, fontSize:11.5, fontWeight:700, background:c.bg, color:c.fg, fontFamily:'ui-monospace,Menlo,monospace' }}>{code}</span>;
+};
+
+// Trigger chip
+const TriggerChip = ({ type='record', label }) => {
+    const isSchedule = type === 'schedule';
+    return (
+        <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 8px', borderRadius:10,
+            background: isSchedule ? 'rgba(58,90,122,0.10)' : 'rgba(200,185,154,0.20)',
+            color: isSchedule ? T.info : T.goldInk, fontSize:11.5, fontWeight:600, fontFamily:T.sans, whiteSpace:'nowrap' }}>
+            <span style={{ fontSize:10 }}>{isSchedule ? '⏱' : '⚡'}</span>
+            {label}
+        </span>
+    );
+};
+
+// ── Data ──────────────────────────────────────────────────────
+
+const INT_APPS = [
+    // Connected
+    { id:'slack',    name:'Slack',      category:'Messaging',    color:'#4a154b', emoji:'💬', connected:true,  tone:'ok',   traffic:'1,247 msgs/day',       desc:'Post deal updates, alerts, and digest to channels.' },
+    { id:'gmail',    name:'Gmail',      category:'Email',        color:'#d93025', emoji:'✉',  connected:true,  tone:'ok',   traffic:'842 emails/day',        desc:'Sync sent/received emails to contact timelines.' },
+    { id:'outlook',  name:'Outlook',    category:'Email',        color:'#0078d4', emoji:'📧', connected:true,  tone:'warn', traffic:'Token refresh in 6d',   desc:'Sync sent/received emails to contact timelines.' },
+    { id:'zoom',     name:'Zoom',       category:'Video',        color:'#2d8cff', emoji:'📹', connected:true,  tone:'ok',   traffic:'34 meetings/week',      desc:'Log call recordings and transcripts to timelines.' },
+    { id:'docusign', name:'DocuSign',   category:'eSign',        color:'#f4b100', emoji:'✍',  connected:true,  tone:'ok',   traffic:'12 envelopes/day',      desc:'Send quotes for signature and track status.' },
+    { id:'linkedin', name:'LinkedIn',   category:'Prospecting',  color:'#0a66c2', emoji:'in', connected:true,  tone:'warn', traffic:'No traffic — verify scope', desc:'Auto-enrich leads with company & role data.' },
+    // Popular not connected
+    { id:'gcal',     name:'Google Calendar', category:'Calendar',   color:'#4285f4', emoji:'📅', connected:false, popular:true, desc:'Sync meetings with contacts automatically.' },
+    { id:'snowflake',name:'Snowflake',  category:'Data warehouse',color:'#29b5e8', emoji:'❄',  connected:false, popular:true, desc:'Push Accelerep data to your data warehouse.' },
+    { id:'clearbit', name:'Clearbit',   category:'Enrichment',   color:'#2869ff', emoji:'◈',  connected:false, popular:true, desc:'Real-time lead enrichment from Clearbit.' },
+    // Catalog
+    { id:'hubspot',  name:'HubSpot',    category:'CRM',          color:'#ff7a59', emoji:'🔶', connected:false, desc:'Bi-directional contact & deal sync.' },
+    { id:'salesforce',name:'Salesforce',category:'CRM',          color:'#00a1e0', emoji:'☁',  connected:false, desc:'Mirror pipeline to Salesforce objects.' },
+    { id:'intercom', name:'Intercom',   category:'Support',      color:'#6afdef', emoji:'💭', connected:false, desc:'Attach support tickets to accounts.' },
+    { id:'zendesk',  name:'Zendesk',    category:'Support',      color:'#03363d', emoji:'Z',  connected:false, desc:'Surface open tickets in deal views.' },
+    { id:'stripe',   name:'Stripe',     category:'Billing',      color:'#635bff', emoji:'💳', connected:false, desc:'Match invoices to closed-won deals.' },
+    { id:'gong',     name:'Gong',       category:'Sales intel',  color:'#7c3aed', emoji:'🎙', connected:false, desc:'Surface call insights on contacts.' },
+];
+
+const INT_API_KEYS = [
+    { id:'k1', name:'Production — pipeline sync', by:'Morgan Reyes', created:'Jan 14, 2024', prefix:'acc_live_', tail:'K3pQ', scopes:['leads:read','opps:read','opps:write','quotes:read'], rateLimit:'5,000 req/min', lastUsed:'2 minutes ago', traffic:[820,910,770,880,920,840,960], status:'Live' },
+    { id:'k2', name:'Reporting export — BI tool',  by:'Priya Sharma',  created:'Mar 2, 2024',  prefix:'acc_live_', tail:'R7wZ', scopes:['reports:read','contacts:read'], rateLimit:'1,000 req/min', lastUsed:'1 hour ago',    traffic:[120,140,110,130,150,125,145], status:'Live' },
+    { id:'k3', name:'Quote PDF webhook receiver',  by:'Jeff Hammond',  created:'May 18, 2024', prefix:'acc_live_', tail:'P2mX', scopes:['quotes:read','webhooks:read'], rateLimit:'500 req/min',   lastUsed:'yesterday',      traffic:[30,25,40,35,28,42,38], status:'Live' },
+    { id:'k4', name:'Sandbox — dev testing',        by:'Priya Sharma',  created:'Jun 1, 2024',  prefix:'acc_test_', tail:'D9nK', scopes:['leads:read','contacts:read','leads:write'], rateLimit:'500 req/min',   lastUsed:'3 days ago',     traffic:[5,12,8,3,0,4,7], status:'Test' },
+    { id:'k5', name:'Legacy mobile app (deprecated)',by:'Morgan Reyes', created:'Nov 1, 2023',  prefix:'acc_live_', tail:'L1vX', scopes:['leads:read','contacts:read'], rateLimit:'200 req/min',   lastUsed:'42 days ago',    traffic:[0,0,1,0,0,0,2], status:'Stale' },
+];
+
+const INT_WEBHOOKS = [
+    { id:'wh1', name:'Pipeline stage changes', url:'https://hooks.zapier.com/hooks/catch/12345/abcdef', events:['opp.stage_changed','opp.won','opp.lost'], successPct:100, attempts:284, lastDelivery:'2 minutes ago', status:'Healthy' },
+    { id:'wh2', name:'Quote approved → ERP',   url:'https://erp.acme.com/api/crm-events',              events:['quote.approved','quote.sent'],            successPct:98,  attempts:47,  lastDelivery:'1 hour ago',     status:'Healthy' },
+    { id:'wh3', name:'Acme billing reconcile', url:'https://billing.acme.com/webhooks/crm',             events:['quote.approved','account.updated'],       successPct:62,  attempts:34,  lastDelivery:'failing — 9h ago',status:'Failing' },
+    { id:'wh4', name:'Lead → Slack notify',    url:'https://hooks.slack.com/services/T123/B456/xyz',    events:['lead.created','lead.qualified'],           successPct:99,  attempts:512, lastDelivery:'4 minutes ago',  status:'Healthy' },
+];
+
+const INT_WEBHOOK_DELIVERIES = [
+    { id:'d1', time:'2 min ago',  endpoint:'Pipeline stage changes', event:'opp.stage_changed', code:200, latencyMs:182,  attempt:1 },
+    { id:'d2', time:'4 min ago',  endpoint:'Lead → Slack notify',    event:'lead.created',       code:200, latencyMs:94,   attempt:1 },
+    { id:'d3', time:'9h ago',     endpoint:'Acme billing reconcile', event:'quote.approved',     code:503, latencyMs:8420, attempt:4 },
+    { id:'d4', time:'1h ago',     endpoint:'Quote approved → ERP',   event:'quote.approved',     code:200, latencyMs:312,  attempt:1 },
+    { id:'d5', time:'12h ago',    endpoint:'Acme billing reconcile', event:'account.updated',    code:502, latencyMs:9100, attempt:3 },
+    { id:'d6', time:'yesterday',  endpoint:'Pipeline stage changes', event:'opp.won',            code:200, latencyMs:201,  attempt:1 },
+];
+
+const INT_AUTOMATIONS = [
+    { id:'a1',  name:'New lead → assign + notify',    owner:'Morgan Reyes', triggerType:'record',   trigger:'lead.created',       when:'lead.source = "website"',          then:'Assign round-robin · Slack #inbound',  runs:284, spark:[30,38,42,28,35,40,36], successPct:100,  lastRun:'2 min ago',  active:true },
+    { id:'a2',  name:'Deal stall alert',               owner:'Morgan Reyes', triggerType:'schedule', trigger:'schedule.daily',      when:'opp.last_activity > 7d',           then:'Email manager · Flag in pipeline',     runs:14,  spark:[1,2,1,2,3,2,3],  successPct:100,  lastRun:'9h ago',     active:true },
+    { id:'a3',  name:'Quote approved → DocuSign',      owner:'Priya Sharma', triggerType:'record',   trigger:'quote.approved',      when:'quote.value > 5000',               then:'Send DocuSign envelope',              runs:47,  spark:[4,6,8,5,7,9,8],  successPct:98,   lastRun:'1h ago',     active:true },
+    { id:'a4',  name:'Closed-won → ERP handoff',       owner:'Priya Sharma', triggerType:'record',   trigger:'opp.won',             when:'opp.type = "New business"',         then:'POST billing.acme.com · Notify CS',   runs:18,  spark:[1,2,3,2,1,3,2],  successPct:94,   lastRun:'3h ago',     active:true, issue:'3 ERP 503 errors this week' },
+    { id:'a5',  name:'MFA enforcement sweep',          owner:'Morgan Reyes', triggerType:'schedule', trigger:'schedule.weekly',     when:'user.mfa = false',                  then:'Email reminder · Flag in Users view',  runs:4,   spark:[1,0,1,1,0,0,1],  successPct:100,  lastRun:'Mon 9am',    active:true },
+    { id:'a6',  name:'Contract renewal 60d warning',   owner:'Priya Sharma', triggerType:'schedule', trigger:'schedule.daily',      when:'account.renewal_date ≤ 60d',        then:'Create task · Email AM',              runs:8,   spark:[0,1,0,1,2,1,2],  successPct:100,  lastRun:'9h ago',     active:true },
+    { id:'a7',  name:'High-value lead escalation',     owner:'Jeff Hammond', triggerType:'record',   trigger:'lead.score_updated',  when:'lead.score ≥ 85',                   then:'Assign AE · Slack #hot-leads',        runs:22,  spark:[2,3,4,3,2,4,3],  successPct:100,  lastRun:'30 min ago', active:true },
+    { id:'a8',  name:'Lost deal survey',               owner:'Morgan Reyes', triggerType:'record',   trigger:'opp.lost',            when:'always',                            then:'Send Typeform survey via email',       runs:9,   spark:[0,1,2,1,1,2,2],  successPct:100,  lastRun:'2 days ago', active:true },
+    { id:'a9',  name:'Territory re-assignment',        owner:'Priya Sharma', triggerType:'record',   trigger:'account.updated',     when:'account.state changed',             then:'Re-assign territory round-robin',     runs:31,  spark:[3,4,5,4,3,5,4],  successPct:97,   lastRun:'1h ago',     active:true },
+    { id:'a10', name:'Low-margin quote flag',          owner:'Priya Sharma', triggerType:'record',   trigger:'quote.created',       when:'quote.margin < 50%',                then:'Flag for manager approval',           runs:12,  spark:[1,2,1,1,2,2,1],  successPct:100,  lastRun:'4h ago',     active:true },
+    { id:'a11', name:'Weekly pipeline digest',         owner:'Morgan Reyes', triggerType:'schedule', trigger:'schedule.weekly',     when:'team.pipeline_value changed',       then:'Email team summary · Slack #sales',   runs:4,   spark:[1,1,0,1,0,1,0],  successPct:100,  lastRun:'Mon 8am',    active:true },
+    { id:'a12', name:'AE handoff on MQL',              owner:'Jeff Hammond', triggerType:'record',   trigger:'lead.qualified',      when:'lead.score ≥ 70',                   then:'Convert → Opportunity · Assign AE',   runs:38,  spark:[3,5,4,6,4,7,5],  successPct:100,  lastRun:'15 min ago', active:true },
+    // Paused
+    { id:'a13', name:'Competitor mention alert',       owner:'Devon Park',   triggerType:'record',   trigger:'contact.note_added',  when:'note contains competitor keywords', then:'Slack #competitive',                  runs:0,   spark:[0,0,0,0,0,0,0],  successPct:null, lastRun:'paused',     active:false },
+    { id:'a14', name:'EMEA overnight digest',          owner:'Ben Whitaker', triggerType:'schedule', trigger:'schedule.daily',      when:'team = "EMEA" · time = 08:00 CET',  then:'Email EMEA team summary',             runs:0,   spark:[0,0,0,0,0,0,0],  successPct:null, lastRun:'paused',     active:false },
+    { id:'a15', name:'Partner co-sell notify',         owner:'Morgan Reyes', triggerType:'record',   trigger:'opp.created',         when:'opp.source = "partner"',            then:'Email partner contact',               runs:0,   spark:[0,0,0,0,0,0,0],  successPct:null, lastRun:'paused',     active:false },
+];
+
+// ── Breadcrumb helper ─────────────────────────────────────────
+const IntCrumb = ({ page, onBack }) => (
+    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+        <span>/</span>
+        <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Integrations</button>
+        <span>/</span>
+        <span style={{ color:T.ink, fontWeight:600 }}>{page}</span>
+    </div>
+);
+
+// Title band shared pattern
+const IntTitle = ({ title, sub, actions, dirty }) => (
+    <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>
+        <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+            <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3, fontFamily:T.sans }}>
+                {title}{dirty && <span style={{ fontSize:12, fontWeight:500, color:T.warn, marginLeft:12 }}>● Unsaved</span>}
+            </div>
+            <div style={{ fontSize:13, color:T.inkMid, marginTop:3, fontFamily:T.sans }}>{sub}</div>
+        </div>
+        <div style={{ display:'flex', gap:8 }}>{actions}</div>
+    </div>
+);
+
+const IntBtn = ({ label, primary, onClick }) => (
+    <button onClick={onClick}
+        style={{ padding:'7px 14px', background: primary ? T.ink : T.surface, color: primary ? '#fbf8f3' : T.ink,
+            border: primary ? 'none' : `1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans, whiteSpace:'nowrap' }}
+        onMouseEnter={e=>e.currentTarget.style.background= primary ? '#3d3530' : T.surface2}
+        onMouseLeave={e=>e.currentTarget.style.background= primary ? T.ink : T.surface}>
+        {label}
+    </button>
+);
+
+// ── MODALS ────────────────────────────────────────────────────
+
+// Shared modal shell
+const IntModal = ({ width=560, onClose, children }) => (
+    <div onClick={onClose}
+        style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:T.sans }}>
+        <div onClick={e=>e.stopPropagation()}
+            style={{ background:T.surface, borderRadius:8, width, maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)' }}>
+            {children}
+        </div>
+    </div>
+);
+
+const IntModalHeader = ({ title, sub, onClose, left }) => (
+    <div style={{ padding:'18px 22px 14px', borderBottom:`1px solid ${T.border}`, flexShrink:0, display:'flex', alignItems:'flex-start', gap:12 }}>
+        {left}
+        <div style={{ flex:1 }}>
+            <div style={{ fontSize:17, fontWeight:700, color:T.ink, letterSpacing:-0.2 }}>{title}</div>
+            {sub && <div style={{ fontSize:12.5, color:T.inkMuted, marginTop:2 }}>{sub}</div>}
+        </div>
+        <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', padding:'2px 4px', lineHeight:1, borderRadius:4 }}
+            onMouseEnter={e=>e.currentTarget.style.color=T.ink} onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>×</button>
+    </div>
+);
+
+const IntModalFooter = ({ left, children }) => (
+    <div style={{ padding:'12px 22px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+        <div style={{ fontSize:11.5, color:T.inkMuted, fontStyle:'italic' }}>{left}</div>
+        <div style={{ display:'flex', gap:8 }}>{children}</div>
+    </div>
+);
+
+// 1. Connect app modal
+const ConnectAppModal = ({ app, onClose }) => {
+    const requiredScopes = ['Read contacts','Read & write calendar events','Send emails on your behalf'];
+    const optionalScopes = ['Read email metadata','Access contact photos'];
+    const [optOn, setOptOn] = useState([true, false]);
+    return (
+        <IntModal width={540} onClose={onClose}>
+            <IntModalHeader onClose={onClose}
+                left={<AppTile name={app?.name||'GC'} color={app?.color||'#4285f4'} emoji={app?.emoji} size={36}/>}
+                title={`Connect ${app?.name||'app'}`}
+                sub={`${app?.category||'Integration'} · by ${app?.name||'app'}`}/>
+            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
+                {/* Account row */}
+                <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:T.surface2, borderRadius:6, border:`1px solid ${T.border}`, marginBottom:16 }}>
+                    <UserAvatar name="Morgan Reyes" size={28}/>
+                    <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>Morgan Reyes</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted }}>morgan@accelerep.com</div>
+                    </div>
+                    <button style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Switch →</button>
+                </div>
+                {/* Required scopes */}
+                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:8, fontFamily:T.sans }}>Required permissions</div>
+                {requiredScopes.map((s,i) => (
+                    <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:`1px solid ${T.border}` }}>
+                        <span style={{ fontSize:13, color:T.ok }}>✓</span>
+                        <span style={{ flex:1, fontSize:13, color:T.ink }}>{s}</span>
+                        <span style={{ padding:'2px 6px', borderRadius:10, background:'rgba(77,107,61,0.12)', color:T.ok, fontSize:10.5, fontWeight:700 }}>Required</span>
+                    </div>
+                ))}
+                {/* Optional scopes */}
+                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', margin:'14px 0 8px', fontFamily:T.sans }}>Optional</div>
+                {optionalScopes.map((s,i) => (
+                    <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:`1px solid ${T.border}` }}>
+                        <span onClick={() => setOptOn(p=>{const n=[...p];n[i]=!n[i];return n;})}
+                            style={{ width:14, height:14, border:`1.5px solid ${optOn[i]?T.ok:T.border}`, borderRadius:2, background:optOn[i]?T.ok:'transparent', cursor:'pointer', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                            {optOn[i] && <span style={{ color:'#fff', fontSize:9, lineHeight:1 }}>✓</span>}
+                        </span>
+                        <span style={{ flex:1, fontSize:13, color:T.ink }}>{s}</span>
+                        <span style={{ padding:'2px 6px', borderRadius:10, background:'rgba(184,115,51,0.10)', color:T.warn, fontSize:10.5, fontWeight:700 }}>Optional</span>
+                    </div>
+                ))}
+                {/* Privacy callout */}
+                <div style={{ marginTop:14, padding:'10px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4 }}>
+                    <div style={{ fontSize:12, color:T.info, fontWeight:600, marginBottom:3 }}>Privacy note</div>
+                    <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.5 }}>Accelerep only reads data you explicitly grant. We never store email content — only metadata for timeline sync.</div>
+                </div>
+            </div>
+            <IntModalFooter left="You'll be redirected to Google to authorize.">
+                <IntBtn label="Cancel" onClick={onClose}/>
+                <IntBtn label={`Authorize ${app?.name||'app'}`} primary onClick={onClose}/>
+            </IntModalFooter>
+        </IntModal>
+    );
+};
+
+// 2. New API key modal — post-creation reveal state
+const NewApiKeyModal = ({ onClose }) => {
+    const [step, setStep] = useState('form'); // form | reveal
+    const [name, setName] = useState('');
+    const [env,  setEnv]  = useState('live');
+    const mockKey = 'acc_live_sk_9fKpQ2mXr7wZ3nDk8vLj1hYtBcEs4uGo';
+    const copied = React.useRef(false);
+
+    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
+
+    return (
+        <IntModal width={580} onClose={onClose}>
+            <IntModalHeader onClose={onClose} title={step==='form' ? 'Create API key' : 'Key created — copy it now'} sub={step==='form' ? 'Keys give programmatic access to Accelerep data.' : undefined}/>
+            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
+                {step === 'form' ? (
+                    <>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 120px', gap:12, marginBottom:14 }}>
+                            <div>
+                                <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Key name</label>
+                                <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Production pipeline sync" style={inp}/>
+                            </div>
+                            <div>
+                                <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Environment</label>
+                                <select value={env} onChange={e=>setEnv(e.target.value)} style={{ ...inp, appearance:'none', cursor:'pointer' }}>
+                                    <option value="live">Live</option>
+                                    <option value="test">Test</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style={{ marginBottom:14 }}>
+                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:6 }}>Scopes</label>
+                            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                                {['leads:read','leads:write','contacts:read','opps:read','opps:write','quotes:read','webhooks:read'].map(s => (
+                                    <span key={s} style={{ padding:'3px 8px', borderRadius:3, background:'rgba(58,90,122,0.10)', color:T.info, fontSize:11.5, fontFamily:'ui-monospace,Menlo,monospace' }}>{s}</span>
+                                ))}
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        {/* Success tile */}
+                        <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', background:'rgba(77,107,61,0.08)', border:`1px solid rgba(77,107,61,0.2)`, borderRadius:6, marginBottom:16 }}>
+                            <span style={{ fontSize:22, color:T.ok }}>✓</span>
+                            <div>
+                                <div style={{ fontSize:13.5, fontWeight:700, color:T.ok }}>Key created successfully</div>
+                                <div style={{ fontSize:12, color:T.inkMid, marginTop:1 }}>Copy it now — you won't be able to see it again.</div>
+                            </div>
+                        </div>
+                        {/* Dark key panel */}
+                        <div style={{ background:T.ink, borderRadius:6, padding:'14px 16px', marginBottom:14 }}>
+                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+                                <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:'#a8f0c8', wordBreak:'break-all', flex:1 }}>{mockKey}</code>
+                                <button onClick={()=>{ navigator.clipboard?.writeText(mockKey); }}
+                                    style={{ padding:'5px 12px', background:'rgba(255,255,255,0.12)', color:'#fbf8f3', border:'1px solid rgba(255,255,255,0.18)', borderRadius:4, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, flexShrink:0 }}>
+                                    Copy
+                                </button>
+                            </div>
+                        </div>
+                        {/* Warn callout */}
+                        <div style={{ padding:'10px 14px', background:'rgba(184,115,51,0.09)', borderLeft:`3px solid ${T.warn}`, borderRadius:4, marginBottom:14 }}>
+                            <div style={{ fontSize:12, color:T.warn, fontWeight:600, marginBottom:2 }}>Store this key securely</div>
+                            <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.5 }}>Never commit it to source control. Use environment variables or a secrets manager (Vault, 1Password, AWS SSM).</div>
+                        </div>
+                        {/* curl snippet */}
+                        <div style={{ background:'rgba(42,38,34,0.04)', border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px' }}>
+                            <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:6 }}>Test with curl</div>
+                            <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMid, lineHeight:1.6, display:'block' }}>
+                                {`curl -H "Authorization: Bearer ${mockKey.slice(0,22)}..." \\\n  https://api.accelerep.com/v1/leads`}
+                            </code>
+                        </div>
+                    </>
+                )}
+            </div>
+            <IntModalFooter left={step==='reveal' ? 'Download as .env' : ''}>
+                {step === 'form' ? (
+                    <>
+                        <IntBtn label="Cancel" onClick={onClose}/>
+                        <IntBtn label="Create key" primary onClick={()=>setStep('reveal')}/>
+                    </>
+                ) : (
+                    <IntBtn label="I've stored it — close" primary onClick={onClose}/>
+                )}
+            </IntModalFooter>
+        </IntModal>
+    );
+};
+
+// 3. New webhook modal
+const NewWebhookModal = ({ onClose }) => {
+    const [name, setName] = useState('');
+    const [url,  setUrl]  = useState('');
+    const [checked, setChecked] = useState(new Set(['opp.stage_changed','opp.won','quote.approved']));
+    const eventGroups = [
+        { group:'Pipeline',  events:['opp.stage_changed','opp.won','opp.lost','opp.created','opp.updated'] },
+        { group:'Quoting',   events:['quote.approved','quote.sent','quote.viewed','quote.signed'] },
+        { group:'Accounts',  events:['account.updated','account.created','contact.created','lead.created','lead.qualified'] },
+    ];
+    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
+    const toggle = (ev) => setChecked(p=>{ const n=new Set(p); n.has(ev)?n.delete(ev):n.add(ev); return n; });
+    return (
+        <IntModal width={620} onClose={onClose}>
+            <IntModalHeader onClose={onClose} title="New webhook endpoint" sub="We'll POST a signed JSON payload to your URL on each event."/>
+            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
+                    <div>
+                        <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Name</label>
+                        <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Pipeline → Zapier" style={inp}/>
+                    </div>
+                    <div>
+                        <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Signing secret</label>
+                        <select style={{ ...inp, appearance:'none', cursor:'pointer' }}>
+                            <option>HMAC-SHA256 (recommended)</option>
+                            <option>None</option>
+                        </select>
+                    </div>
+                </div>
+                <div style={{ marginBottom:14 }}>
+                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Endpoint URL</label>
+                    <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://hooks.example.com/accelerep" style={{ ...inp, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}/>
+                </div>
+                <div style={{ marginBottom:14 }}>
+                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Retry policy</label>
+                    <select style={{ ...inp, appearance:'none', cursor:'pointer', width:'50%' }}>
+                        <option>Exponential backoff (3 attempts)</option>
+                        <option>Fixed 5-minute intervals</option>
+                        <option>No retry</option>
+                    </select>
+                </div>
+                {/* Event picker */}
+                <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:8 }}>
+                    Events <span style={{ color:T.inkMuted, fontWeight:400 }}>({checked.size} selected)</span>
+                </div>
+                {eventGroups.map(({ group, events }) => (
+                    <div key={group} style={{ marginBottom:12 }}>
+                        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', padding:'5px 0', borderBottom:`1px solid ${T.border}`, marginBottom:4, fontFamily:T.sans }}>{group}</div>
+                        {events.map(ev => (
+                            <div key={ev} onClick={()=>toggle(ev)}
+                                style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 4px', cursor:'pointer', borderBottom:`1px solid ${T.border}` }}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                                onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                <span style={{ width:14, height:14, border:`1.5px solid ${checked.has(ev)?T.ok:T.border}`, borderRadius:2, background:checked.has(ev)?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                    {checked.has(ev) && <span style={{ color:'#fff', fontSize:9 }}>✓</span>}
+                                </span>
+                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.ink }}>{ev}</span>
+                            </div>
+                        ))}
+                    </div>
+                ))}
+            </div>
+            <IntModalFooter left="A signing secret will be revealed once on creation.">
+                <IntBtn label="Cancel" onClick={onClose}/>
+                <IntBtn label="Create endpoint" primary onClick={onClose}/>
+            </IntModalFooter>
+        </IntModal>
+    );
+};
+
+// 4. New automation modal — 4-step stepper
+const NewAutomationModal = ({ onClose }) => {
+    const [step, setStep] = useState(1);
+    const [autoName, setAutoName] = useState('');
+    const [selectedTrigger, setSelectedTrigger] = useState('opp.stage_changed');
+    const triggers = [
+        { key:'opp.stage_changed', label:'Deal stage changed', type:'record', icon:'⚡' },
+        { key:'opp.won',           label:'Deal won',           type:'record', icon:'⚡' },
+        { key:'lead.created',      label:'Lead created',       type:'record', icon:'⚡' },
+        { key:'quote.approved',    label:'Quote approved',     type:'record', icon:'⚡' },
+        { key:'schedule.daily',    label:'Daily schedule',     type:'schedule',icon:'⏱' },
+        { key:'schedule.weekly',   label:'Weekly schedule',    type:'schedule',icon:'⏱' },
+    ];
+    const steps = ['Trigger','Condition','Actions','Review'];
+    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
+    return (
+        <IntModal width={720} onClose={onClose}>
+            <IntModalHeader onClose={onClose} title="New automation" sub="Define a trigger, conditions, and the actions to take."/>
+            {/* Stepper */}
+            <div style={{ display:'flex', borderBottom:`1px solid ${T.border}`, padding:'0 22px', flexShrink:0 }}>
+                {steps.map((s,i) => {
+                    const n = i+1;
+                    const active = step===n, done = step>n;
+                    return (
+                        <div key={s} style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 16px 10px 0', fontSize:12.5, fontWeight:600, cursor: done ? 'pointer' : 'default', color: active ? T.ink : done ? T.ok : T.inkMuted, borderBottom: active ? `2px solid ${T.goldInk}` : '2px solid transparent' }}
+                            onClick={()=>{ if(done) setStep(n); }}>
+                            <span style={{ width:20, height:20, borderRadius:'50%', border:`1.5px solid ${active?T.goldInk:done?T.ok:T.border}`, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:11, background: done ? T.ok : 'transparent', color: done ? '#fff' : active ? T.goldInk : T.inkMuted }}>
+                                {done ? '✓' : n}
+                            </span>
+                            {s}
+                        </div>
+                    );
+                })}
+            </div>
+            {/* Step body */}
+            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
+                {step===1 && (
+                    <>
+                        <div style={{ marginBottom:14 }}>
+                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Automation name</label>
+                            <input value={autoName} onChange={e=>setAutoName(e.target.value)} placeholder="e.g. New lead → assign + notify" style={inp}/>
+                        </div>
+                        <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:8 }}>Trigger event</div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                            {triggers.map(tr => {
+                                const sel = selectedTrigger===tr.key;
+                                return (
+                                    <div key={tr.key} onClick={()=>setSelectedTrigger(tr.key)}
+                                        style={{ padding:'10px 14px', border:`1.5px solid ${sel?T.goldInk:T.border}`, borderRadius:6, cursor:'pointer', display:'flex', alignItems:'center', gap:10, background: sel?'rgba(200,185,154,0.10)':T.surface }}>
+                                        <span style={{ fontSize:16 }}>{tr.icon}</span>
+                                        <div>
+                                            <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{tr.label}</div>
+                                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMuted }}>{tr.key}</div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </>
+                )}
+                {step===2 && (
+                    <div>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, marginBottom:12 }}>When condition</div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 1fr', gap:10 }}>
+                            <select style={{ ...inp, appearance:'none', cursor:'pointer' }}>
+                                <option>opp.stage</option><option>opp.value</option><option>opp.owner</option>
+                            </select>
+                            <select style={{ ...inp, appearance:'none', cursor:'pointer' }}>
+                                <option>changed to</option><option>equals</option><option>is greater than</option>
+                            </select>
+                            <input placeholder="Closed Won" style={{ ...inp, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}/>
+                        </div>
+                    </div>
+                )}
+                {step===3 && (
+                    <div>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, marginBottom:12 }}>Then do</div>
+                        {/* Action row */}
+                        <div style={{ padding:'12px 14px', border:`1px solid ${T.border}`, borderRadius:6, display:'flex', alignItems:'center', gap:10, marginBottom:8, background:T.surface }}>
+                            <AppTile name="SL" color="#4a154b" emoji="💬" size={24}/>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>Post to Slack channel</div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted }}>#sales-alerts · include deal value, owner, stage</div>
+                            </div>
+                            <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer' }}>×</button>
+                        </div>
+                        {/* Add action slot */}
+                        <div style={{ padding:'12px 14px', border:`1.5px dashed ${T.border}`, borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center', gap:8, cursor:'pointer', color:T.inkMuted, fontSize:12.5 }}
+                            onMouseEnter={e=>e.currentTarget.style.borderColor=T.goldInk}
+                            onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                            <span>+</span> Add action
+                        </div>
+                    </div>
+                )}
+                {step===4 && (
+                    <div>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, marginBottom:12 }}>Review & activate</div>
+                        {[
+                            { label:'Name',      value: autoName || 'Untitled automation' },
+                            { label:'Trigger',   value: triggers.find(t=>t.key===selectedTrigger)?.label },
+                            { label:'Condition', value: 'opp.stage changed to Closed Won' },
+                            { label:'Actions',   value: 'Post to Slack #sales-alerts' },
+                        ].map((r,i) => (
+                            <div key={i} style={{ display:'grid', gridTemplateColumns:'130px 1fr', gap:10, padding:'9px 0', borderBottom:`1px solid ${T.border}` }}>
+                                <div style={{ fontSize:12, fontWeight:600, color:T.inkMid }}>{r.label}</div>
+                                <div style={{ fontSize:13, color:T.ink }}>{r.value}</div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+            <IntModalFooter left={step===4 ? 'Automation activates immediately on save.' : `Step ${step} of 4`}>
+                <IntBtn label="Save as draft" onClick={onClose}/>
+                {step < 4
+                    ? <IntBtn label="Next →" primary onClick={()=>setStep(s=>s+1)}/>
+                    : <IntBtn label="Activate automation" primary onClick={onClose}/>}
+            </IntModalFooter>
+        </IntModal>
+    );
+};
+
+// ── ① Connected Apps ──────────────────────────────────────────
+const ConnectedAppsDetail = ({ onBack }) => {
+    const [connectModal, setConnectModal] = useState(null);
+    const [catFilter, setCatFilter] = useState('All');
+    const connected = INT_APPS.filter(a=>a.connected);
+    const popular   = INT_APPS.filter(a=>a.popular);
+    const catalog   = INT_APPS.filter(a=>!a.connected && !a.popular);
+    const cats = ['All',...new Set(catalog.map(a=>a.category))];
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {connectModal && <ConnectAppModal app={connectModal} onClose={()=>setConnectModal(null)}/>}
+            <IntCrumb page="Connected apps" onBack={onBack}/>
+            <IntTitle title="Connected apps" sub={`${connected.length} connected · browse and manage your integration catalog`}
+                actions={[<IntBtn key="mkt" label="Browse marketplace"/>, <IntBtn key="req" label="+ Request integration" primary/>]}/>
+
+            {/* Section 1 — Connected */}
+            <div style={{ marginBottom:24 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:12 }}>Connected ({connected.length})</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:14 }}>
+                    {connected.map(app => (
+                        <div key={app.id} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16, display:'flex', flexDirection:'column', gap:10 }}>
+                            <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
+                                <AppTile name={app.name} color={app.color} emoji={app.emoji} size={36}/>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{app.name}</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted }}>{app.category}</div>
+                                </div>
+                            </div>
+                            <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.4 }}>{app.desc}</div>
+                            <div style={{ paddingTop:8, borderTop:`1px solid ${T.border}` }}>
+                                <StatusDot tone={app.tone} label={app.traffic}/>
+                            </div>
+                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                <span style={{ fontSize:11, color:T.inkMuted }}>by {app.name} · connected today</span>
+                                <button style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Manage →</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Section 2 — Popular */}
+            <div style={{ marginBottom:24 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:10 }}>Popular</div>
+                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                    {popular.map((app,i) => (
+                        <div key={app.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', borderBottom: i<popular.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                            <AppTile name={app.name} color={app.color} emoji={app.emoji} size={32}/>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{app.name}</div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted }}>{app.desc}</div>
+                            </div>
+                            <span style={{ fontSize:11.5, color:T.inkMuted, marginRight:8 }}>{app.category}</span>
+                            <button onClick={()=>setConnectModal(app)}
+                                style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Connect</button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Section 3 — All apps catalog */}
+            <div>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>All apps</div>
+                    <div style={{ display:'flex', gap:4 }}>
+                        {cats.map(c => (
+                            <button key={c} onClick={()=>setCatFilter(c)}
+                                style={{ padding:'3px 10px', fontSize:11.5, fontWeight:600, borderRadius:10, border:`1px solid ${catFilter===c?T.ink:T.border}`, background:catFilter===c?T.ink:'transparent', color:catFilter===c?'#fbf8f3':T.inkMid, cursor:'pointer', fontFamily:T.sans }}>{c}</button>
+                        ))}
+                    </div>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
+                    {catalog.filter(a=>catFilter==='All'||a.category===catFilter).map(app => (
+                        <div key={app.id} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:'12px 14px', display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}
+                            onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderStrong}
+                            onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                            <AppTile name={app.name} color={app.color} emoji={app.emoji} size={28}/>
+                            <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{app.name}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted }}>{app.category}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── ② API Keys ────────────────────────────────────────────────
+const ApiKeysDetail = ({ onBack }) => {
+    const [filter, setFilter] = useState('All');
+    const [showModal, setShowModal] = useState(false);
+    const visible = INT_API_KEYS.filter(k => filter==='All' || k.status===filter);
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showModal && <NewApiKeyModal onClose={()=>setShowModal(false)}/>}
+            <IntCrumb page="API keys" onBack={onBack}/>
+            <IntTitle title="API keys" sub="Workspace REST API credentials · 3 active keys · last edited 2 months ago by Admin"
+                actions={[
+                    <IntBtn key="docs" label="View docs ↗"/>,
+                    <IntBtn key="new" label="+ Create key" primary onClick={()=>setShowModal(true)}/>,
+                ]}/>
+
+            {/* Filter + table */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:18 }}>
+                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Keys</div>
+                    <div style={{ display:'flex', gap:0, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:2 }}>
+                        {['All','Live','Test','Stale'].map(f => (
+                            <button key={f} onClick={()=>setFilter(f)}
+                                style={{ padding:'4px 10px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans, background:filter===f?T.ink:'transparent', color:filter===f?'#fbf8f3':T.inkMid }}>{f}</button>
+                        ))}
+                    </div>
+                </div>
+                {/* Header */}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 200px 160px 100px 120px 120px 90px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                    {['NAME','KEY','SCOPES','RATE LIMIT','LAST USED','7D TRAFFIC','STATUS',''].map((h,i) => (
+                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                    ))}
+                </div>
+                {visible.map((k,i) => {
+                    const stale = k.status==='Stale';
+                    return (
+                        <div key={k.id} style={{ display:'grid', gridTemplateColumns:'1fr 200px 160px 100px 120px 120px 90px 32px', gap:8, padding:'11px 16px', borderBottom:i<visible.length-1?`1px solid ${T.border}`:'none', alignItems:'center', opacity: stale ? 0.72 : 1 }}>
+                            {/* Name */}
+                            <div>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{k.name}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted }}>by {k.by} · {k.created}</div>
+                            </div>
+                            {/* Key */}
+                            <KeyMono prefix={k.prefix} tail={k.tail}/>
+                            {/* Scopes */}
+                            <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
+                                {k.scopes.slice(0,2).map(s => (
+                                    <span key={s} style={{ padding:'1px 5px', borderRadius:3, background:'rgba(58,90,122,0.10)', color:T.info, fontSize:10, fontFamily:'ui-monospace,Menlo,monospace' }}>{s}</span>
+                                ))}
+                                {k.scopes.length > 2 && <span style={{ fontSize:10, color:T.inkMuted }}>+{k.scopes.length-2}</span>}
+                            </div>
+                            {/* Rate limit */}
+                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>{k.rateLimit}</div>
+                            {/* Last used */}
+                            <div style={{ fontSize:12, color: stale ? T.danger : T.inkMid }}>{k.lastUsed}</div>
+                            {/* Sparkline + calls */}
+                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                <MiniSpark data={k.traffic} color={stale?T.border:T.ok}/>
+                            </div>
+                            {/* Status */}
+                            <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                background: k.status==='Live'?'rgba(77,107,61,0.12)':k.status==='Test'?'rgba(58,90,122,0.10)':'rgba(184,115,51,0.12)',
+                                color: k.status==='Live'?T.ok:k.status==='Test'?T.info:T.warn }}>
+                                {k.status}
+                            </span>
+                            <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Workspace defaults */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:18 }}>
+                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:14 }}>Workspace defaults</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:18 }}>
+                    {[
+                        { label:'Default rate limit', value:'1,000 req/min' },
+                        { label:'Default expiration', value:'365 days' },
+                        { label:'Default IP allowlist', value:'0.0.0.0/0 (any)' },
+                    ].map((f,i) => (
+                        <div key={i}>
+                            <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</div>
+                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, color:T.ink }}>{f.value}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── ③ Webhooks ────────────────────────────────────────────────
+const WebhooksDetail = ({ onBack, focusFailing=false }) => {
+    const [showModal, setShowModal] = useState(false);
+    const failing = INT_WEBHOOKS.filter(w=>w.status==='Failing');
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showModal && <NewWebhookModal onClose={()=>setShowModal(false)}/>}
+            <IntCrumb page="Webhooks" onBack={onBack}/>
+            <IntTitle title="Webhooks" sub="4 endpoints · 1 failing · subscribe to CRM events and push to your services"
+                actions={[
+                    <IntBtn key="del" label="View deliveries"/>,
+                    <IntBtn key="ref" label="Event reference ↗"/>,
+                    <IntBtn key="new" label="+ New endpoint" primary onClick={()=>setShowModal(true)}/>,
+                ]}/>
+
+            {/* Failing callout */}
+            {failing.length > 0 && (
+                <div style={{ padding:'12px 16px', background:'rgba(156,58,46,0.07)', borderLeft:`3px solid ${T.danger}`, borderRadius:6, marginBottom:18, display:'flex', alignItems:'center', gap:14 }}>
+                    <span style={{ fontSize:18, color:T.danger }}>⚠</span>
+                    <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:T.danger }}>1 endpoint failing</div>
+                        <div style={{ fontSize:12, color:T.inkMid, marginTop:2 }}><b>{failing[0].name}</b> — last attempt 9h ago · 38% success rate · 4 retries exhausted</div>
+                    </div>
+                    <button style={{ padding:'6px 14px', background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Investigate</button>
+                </div>
+            )}
+
+            {/* Endpoints table */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:18 }}>
+                <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Endpoints</div>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 180px 130px 130px 90px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                    {['ENDPOINT','EVENTS','SUCCESS 30D','LAST DELIVERY','STATUS',''].map((h,i) => (
+                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                    ))}
+                </div>
+                {INT_WEBHOOKS.map((wh,i) => (
+                    <div key={wh.id} style={{ display:'grid', gridTemplateColumns:'1fr 180px 130px 130px 90px 32px', gap:8, padding:'11px 16px', borderBottom:i<INT_WEBHOOKS.length-1?`1px solid ${T.border}`:'none', alignItems:'center',
+                        background: wh.status==='Failing' ? 'rgba(156,58,46,0.03)' : 'transparent' }}>
+                        {/* Endpoint */}
+                        <div>
+                            <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{wh.name}</div>
+                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMuted, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{wh.url}</div>
+                        </div>
+                        {/* Events */}
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
+                            {wh.events.slice(0,1).map(ev => (
+                                <span key={ev} style={{ padding:'1px 5px', borderRadius:3, background:'rgba(58,90,122,0.09)', color:T.info, fontSize:10, fontFamily:'ui-monospace,Menlo,monospace' }}>{ev}</span>
+                            ))}
+                            {wh.events.length>1 && <span style={{ fontSize:10, color:T.inkMuted }}>+{wh.events.length-1}</span>}
+                        </div>
+                        {/* Health bar */}
+                        <HealthBar pct={wh.successPct} attempts={wh.attempts}/>
+                        {/* Last delivery */}
+                        <div style={{ fontSize:12, color: wh.status==='Failing' ? T.danger : T.inkMid }}>{wh.lastDelivery}</div>
+                        {/* Status */}
+                        <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                            background: wh.status==='Healthy'?'rgba(77,107,61,0.12)':'rgba(156,58,46,0.12)',
+                            color: wh.status==='Healthy'?T.ok:T.danger }}>
+                            {wh.status}
+                        </span>
+                        <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+                    </div>
+                ))}
+            </div>
+
+            {/* Recent deliveries */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Recent deliveries</div>
+                    <button style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>View all →</button>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'90px 1fr 160px 80px 80px 1fr', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                    {['TIME','ENDPOINT','EVENT','STATUS','LATENCY',''].map((h,i) => (
+                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                    ))}
+                </div>
+                {INT_WEBHOOK_DELIVERIES.map((d,i) => (
+                    <div key={d.id} style={{ display:'grid', gridTemplateColumns:'90px 1fr 160px 80px 80px 1fr', gap:8, padding:'9px 16px', borderBottom:i<INT_WEBHOOK_DELIVERIES.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                        <div style={{ fontSize:11.5, color:T.inkMuted }}>{d.time}</div>
+                        <div style={{ fontSize:12.5, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.endpoint}</div>
+                        <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.info }}>{d.event}</span>
+                        <StatusCode code={d.code}/>
+                        <div style={{ fontSize:12, color: d.latencyMs > 5000 ? T.warn : T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{d.latencyMs > 1000 ? `${(d.latencyMs/1000).toFixed(1)}s` : `${d.latencyMs}ms`}</div>
+                        <div style={{ fontSize:11, color:T.inkMuted }}>{d.attempt > 1 ? `#${d.attempt} retry` : '#1'}</div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// ── ④ Automations ─────────────────────────────────────────────
+const AutomationsDetail = ({ onBack }) => {
+    const [filter, setFilter] = useState('All');
+    const [showModal, setShowModal] = useState(false);
+
+    const active  = INT_AUTOMATIONS.filter(a=>a.active);
+    const paused  = INT_AUTOMATIONS.filter(a=>!a.active);
+    const failing = INT_AUTOMATIONS.filter(a=>a.active && a.issue);
+    const totalRuns = INT_AUTOMATIONS.reduce((s,a)=>s+a.runs,0);
+    const avgSuccess = Math.round(active.filter(a=>a.successPct!=null).reduce((s,a)=>s+(a.successPct||0),0) / active.filter(a=>a.successPct!=null).length);
+
+    const visible = INT_AUTOMATIONS.filter(a => {
+        if (filter==='Active')  return a.active;
+        if (filter==='Paused')  return !a.active;
+        if (filter==='Failing') return a.issue;
+        return true;
+    });
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showModal && <NewAutomationModal onClose={()=>setShowModal(false)}/>}
+            <IntCrumb page="Automations" onBack={onBack}/>
+            <IntTitle title="Automations" sub={`${active.length} active · ${paused.length} paused · rules, triggers, and scheduled jobs`}
+                actions={[
+                    <IntBtn key="tpl" label="Browse templates"/>,
+                    <IntBtn key="his" label="View run history"/>,
+                    <IntBtn key="new" label="+ New automation" primary onClick={()=>setShowModal(true)}/>,
+                ]}/>
+
+            {/* Stats strip */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:14, marginBottom:20 }}>
+                {[
+                    { label:'Rules',          value:INT_AUTOMATIONS.length, color:T.ink },
+                    { label:'Runs / 30d',     value:totalRuns,              color:T.ink },
+                    { label:'Success rate',   value:`${avgSuccess}%`,       color:avgSuccess>=98?T.ok:T.warn },
+                    { label:'Failed (24h)',   value:failing.length,         color:failing.length>0?T.danger:T.ok },
+                ].map((s,i) => (
+                    <div key={i} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:'16px 18px' }}>
+                        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:8, fontFamily:T.sans }}>{s.label}</div>
+                        <div style={{ fontSize:28, fontWeight:700, color:s.color, fontFamily:T.serif, fontStyle:'italic', letterSpacing:-0.5 }}>{s.value}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Rules table */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Rules</div>
+                    <div style={{ display:'flex', gap:0, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:2 }}>
+                        {['All','Active','Paused','Failing'].map(f => (
+                            <button key={f} onClick={()=>setFilter(f)}
+                                style={{ padding:'4px 10px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans, background:filter===f?T.ink:'transparent', color:filter===f?'#fbf8f3':T.inkMid }}>{f}</button>
+                        ))}
+                    </div>
+                </div>
+                {/* Header */}
+                <div style={{ display:'grid', gridTemplateColumns:'60px 1fr 160px 120px 1fr 80px 80px 100px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                    {['ON','NAME','TRIGGER','WHEN','THEN','RUNS','SUCCESS','LAST RUN',''].map((h,i) => (
+                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                    ))}
+                </div>
+                {visible.map((rule, i) => (
+                    <div key={rule.id}
+                        style={{ display:'grid', gridTemplateColumns:'60px 1fr 160px 120px 1fr 80px 80px 100px 32px', gap:8, padding:'10px 16px', borderBottom:i<visible.length-1?`1px solid ${T.border}`:'none', alignItems:'center', opacity:rule.active?1:0.62 }}>
+                        {/* On/off toggle pill */}
+                        <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:10, fontSize:11, fontWeight:700,
+                            background: rule.active?'rgba(77,107,61,0.12)':'rgba(138,131,120,0.14)',
+                            color: rule.active?T.ok:T.inkMuted, cursor:'pointer' }}>
+                            <span style={{ width:7, height:7, borderRadius:'50%', background:rule.active?T.ok:T.inkMuted }}/>
+                            {rule.active?'On':'Off'}
+                        </span>
+                        {/* Name */}
+                        <div>
+                            <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{rule.name}</div>
+                            <div style={{ fontSize:11, color:T.inkMuted }}>{rule.owner}</div>
+                            {rule.issue && <div style={{ fontSize:11, color:T.danger, marginTop:2 }}>⚠ {rule.issue}</div>}
+                        </div>
+                        {/* Trigger chip */}
+                        <TriggerChip type={rule.triggerType} label={rule.trigger}/>
+                        {/* When */}
+                        <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMid, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{rule.when}</div>
+                        {/* Then */}
+                        <div style={{ fontSize:12, color:T.inkMid, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{rule.then}</div>
+                        {/* Runs sparkline */}
+                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                            <MiniSpark data={rule.spark} color={rule.active?T.ok:T.border}/>
+                            <span style={{ fontSize:11, color:T.inkMuted }}>{rule.runs}</span>
+                        </div>
+                        {/* Success % */}
+                        <div style={{ fontSize:12, fontWeight:600, color: rule.successPct == null ? T.inkMuted : rule.successPct < 95 ? T.warn : T.ok }}>
+                            {rule.successPct != null ? `${rule.successPct}%` : '—'}
+                        </div>
+                        {/* Last run */}
+                        <div style={{ fontSize:11.5, color:T.inkMuted }}>{rule.lastRun}</div>
+                        {/* Kebab */}
+                        <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECURITY — data + helpers + five detail pages + two modals
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Cell / category helpers ────────────────────────────────────
+
+const flsCellStyle = (level) => {
+    const m = {
+        'Edit':   { bg:'rgba(77,107,61,0.14)',   fg:'#4d6b3d', label:'Edit'   },
+        'Read':   { bg:'rgba(58,90,122,0.13)',    fg:'#3a5a7a', label:'Read'   },
+        'Masked': { bg:'rgba(184,115,51,0.14)',   fg:'#b87333', label:'Masked' },
+        'Hidden': { bg:'rgba(138,131,120,0.12)',  fg:'#5a544c', label:'Hidden' },
+    };
+    return m[level] || { bg:'transparent', fg:T.inkMuted, label:level };
+};
+
+const auditCatTone = (cat) => {
+    if (cat === 'auth')     return 'info';
+    if (cat === 'security') return 'warn';
+    return 'neutral';
+};
+
+const auditCatStyle = (cat) => {
+    const t = auditCatTone(cat);
+    if (t === 'info')    return { bg:'rgba(58,90,122,0.10)',   fg:T.info };
+    if (t === 'warn')    return { bg:'rgba(184,115,51,0.12)',  fg:T.warn };
+    return { bg:'rgba(138,131,120,0.12)', fg:T.inkMid };
+};
+
+// ── Data ──────────────────────────────────────────────────────
+
+const SEC_SSO = {
+    configured: false,
+    provider: 'Okta',
+    protocol: 'SAML 2.0',
+    defaultRole: 'Sales Rep',
+    sp: {
+        entityId: 'https://accelerep.com/sso',
+        acsUrl:   'https://api.accelerep.com/sso/acs',
+    },
+    idp: {
+        ssoUrl:    'https://acme.okta.com/app/exk1zx.../sso/saml',
+        entityId:  'http://www.okta.com/exk1zx9aA1bC2dE3F4',
+        cert:      '-----BEGIN CERTIFICATE-----\n(paste your IdP X.509 certificate here)\n-----END CERTIFICATE-----',
+    },
+    attributeMap: [
+        { idp:'NameID',     local:'email',     required:true  },
+        { idp:'firstName',  local:'firstName', required:true  },
+        { idp:'lastName',   local:'lastName',  required:true  },
+        { idp:'department', local:'team',      required:false },
+        { idp:'role',       local:'role',      required:false },
+    ],
+    jitProvisioning: 'On — create user on first SSO login',
+    concurrentPassword: 'Disabled (SSO only)',
+    verifiedDomains: ['accelerep.com','acme-corp.com'],
+};
+
+const SEC_MFA = {
+    policy: 'optional',
+    enforcement: 'Optional — admins required',
+    gracePeriod: '7 days',
+    rememberDevice: '30 days',
+    onFactorReset: 'Re-enroll on next sign-in',
+    factors: { totp:true, passkey:true, sms:false, email:false },
+    enrolled: 14,
+    total: 22,
+    perRole: [
+        { role:'Admin',        required:true,  enrolled:4,  total:4  },
+        { role:'Sales Manager',required:true,  enrolled:3,  total:3  },
+        { role:'Sales Rep',    required:false, enrolled:5,  total:11 },
+        { role:'CS',           required:true,  enrolled:2,  total:2  },
+        { role:'Finance',      required:false, enrolled:0,  total:2  },
+    ],
+    notEnrolled: [
+        { email:'devon@accelerep.com',  role:'Sales Rep', invited:'2 wk ago', never:false },
+        { email:'alia@accelerep.com',   role:'Sales Rep', invited:'5 days ago',never:false },
+        { email:'kirim@accelerep.com',  role:'Finance',   invited:'never',    never:true  },
+        { email:'sasha@accelerep.com',  role:'Sales Rep', invited:'1 wk ago', never:false },
+    ],
+};
+
+const SEC_SESSION = {
+    idleTimeout: '480 minutes',
+    sessionLifetime: '12 hours',
+    concurrentSessions: '3 max',
+    reauth: 'Required (last 5 minutes)',
+    minLength: '12 characters',
+    rotation: 'Every 90 days',
+    history: 'Last 5 prevented',
+    lockout: '5 failures',
+    passwordComplexity: { mixedCase:true, number:true, symbol:true, blockCommon:true },
+    ipAllowlist: [
+        { cidr:'10.0.0.0/8',     label:'HQ VPN',         status:'Enforced' },
+        { cidr:'52.84.124.0/22', label:'AWS prod NAT',    status:'Enforced' },
+        { cidr:'203.0.113.42/32',label:'Vendor IP — Acme',status:'Logged'  },
+    ],
+};
+
+const FLS_ROLES  = ['Admin','Sales Manager','Sales Rep','CS','Finance'];
+const FLS_FIELDS = [
+    { name:'Account.Annual_Revenue',    type:'currency', pii:true  },
+    { name:'Account.Credit_Score',      type:'number',   pii:true  },
+    { name:'Contact.Personal_Email',    type:'email',    pii:true  },
+    { name:'Contact.Phone_Number',      type:'phone',    pii:false },
+    { name:'Opportunity.Discount_Pct',  type:'percent',  pii:false },
+    { name:'Opportunity.Forecast_Notes',type:'text',     pii:false },
+    { name:'Quote.COGS',                type:'currency', pii:true  },
+    { name:'Report.Pipeline_coverage',  type:'number',   pii:false },
+];
+// matrix[fieldIdx][roleIdx] = 'Edit'|'Read'|'Masked'|'Hidden'
+const FLS_MATRIX_INIT = [
+    ['Edit','Edit','Masked','Read','Edit'],
+    ['Edit','Read','Hidden','Hidden','Edit'],
+    ['Edit','Read','Masked','Read','Read'],
+    ['Edit','Edit','Edit','Edit','Read'],
+    ['Edit','Edit','Read','Read','Edit'],
+    ['Edit','Edit','Hidden','Hidden','Read'],
+    ['Edit','Edit','Hidden','Hidden','Edit'],
+    ['Edit','Edit','Read','Read','Read'],
+];
+const FLS_OBJECTS = ['Account','Contact','Opportunity','Quote','Report'];
+
+const SEC_AUDIT_EVENTS = [
+    { when:'just now',     actor:'System',                action:'backup.completed',       target:'workspace',                   cat:'admin',    sev:'info',  ip:'—' },
+    { when:'4 minutes ago',actor:'jeff@accelerep.com',    action:'user.invited',            target:'devon@accelerep.com',          cat:'admin',    sev:'info',  ip:'99.121.40.218' },
+    { when:'12 minutes ago',actor:'priya@accelerep.com',  action:'pipeline.stage_edited',   target:'Stage "Demo"',                 cat:'data',     sev:'info',  ip:'45.287.55.188' },
+    { when:'1 hour ago',   actor:'morgan@accelerep.com',  action:'apikey.created',          target:'Zapier production',            cat:'security', sev:'warn',  ip:'75.222.84.12' },
+    { when:'3 hours ago',  actor:'jeff@accelerep.com',    action:'pricebook.edited',        target:'Enterprise plan — $/seat',    cat:'data',     sev:'info',  ip:'99.121.40.218' },
+    { when:'4 hours ago',  actor:'theo@accelerep.com',    action:'login.failed',            target:'self — MFA wrong code',        cat:'auth',     sev:'warn',  ip:'24.18.86.44' },
+    { when:'6 hours ago',  actor:'morgan@accelerep.com',  action:'webhook.created',         target:'Acme billing reconcile',       cat:'security', sev:'info',  ip:'75.222.84.12' },
+    { when:'yesterday',    actor:'jeff@accelerep.com',    action:'role.permission_changed',  target:'Sales Rep · Quotes:edit',     cat:'admin',    sev:'warn',  ip:'99.121.40.218' },
+    { when:'2 days ago',   actor:'morgan@accelerep.com',  action:'sso.test_login_failed',   target:'morgan@accelerep.com',         cat:'auth',     sev:'warn',  ip:'75.222.84.12' },
+    { when:'3 days ago',   actor:'jeff@accelerep.com',    action:'mfa.policy_changed',      target:'Optional → Required (admins)', cat:'auth',     sev:'info',  ip:'99.121.40.218' },
+    { when:'5 days ago',   actor:'System',                action:'apikey.revoked',          target:'Legacy webhook poller',        cat:'security', sev:'info',  ip:'—' },
+    { when:'1 week ago',   actor:'priya@accelerep.com',   action:'territory.created',       target:'EMEA - mid-market',            cat:'admin',    sev:'info',  ip:'45.287.55.188' },
+];
+
+const SEC_AUDIT_STREAMS = [
+    { dest:'Splunk Cloud', url:'https://acme.splunkcloud.com/sves/services/collector', fmt:'HEC JSON', status:'Active',  lastDelivered:'2 min ago'  },
+    { dest:'Datadog Logs', url:'https://http-intake.logs.datadoghq.com/api/v/logs',   fmt:'JSON',     status:'Active',  lastDelivered:'1 min ago'  },
+    { dest:'S3 archive',   url:'s3://acme-audit-archive/accelerep/',                  fmt:'NDJSON.gz',status:'Active',  lastDelivered:'6 hours ago'},
+    { dest:'Old SIEM webhook',url:'https://siem.acme.legacy/ingest',                  fmt:'JSON',     status:'Failing', lastDelivered:'3 days ago' },
+];
+
+// ── Shared chrome helpers ──────────────────────────────────────
+
+const SecCrumb = ({ page, onBack }) => (
+    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10, fontFamily:T.sans }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+        <span>/</span>
+        <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Security</button>
+        <span>/</span>
+        <span style={{ color:T.ink, fontWeight:600 }}>{page}</span>
+    </div>
+);
+
+const SecTitle = ({ title, sub, badge, updatedAt, actions, dirty }) => (
+    <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>
+        <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+            <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3, fontFamily:T.sans }}>
+                {title}{dirty && <span style={{ fontSize:12, fontWeight:500, color:T.warn, marginLeft:12 }}>● Unsaved</span>}
+            </div>
+            <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', fontFamily:T.sans }}>
+                <span>{sub}</span>
+                {badge && <><span style={{ color:T.inkMuted }}>•</span>
+                    <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:12.5, color:T.ok, fontWeight:600 }}>
+                        <span>✓</span><span>{badge}</span>
+                    </span></>}
+                {updatedAt && <><span style={{ color:T.inkMuted }}>•</span>
+                    <span style={{ fontSize:11.5, color:T.inkMuted }}>{updatedAt}</span></>}
+            </div>
+        </div>
+        <div style={{ display:'flex', gap:8 }}>{actions}</div>
+    </div>
+);
+
+const SecBtn = ({ label, primary, warn:isWarn, onClick, disabled }) => (
+    <button onClick={onClick} disabled={disabled}
+        style={{ padding:'7px 14px', fontFamily:T.sans, fontSize:12.5, fontWeight:600, cursor:disabled?'default':'pointer', borderRadius:T.r, border:'none', whiteSpace:'nowrap',
+            background: isWarn ? T.warn : primary ? T.ink : T.surface,
+            color: (isWarn||primary) ? '#fbf8f3' : T.ink,
+            ...((!isWarn&&!primary) ? { border:`1px solid ${T.borderStrong}` } : {}),
+            opacity: disabled ? 0.6 : 1,
+        }}
+        onMouseEnter={e=>{ if(!disabled) e.currentTarget.style.opacity='0.85'; }}
+        onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
+        {label}
+    </button>
+);
+
+// Warn/info callout strip
+const SecCallout = ({ tone='warn', icon='⚠', text, actions }) => {
+    const c = tone==='warn'
+        ? { bg:'rgba(184,115,51,0.09)', border:T.warn, iconColor:T.warn }
+        : { bg:'rgba(58,90,122,0.08)',  border:T.info,  iconColor:T.info };
+    return (
+        <div style={{ padding:'11px 16px', background:c.bg, borderLeft:`3px solid ${c.border}`, borderRadius:4, marginBottom:20, display:'flex', alignItems:'center', gap:12 }}>
+            <span style={{ color:c.iconColor, fontSize:16, flexShrink:0 }}>{icon}</span>
+            <div style={{ flex:1, fontSize:13, color:T.inkMid, fontFamily:T.sans }}>{text}</div>
+            {actions && <div style={{ display:'flex', gap:8, flexShrink:0 }}>{actions}</div>}
+        </div>
+    );
+};
+
+// Section card
+const SecCard = ({ title, desc, children, headAction }) => (
+    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20, marginBottom:16 }}>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:16 }}>
+            <div>
+                <div style={{ fontSize:15, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{title}</div>
+                {desc && <div style={{ fontSize:12.5, color:T.inkMid, marginTop:3, fontFamily:T.sans }}>{desc}</div>}
+            </div>
+            {headAction}
+        </div>
+        {children}
+    </div>
+);
+
+// 2-col field row
+const SecFieldRow = ({ fields }) => (
+    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14 }}>
+        {fields.map((f,i) => (
+            <div key={i}>
+                <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{f.label}</label>
+                <select defaultValue={f.value} style={{ width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', appearance:'none', cursor:'pointer', background:T.surface,
+                    backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+                    backgroundRepeat:'no-repeat', backgroundPosition:'right 10px center', paddingRight:28 }}>
+                    <option>{f.value}</option>
+                </select>
+            </div>
+        ))}
+    </div>
+);
+
+// On/off tile (complexity + MFA factors)
+const OnOffTile = ({ label, sub, on }) => (
+    <div style={{ padding:'12px 14px', border:`1px solid ${on?T.ok:T.border}`, borderRadius:6,
+        background: on ? 'rgba(77,107,61,0.07)' : T.bg,
+        display:'flex', alignItems:'flex-start', gap:10 }}>
+        <span style={{
+            width:16, height:16, borderRadius:3, border:`1.5px solid ${on?T.ok:T.border}`,
+            background:on?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center',
+            flexShrink:0, marginTop:1,
+        }}>
+            {on && <span style={{ color:'#fff', fontSize:10, lineHeight:1 }}>✓</span>}
+        </span>
+        <div>
+            <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{label}</div>
+            {sub && <div style={{ fontSize:11, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>{sub}</div>}
+        </div>
+    </div>
+);
+
+// ── MODALS ────────────────────────────────────────────────────
+
+// Configure SSO modal — shown at step 2
+const ConfigureSsoModal = ({ onClose }) => {
+    const [step, setStep] = useState(2);
+    const steps = ['Provider','Service info','IdP info','Test'];
+    const SP = SEC_SSO.sp;
+
+    return (
+        <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:T.sans }}>
+            <div onClick={e=>e.stopPropagation()}
+                style={{ background:T.surface, borderRadius:8, width:720, maxHeight:760, display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)' }}>
+                {/* Header */}
+                <div style={{ padding:'18px 22px 14px', borderBottom:`1px solid ${T.border}`, flexShrink:0, display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
+                    <div>
+                        <div style={{ fontSize:17, fontWeight:700, color:T.ink, letterSpacing:-0.2 }}>Configure single sign-on</div>
+                        <div style={{ fontSize:12.5, color:T.inkMuted, marginTop:2 }}>Connect your identity provider in 4 steps.</div>
+                    </div>
+                    <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', lineHeight:1 }}>×</button>
+                </div>
+                {/* Stepper */}
+                <div style={{ display:'flex', padding:'0 22px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
+                    {steps.map((s,i) => {
+                        const n = i+1; const done = step>n; const active = step===n;
+                        return (
+                            <div key={s} style={{ display:'flex', alignItems:'center', gap:6, padding:'10px 14px 10px 0', fontSize:12.5, fontWeight:600,
+                                color: active ? T.ink : done ? T.ok : T.inkMuted,
+                                borderBottom: active ? `2px solid ${T.goldInk}` : '2px solid transparent', cursor: done?'pointer':'default' }}
+                                onClick={()=>{ if(done) setStep(n); }}>
+                                <span style={{ width:20, height:20, borderRadius:'50%', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:11,
+                                    border:`1.5px solid ${active?T.goldInk:done?T.ok:T.border}`,
+                                    background: done ? T.ok : 'transparent',
+                                    color: done ? '#fff' : active ? T.goldInk : T.inkMuted }}>
+                                    {done ? '✓' : n}
+                                </span>
+                                {s}
+                            </div>
+                        );
+                    })}
+                </div>
+                {/* Body */}
+                <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
+                    <div style={{ ...eb(T.inkMuted), marginBottom:12 }}>STEP 2 — SERVICE PROVIDER INFO</div>
+                    <div style={{ fontSize:12.5, color:T.inkMid, marginBottom:16 }}>Copy these values into your Okta SAML application configuration.</div>
+                    {/* Copy pairs */}
+                    {[
+                        { label:'Entity ID / Audience', value: SP.entityId },
+                        { label:'ACS / Reply URL',       value: SP.acsUrl   },
+                    ].map((row,i) => (
+                        <div key={i} style={{ display:'grid', gridTemplateColumns:'160px 1fr 80px', gap:10, alignItems:'center', marginBottom:10 }}>
+                            <label style={{ fontSize:12.5, fontWeight:600, color:T.inkMid, fontFamily:T.sans }}>{row.label}</label>
+                            <input readOnly value={row.value} style={{ padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.bg }}/>
+                            <button onClick={()=>navigator.clipboard?.writeText(row.value)}
+                                style={{ padding:'7px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Copy</button>
+                        </div>
+                    ))}
+                    {/* NameID format */}
+                    <div style={{ display:'grid', gridTemplateColumns:'160px 240px', gap:10, alignItems:'center', marginTop:10 }}>
+                        <label style={{ fontSize:12.5, fontWeight:600, color:T.inkMid, fontFamily:T.sans }}>NameID Format</label>
+                        <select style={{ padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' }}>
+                            <option>EmailAddress</option>
+                            <option>Persistent</option>
+                            <option>Transient</option>
+                        </select>
+                    </div>
+                    {/* Info callout */}
+                    <div style={{ marginTop:16, padding:'10px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4 }}>
+                        <span style={{ fontSize:12.5, color:T.info, fontWeight:600 }}>Tip. </span>
+                        <span style={{ fontSize:12.5, color:T.inkMid }}>You can also download the SP metadata XML and upload it directly to Okta.</span>
+                    </div>
+                </div>
+                {/* Footer */}
+                <div style={{ padding:'12px 22px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+                    <SecBtn label="Back" onClick={()=>setStep(s=>Math.max(1,s-1))}/>
+                    <div style={{ display:'flex', gap:8 }}>
+                        <SecBtn label="Download SP metadata"/>
+                        <SecBtn label="Continue" primary onClick={()=>setStep(s=>Math.min(4,s+1))}/>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Enforce MFA confirm modal
+const EnforceMfaModal = ({ onClose }) => {
+    const [confirm, setConfirm] = useState('');
+    const [notify, setNotify]   = useState(false);
+    const ready = confirm.trim().toUpperCase() === 'ENFORCE';
+    return (
+        <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:T.sans }}>
+            <div onClick={e=>e.stopPropagation()}
+                style={{ background:T.surface, borderRadius:8, width:520, boxShadow:'0 20px 56px rgba(20,16,12,0.28)', overflow:'hidden' }}>
+                {/* Header */}
+                <div style={{ padding:'20px 22px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'flex-start', gap:12 }}>
+                    <div style={{ width:32, height:32, borderRadius:5, background:T.warn, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>⚠</div>
+                    <div>
+                        <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>Enforce MFA for all users?</div>
+                        <div style={{ fontSize:12.5, color:T.inkMid, marginTop:3 }}>This action affects 22 users immediately.</div>
+                    </div>
+                </div>
+                {/* Body */}
+                <div style={{ padding:'18px 22px' }}>
+                    {/* Impact breakdown */}
+                    <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, padding:'12px 16px', marginBottom:18 }}>
+                        <div style={{ fontSize:13, color:T.inkMid, marginBottom:6 }}>
+                            <b style={{ color:T.ok }}>14 users</b> are already enrolled — no impact.
+                        </div>
+                        <div style={{ fontSize:13, color:T.inkMid, marginBottom:6 }}>
+                            <b style={{ color:T.warn }}>8 users</b> will be prompted to enroll on their next sign-in.
+                        </div>
+                        <div style={{ fontSize:13, color:T.inkMid }}>
+                            <b>1 user</b> (<span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>kirim@accelerep.com</span>) was never invited — they'll need a fresh invite.
+                        </div>
+                    </div>
+                    {/* Type to confirm */}
+                    <div style={{ marginBottom:12 }}>
+                        <label style={{ display:'block', fontSize:12, fontWeight:600, color:T.inkMid, marginBottom:6 }}>
+                            Type <b style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.ink }}>ENFORCE</b> to confirm
+                        </label>
+                        <input value={confirm} onChange={e=>setConfirm(e.target.value)}
+                            placeholder="ENFORCE"
+                            style={{ width:'100%', padding:'8px 10px', border:`1.5px solid ${ready?T.warn:T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' }}/>
+                    </div>
+                    {/* Notify checkbox */}
+                    <div style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }} onClick={()=>setNotify(v=>!v)}>
+                        <span style={{ width:14, height:14, border:`1.5px solid ${notify?T.ok:T.border}`, borderRadius:2, background:notify?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                            {notify && <span style={{ color:'#fff', fontSize:9 }}>✓</span>}
+                        </span>
+                        <span style={{ fontSize:13, color:T.inkMid }}>Send notification email to affected users now</span>
+                    </div>
+                </div>
+                {/* Footer */}
+                <div style={{ padding:'12px 22px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', alignItems:'center', justifyContent:'flex-end', gap:8 }}>
+                    <SecBtn label="Cancel" onClick={onClose}/>
+                    <SecBtn label="Enforce MFA" warn disabled={!ready} onClick={()=>{ if(ready) onClose(); }}/>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── ① SSO Detail ──────────────────────────────────────────────
+const SsoDetail = ({ onBack }) => {
+    const [provider, setProvider] = useState(SEC_SSO.provider);
+    const [showWizard, setShowWizard] = useState(false);
+    const [idpSsoUrl, setIdpSsoUrl] = useState(SEC_SSO.idp.ssoUrl);
+    const [idpEntityId, setIdpEntityId] = useState(SEC_SSO.idp.entityId);
+    const [idpCert, setIdpCert] = useState(SEC_SSO.idp.cert);
+    const providers = ['Okta','Azure AD','Google','OneLogin','Generic'];
+    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showWizard && <ConfigureSsoModal onClose={()=>setShowWizard(false)}/>}
+            <SecCrumb page="Single sign-on (SSO)" onBack={onBack}/>
+            <SecTitle
+                title="Single sign-on (SSO)"
+                sub="SAML 2.0 / OIDC identity provider"
+                badge={SEC_SSO.configured ? 'Active · 412 logins / 30d' : undefined}
+                updatedAt={SEC_SSO.configured ? 'Last edited by Morgan' : 'Last edited never by —'}
+                actions={[
+                    <SecBtn key="dl" label="Download metadata"/>,
+                    <SecBtn key="tl" label="Test login"/>,
+                    <SecBtn key="act" label={SEC_SSO.configured ? 'Save changes' : 'Activate SSO'} primary/>,
+                ]}/>
+
+            {/* Not configured callout */}
+            {!SEC_SSO.configured && (
+                <SecCallout tone="warn" text={
+                    <><b>SSO is not configured.</b> Workspaces with 10+ users should set up SSO so deactivating an IdP user revokes Accelerep access.</>
+                } actions={[<SecBtn key="wiz" label="Configure with wizard" onClick={()=>setShowWizard(true)}/>]}/>
+            )}
+
+            {/* Provider preset */}
+            <SecCard title="Provider" desc="Pick a preset or use a generic SAML / OIDC provider.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:8, marginBottom:16 }}>
+                    {providers.map(p => (
+                        <button key={p} onClick={()=>setProvider(p)}
+                            style={{ padding:'10px 8px', border:`1.5px solid ${provider===p?T.goldInk:T.border}`, borderRadius:6, background:provider===p?'rgba(200,185,154,0.12)':T.surface, cursor:'pointer', fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, transition:'border-color 100ms, background 100ms' }}>
+                            {p}
+                        </button>
+                    ))}
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                    {[{label:'Protocol',value:'SAML 2.0'},{label:'Default role for new users',value:'Sales Rep'}].map((f,i) => (
+                        <div key={i}>
+                            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</label>
+                            <select defaultValue={f.value} style={{ ...inp, fontFamily:T.sans, appearance:'none', cursor:'pointer', backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat:'no-repeat', backgroundPosition:'right 10px center', paddingRight:28 }}>
+                                <option>{f.value}</option>
+                            </select>
+                        </div>
+                    ))}
+                </div>
+            </SecCard>
+
+            {/* Service provider */}
+            <SecCard title="Service provider (Accelerep)" desc="Paste these values into your IdP.">
+                {[
+                    { label:'Entity ID', value:SEC_SSO.sp.entityId },
+                    { label:'ACS URL',   value:SEC_SSO.sp.acsUrl   },
+                ].map((row,i) => (
+                    <div key={i} style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center', marginBottom:10 }}>
+                        <label style={{ fontSize:12.5, fontWeight:600, color:T.inkMid }}>{row.label}</label>
+                        <input readOnly value={row.value} style={{ ...inp, background:T.bg }} onClick={e=>e.currentTarget.select()}/>
+                    </div>
+                ))}
+            </SecCard>
+
+            {/* Identity provider */}
+            <SecCard title="Identity provider" desc="From your IdP application.">
+                <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center', marginBottom:10 }}>
+                    <label style={{ fontSize:12.5, fontWeight:600, color:T.inkMid }}>SSO URL</label>
+                    <input value={idpSsoUrl} onChange={e=>setIdpSsoUrl(e.target.value)} style={inp}/>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'center', marginBottom:10 }}>
+                    <label style={{ fontSize:12.5, fontWeight:600, color:T.inkMid }}>IdP entity ID</label>
+                    <input value={idpEntityId} onChange={e=>setIdpEntityId(e.target.value)} style={inp}/>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'120px 1fr', gap:12, alignItems:'flex-start', marginBottom:4 }}>
+                    <label style={{ fontSize:12.5, fontWeight:600, color:T.inkMid, paddingTop:8 }}>X.509 certificate</label>
+                    <textarea value={idpCert} onChange={e=>setIdpCert(e.target.value)} rows={4}
+                        style={{ ...inp, fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, resize:'vertical', lineHeight:1.5 }}/>
+                </div>
+            </SecCard>
+
+            {/* Attribute mapping */}
+            <SecCard title="Attribute mapping" desc="Map IdP claims to Accelerep user fields.">
+                <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 120px 60px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                        {['IDP ATTRIBUTE','ACCELEREP FIELD','REQUIRED',''].map((h,i) => (
+                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                        ))}
+                    </div>
+                    {SEC_SSO.attributeMap.map((row,i) => (
+                        <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 120px 60px', gap:8, padding:'9px 14px', borderBottom:i<SEC_SSO.attributeMap.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.ink }}>{row.idp}</span>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.inkMid }}>{row.local}</span>
+                            <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                background: row.required?'rgba(77,107,61,0.12)':'rgba(184,115,51,0.10)',
+                                color: row.required?T.ok:T.warn }}>
+                                {row.required?'Required':'Optional'}
+                            </span>
+                            <button style={{ fontSize:12.5, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Edit</button>
+                        </div>
+                    ))}
+                </div>
+            </SecCard>
+
+            {/* Provisioning & domains */}
+            <SecCard title="Provisioning & domains" desc="Just-in-time creation and verified domains.">
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:16 }}>
+                    {[
+                        { label:'JIT provisioning',        value:SEC_SSO.jitProvisioning   },
+                        { label:'Concurrent password login',value:SEC_SSO.concurrentPassword },
+                    ].map((f,i) => (
+                        <div key={i}>
+                            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</label>
+                            <select defaultValue={f.value} style={{ width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', appearance:'none', cursor:'pointer', background:T.surface }}>
+                                <option>{f.value}</option>
+                            </select>
+                        </div>
+                    ))}
+                </div>
+                <div style={{ fontSize:11.5, fontWeight:600, color:T.inkMid, textTransform:'uppercase', letterSpacing:0.5, marginBottom:8, fontFamily:T.sans }}>Verified domains</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                    {SEC_SSO.verifiedDomains.map(d => (
+                        <span key={d} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'4px 10px', background:'rgba(58,90,122,0.08)', border:`1px solid rgba(58,90,122,0.18)`, borderRadius:4, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.info }}>
+                            {d}
+                            <span style={{ cursor:'pointer', color:T.inkMuted, fontSize:14, lineHeight:1 }}>×</span>
+                        </span>
+                    ))}
+                    <button style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', border:`1.5px dashed ${T.border}`, borderRadius:4, background:'transparent', fontSize:12.5, color:T.inkMuted, cursor:'pointer', fontFamily:T.sans }}>+ Add domain</button>
+                </div>
+            </SecCard>
+        </div>
+    );
+};
+
+// ── ② MFA Detail ──────────────────────────────────────────────
+const MfaDetail = ({ onBack }) => {
+    const [showEnforce, setShowEnforce] = useState(false);
+    const { enrolled, total, perRole, notEnrolled } = SEC_MFA;
+    const notEnrolledCount = total - enrolled;
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showEnforce && <EnforceMfaModal onClose={()=>setShowEnforce(false)}/>}
+            <SecCrumb page="Multi-factor auth" onBack={onBack}/>
+            <SecTitle
+                title="Multi-factor auth"
+                sub="Enforce a second factor on sign-in"
+                badge={`Optional · ${enrolled}/${total} enrolled`}
+                updatedAt="Last edited 3 months ago by Jeff Hammond"
+                actions={[
+                    <SecBtn key="rem" label="Send reminders"/>,
+                    <SecBtn key="enf" label="Enforce for all" primary onClick={()=>setShowEnforce(true)}/>,
+                ]}/>
+
+            {/* Optional warn callout */}
+            {SEC_MFA.policy === 'optional' && (
+                <SecCallout tone="warn"
+                    text={<>MFA is optional. <b>{notEnrolledCount} users haven't enrolled.</b> Move to Required to lock down sign-in.</>}
+                    actions={[
+                        <SecBtn key="r" label="Send reminders"/>,
+                        <SecBtn key="e" label="Enforce now" primary onClick={()=>setShowEnforce(true)}/>,
+                    ]}/>
+            )}
+
+            {/* Policy */}
+            <SecCard title="Policy">
+                <SecFieldRow fields={[
+                    { label:'Enforcement',                  value:SEC_MFA.enforcement   },
+                    { label:'Grace period (days after invite)',value:SEC_MFA.gracePeriod },
+                    { label:'Remember device',              value:SEC_MFA.rememberDevice },
+                    { label:'On factor reset',              value:SEC_MFA.onFactorReset  },
+                ]}/>
+                <div style={{ fontSize:11.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>Allowed factors</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
+                    <OnOffTile label="Authenticator (TOTP)" sub="Google, 1Password, Authy" on={SEC_MFA.factors.totp}/>
+                    <OnOffTile label="Security key / Passkey" sub="WebAuthn, biometrics" on={SEC_MFA.factors.passkey}/>
+                    <OnOffTile label="SMS code" sub="Discouraged — NIST advises against" on={SEC_MFA.factors.sms}/>
+                    <OnOffTile label="Email code" sub="Lowest assurance" on={SEC_MFA.factors.email}/>
+                </div>
+            </SecCard>
+
+            {/* Enrollment by role */}
+            <SecCard title={`Enrollment by role (${enrolled}/${total} · ${Math.round(enrolled/total*100)}%)`}>
+                <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 100px 1fr 140px 80px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                        {['ROLE','REQUIRED','ENROLLMENT','STATUS',''].map((h,i) => (
+                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                        ))}
+                    </div>
+                    {perRole.map((r,i) => {
+                        const pct = r.total > 0 ? Math.round(r.enrolled/r.total*100) : 0;
+                        const full = pct === 100;
+                        const pending = r.total - r.enrolled;
+                        return (
+                            <div key={r.role} style={{ display:'grid', gridTemplateColumns:'1fr 100px 1fr 140px 80px', gap:8, padding:'10px 14px', borderBottom:i<perRole.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                                <span style={{ fontSize:13, fontWeight:600, color:T.ink }}>{r.role}</span>
+                                <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                    background:r.required?'rgba(156,58,46,0.10)':'rgba(184,115,51,0.10)',
+                                    color:r.required?T.danger:T.warn }}>
+                                    {r.required?'Required':'Optional'}
+                                </span>
+                                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                    <div style={{ width:100, height:6, background:T.border, borderRadius:3, overflow:'hidden', flexShrink:0 }}>
+                                        <div style={{ width:`${pct}%`, height:'100%', background: full ? T.ok : T.warn, borderRadius:3 }}/>
+                                    </div>
+                                    <span style={{ fontSize:11.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{r.enrolled}/{r.total}</span>
+                                </div>
+                                <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                    background: full ? 'rgba(77,107,61,0.12)' : 'rgba(184,115,51,0.12)',
+                                    color: full ? T.ok : T.warn }}>
+                                    {full ? 'Complete' : `${pending} pending`}
+                                </span>
+                                <button style={{ fontSize:12, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Remind →</button>
+                            </div>
+                        );
+                    })}
+                </div>
+            </SecCard>
+
+            {/* Not yet enrolled */}
+            <SecCard title="Not yet enrolled" desc="Send reminder, force enrollment on next sign-in, or grant exception.">
+                <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 100px 80px 80px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                        {['USER','ROLE','INVITED','',''].map((h,i) => (
+                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                        ))}
+                    </div>
+                    {notEnrolled.map((u,i) => (
+                        <div key={u.email} style={{ display:'grid', gridTemplateColumns:'1fr 120px 100px 80px 80px', gap:8, padding:'9px 14px', borderBottom:i<notEnrolled.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.ink }}>{u.email}</span>
+                            <span style={{ fontSize:12.5, color:T.inkMid }}>{u.role}</span>
+                            <span style={{ fontSize:12.5, color:u.never?T.danger:T.inkMid }}>{u.invited}</span>
+                            <button style={{ fontSize:12, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Remind</button>
+                            <button style={{ fontSize:12, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Exception</button>
+                        </div>
+                    ))}
+                </div>
+            </SecCard>
+        </div>
+    );
+};
+
+// ── ③ Session & Password Detail ───────────────────────────────
+const SessionDetail = ({ onBack }) => {
+    const { ipAllowlist, passwordComplexity } = SEC_SESSION;
+    const [dirty, setDirty] = useState(false);
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            <SecCrumb page="Session & password" onBack={onBack}/>
+            <SecTitle
+                title="Session & password policy"
+                sub="Idle timeout, password rules, IP allowlist"
+                badge="Strong policy · 8h idle · 90-day rotation"
+                updatedAt="Last edited last week by Jeff Hammond"
+                dirty={dirty}
+                actions={[
+                    <SecBtn key="rev" label="Revert" onClick={()=>setDirty(false)}/>,
+                    <SecBtn key="sav" label="Save policy" primary onClick={()=>setDirty(false)}/>,
+                ]}/>
+
+            {/* Session section */}
+            <SecCard title="Session" >
+                <SecFieldRow fields={[
+                    { label:'Idle timeout',                value:SEC_SESSION.idleTimeout        },
+                    { label:'Absolute session lifetime',   value:SEC_SESSION.sessionLifetime    },
+                    { label:'Concurrent sessions per user',value:SEC_SESSION.concurrentSessions },
+                    { label:'Re-auth for sensitive actions',value:SEC_SESSION.reauth            },
+                ]}/>
+            </SecCard>
+
+            {/* Password section */}
+            <SecCard title="Password">
+                <SecFieldRow fields={[
+                    { label:'Minimum length',            value:SEC_SESSION.minLength },
+                    { label:'Rotation',                  value:SEC_SESSION.rotation  },
+                    { label:'History',                   value:SEC_SESSION.history   },
+                    { label:'Lockout after failed attempts',value:SEC_SESSION.lockout },
+                ]}/>
+                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>Complexity</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
+                    <OnOffTile label="Mixed case" on={passwordComplexity.mixedCase}/>
+                    <OnOffTile label="Number"     on={passwordComplexity.number}/>
+                    <OnOffTile label="Symbol"     on={passwordComplexity.symbol}/>
+                    <OnOffTile label="Block common" on={passwordComplexity.blockCommon}/>
+                </div>
+            </SecCard>
+
+            {/* IP allowlist */}
+            <SecCard title="IP allowlist" desc="Restrict sign-in to these CIDR ranges. Empty = no restriction."
+                headAction={<SecBtn label="+ Add range" onClick={()=>setDirty(true)}/>}>
+                <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'160px 1fr 100px 130px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                        {['CIDR','LABEL','STATUS',''].map((h,i) => (
+                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                        ))}
+                    </div>
+                    {ipAllowlist.map((row,i) => (
+                        <div key={row.cidr} style={{ display:'grid', gridTemplateColumns:'160px 1fr 100px 130px', gap:8, padding:'10px 14px', borderBottom:i<ipAllowlist.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.ink }}>{row.cidr}</span>
+                            <span style={{ fontSize:13, color:T.inkMid }}>{row.label}</span>
+                            <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                background:row.status==='Enforced'?'rgba(77,107,61,0.12)':'rgba(184,115,51,0.10)',
+                                color:row.status==='Enforced'?T.ok:T.warn }}>
+                                {row.status}
+                            </span>
+                            <div style={{ display:'flex', gap:8 }}>
+                                <button style={{ fontSize:12, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Edit</button>
+                                <button style={{ fontSize:12, color:T.danger, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Remove</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </SecCard>
+        </div>
+    );
+};
+
+// ── ④ Field-level security Detail ────────────────────────────
+// FLS matrix with click-to-cycle cells — defined at module level
+const FlsMatrixCell = ({ level, onCycle }) => {
+    const cycle = ['Edit','Read','Masked','Hidden'];
+    const s = flsCellStyle(level);
+    return (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <button onClick={onCycle}
+                style={{ padding:'3px 11px', borderRadius:4, fontSize:11.5, fontWeight:700, background:s.bg, color:s.fg, border:'none', cursor:'pointer', fontFamily:T.sans, minWidth:56 }}>
+                {s.label}
+            </button>
+        </div>
+    );
+};
+
+const FlsDetail = ({ onBack }) => {
+    const [objFilter, setObjFilter] = useState('Account');
+    const [search, setSearch] = useState('');
+    const [matrix, setMatrix] = useState(FLS_MATRIX_INIT.map(row=>[...row]));
+    const [dirty, setDirty] = useState(false);
+    const levels = ['Edit','Read','Masked','Hidden'];
+
+    const cycleCell = (fi, ri) => {
+        setMatrix(prev => {
+            const m = prev.map(r=>[...r]);
+            const idx = levels.indexOf(m[fi][ri]);
+            m[fi][ri] = levels[(idx+1) % levels.length];
+            return m;
+        });
+        setDirty(true);
+    };
+
+    const visFields = FLS_FIELDS.filter(f => {
+        const obj = f.name.split('.')[0];
+        return obj === objFilter && (!search || f.name.toLowerCase().includes(search.toLowerCase()));
+    });
+
+    const fieldIndices = visFields.map(f => FLS_FIELDS.indexOf(f));
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            <SecCrumb page="Field-level security" onBack={onBack}/>
+            <SecTitle
+                title="Field-level security"
+                sub="5 objects · 8 sensitive fields tracked"
+                badge="2 fields with masking · 1 hidden from non-finance"
+                updatedAt="Last edited last week by Morgan Reyes"
+                dirty={dirty}
+                actions={[
+                    <SecBtn key="exp" label="Export matrix"/>,
+                    <SecBtn key="sav" label="Save changes" primary onClick={()=>setDirty(false)}/>,
+                ]}/>
+
+            {/* Object filter */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:'14px 16px', marginBottom:16, display:'flex', alignItems:'center', gap:10 }}>
+                <span style={{ fontSize:13, fontWeight:700, color:T.ink, marginRight:4 }}>Object filter</span>
+                <div style={{ display:'flex', gap:6 }}>
+                    {FLS_OBJECTS.map(obj => (
+                        <button key={obj} onClick={()=>setObjFilter(obj)}
+                            style={{ padding:'5px 14px', fontSize:12.5, fontWeight:600, borderRadius:4, border:`1px solid ${objFilter===obj?T.ink:T.border}`, background:objFilter===obj?T.ink:'transparent', color:objFilter===obj?'#fbf8f3':T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                            {obj}
+                        </button>
+                    ))}
+                </div>
+                <div style={{ flex:1 }}/>
+                <input value={search} onChange={e=>setSearch(e.target.value)}
+                    placeholder="Search field…"
+                    style={{ padding:'6px 12px', fontSize:12.5, border:`1px solid ${T.border}`, borderRadius:16, outline:'none', width:180, fontFamily:T.sans, background:T.surface, color:T.ink }}/>
+            </div>
+
+            {/* FLS matrix */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                {/* Matrix header */}
+                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div>
+                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{objFilter} · Field × Role matrix</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any cell to change. Edit &gt; Read &gt; Masked &gt; Hidden.</div>
+                    </div>
+                    {/* Legend */}
+                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        {['Edit','Read','Masked','Hidden'].map(l => {
+                            const s = flsCellStyle(l);
+                            return <span key={l} style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11 }}>
+                                <span style={{ width:10, height:10, borderRadius:2, background:s.bg, border:`1px solid ${s.fg}22`, display:'inline-block' }}/>
+                                <span style={{ color:T.inkMuted }}>{l}</span>
+                            </span>;
+                        })}
+                    </div>
+                </div>
+                {/* Scrollable matrix table */}
+                <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', minWidth:600, fontFamily:T.sans }}>
+                        <thead>
+                            <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                                <th style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'left', minWidth:220, position:'sticky', left:0, background:T.surface2, zIndex:1 }}>FIELD</th>
+                                {FLS_ROLES.map(r => (
+                                    <th key={r} style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'center', minWidth:110 }}>{r}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {visFields.map((field, visIdx) => {
+                                const fi = fieldIndices[visIdx];
+                                return (
+                                    <tr key={field.name} style={{ borderBottom:`1px solid ${T.border}` }}
+                                        onMouseEnter={e=>Array.from(e.currentTarget.cells).forEach(c=>c.style.background=T.surface2)}
+                                        onMouseLeave={e=>Array.from(e.currentTarget.cells).forEach(c=>c.style.background='transparent')}>
+                                        <td style={{ padding:'10px 16px', position:'sticky', left:0, background:T.surface, zIndex:1 }}>
+                                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, fontWeight:600, color:T.ink }}>{field.name}</div>
+                                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>
+                                                {field.type} · {field.pii ? <span style={{ color:T.warn, fontWeight:600 }}>PII</span> : 'standard'}
+                                            </div>
+                                        </td>
+                                        {FLS_ROLES.map((role, ri) => (
+                                            <td key={role} style={{ padding:'8px 10px', textAlign:'center' }}>
+                                                <FlsMatrixCell level={matrix[fi]?.[ri] || 'Read'} onCycle={()=>cycleCell(fi,ri)}/>
+                                            </td>
+                                        ))}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── ⑤ Audit Log Detail ────────────────────────────────────────
+const AuditDetail = ({ onBack }) => {
+    const [catFilter, setCatFilter]   = useState('All categories');
+    const [actorFilter, setActorFilter] = useState('All actors');
+    const [timeFilter, setTimeFilter]   = useState('Last 7 days');
+    const [search, setSearch]           = useState('');
+
+    const visible = SEC_AUDIT_EVENTS.filter(e => {
+        if (catFilter !== 'All categories' && e.cat !== catFilter) return false;
+        if (actorFilter !== 'All actors'   && e.actor !== actorFilter) return false;
+        const q = search.toLowerCase();
+        return !q || e.action.includes(q) || e.actor.includes(q) || e.target.includes(q);
+    });
+
+    const catSel = { padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', appearance:'none', cursor:'pointer', background:T.surface };
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            <SecCrumb page="Audit log" onBack={onBack}/>
+            <SecTitle
+                title="Audit log"
+                sub="12 events · last 7 days · retention 13 months"
+                badge="Streaming to Splunk · 2 alerts triggered today"
+                updatedAt="Last edited real-time by —"
+                actions={[
+                    <SecBtn key="str" label="Configure streaming"/>,
+                    <SecBtn key="exp" label="Export CSV"/>,
+                    <SecBtn key="ale" label="Manage alerts" primary/>,
+                ]}/>
+
+            {/* Filters */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:'14px 16px', marginBottom:16 }}>
+                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:12 }}>Filters</div>
+                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <input value={search} onChange={e=>setSearch(e.target.value)}
+                        placeholder="Search action, actor, target…"
+                        style={{ flex:1, padding:'7px 12px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface }}/>
+                    <select value={catFilter} onChange={e=>setCatFilter(e.target.value)} style={catSel}>
+                        {['All categories','auth','security','data','admin','billing'].map(c=><option key={c}>{c}</option>)}
+                    </select>
+                    <select value={actorFilter} onChange={e=>setActorFilter(e.target.value)} style={catSel}>
+                        {['All actors','System','jeff@accelerep.com','morgan@accelerep.com','priya@accelerep.com','theo@accelerep.com'].map(a=><option key={a}>{a}</option>)}
+                    </select>
+                    <select value={timeFilter} onChange={e=>setTimeFilter(e.target.value)} style={catSel}>
+                        {['Last 7 days','Last 30 days','Last 90 days','Custom'].map(t=><option key={t}>{t}</option>)}
+                    </select>
+                    <span style={{ fontSize:12.5, color:T.inkMuted, whiteSpace:'nowrap' }}>Showing {visible.length} of 12,847</span>
+                </div>
+            </div>
+
+            {/* Event stream */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:16 }}>
+                <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Event stream</div>
+                </div>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans }}>
+                    <thead>
+                        <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                            {['WHEN','ACTOR','ACTION','TARGET','CATEGORY','IP'].map((h,i) => (
+                                <th key={i} style={{ padding:'8px 14px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'left' }}>{h}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {visible.map((ev,i) => {
+                            const cs = auditCatStyle(ev.cat);
+                            const isWarn = ev.sev === 'warn';
+                            return (
+                                <tr key={i} style={{ borderBottom:`1px solid ${T.border}`, background: isWarn ? 'rgba(184,115,51,0.05)' : 'transparent' }}>
+                                    <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMuted, whiteSpace:'nowrap' }}>{ev.when}</td>
+                                    <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.ink, whiteSpace:'nowrap' }}>{ev.actor}</td>
+                                    <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, fontWeight:600, color: isWarn ? T.warn : T.ink, whiteSpace:'nowrap' }}>{ev.action}</td>
+                                    <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid, maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.target}</td>
+                                    <td style={{ padding:'9px 14px' }}>
+                                        <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:3, fontSize:11, fontWeight:700, background:cs.bg, color:cs.fg }}>{ev.cat}</span>
+                                    </td>
+                                    <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMuted }}>{ev.ip}</td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Streaming destinations */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Streaming destinations</div>
+                    <button style={{ fontSize:12.5, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>+ Add destination</button>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'140px 1fr 100px 90px 120px', gap:8, padding:'7px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                    {['DESTINATION','ENDPOINT','FORMAT','STATUS','LAST DELIVERED'].map((h,i) => (
+                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                    ))}
+                </div>
+                {SEC_AUDIT_STREAMS.map((s,i) => (
+                    <div key={s.dest} style={{ display:'grid', gridTemplateColumns:'140px 1fr 100px 90px 120px', gap:8, padding:'10px 16px', borderBottom:i<SEC_AUDIT_STREAMS.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                        <span style={{ fontSize:13, fontWeight:600, color:T.ink }}>{s.dest}</span>
+                        <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMuted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.url}</span>
+                        <span style={{ display:'inline-block', padding:'2px 6px', borderRadius:3, fontSize:11, fontWeight:600, background:'rgba(138,131,120,0.12)', color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{s.fmt}</span>
+                        <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                            background:s.status==='Active'?'rgba(77,107,61,0.12)':'rgba(156,58,46,0.12)',
+                            color:s.status==='Active'?T.ok:T.danger }}>
+                            {s.status}
+                        </span>
+                        <span style={{ fontSize:12, color:s.status==='Failing'?T.danger:T.inkMid }}>{s.lastDelivered}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS → DATA — data fixtures + primitives + four detail pages + four modals
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Fixtures ──────────────────────────────────────────────────
+
+const DATA_IMPORT = {
+    lastRun: { ts:'3 days ago', rows:812, errors:14, by:'morgan@accelerep.com', object:'Accounts' },
+    history: [
+        { id:'imp-014', ts:'3 days ago',  object:'Accounts',      rows:812,  errors:14, status:'partial',   by:'morgan@accelerep.com' },
+        { id:'imp-013', ts:'1 week ago',  object:'Contacts',      rows:2410, errors:0,  status:'success',   by:'morgan@accelerep.com' },
+        { id:'imp-012', ts:'2 weeks ago', object:'Leads',         rows:1680, errors:3,  status:'partial',   by:'jeff@accelerep.com'   },
+        { id:'imp-011', ts:'3 weeks ago', object:'Opportunities', rows:248,  errors:0,  status:'success',   by:'morgan@accelerep.com' },
+        { id:'imp-010', ts:'1 month ago', object:'Accounts',      rows:412,  errors:0,  status:'success',   by:'morgan@accelerep.com' },
+    ],
+    wizard: {
+        step:'map',
+        file:{ name:'salesforce-accounts-2026-q1.csv', size:'4.2 MB', rows:812, encoding:'UTF-8' },
+        columns:[
+            { csv:'Account Name',  target:'name',          type:'text',     sample:'Acme Corp',          confidence:0.99, required:true  },
+            { csv:'Domain',        target:'domain',        type:'url',      sample:'acme.com',           confidence:0.97, required:true  },
+            { csv:'Annual Revenue',target:'annualRevenue', type:'currency', sample:'$12,400,000',        confidence:0.94 },
+            { csv:'Employees',     target:'employeeCount', type:'number',   sample:'320',                confidence:0.99 },
+            { csv:'Industry',      target:'industry',      type:'enum',     sample:'Manufacturing',      confidence:0.91 },
+            { csv:'Tier',          target:'customerTier',  type:'enum',     sample:'Enterprise',         confidence:0.84 },
+            { csv:'Owner Email',   target:'ownerEmail',    type:'email',    sample:'morgan@accelerep…',  confidence:0.99 },
+            { csv:'Created (UTC)', target:'createdAt',     type:'datetime', sample:'2024-04-12T10:14Z',  confidence:0.96 },
+            { csv:'Notes',         target:'__skip__',      type:'text',     sample:'pricing call w/ CTO',confidence:0.42 },
+            { csv:'Salesforce ID', target:'externalId',    type:'text',     sample:'0014x000abcd1234',   confidence:0.88 },
+        ],
+        dedupe:{ match:'domain', onMatch:'update', skipBlanks:true },
+        preview:{ willCreate:612, willUpdate:186, willSkip:14, errors:[
+            { row:47,  field:'domain',        msg:'Invalid format: "n/a"' },
+            { row:112, field:'annualRevenue', msg:'Could not parse "TBD"' },
+            { row:304, field:'industry',      msg:'"Crypto" not in industry taxonomy' },
+        ]},
+    },
+};
+
+const DATA_EXPORT = {
+    schedules:[
+        { id:'sch-01', name:'Weekly account snapshot',         scope:'Accounts (all)',                cadence:'Weekly · Mon 06:00 UTC', destination:'s3://acme-export/accounts/',  format:'CSV',       last:'2 days ago', size:'12.4 MB', enabled:true,  status:'ok' },
+        { id:'sch-02', name:'Pipeline weekly digest',          scope:'Opportunities (open)',          cadence:'Weekly · Fri 22:00 UTC', destination:'email:finance@…',             format:'XLSX',      last:'5 days ago', size:'480 KB',  enabled:true,  status:'ok' },
+        { id:'sch-03', name:'Daily activity log',              scope:'Activity (all touchpoints)',    cadence:'Daily · 02:00 UTC',      destination:'snowflake:stg.activity',      format:'NDJSON.gz', last:'14h ago',    size:'88 MB',   enabled:true,  status:'ok' },
+        { id:'sch-04', name:'Marketing handoff',               scope:'Leads (closed-won)',            cadence:'Weekly · Wed 08:00 UTC', destination:'webhook:hubspot.com/…',       format:'JSON',      last:'failing 3×', size:'—',       enabled:true,  status:'failing' },
+        { id:'sch-05', name:'GDPR DSR archive',                scope:'Per-subject (PII bundle)',      cadence:'On request',             destination:'secure download link',        format:'ZIP',       last:'3 weeks ago',size:'2.1 MB',  enabled:true,  status:'ok' },
+        { id:'sch-06', name:'Closed deals quarterly (paused)', scope:'Opportunities (won)',           cadence:'Quarterly · 1st 00:00',  destination:'sftp://reporting.acme/…',     format:'CSV',       last:'6 weeks ago',size:'—',       enabled:false, status:'ok' },
+    ],
+    recent:[
+        { ts:'today, 14:02', name:'Ad-hoc · Q1 deals',         by:'jeff@accelerep.com',   rows:248,   format:'XLSX',size:'120 KB', ms:412 },
+        { ts:'today, 09:14', name:'Weekly account snapshot',   by:'system (schedule)',    rows:14210, format:'CSV', size:'12.4 MB',ms:2840 },
+        { ts:'yesterday',    name:'Ad-hoc · NA territory map', by:'morgan@accelerep.com', rows:612,   format:'CSV', size:'88 KB',  ms:220 },
+        { ts:'2 days ago',   name:'Pipeline weekly digest',    by:'system (schedule)',    rows:412,   format:'XLSX',size:'480 KB', ms:980 },
+        { ts:'4 days ago',   name:'Ad-hoc · contact opt-outs', by:'priya@accelerep.com',  rows:47,    format:'CSV', size:'8 KB',   ms:90 },
+    ],
+    dsrQueue:[
+        { id:'dsr-018', subject:'k.harper@example.com', type:'access',  submitted:'2 days ago',  sla:'28 days remaining', status:'in-progress' },
+        { id:'dsr-017', subject:'matt@thirdrock.io',    type:'erasure', submitted:'1 week ago',  sla:'23 days remaining', status:'in-progress' },
+        { id:'dsr-016', subject:'p.mehta@globex.test',  type:'access',  submitted:'3 weeks ago', sla:'completed',         status:'completed'   },
+    ],
+};
+
+const DATA_BACKUP = {
+    retentionDays:30,
+    region:'us-east-1 (primary) · eu-west-1 (replica)',
+    totalSize:'58.4 MB',
+    lastBackup:{ ts:'4 hours ago', size:'2.4 GB', duration:'14m 22s' },
+    snapshots:[
+        { id:'bk_snap_2026_04_27_0314', ts:'today, 03:14',    type:'auto',   size:'2.4 GB', records:14210, duration:'14m 22s' },
+        { id:'bk_snap_2026_04_26_0314', ts:'yesterday, 03:14',type:'auto',   size:'2.4 GB', records:14201, duration:'14m 04s' },
+        { id:'bk_snap_2026_04_25_1840', ts:'yesterday, 18:40',type:'manual', size:'2.4 GB', records:14198, duration:'14m 12s' },
+        { id:'bk_snap_2026_04_25_0314', ts:'2 days ago',      type:'auto',   size:'2.3 GB', records:14180, duration:'13m 58s' },
+        { id:'bk_snap_2026_04_24_0314', ts:'3 days ago',      type:'auto',   size:'2.3 GB', records:14174, duration:'14m 11s' },
+        { id:'bk_snap_2026_04_23_0314', ts:'4 days ago',      type:'auto',   size:'2.3 GB', records:14160, duration:'15m 02s' },
+        { id:'bk_snap_2026_04_22_0314', ts:'5 days ago',      type:'auto',   size:'2.3 GB', records:14138, duration:'14m 30s' },
+        { id:'bk_snap_2026_04_21_0314', ts:'6 days ago',      type:'auto',   size:'2.2 GB', records:14094, duration:'13m 41s' },
+        { id:'bk_snap_2026_04_20_0314', ts:'1 week ago',      type:'auto',   size:'2.2 GB', records:14070, duration:'14m 08s' },
+        { id:'bk_snap_2026_04_19_0314', ts:'8 days ago',      type:'auto',   size:'2.2 GB', records:14041, duration:'13m 54s' },
+    ],
+};
+
+const DATA_FEATURES = {
+    flags:[
+        { id:'deal-scoring',     name:'Deal scoring',           desc:'AI-driven probability and next-step suggestions on opportunities',      on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'writing-assist',   name:'Writing assist',         desc:'Inline AI writing help in notes, emails, and proposals',                on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'meeting-summaries',name:'Meeting summaries',      desc:'Auto-summarize Zoom/Teams calls and post to record',                    on:true,  scope:'workspace · 75% rollout', beta:true,  new:false },
+        { id:'sentiment',        name:'Email sentiment',        desc:'Score reply sentiment on incoming threads',                             on:false, scope:'off',                     beta:true,  new:true  },
+        { id:'forecast-roll',    name:'Forecast rollup',        desc:'Hierarchical forecast with manager adjustments',                        on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'territory-rules',  name:'Territory rules engine', desc:'Auto-assign accounts to territories on create/update',                  on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'lead-routing',     name:'Lead routing',           desc:'Round-robin + skill-based lead distribution',                           on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'duplicate-merge',  name:'Smart duplicate merge',  desc:'Suggest merges when accounts/contacts collide',                         on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'health-scores',    name:'Account health scores',  desc:'Health 0–100 per account based on usage and sentiment',                 on:false, scope:'off',                     beta:true,  new:false },
+        { id:'mobile-offline',   name:'Mobile offline mode',    desc:'Cache and sync recent records on iOS/Android',                          on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'mobile-voice',     name:'Mobile voice notes',     desc:'Dictate notes on the go with auto-transcription',                       on:true,  scope:'workspace · 100%',        beta:false, new:true  },
+        { id:'quote-redlines',   name:'Quote redlines',         desc:'Track legal redline rounds on quote PDFs',                              on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'esign-bulk',       name:'Bulk e-sign',            desc:'Send the same agreement to many counterparties at once',                on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'public-api-v2',    name:'Public API v2',          desc:'New REST + webhooks; v1 deprecation in 90 days',                        on:true,  scope:'workspace · 100%',        beta:true,  new:false },
+        { id:'graphql',          name:'GraphQL endpoint',       desc:'Read-only GraphQL on top of v2',                                        on:false, scope:'off',                     beta:true,  new:false },
+        { id:'audit-streaming',  name:'Audit log streaming',    desc:'Push audit events to Splunk / Datadog / S3',                            on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'workflows-loops',  name:'Workflow loops',         desc:'For-each automation steps over collections',                            on:false, scope:'off',                     beta:true,  new:false },
+        { id:'commit-categories',name:'Commit categories',      desc:'Pipeline / Best Case / Commit / Closed buckets',                        on:true,  scope:'workspace · 100%',        beta:false, new:false },
+    ],
+};
+
+const DATA_AI = {
+    enabled:true, model:'claude-sonnet-4-5', fallback:'claude-haiku-4-5',
+    region:'US · us-east-2', tokenBudget:25000000, tokensUsed:4280000,
+    trainingOptIn:false, zeroRetention:true, piiRedaction:true, byok:false, byokProvider:'—',
+    dpaSignedAt:'2025-11-04',
+    usage:{ tokens30d:4280000, requests30d:29680, avgLatency:'1.4s', piiBlocked:142,
+        byFeature:[
+            { feature:'Writing assist',    requests:18420, tokens:2104000, pctBudget:8.4, avgLatency:'1.1s' },
+            { feature:'Deal scoring',      requests:9420,  tokens:1408000, pctBudget:5.6, avgLatency:'0.9s' },
+            { feature:'Meeting summaries', requests:1840,  tokens:612000,  pctBudget:2.4, avgLatency:'4.2s' },
+            { feature:'Email sentiment',   requests:0,     tokens:0,       pctBudget:0,   avgLatency:'—'    },
+            { feature:'Account health',    requests:0,     tokens:0,       pctBudget:0,   avgLatency:'—'    },
+        ],
+    },
+};
+
+// ── Shared primitives ─────────────────────────────────────────
+
+// Step rail for the import wizard
+const DataStepRail = ({ step }) => {
+    const steps = [
+        { id:'upload',  label:'Upload' },
+        { id:'map',     label:'Map columns' },
+        { id:'dedupe',  label:'Dedupe' },
+        { id:'preview', label:'Preview' },
+        { id:'done',    label:'Run' },
+    ];
+    const idx = steps.findIndex(s => s.id === step);
+    return (
+        <div style={{ display:'flex', alignItems:'center', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 16px', marginBottom:16, gap:0 }}>
+            {steps.map((s,i) => {
+                const done = i < idx; const active = i === idx;
+                return (
+                    <React.Fragment key={s.id}>
+                        <span style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, fontWeight: active ? 700 : 500, color: active ? T.ink : done ? T.ok : T.inkMuted }}>
+                            <span style={{ width:18, height:18, borderRadius:'50%', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700,
+                                background: done ? T.ok : active ? T.goldInk : 'transparent',
+                                color: (done||active) ? '#fbf8f3' : T.inkMuted,
+                                border: (!done && !active) ? `1px solid ${T.border}` : 'none' }}>
+                                {done ? '✓' : i+1}
+                            </span>
+                            {s.label}
+                        </span>
+                        {i < steps.length-1 && <span style={{ width:32, height:1, background:T.border, margin:'0 10px', flexShrink:0 }}/>}
+                    </React.Fragment>
+                );
+            })}
+        </div>
+    );
+};
+
+// Stat card with serif italic numerals
+const DataStatCard = ({ label, value, mono, warn }) => (
+    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:14 }}>
+        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:6, fontFamily:T.sans }}>{label}</div>
+        <div style={{ fontFamily: mono ? 'ui-monospace,Menlo,monospace' : T.serif, fontStyle: mono ? 'normal' : 'italic', fontWeight:700, fontSize: mono ? 18 : 26, color: warn ? T.warn : T.ink }}>{value}</div>
+    </div>
+);
+
+// Feature flag row
+const DataFlagRow = ({ f, last }) => {
+    const [on, setOn] = useState(f.on);
+    return (
+        <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 0', borderBottom: last ? 'none' : `1px solid ${T.border}` }}>
+            <span onClick={()=>setOn(v=>!v)}
+                style={{ width:30, height:18, borderRadius:9, background: on ? T.ok : T.border, position:'relative', flexShrink:0, cursor:'pointer', display:'inline-block' }}>
+                <span style={{ position:'absolute', top:2, left: on ? 14 : 2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+            </span>
+            <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, display:'flex', alignItems:'center', gap:6 }}>
+                    {f.name}
+                    {f.beta && <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(58,90,122,0.10)', color:T.info, fontSize:10.5, fontWeight:700 }}>Beta</span>}
+                    {f.new  && <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(184,115,51,0.10)', color:T.warn, fontSize:10.5, fontWeight:700 }}>New</span>}
+                </div>
+                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>{f.desc}</div>
+            </div>
+            <div style={{ fontSize:11.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', textAlign:'right', minWidth:160 }}>{f.scope}</div>
+        </div>
+    );
+};
+
+// Data section card (reuses same visual as SecCard but no dependency)
+const DataCard = ({ title, desc, headAction, children }) => (
+    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20, marginBottom:16, fontFamily:T.sans }}>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14 }}>
+            <div>
+                <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>{title}</div>
+                {desc && <div style={{ fontSize:12.5, color:T.inkMid, marginTop:3 }}>{desc}</div>}
+            </div>
+            {headAction}
+        </div>
+        {children}
+    </div>
+);
+
+// Table header row
+const DTableHead = ({ cols }) => (
+    <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+        {cols.map((h,i) => <th key={i} style={{ textAlign:'left', padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans }}>{h}</th>)}
+    </tr>
+);
+
+// QPill equivalent for Data pages
+const DPill = ({ tone='neutral', children }) => {
+    const m = {
+        ok:      { bg:'rgba(77,107,61,0.12)',   fg:T.ok      },
+        warn:    { bg:'rgba(184,115,51,0.12)',  fg:T.warn    },
+        danger:  { bg:'rgba(156,58,46,0.12)',   fg:T.danger  },
+        info:    { bg:'rgba(58,90,122,0.10)',   fg:T.info    },
+        neutral: { bg:'rgba(138,131,120,0.12)', fg:T.inkMid  },
+    };
+    const c = m[tone]||m.neutral;
+    return <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700, background:c.bg, color:c.fg, fontFamily:T.sans, whiteSpace:'nowrap' }}>{children}</span>;
+};
+
+// Data page crumb
+const DataCrumb = ({ page, onBack }) => (
+    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10, fontFamily:T.sans }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+        <span>/</span>
+        <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Data</button>
+        <span>/</span>
+        <span style={{ color:T.ink, fontWeight:600 }}>{page}</span>
+    </div>
+);
+
+// Data title band
+const DataTitle = ({ title, sub, badge, updatedBy, updatedAt, actions, dirty }) => (
+    <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20, fontFamily:T.sans }}>
+        <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+            <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>
+                {title}{dirty && <span style={{ fontSize:12, fontWeight:500, color:T.warn, marginLeft:12 }}>● Unsaved</span>}
+            </div>
+            <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                <span>{sub}</span>
+                {badge && <><span style={{ color:T.inkMuted }}>•</span><span style={{ color:T.ok, fontWeight:600 }}>✓ {badge}</span></>}
+                {updatedBy && <><span style={{ color:T.inkMuted }}>•</span><span style={{ fontSize:11.5, color:T.inkMuted }}>Last: {updatedAt} by <b style={{ color:T.inkMid, fontWeight:500 }}>{updatedBy}</b></span></>}
+            </div>
+        </div>
+        <div style={{ display:'flex', gap:8 }}>{actions}</div>
+    </div>
+);
+
+const DataBtn = ({ label, primary, danger:isDanger, onClick, disabled }) => (
+    <button onClick={onClick} disabled={disabled}
+        style={{ padding:'7px 14px', fontFamily:T.sans, fontSize:12.5, fontWeight:600, cursor:disabled?'default':'pointer', borderRadius:T.r, whiteSpace:'nowrap',
+            background: isDanger ? T.danger : primary ? T.ink : T.surface,
+            color: (isDanger||primary) ? '#fbf8f3' : T.ink,
+            border: (isDanger||primary) ? 'none' : `1px solid ${T.borderStrong}`,
+            opacity: disabled ? 0.6 : 1, transition:'opacity 100ms' }}>
+        {label}
+    </button>
+);
+
+// ── MODALS ────────────────────────────────────────────────────
+
+// Shared modal shell (re-uses same pattern as IntModal from Integrations)
+const DataModal = ({ width=640, onClose, children }) => (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:T.sans }}>
+        <div onClick={e=>e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width, maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)' }}>
+            {children}
+        </div>
+    </div>
+);
+const DataModalHead = ({ title, sub, onClose }) => (
+    <div style={{ padding:'18px 22px 14px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
+            <div>
+                <div style={{ fontSize:16, fontWeight:700, color:T.ink }}>{title}</div>
+                {sub && <div style={{ fontSize:12.5, color:T.inkMuted, marginTop:2 }}>{sub}</div>}
+            </div>
+            <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', lineHeight:1, padding:'2px 4px' }}>×</button>
+        </div>
+    </div>
+);
+const DataModalFoot = ({ children }) => (
+    <div style={{ padding:'12px 22px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', gap:8, justifyContent:'flex-end', flexShrink:0 }}>{children}</div>
+);
+
+// 1. New import modal
+const NewImportModal = ({ onClose }) => (
+    <DataModal onClose={onClose}>
+        <DataModalHead title="New import" sub="Step 1 of 5 — upload a CSV." onClose={onClose}/>
+        <div style={{ flex:1, overflowY:'auto', padding:22 }}>
+            <div style={{ marginBottom:12 }}>
+                <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>Object</label>
+                <select style={{ width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' }}>
+                    <option>Accounts</option><option>Contacts</option><option>Leads</option><option>Opportunities</option>
+                </select>
+            </div>
+            <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:8, fontFamily:T.sans }}>File</div>
+            <div style={{ border:`2px dashed ${T.borderStrong}`, borderRadius:4, padding:'32px 20px', textAlign:'center', background:T.surface2, cursor:'pointer', marginBottom:14 }}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.goldInk}
+                onMouseLeave={e=>e.currentTarget.style.borderColor=T.borderStrong}>
+                <div style={{ fontSize:28, color:T.inkMuted, marginBottom:8 }}>↑</div>
+                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>Drop CSV here, or <span style={{ color:T.goldInk, textDecoration:'underline' }}>browse</span></div>
+                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:6 }}>UTF-8 · max 100 MB · max 250,000 rows</div>
+            </div>
+            <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:8, fontFamily:T.sans }}>Or start from a saved mapping</div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                {['Salesforce → Accounts','HubSpot → Contacts','Outreach → Leads','Apollo → Contacts'].map(p => (
+                    <span key={p} style={{ padding:'5px 10px', borderRadius:3, background:T.surface2, border:`1px solid ${T.border}`, fontSize:11.5, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e=>e.currentTarget.style.borderColor=T.goldInk}
+                        onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>{p}</span>
+                ))}
+            </div>
+        </div>
+        <DataModalFoot>
+            <DataBtn label="Cancel" onClick={onClose}/>
+            <DataBtn label="Continue → Map columns" primary onClick={onClose}/>
+        </DataModalFoot>
+    </DataModal>
+);
+
+// 2. New scheduled export modal
+const NewExportModal = ({ onClose }) => {
+    const selStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' };
+    const inpStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' };
+    const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
+    return (
+        <DataModal onClose={onClose}>
+            <DataModalHead title="New scheduled export" sub="Recurring delivery to S3, SFTP, email, or webhook." onClose={onClose}/>
+            <div style={{ flex:1, overflowY:'auto', padding:22 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                    <FL label="Name"><input defaultValue="Weekly accounts → S3" style={inpStyle}/></FL>
+                    <FL label="Object"><select style={selStyle}><option>Accounts</option><option>Contacts</option><option>Opportunities</option></select></FL>
+                    <FL label="Filter (CRMQL)"><input defaultValue="updated_at > now() - 7d" style={{ ...inpStyle, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}/></FL>
+                    <FL label="Format"><select style={selStyle}><option>CSV</option><option>XLSX</option><option>NDJSON.gz</option><option>JSON</option></select></FL>
+                    <FL label="Frequency"><select style={selStyle}><option>Weekly · Mondays 06:00 UTC</option><option>Daily · 02:00 UTC</option><option>Monthly</option></select></FL>
+                    <FL label="Destination"><select style={selStyle}><option>S3 · acme-exports/accounts/</option><option>SFTP</option><option>Email</option><option>Webhook</option></select></FL>
+                </div>
+            </div>
+            <DataModalFoot>
+                <DataBtn label="Run once now"/>
+                <DataBtn label="Cancel" onClick={onClose}/>
+                <DataBtn label="Create schedule" primary onClick={onClose}/>
+            </DataModalFoot>
+        </DataModal>
+    );
+};
+
+// 3. Restore from snapshot modal (type-to-confirm RESTORE)
+const RestoreModal = ({ snap, onClose }) => {
+    const [confirm, setConfirm] = useState('');
+    const [notify, setNotify]   = useState(true);
+    const ready = confirm.trim().toUpperCase() === 'RESTORE';
+    return (
+        <DataModal width={540} onClose={onClose}>
+            <DataModalHead onClose={onClose}
+                title={<span style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span style={{ width:32, height:32, borderRadius:4, background:'rgba(156,58,46,0.12)', color:T.danger, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700, flexShrink:0 }}>⚠</span>
+                    Restore from snapshot?
+                </span>}
+                sub={`This will overwrite records with snapshot data from ${snap?.ts || 'yesterday'}.`}/>
+            <div style={{ flex:1, overflowY:'auto', padding:22 }}>
+                <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', marginBottom:14, fontSize:12 }}>
+                    {[
+                        { label:'Snapshot',            value: snap?.id || 'bk_snap_2026_04_26_0314', mono:true },
+                        { label:'Records to restore',  value:'3', bold:true },
+                        { label:'Conflicts to resolve',value:'3 will be overwritten', color:T.warn },
+                        { label:'Pre-restore snapshot', value:'✓ will run first', color:T.ok },
+                    ].map((r,i) => (
+                        <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: i<3?5:0 }}>
+                            <span style={{ color:T.inkMid }}>{r.label}</span>
+                            <span style={{ fontFamily:r.mono?'ui-monospace,Menlo,monospace':'inherit', fontWeight:r.bold?600:500, color:r.color||T.ink }}>{r.value}</span>
+                        </div>
+                    ))}
+                </div>
+                <div style={{ marginBottom:12 }}>
+                    <label style={{ display:'block', fontSize:12, fontWeight:600, color:T.inkMid, marginBottom:6 }}>
+                        Type <b style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.ink }}>RESTORE</b> to confirm
+                    </label>
+                    <input value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="RESTORE"
+                        style={{ width:'100%', padding:'8px 10px', border:`1.5px solid ${ready?T.danger:T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' }}/>
+                </div>
+                <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:12.5, cursor:'pointer' }} onClick={()=>setNotify(v=>!v)}>
+                    <span style={{ width:14, height:14, border:`1.5px solid ${notify?T.ok:T.border}`, borderRadius:2, background:notify?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                        {notify && <span style={{ color:'#fff', fontSize:9 }}>✓</span>}
+                    </span>
+                    Notify workspace admins after restore completes
+                </label>
+            </div>
+            <DataModalFoot>
+                <DataBtn label="Cancel" onClick={onClose}/>
+                <DataBtn label="Restore now" danger disabled={!ready} onClick={()=>{ if(ready) onClose(); }}/>
+            </DataModalFoot>
+        </DataModal>
+    );
+};
+
+// 4. Reset AI training data modal (type-to-confirm RESET)
+const ResetAiModal = ({ onClose }) => {
+    const [confirm, setConfirm] = useState('');
+    const [notify, setNotify]   = useState(true);
+    const ready = confirm.trim().toUpperCase() === 'RESET';
+    return (
+        <DataModal width={540} onClose={onClose}>
+            <DataModalHead onClose={onClose}
+                title={<span style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span style={{ width:32, height:32, borderRadius:4, background:'rgba(156,58,46,0.12)', color:T.danger, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700, flexShrink:0 }}>⚠</span>
+                    Reset AI training data?
+                </span>}
+                sub="Permanently delete this workspace's prompts and outputs from the AI provider."/>
+            <div style={{ flex:1, overflowY:'auto', padding:22 }}>
+                <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', marginBottom:14, fontSize:12 }}>
+                    {[
+                        { label:'Workspace',       value:'accelerep · acme', mono:true },
+                        { label:'Records to purge',value:'~84,200 prompts / outputs', bold:true },
+                        { label:'Provider',        value:'Anthropic · Claude Sonnet 4.5', mono:true },
+                        { label:'SLA',             value:'Up to 30 days to propagate' },
+                    ].map((r,i) => (
+                        <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: i<3?5:0 }}>
+                            <span style={{ color:T.inkMid }}>{r.label}</span>
+                            <span style={{ fontFamily:r.mono?'ui-monospace,Menlo,monospace':'inherit', fontWeight:r.bold?600:400, color:T.ink }}>{r.value}</span>
+                        </div>
+                    ))}
+                </div>
+                <div style={{ padding:'10px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:3, marginBottom:14, fontSize:12 }}>
+                    <span style={{ fontWeight:700, color:T.danger }}>This cannot be undone.</span>
+                    <span style={{ color:T.inkMid }}> Past AI suggestions referenced from records will continue to display, but the underlying training corpus will be erased.</span>
+                </div>
+                <div style={{ marginBottom:12 }}>
+                    <label style={{ display:'block', fontSize:12, fontWeight:600, color:T.inkMid, marginBottom:6 }}>
+                        Type <b style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.ink }}>RESET</b> to confirm
+                    </label>
+                    <input value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="RESET"
+                        style={{ width:'100%', padding:'8px 10px', border:`1.5px solid ${ready?T.danger:T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' }}/>
+                </div>
+                <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:12.5, cursor:'pointer' }} onClick={()=>setNotify(v=>!v)}>
+                    <span style={{ width:14, height:14, border:`1.5px solid ${notify?T.ok:T.border}`, borderRadius:2, background:notify?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                        {notify && <span style={{ color:'#fff', fontSize:9 }}>✓</span>}
+                    </span>
+                    Open a tracking ticket and email the workspace owner
+                </label>
+            </div>
+            <DataModalFoot>
+                <DataBtn label="Cancel" onClick={onClose}/>
+                <DataBtn label="Request reset" danger disabled={!ready} onClick={()=>{ if(ready) onClose(); }}/>
+            </DataModalFoot>
+        </DataModal>
+    );
+};
+
+// ── ① Import Detail ───────────────────────────────────────────
+const ImportDetail = ({ onBack }) => {
+    const [showModal, setShowModal] = useState(false);
+    const w = DATA_IMPORT.wizard;
+    const mapped = w.columns.filter(c => c.target !== '__skip__').length;
+
+    const th = { padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans, textAlign:'left' };
+    const td = (extra={}) => ({ padding:'8px 12px', fontFamily:T.sans, ...extra });
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showModal && <NewImportModal onClose={()=>setShowModal(false)}/>}
+            <DataCrumb page="Import" onBack={onBack}/>
+            <DataTitle
+                title="Import data"
+                sub="CSV import for accounts, contacts, leads, opportunities"
+                updatedBy={DATA_IMPORT.lastRun.by}
+                updatedAt={DATA_IMPORT.lastRun.ts}
+                actions={[
+                    <DataBtn key="h" label="View history" onClick={()=>setShowModal(true)}/>,
+                    <DataBtn key="m" label="Save mapping as preset"/>,
+                    <DataBtn key="c" label="Continue → Dedupe" primary/>,
+                ]}/>
+
+            {/* Warn callout when last run had errors */}
+            {DATA_IMPORT.lastRun.errors > 0 && (
+                <div style={{ padding:'11px 16px', background:'rgba(184,115,51,0.09)', borderLeft:`3px solid ${T.warn}`, borderRadius:4, marginBottom:16, display:'flex', alignItems:'center', gap:12 }}>
+                    <span style={{ color:T.warn, fontSize:15 }}>⚠</span>
+                    <div style={{ flex:1, fontSize:12.5, color:T.inkMid }}>
+                        <b style={{ color:T.warn }}>Last import had {DATA_IMPORT.lastRun.errors} row errors.</b> Review the error report before re-running, or load that mapping to retry.
+                    </div>
+                    <DataBtn label="Download error report"/>
+                    <DataBtn label="Reload mapping"/>
+                </div>
+            )}
+
+            <DataStepRail step={w.step}/>
+
+            {/* File section */}
+            <DataCard title="File" desc="Step 1 — uploaded.">
+                <div style={{ display:'flex', alignItems:'center', gap:14, padding:'4px 0' }}>
+                    <div style={{ width:44, height:56, borderRadius:3, background:T.surface2, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', flexShrink:0 }}>CSV</div>
+                    <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{w.file.name}</div>
+                        <div style={{ fontSize:11.5, color:T.inkMid, marginTop:2 }}>{w.file.size} · {w.file.rows.toLocaleString()} rows · {w.file.encoding}</div>
+                    </div>
+                    <select style={{ padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer', appearance:'none' }}>
+                        <option>Accounts</option>
+                    </select>
+                    <DataBtn label="Replace file"/>
+                </div>
+            </DataCard>
+
+            {/* Map columns */}
+            <DataCard title={`Map columns (${mapped} of ${w.columns.length} mapped)`} desc="Step 2 — confirm Accelerep field for each CSV column. Low-confidence rows highlighted."
+                headAction={<span style={{ fontSize:11.5, color:T.info, cursor:'pointer', fontWeight:600 }}>Auto-map all →</span>}>
+                <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
+                        <thead><tr style={{ background:T.surface2 }}>{['CSV column','Sample value','Type','Accelerep field','Confidence',''].map((h,i) => <th key={i} style={{ ...th }}>{h}</th>)}</tr></thead>
+                        <tbody>
+                            {w.columns.map((c,i) => {
+                                const low = c.confidence < 0.85;
+                                const skip = c.target === '__skip__';
+                                return (
+                                    <tr key={c.csv} style={{ borderBottom: i<w.columns.length-1?`1px solid ${T.border}`:'none', background: low && !skip ? 'rgba(184,115,51,0.08)' : 'transparent', opacity: skip ? 0.55 : 1 }}>
+                                        <td style={{ ...td(), fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, fontWeight:600 }}>
+                                            {c.csv}
+                                            {c.required && !skip && <span style={{ marginLeft:6, padding:'1px 5px', borderRadius:10, background:'rgba(184,115,51,0.12)', color:T.warn, fontSize:10, fontWeight:700 }}>Required</span>}
+                                        </td>
+                                        <td style={{ ...td(), fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMid, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.sample}</td>
+                                        <td style={{ ...td() }}>
+                                            <span style={{ padding:'2px 7px', borderRadius:10, background:'rgba(138,131,120,0.12)', color:T.inkMid, fontSize:11, fontWeight:600 }}>{c.type}</span>
+                                        </td>
+                                        <td style={{ ...td() }}>
+                                            <select defaultValue={skip ? 'Skip column' : c.target} style={{ padding:'5px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer', appearance:'none', minWidth:180 }}>
+                                                <option>{skip ? 'Skip column' : c.target}</option>
+                                            </select>
+                                        </td>
+                                        <td style={{ ...td() }}>
+                                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                                <div style={{ width:60, height:5, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:3, overflow:'hidden' }}>
+                                                    <div style={{ width:`${Math.round(c.confidence*100)}%`, height:'100%', background: c.confidence > 0.9 ? T.ok : c.confidence > 0.7 ? T.warn : T.danger }}/>
+                                                </div>
+                                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMid }}>{Math.round(c.confidence*100)}%</span>
+                                            </div>
+                                        </td>
+                                        <td style={{ ...td(), textAlign:'right' }}>
+                                            <span style={{ fontSize:11, color:T.inkMid, cursor:'pointer', fontWeight:600 }}>{skip ? 'Map →' : 'Skip'}</span>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </DataCard>
+
+            {/* Dedupe rules */}
+            <DataCard title="Dedupe rules" desc="Step 3 — what to do when an incoming row matches an existing record.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16, marginBottom:14 }}>
+                    {[
+                        { label:'Match on',            value:'Domain (case-insensitive)' },
+                        { label:'On match',            value:'Update existing'            },
+                        { label:'Blank values in CSV', value:'Skip — keep existing'       },
+                    ].map((f,i) => (
+                        <div key={i}>
+                            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</label>
+                            <select defaultValue={f.value} style={{ width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' }}>
+                                <option>{f.value}</option>
+                            </select>
+                        </div>
+                    ))}
+                </div>
+                <div style={{ padding:'10px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid }}>
+                    <span style={{ fontWeight:700, color:T.info }}>Note.</span> Falls back to Salesforce ID when the chosen key is empty.
+                </div>
+            </DataCard>
+
+            {/* Preview */}
+            <DataCard title="Preview" desc="Step 4 — inspect what the import will do before committing.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12, marginBottom:16 }}>
+                    <DataStatCard label="Will create" value={w.preview.willCreate}/>
+                    <DataStatCard label="Will update" value={w.preview.willUpdate}/>
+                    <DataStatCard label="Will skip"   value={w.preview.willSkip} />
+                    <DataStatCard label="Errors"      value={w.preview.errors.length} warn/>
+                </div>
+                {w.preview.errors.length > 0 && (
+                    <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                        <div style={{ display:'grid', gridTemplateColumns:'60px 1fr 1fr', gap:8, padding:'7px 12px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                            {['Row','Field','Message'].map((h,i) => <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase' }}>{h}</div>)}
+                        </div>
+                        {w.preview.errors.map((e,i) => (
+                            <div key={i} style={{ display:'grid', gridTemplateColumns:'60px 1fr 1fr', gap:8, padding:'8px 12px', borderBottom:i<w.preview.errors.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMuted }}>{e.row}</span>
+                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{e.field}</span>
+                                <span style={{ fontSize:12.5, color:T.warn }}>{e.msg}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </DataCard>
+        </div>
+    );
+};
+
+// ── ② Export Detail ───────────────────────────────────────────
+const ExportDetail = ({ onBack }) => {
+    const [showModal, setShowModal] = useState(false);
+    const e = DATA_EXPORT;
+    const failing = e.schedules.find(s => s.status === 'failing');
+    const activeCount = e.schedules.filter(s => s.enabled).length;
+    const openDsr = e.dsrQueue.filter(d => d.status !== 'completed').length;
+    const th = { padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans, textAlign:'left' };
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showModal && <NewExportModal onClose={()=>setShowModal(false)}/>}
+            <DataCrumb page="Export" onBack={onBack}/>
+            <DataTitle
+                title="Export"
+                sub="Scheduled and ad-hoc exports; GDPR data subject requests"
+                badge={`${activeCount} active schedules · ${openDsr} open DSR`}
+                updatedBy="Morgan Reyes" updatedAt="3 months ago"
+                actions={[
+                    <DataBtn key="adhoc" label="Run ad-hoc export"/>,
+                    <DataBtn key="new" label="+ New scheduled export" primary onClick={()=>setShowModal(true)}/>,
+                ]}/>
+
+            {/* Failing callout */}
+            {failing && (
+                <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:13 }}>
+                    <b style={{ color:T.danger }}>"{failing.name}" failing.</b>
+                    <span style={{ color:T.inkMid, marginLeft:6 }}>Last attempt {failing.last}.</span>
+                </div>
+            )}
+
+            {/* Scheduled exports table */}
+            <DataCard title={`Scheduled exports (${e.schedules.length})`} desc="Recurring exports to S3, Snowflake, email, or webhook.">
+                <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
+                        <thead><tr style={{ background:T.surface2 }}>{['Name','Scope','Cadence','Destination','Format','Last run','Status',''].map((h,i)=><th key={i} style={th}>{h}</th>)}</tr></thead>
+                        <tbody>
+                            {e.schedules.map((s,i) => {
+                                const tone = !s.enabled ? 'neutral' : s.status==='failing' ? 'danger' : 'ok';
+                                const label = !s.enabled ? 'Paused' : s.status==='failing' ? 'Failing' : 'Active';
+                                return (
+                                    <tr key={s.id} style={{ borderBottom:i<e.schedules.length-1?`1px solid ${T.border}`:'none', opacity:s.enabled?1:0.62 }}>
+                                        <td style={{ padding:'10px 12px', fontWeight:600 }}>{s.name}</td>
+                                        <td style={{ padding:'10px 12px', fontSize:12, color:T.inkMid }}>{s.scope}</td>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{s.cadence}</td>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.destination}</td>
+                                        <td style={{ padding:'10px 12px' }}><DPill tone="neutral">{s.format}</DPill></td>
+                                        <td style={{ padding:'10px 12px', color:T.inkMid, fontSize:12 }}>{s.last} · {s.size}</td>
+                                        <td style={{ padding:'10px 12px' }}><DPill tone={tone}>{label}</DPill></td>
+                                        <td style={{ padding:'10px 12px', textAlign:'right' }}>
+                                            <span style={{ fontSize:11, color:T.info, cursor:'pointer', fontWeight:600 }}>Edit</span>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </DataCard>
+
+            {/* Recent activity */}
+            <DataCard title="Recent activity" desc="One-off and scheduled runs in the last few days.">
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
+                    <thead><tr style={{ background:T.surface2 }}>{['When','Name','By','Rows','Format','Size','Duration'].map((h,i)=><th key={i} style={th}>{h}</th>)}</tr></thead>
+                    <tbody>
+                        {e.recent.map((r,i) => (
+                            <tr key={i} style={{ borderBottom:i<e.recent.length-1?`1px solid ${T.border}`:'none' }}>
+                                <td style={{ padding:'10px 12px', color:T.inkMuted }}>{r.ts}</td>
+                                <td style={{ padding:'10px 12px', fontWeight:500 }}>{r.name}</td>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{r.by}</td>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{r.rows.toLocaleString()}</td>
+                                <td style={{ padding:'10px 12px' }}><DPill tone="neutral">{r.format}</DPill></td>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{r.size}</td>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{r.ms}ms</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </DataCard>
+
+            {/* GDPR / DSR queue */}
+            <DataCard title={`GDPR / DSR queue (${openDsr} open)`} desc="Data Subject Requests — export or delete a subject's data within 30 days.">
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
+                    <thead><tr style={{ background:T.surface2 }}>{['Ticket','Subject','Type','Submitted','SLA','Status'].map((h,i)=><th key={i} style={th}>{h}</th>)}</tr></thead>
+                    <tbody>
+                        {e.dsrQueue.map((d,i) => (
+                            <tr key={d.id} style={{ borderBottom:i<e.dsrQueue.length-1?`1px solid ${T.border}`:'none' }}>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{d.id}</td>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{d.subject}</td>
+                                <td style={{ padding:'10px 12px' }}><DPill tone={d.type==='erasure'?'danger':'neutral'}>{d.type==='erasure'?'Erasure':'Access'}</DPill></td>
+                                <td style={{ padding:'10px 12px', color:T.inkMid }}>{d.submitted}</td>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMid }}>{d.sla}</td>
+                                <td style={{ padding:'10px 12px' }}><DPill tone={d.status==='completed'?'ok':'info'}>{d.status==='completed'?'Completed':'In progress'}</DPill></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </DataCard>
+        </div>
+    );
+};
+
+// ── ③ Backup Detail ───────────────────────────────────────────
+const BackupDetail = ({ onBack }) => {
+    const [restoreSnap, setRestoreSnap] = useState(null);
+    const b = DATA_BACKUP;
+    const th = { padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans, textAlign:'left' };
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {restoreSnap && <RestoreModal snap={restoreSnap} onClose={()=>setRestoreSnap(null)}/>}
+            <DataCrumb page="Backup & restore" onBack={onBack}/>
+            <DataTitle
+                title="Backup & restore"
+                sub="Automated daily snapshots and point-in-time restore"
+                badge={`Daily · last: ${b.lastBackup.ts} · ${b.lastBackup.size}`}
+                updatedBy="System" updatedAt="4 hours ago"
+                actions={[
+                    <DataBtn key="res" label="Restore from backup" onClick={()=>setRestoreSnap(b.snapshots[0])}/>,
+                    <DataBtn key="run" label="Run backup now" primary/>,
+                ]}/>
+
+            {/* Stats */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12, marginBottom:16 }}>
+                <DataStatCard label="Last backup"    value={b.lastBackup.ts}         mono/>
+                <DataStatCard label="Backups stored" value={b.snapshots.length}      />
+                <DataStatCard label="Total size"     value={b.totalSize}             />
+                <DataStatCard label="Retention"      value={`${b.retentionDays} days`}/>
+            </div>
+
+            {/* Schedule form */}
+            <DataCard title="Schedule" desc="Backups are automated; you can also run a snapshot at any time.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
+                    {[
+                        { label:'Frequency',          value:'Daily'                              },
+                        { label:'Time of day (UTC)',   value:'03:00', mono:true                   },
+                        { label:'Retention',           value:`${b.retentionDays} days`            },
+                        { label:'Region',              value:b.region                             },
+                        { label:'Encryption',          value:'AES-256 · workspace key'            },
+                        { label:'Notify on failure',   value:'#sec-ops + email Morgan'            },
+                    ].map((f,i) => (
+                        <div key={i}>
+                            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</label>
+                            <input defaultValue={f.value} readOnly style={{ width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily: f.mono?'ui-monospace,Menlo,monospace':T.sans, outline:'none', background:T.surface, boxSizing:'border-box', cursor:'default' }}/>
+                        </div>
+                    ))}
+                </div>
+            </DataCard>
+
+            {/* Snapshots table */}
+            <DataCard title="Recent snapshots" desc="Each snapshot is a complete point-in-time copy of all CRM data and settings."
+                headAction={<span style={{ fontSize:11.5, color:T.info, cursor:'pointer', fontWeight:600 }}>Configure storage →</span>}>
+                <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans, minWidth:700 }}>
+                        <thead><tr style={{ background:T.surface2 }}>{['Snapshot ID','When','Type','Size','Records','Duration','Status',''].map((h,i)=><th key={i} style={th}>{h}</th>)}</tr></thead>
+                        <tbody>
+                            {b.snapshots.map((s,i) => (
+                                <tr key={s.id} style={{ borderBottom:i<b.snapshots.length-1?`1px solid ${T.border}`:'none' }}>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{s.id}</td>
+                                    <td style={{ padding:'10px 12px', color:T.inkMid }}>{s.ts}</td>
+                                    <td style={{ padding:'10px 12px' }}><DPill tone={s.type==='manual'?'info':'neutral'}>{s.type==='manual'?'Manual':'Automated'}</DPill></td>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{s.size}</td>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{s.records.toLocaleString()}</td>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{s.duration}</td>
+                                    <td style={{ padding:'10px 12px' }}><DPill tone="ok">Ready</DPill></td>
+                                    <td style={{ padding:'10px 12px', textAlign:'right', display:'flex', gap:12 }}>
+                                        <button onClick={()=>setRestoreSnap(s)} style={{ fontSize:11, color:T.info, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans }}>Restore</button>
+                                        <button style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans }}>Download</button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </DataCard>
+        </div>
+    );
+};
+
+// ── ④ Features & AI Detail ────────────────────────────────────
+const FeaturesDetail = ({ onBack }) => {
+    const [showReset, setShowReset] = useState(false);
+    const [aiRegion, setAiRegion]   = useState(DATA_AI.region);
+    const [dirty, setDirty]         = useState(false);
+    const f  = DATA_FEATURES;
+    const ai = DATA_AI;
+    const onCount = f.flags.filter(x=>x.on).length;
+    const betaOn  = f.flags.filter(x=>x.beta && x.on).length;
+
+    const selSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer',
+        backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+        backgroundRepeat:'no-repeat', backgroundPosition:'right 10px center', paddingRight:28 };
+    const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' };
+    const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showReset && <ResetAiModal onClose={()=>setShowReset(false)}/>}
+            <DataCrumb page="Features & AI" onBack={onBack}/>
+            <DataTitle
+                title="Features & AI"
+                sub="App-wide feature flags and AI controls (model, residency, training, redaction)"
+                badge={`${onCount} of ${f.flags.length} on · AI enabled · ${ai.region}`}
+                updatedBy="Morgan Reyes" updatedAt="1 month ago"
+                dirty={dirty}
+                actions={[
+                    <DataBtn key="exp" label="Export config"/>,
+                    <DataBtn key="sav" label="Save changes" primary onClick={()=>setDirty(false)}/>,
+                ]}/>
+
+            {/* Beta callout */}
+            {betaOn > 0 && (
+                <div style={{ padding:'11px 16px', background:'rgba(58,90,122,0.08)', borderLeft:`3px solid ${T.info}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.inkMid }}>
+                    <b style={{ color:T.info }}>Beta features active.</b> Workspace has {betaOn} beta flag{betaOn>1?'s':''} enabled. Behavior may change between releases.
+                </div>
+            )}
+
+            {/* Feature flags */}
+            <DataCard title={`Feature flags (${onCount} / ${f.flags.length} on)`} desc="Workspace-wide toggles. Some flags affect billing or pricing.">
+                <div style={{ display:'flex', gap:6, marginBottom:10 }}>
+                    {['All','Sales','Quoting','Reports','AI','Beta'].map((p,i) => (
+                        <span key={p} style={{ padding:'4px 10px', borderRadius:3, background:i===0?T.ink:T.surface2, color:i===0?'#fbf8f3':T.inkMid, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>{p}</span>
+                    ))}
+                </div>
+                {f.flags.map((flag,i) => <DataFlagRow key={flag.id} f={flag} last={i===f.flags.length-1}/>)}
+            </DataCard>
+
+            {/* AI model & access */}
+            <DataCard title="AI · Model & access" desc="Which model powers AI features and which roles can use them.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
+                    <FL label="Model"><select style={selSt}><option>{ai.model}</option></select></FL>
+                    <FL label="Fallback"><select style={selSt}><option>{ai.fallback}</option></select></FL>
+                    <FL label="Available to"><select style={selSt}><option>All roles except Finance</option></select></FL>
+                    <FL label="Daily token budget"><input defaultValue={ai.tokenBudget.toLocaleString()} style={inpSt}/></FL>
+                    <FL label="Used today"><input readOnly value={`${ai.tokensUsed.toLocaleString()} (${Math.round(ai.tokensUsed/ai.tokenBudget*100)}%)`} style={{ ...inpSt, cursor:'default' }}/></FL>
+                    <FL label="On budget exceed"><select style={selSt}><option>Throttle to 1 req/s</option></select></FL>
+                </div>
+            </DataCard>
+
+            {/* AI data residency & training */}
+            <DataCard title="AI · Data residency & training" desc="Where requests are processed and whether your data trains the model.">
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
+                    {[
+                        { id:'us', region:'US · us-east-2', latency:'+0ms'           },
+                        { id:'eu', region:'EU · eu-west-1', latency:'+82ms (from US)' },
+                    ].map(r => {
+                        const sel = aiRegion === r.region;
+                        return (
+                            <div key={r.id} onClick={()=>{ setAiRegion(r.region); setDirty(true); }}
+                                style={{ border:`1px solid ${sel?T.goldInk:T.border}`, background:sel?'rgba(200,185,154,0.10)':T.surface, borderRadius:6, padding:'12px 14px', cursor:'pointer', transition:'border-color 100ms' }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                    <span style={{ width:14, height:14, borderRadius:'50%', border:`1.5px solid ${sel?T.goldInk:T.inkMuted}`, position:'relative', flexShrink:0 }}>
+                                        {sel && <span style={{ position:'absolute', inset:3, borderRadius:'50%', background:T.goldInk }}/>}
+                                    </span>
+                                    <span style={{ fontSize:13, fontWeight:600, color:T.ink }}>{r.region}</span>
+                                </div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:4, marginLeft:22 }}>Latency: {r.latency}</div>
+                            </div>
+                        );
+                    })}
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                    {[
+                        { id:'training',  on:!ai.trainingOptIn, label:'Training opt-out',    desc:'Your prompts and outputs do not train the model.' },
+                        { id:'logging',   on:ai.zeroRetention,  label:'Zero data retention', desc:'AI provider stores no request data after response.' },
+                        { id:'redaction', on:ai.piiRedaction,   label:'PII redaction',        desc:'Personal email, phone, SSN replaced with placeholders pre-prompt.' },
+                        { id:'byok',      on:ai.byok,           label:'BYOK (bring your own key)', desc: ai.byok ? `Active · ${ai.byokProvider}` : 'Use your own model API key for AI requests.' },
+                    ].map(t => (
+                        <div key={t.id} style={{ border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', background: t.on ? 'rgba(77,107,61,0.07)' : T.surface, display:'flex', alignItems:'flex-start', gap:10 }}>
+                            <span style={{ width:18, height:18, borderRadius:3, border:`1.5px solid ${t.on?T.ok:T.border}`, background:t.on?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#fbf8f3', fontSize:11, fontWeight:700, flexShrink:0, marginTop:1 }}>
+                                {t.on ? '✓' : ''}
+                            </span>
+                            <div>
+                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{t.label}</div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>{t.desc}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </DataCard>
+
+            {/* AI governance */}
+            <DataCard title="AI · Governance" desc="Compliance metadata and danger-zone actions.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16, marginBottom:16 }}>
+                    <FL label="DPA signed"><input readOnly value={ai.dpaSignedAt} style={{ ...inpSt, cursor:'default' }}/></FL>
+                    <FL label="Audit logging"><select style={selSt}><option>All AI requests · 13mo retention</option></select></FL>
+                    <FL label="Block list (regex, comma-separated)"><input placeholder="e.g. \\bSSN\\b, \\bpassword\\b" style={{ ...inpSt, fontFamily:'ui-monospace,Menlo,monospace' }}/></FL>
+                </div>
+                {/* Danger zone */}
+                <div style={{ padding:'14px 16px', background:'rgba(156,58,46,0.06)', borderLeft:`3px solid ${T.danger}`, borderRadius:4 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:T.danger, marginBottom:4 }}>Reset training data</div>
+                    <div style={{ fontSize:12.5, color:T.inkMid, marginBottom:10 }}>Removes any data your workspace has contributed to model training. Takes up to 30 days at the provider.</div>
+                    <DataBtn label="Request reset" danger onClick={()=>setShowReset(true)}/>
+                </div>
+            </DataCard>
+        </div>
+    );
+};
+
 // ADMIN WORKSPACE VIEW
 // ─────────────────────────────────────────────────────────────
 const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter }) => {
@@ -4321,6 +9335,28 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         // Quoting
         'approval-tiers':       'approval-tiers',
         'quote-templates':      'quote-templates',
+        'price-book':           'price-book',
+        // Data
+        'import':   'import',
+        'export':   'export',
+        'backup':   'backup',
+        'features': 'features',
+        // Security
+        'sso':              'sso',
+        'mfa':              'mfa',
+        'session':          'session',
+        'field-visibility': 'field-visibility',
+        'audit-log':        'audit-log',
+        // Integrations
+        'apps':         'apps',
+        'api-keys':     'api-keys',
+        'webhooks':     'webhooks',
+        'automations':  'automations',
+        // People & Teams
+        'users':        'users',
+        'teams':        'teams',
+        'territories':  'territories',
+        'roles':        'roles',
         // Sales process Group 2
         'custom-fields':        'custom-fields',
         'pain-points':          'pain-points',
@@ -4346,6 +9382,32 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         // Quoting detail pages
         if (id === 'quote-templates') return <QuoteTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'approval-tiers')  return <ApprovalTiersDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'price-book')      return <PriceBookDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
+
+        // Data detail pages
+        if (id === 'import')   return <ImportDetail   onBack={onBack}/>;
+        if (id === 'export')   return <ExportDetail   onBack={onBack}/>;
+        if (id === 'backup')   return <BackupDetail   onBack={onBack}/>;
+        if (id === 'features') return <FeaturesDetail onBack={onBack}/>;
+
+        // Security detail pages
+        if (id === 'sso')              return <SsoDetail       onBack={onBack}/>;
+        if (id === 'mfa')              return <MfaDetail       onBack={onBack}/>;
+        if (id === 'session')          return <SessionDetail   onBack={onBack}/>;
+        if (id === 'field-visibility') return <FlsDetail       onBack={onBack}/>;
+        if (id === 'audit-log')        return <AuditDetail     onBack={onBack}/>;
+
+        // Integrations detail pages
+        if (id === 'apps')        return <ConnectedAppsDetail onBack={onBack}/>;
+        if (id === 'api-keys')    return <ApiKeysDetail      onBack={onBack}/>;
+        if (id === 'webhooks')    return <WebhooksDetail     onBack={onBack}/>;
+        if (id === 'automations') return <AutomationsDetail  onBack={onBack}/>;
+
+        // People & Teams detail pages
+        if (id === 'users')       return <UsersDetail       settings={settings} onBack={onBack}/>;
+        if (id === 'teams')       return <TeamsDetail        settings={settings} onBack={onBack}/>;
+        if (id === 'territories') return <TerritoriesDetail settings={settings} onBack={onBack}/>;
+        if (id === 'roles')       return <RolesDetail       settings={settings} onBack={onBack}/>;
 
         // Sales process Group 2 detail pages
         if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
@@ -4462,7 +9524,8 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
                                     <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{it.name}</div>
                                     <div style={{ fontSize:11, color:T.inkMid, marginTop:1, fontFamily:T.sans }}>{it.statusDetail}</div>
                                 </div>
-                                <button style={{ padding:'4px 10px', fontSize:11, fontWeight:600, background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Fix</button>
+                                <button onClick={() => setActiveItem(SETTINGS_ITEMS.find(i=>i.id===it.id)||it)}
+                                    style={{ padding:'4px 10px', fontSize:11, fontWeight:600, background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Fix →</button>
                             </div>
                         ))}
                         {attentionItems.length === 0 && <div style={{ fontSize:12, color:T.ok, fontFamily:T.sans }}>All checks passing ✓</div>}
