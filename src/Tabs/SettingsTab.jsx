@@ -5826,6 +5826,717 @@ const PriceBookDetail = ({ settings, setSettings, onBack }) => {
     );
 };
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PEOPLE & TEAMS — data + shared primitives
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Deterministic avatar color from initials
+const AVATAR_COLORS = ['#4d6b3d','#3a5a7a','#7a6a48','#9c5a3a','#5e4e7a','#3a6a6a','#6b2a22','#4a6b5a'];
+const avatarColor = (name='') => AVATAR_COLORS[(name.charCodeAt(0)||0) % AVATAR_COLORS.length];
+const initials   = (name='') => name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+
+const UserAvatar = ({ name, size=24 }) => (
+    <span style={{
+        display:'inline-flex', alignItems:'center', justifyContent:'center',
+        width:size, height:size, borderRadius:'50%',
+        background: avatarColor(name), color:'#fff',
+        fontSize: size*0.38, fontWeight:700, fontFamily:T.sans,
+        flexShrink:0, letterSpacing:0,
+    }}>{initials(name)}</span>
+);
+
+const RolePill = ({ role }) => {
+    const map = {
+        'Admin':         { bg:'rgba(42,38,34,0.85)',  fg:'#fbf8f3' },
+        'Sales Manager': { bg:'rgba(58,90,122,0.14)', fg:'#3a5a7a' },
+        'Sales Rep':     { bg:'rgba(77,107,61,0.12)', fg:'#4d6b3d' },
+        'CS':            { bg:'rgba(94,78,122,0.12)', fg:'#5e4e7a' },
+        'Finance':       { bg:'rgba(184,115,51,0.12)',fg:'#b87333' },
+    };
+    const c = map[role] || { bg:'rgba(138,131,120,0.14)', fg:'#5a544c' };
+    return (
+        <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:3, fontSize:11.5, fontWeight:700, background:c.bg, color:c.fg, fontFamily:T.sans, letterSpacing:0.1, whiteSpace:'nowrap' }}>
+            {role}
+        </span>
+    );
+};
+
+// Scope badge for permission matrix — VIEW / SHARE columns
+const ScopeBadge = ({ scope }) => {
+    const map = {
+        'ALL':  { bg:'rgba(77,107,61,0.12)',   fg:'#4d6b3d' },
+        'TEAM': { bg:'rgba(58,90,122,0.12)',   fg:'#3a5a7a' },
+        'OWN':  { bg:'rgba(184,115,51,0.12)',  fg:'#b87333' },
+        '—':    { bg:'transparent',            fg:T.inkMuted },
+    };
+    const c = map[scope] || map['—'];
+    return (
+        <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:3, fontSize:10.5, fontWeight:700, background:c.bg, color:c.fg, fontFamily:T.sans, letterSpacing:0.4 }}>
+            {scope}
+        </span>
+    );
+};
+
+// Permission dot — filled green for true, dash for false
+const PermDot = ({ on }) => on
+    ? <span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:T.ok }}/>
+    : <span style={{ color:T.border, fontSize:14, lineHeight:1 }}>—</span>;
+
+// Attainment progress bar
+const AttainBar = ({ pct }) => {
+    const color = pct >= 100 ? T.ok : pct >= 60 ? T.warn : T.danger;
+    return (
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <div style={{ width:60, height:5, background:T.border, borderRadius:3, overflow:'hidden', flexShrink:0 }}>
+                <div style={{ width:`${Math.min(pct,100)}%`, height:'100%', background:color, borderRadius:3 }}/>
+            </div>
+            <span style={{ fontSize:11.5, fontWeight:700, color, fontFamily:'ui-monospace,Menlo,monospace', minWidth:28 }}>{pct}%</span>
+        </div>
+    );
+};
+
+// ── Data ──────────────────────────────────────────────────────
+const PT_USERS = [
+    { id:'u1',  initials:'MR', name:'Morgan Reyes',   email:'morgan@accelerep.com',  role:'Admin',         team:'Leadership', manager:'—',            lastActive:'4 minutes ago',  mfa:true,  status:'Active' },
+    { id:'u2',  initials:'PS', name:'Priya Sharma',   email:'priya@accelerep.com',   role:'Admin',         team:'RevOps',     manager:'Morgan Reyes', lastActive:'12 minutes ago', mfa:true,  status:'Active' },
+    { id:'u3',  initials:'JH', name:'Jeff Hammond',   email:'jeff@accelerep.com',    role:'Sales Manager', team:'SMB West',   manager:'Morgan Reyes', lastActive:'1 hour ago',     mfa:true,  status:'Active' },
+    { id:'u4',  initials:'DP', name:'Devon Park',     email:'devon@accelerep.com',   role:'Sales Manager', team:'SMB East',   manager:'Morgan Reyes', lastActive:'3 hours ago',    mfa:true,  status:'Active' },
+    { id:'u5',  initials:'NT', name:'Naomi Tran',     email:'naomi@accelerep.com',   role:'Sales Manager', team:'Mid-Market', manager:'Morgan Reyes', lastActive:'today, 9:14am',  mfa:true,  status:'Active' },
+    { id:'u6',  initials:'BW', name:'Ben Whitaker',   email:'ben@accelerep.com',     role:'Sales Manager', team:'EMEA',       manager:'Morgan Reyes', lastActive:'yesterday',      mfa:true,  status:'Active' },
+    { id:'u7',  initials:'CV', name:'Camila Vega',    email:'camila@accelerep.com',  role:'Sales Rep',     team:'SMB West',   manager:'Jeff Hammond', lastActive:'8 minutes ago',  mfa:true,  status:'Active' },
+    { id:'u8',  initials:'AP', name:'Aiden Park',     email:'aiden@accelerep.com',   role:'Sales Rep',     team:'SMB West',   manager:'Jeff Hammond', lastActive:'today, 11:02am', mfa:true,  status:'Active' },
+    { id:'u9',  initials:'RC', name:'Riley Chen',     email:'riley@accelerep.com',   role:'Sales Rep',     team:'SMB West',   manager:'Jeff Hammond', lastActive:'2 days ago',     mfa:false, status:'Active', staleMfa:true },
+    { id:'u10', initials:'HI', name:'Hassan Idris',   email:'hassan@accelerep.com',  role:'Sales Rep',     team:'SMB East',   manager:'Devon Park',   lastActive:'today, 8:21am',  mfa:true,  status:'Active' },
+    { id:'u11', initials:'SV', name:'Sasha Volkov',   email:'sasha@accelerep.com',   role:'Sales Rep',     team:'SMB East',   manager:'Devon Park',   lastActive:'5 days ago',     mfa:false, status:'Active', staleMfa:true },
+    { id:'u12', initials:'TR', name:'Tomás Rivera',   email:'tomas@accelerep.com',   role:'Sales Rep',     team:'SMB East',   manager:'Devon Park',   lastActive:'yesterday',      mfa:true,  status:'Active' },
+    { id:'u13', initials:'MG', name:'Maya Goldberg',  email:'maya@accelerep.com',    role:'Sales Rep',     team:'Mid-Market', manager:'Naomi Tran',   lastActive:'today, 10:48am', mfa:true,  status:'Active' },
+    { id:'u14', initials:'LW', name:'Lin Wei',        email:'lin@accelerep.com',     role:'Sales Rep',     team:'Mid-Market', manager:'Naomi Tran',   lastActive:'1 hour ago',     mfa:true,  status:'Active' },
+    { id:'u15', initials:'KO', name:'Kwame Osei',     email:'kwame@accelerep.com',   role:'Sales Rep',     team:'Mid-Market', manager:'Naomi Tran',   lastActive:'today, 9:55am',  mfa:true,  status:'Active' },
+    { id:'u16', initials:'FP', name:'Fatima Patel',   email:'fatima@accelerep.com',  role:'Sales Rep',     team:'EMEA',       manager:'Ben Whitaker', lastActive:'1 hour ago',     mfa:true,  status:'Active' },
+    { id:'u17', initials:'LC', name:'Luca Conti',     email:'luca@accelerep.com',    role:'Sales Rep',     team:'EMEA',       manager:'Ben Whitaker', lastActive:'3 hours ago',    mfa:true,  status:'Active' },
+    { id:'u18', initials:'AK', name:'Alia Karim',     email:'alia@accelerep.com',    role:'CS',            team:'Customer Success', manager:'Morgan Reyes', lastActive:'today',   mfa:true,  status:'Active' },
+    { id:'u19', initials:'TM', name:'Theo Mensah',    email:'theo@accelerep.com',    role:'Finance',       team:'Finance',    manager:'Morgan Reyes', lastActive:'2 days ago',     mfa:true,  status:'Active' },
+    { id:'u20', initials:'AB', name:'Anika Bose',     email:'anika@accelerep.com',   role:'Sales Rep',     team:null,         manager:null,           lastActive:null,             mfa:false, status:'Invited', invitedDaysAgo:1 },
+    { id:'u21', initials:'FB', name:'Felix Brandt',   email:'felix@accelerep.com',   role:'Sales Rep',     team:null,         manager:null,           lastActive:null,             mfa:false, status:'Invited', invitedDaysAgo:3 },
+];
+
+const PT_TEAMS = [
+    { id:'tm1', name:'Leadership',      color:'#2a2622', manager:'Morgan Reyes',  managerInit:'MR', members:1,  pipeline:'—',           quotaQ:null,  attainPct:null, region:'—' },
+    { id:'tm2', name:'RevOps',          color:'#5e4e7a', manager:'Priya Sharma',  managerInit:'PS', members:1,  pipeline:'—',           quotaQ:null,  attainPct:null, region:'—' },
+    { id:'tm3', name:'SMB West',        color:'#4d6b3d', manager:'Jeff Hammond',  managerInit:'JH', members:4,  pipeline:'New business', quotaQ:'$1.2M', attainPct:78, region:'NAM-West' },
+    { id:'tm4', name:'SMB East',        color:'#3a5a7a', manager:'Devon Park',    managerInit:'DP', members:4,  pipeline:'New business', quotaQ:'$1.2M', attainPct:92, region:'NAM-East' },
+    { id:'tm5', name:'Mid-Market',      color:'#7a6a48', manager:'Naomi Tran',    managerInit:'NT', members:4,  pipeline:'New business', quotaQ:'$2.4M', attainPct:104,region:'NAM-Strategic' },
+    { id:'tm6', name:'EMEA',            color:'#9c5a3a', manager:'Ben Whitaker',  managerInit:'BW', members:3,  pipeline:'New business', quotaQ:'$1.6M', attainPct:66, region:'EMEA' },
+    { id:'tm7', name:'Customer Success',color:'#3a6a6a', manager:'Alia Karim',    managerInit:'AK', members:3,  pipeline:'Renewals',     quotaQ:'$2.1M', attainPct:95, region:'Global' },
+    { id:'tm8', name:'Finance',         color:'#6b2a22', manager:'Theo Mensah',   managerInit:'TM', members:1,  pipeline:'—',           quotaQ:null,  attainPct:null, region:'—' },
+];
+
+const PT_TERRITORIES = [
+    { id:'tr1', name:'NAM West',    parent:'NAM',  rule:"State ∈ {CA, OR, WA, NV, AZ, UT, ID}", accounts:412, pipeline:'$2.4M', ownerInit:'JH', owner:'Jeff Hammond',  reps:4, status:'Active' },
+    { id:'tr2', name:'NAM East',    parent:'NAM',  rule:"State ∈ {NY, MA, PA, NJ, CT, VA, NC, DC, FL, GA}", accounts:386, pipeline:'$2.1M', ownerInit:'DP', owner:'Devon Park',   reps:4, status:'Active' },
+    { id:'tr3', name:'NAM Central', parent:'NAM',  rule:"State ∈ {TX, IL, OH, MI, MN, CO, MO}", accounts:264, pipeline:'$1.5M', ownerInit:'DP', owner:'Devon Park',   reps:2, status:'Active' },
+    { id:'tr4', name:'NAM Strategic',parent:'NAM', rule:'Account ∈ "Top 200 Named Accounts"',   accounts:200, pipeline:'$5.8M', ownerInit:'NT', owner:'Naomi Tran',   reps:4, status:'Active' },
+    { id:'tr5', name:'EMEA North',  parent:'EMEA', rule:"Country ∈ {UK, IE, DE, NL, SE, NO, DK, FI}", accounts:184, pipeline:'$1.0M', ownerInit:'BW', owner:'Ben Whitaker',reps:2, status:'Active' },
+    { id:'tr6', name:'EMEA South',  parent:'EMEA', rule:"Country ∈ {FR, ES, IT, PT}",           accounts:96,  pipeline:'$0.6M', ownerInit:'BW', owner:'Ben Whitaker',reps:1, status:'Active' },
+    { id:'tr7', name:'APAC',        parent:'—',    rule:'Region = APAC',                         accounts:41,  pipeline:'$0.2M', ownerInit:null,  owner:'Unassigned',   reps:0, status:'Unassigned' },
+    { id:'tr8', name:'LATAM',       parent:'—',    rule:'Region = LATAM',                        accounts:22,  pipeline:'$0.1M', ownerInit:null,  owner:'Unassigned',   reps:0, status:'Unassigned' },
+];
+
+const PT_ROLES = [
+    { id:'r1', name:'Admin',         userCount:2,  sys:true  },
+    { id:'r2', name:'Sales Manager', userCount:4,  sys:true  },
+    { id:'r3', name:'Sales Rep',     userCount:28, sys:true  },
+    { id:'r4', name:'Customer Success', userCount:6, sys:false },
+    { id:'r5', name:'Finance / CFO', userCount:2,  sys:true  },
+];
+
+const PT_PERM_OBJECTS = [
+    { id:'o1', name:'Leads',            sub:'Pre-qualified contacts in the funnel' },
+    { id:'o2', name:'Accounts',         sub:'Customer organizations' },
+    { id:'o3', name:'Contacts',         sub:'People at accounts' },
+    { id:'o4', name:'Opportunities',    sub:'Pipeline deals' },
+    { id:'o5', name:'Quotes',           sub:'Pricing & proposal documents' },
+    { id:'o6', name:'Price book',       sub:'Catalog, list prices, rules' },
+    { id:'o7', name:'Reports',          sub:'Saved reports & dashboards' },
+    { id:'o8', name:'Settings',         sub:'Workspace administration' },
+    { id:'o9', name:'Billing & contracts', sub:'Subscriptions, invoices, MRR' },
+];
+
+// Permissions matrix: role × object → { view, create, edit, delete, export, share, approve }
+// view/share use scope strings: 'ALL'|'TEAM'|'OWN'|'—'
+// others are boolean
+const PT_PERMS = {
+    // Admin
+    r1: {
+        o1:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o2:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o3:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o4:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o5:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o6:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o7:{ view:'ALL', create:true,  edit:true,  delete:true,  export:true,  share:'ALL', approve:true  },
+        o8:{ view:'ALL', create:true,  edit:true,  delete:true,  export:false, share:'—',   approve:false },
+        o9:{ view:'ALL', create:true,  edit:true,  delete:false, export:true,  share:'—',   approve:true  },
+    },
+    // Sales Manager
+    r2: {
+        o1:{ view:'TEAM', create:true, edit:true,  delete:false, export:true,  share:'TEAM', approve:false },
+        o2:{ view:'TEAM', create:true, edit:true,  delete:false, export:true,  share:'TEAM', approve:false },
+        o3:{ view:'TEAM', create:true, edit:true,  delete:false, export:true,  share:'TEAM', approve:false },
+        o4:{ view:'TEAM', create:true, edit:true,  delete:false, export:true,  share:'TEAM', approve:true  },
+        o5:{ view:'TEAM', create:true, edit:true,  delete:false, export:true,  share:'TEAM', approve:true  },
+        o6:{ view:'ALL',  create:false,edit:false, delete:false, export:false, share:'—',    approve:false },
+        o7:{ view:'TEAM', create:true, edit:true,  delete:false, export:true,  share:'TEAM', approve:false },
+        o8:{ view:'—',    create:false,edit:false, delete:false, export:false, share:'—',    approve:false },
+        o9:{ view:'—',    create:false,edit:false, delete:false, export:false, share:'—',    approve:false },
+    },
+    // Sales Rep
+    r3: {
+        o1:{ view:'OWN', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o2:{ view:'OWN', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o3:{ view:'OWN', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o4:{ view:'OWN', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o5:{ view:'OWN', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o6:{ view:'ALL', create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o7:{ view:'OWN', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o8:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o9:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+    },
+    // Customer Success
+    r4: {
+        o1:{ view:'ALL', create:false,edit:false, delete:false, export:false, share:'OWN', approve:false },
+        o2:{ view:'ALL', create:false,edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o3:{ view:'ALL', create:true, edit:true,  delete:false, export:false, share:'OWN', approve:false },
+        o4:{ view:'ALL', create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o5:{ view:'ALL', create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o6:{ view:'ALL', create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o7:{ view:'ALL', create:false,edit:false, delete:false, export:true,  share:'OWN', approve:false },
+        o8:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o9:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+    },
+    // Finance / CFO
+    r5: {
+        o1:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o2:{ view:'ALL', create:false,edit:false, delete:false, export:true,  share:'—',   approve:false },
+        o3:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o4:{ view:'ALL', create:false,edit:false, delete:false, export:true,  share:'—',   approve:true  },
+        o5:{ view:'ALL', create:false,edit:false, delete:false, export:true,  share:'—',   approve:true  },
+        o6:{ view:'ALL', create:false,edit:true,  delete:false, export:true,  share:'—',   approve:false },
+        o7:{ view:'ALL', create:true, edit:true,  delete:false, export:true,  share:'ALL', approve:false },
+        o8:{ view:'—',   create:false,edit:false, delete:false, export:false, share:'—',   approve:false },
+        o9:{ view:'ALL', create:true, edit:true,  delete:false, export:true,  share:'—',   approve:true  },
+    },
+};
+
+const PT_PERM_ACTIONS = ['view','create','edit','delete','export','share','approve'];
+
+// ── USERS detail page ─────────────────────────────────────────
+const UsersDetail = ({ settings, onBack }) => {
+    const [filter, setFilter]   = useState('All'); // All|Active|Invited|Deactivated|MFA off
+    const [search, setSearch]   = useState('');
+    const [selected, setSelected] = useState(new Set());
+
+    const filterTabs = [
+        { key:'All',        label:`All · ${PT_USERS.length}` },
+        { key:'Active',     label:`Active · ${PT_USERS.filter(u=>u.status==='Active').length}` },
+        { key:'Invited',    label:`Pending · ${PT_USERS.filter(u=>u.status==='Invited').length}` },
+        { key:'Deactivated',label:`Deactivated · 1` },
+        { key:'MFA off',    label:`MFA off · ${PT_USERS.filter(u=>!u.mfa).length}` },
+    ];
+
+    const visible = PT_USERS.filter(u => {
+        if (filter === 'Active'     && u.status !== 'Active')  return false;
+        if (filter === 'Invited'    && u.status !== 'Invited') return false;
+        if (filter === 'MFA off'    && u.mfa)                  return false;
+        if (filter === 'Deactivated'&& u.status !== 'Deactivated') return false;
+        const q = search.toLowerCase();
+        return !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.team||'').toLowerCase().includes(q);
+    });
+
+    const isStale = (s) => s && (s.includes('days ago') || s.includes('week'));
+
+    const activeCount = PT_USERS.filter(u=>u.status==='Active').length;
+    const invitedCount = PT_USERS.filter(u=>u.status==='Invited');
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {/* Breadcrumb */}
+            <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
+                <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+                <span>/</span>
+                <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>People & Teams</button>
+                <span>/</span>
+                <span style={{ color:T.ink, fontWeight:600 }}>Users</span>
+            </div>
+
+            {/* Title band */}
+            <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:18 }}>
+                <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+                    <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>Users</div>
+                    <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                        <span>Invite, deactivate, and assign roles & permissions</span>
+                        <span style={{ color:T.inkMuted }}>•</span>
+                        <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
+                        <span>{activeCount} active · {invitedCount.length} pending invite · 1 deactivated</span>
+                        <span style={{ color:T.inkMuted }}>•</span>
+                        <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited yesterday by <b style={{ color:T.inkMid, fontWeight:500 }}>Morgan</b></span>
+                    </div>
+                </div>
+                <div style={{ display:'flex', gap:8 }}>
+                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Import CSV</button>
+                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Export</button>
+                    <button style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>Invite users</button>
+                </div>
+            </div>
+
+            {/* Body: 1fr + 320px right rail */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:18, alignItems:'start' }}>
+
+                {/* Left: filter tabs + table */}
+                <div>
+                    {/* Filter strip */}
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+                        <div style={{ display:'flex', gap:0, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:3, overflow:'hidden' }}>
+                            {filterTabs.map(ft => (
+                                <button key={ft.key} onClick={() => setFilter(ft.key)}
+                                    style={{ padding:'5px 12px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans,
+                                        background: filter===ft.key ? T.ink : 'transparent',
+                                        color: filter===ft.key ? '#fbf8f3' : T.inkMid,
+                                        whiteSpace:'nowrap',
+                                    }}>{ft.label}</button>
+                            ))}
+                        </div>
+                        <input value={search} onChange={e=>setSearch(e.target.value)}
+                            placeholder="Search by name, email, team…"
+                            style={{ padding:'6px 12px', fontSize:12.5, border:`1px solid ${T.border}`, borderRadius:16, outline:'none', width:220, fontFamily:T.sans, background:T.surface, color:T.ink }}/>
+                    </div>
+
+                    {/* User table */}
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                        <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
+                            <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>All users</div>
+                            <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any row to open the user profile. Use bulk select for role changes, deactivation, or MFA enforcement.</div>
+                        </div>
+                        {/* Table header */}
+                        <div style={{ display:'grid', gridTemplateColumns:'32px 1fr 140px 120px 120px 120px 40px 90px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                            {['','NAME','ROLE','TEAM','MANAGER','LAST ACTIVE','MFA','STATUS',''].map((h,i) => (
+                                <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                            ))}
+                        </div>
+                        {visible.map((u, i) => (
+                            <div key={u.id}
+                                style={{ display:'grid', gridTemplateColumns:'32px 1fr 140px 120px 120px 120px 40px 90px 32px', gap:8, padding:'10px 16px', borderBottom: i<visible.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                                onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                {/* Checkbox */}
+                                <div onClick={e=>{ e.stopPropagation(); setSelected(prev => { const n=new Set(prev); n.has(u.id)?n.delete(u.id):n.add(u.id); return n; }); }}
+                                    style={{ width:14, height:14, border:`1.5px solid ${selected.has(u.id)?T.ink:T.border}`, borderRadius:2, background:selected.has(u.id)?T.ink:'transparent', cursor:'pointer', flexShrink:0 }}/>
+                                {/* Name + email */}
+                                <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
+                                    <UserAvatar name={u.name} size={26}/>
+                                    <div style={{ minWidth:0 }}>
+                                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{u.name}</div>
+                                        <div style={{ fontSize:11, color:T.inkMuted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{u.email}</div>
+                                    </div>
+                                </div>
+                                {/* Role */}
+                                <div><RolePill role={u.role}/></div>
+                                {/* Team */}
+                                <div style={{ fontSize:12.5, color:T.inkMid }}>{u.team || '—'}</div>
+                                {/* Manager */}
+                                <div style={{ fontSize:12.5, color:T.inkMid }}>{u.manager || '—'}</div>
+                                {/* Last active */}
+                                <div style={{ fontSize:12, color: isStale(u.lastActive) ? T.warn : T.inkMid }}>{u.lastActive || '—'}</div>
+                                {/* MFA */}
+                                <div style={{ textAlign:'center' }}>
+                                    {u.status === 'Active'
+                                        ? u.mfa ? <span style={{ color:T.ok, fontSize:14 }}>●</span> : <span style={{ color:T.border, fontSize:14 }}>○</span>
+                                        : <span style={{ color:T.border, fontSize:12 }}>—</span>}
+                                </div>
+                                {/* Status */}
+                                <div>
+                                    <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                        background: u.status==='Active' ? 'rgba(77,107,61,0.12)' : u.status==='Invited' ? 'rgba(184,115,51,0.12)' : 'rgba(138,131,120,0.14)',
+                                        color: u.status==='Active' ? T.ok : u.status==='Invited' ? T.warn : T.inkMuted }}>
+                                        {u.status}
+                                    </span>
+                                </div>
+                                {/* Kebab */}
+                                <button onClick={e=>e.stopPropagation()} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0, lineHeight:1 }}>⋯</button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Right rail */}
+                <div style={{ display:'flex', flexDirection:'column', gap:14, position:'sticky', top:0 }}>
+                    {/* Pending invites */}
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+                            <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Pending invites</div>
+                            <button style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Resend all</button>
+                        </div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:10 }}>Sent but not yet accepted.</div>
+                        {invitedCount.map(u => (
+                            <div key={u.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:`1px solid ${T.border}` }}>
+                                <UserAvatar name={u.name} size={28}/>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{u.name}</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.email}</div>
+                                </div>
+                                <span style={{ fontSize:11, color:T.warn, fontWeight:600, flexShrink:0 }}>{u.invitedDaysAgo === 1 ? 'yesterday' : `${u.invitedDaysAgo}d ago`}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Seat usage */}
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
+                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:4 }}>Seat usage</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:12 }}>Workspace limits.</div>
+                        {/* Main bar */}
+                        <div style={{ display:'flex', alignItems:'baseline', gap:4, marginBottom:6 }}>
+                            <span style={{ fontSize:18, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{activeCount}</span>
+                            <span style={{ fontSize:13, color:T.inkMuted }}>/ 50</span>
+                            <div style={{ flex:1 }}/>
+                            <span style={{ fontSize:11.5, fontWeight:600, color:T.ok }}>84%</span>
+                        </div>
+                        <div style={{ height:5, background:T.border, borderRadius:3, marginBottom:12, overflow:'hidden' }}>
+                            <div style={{ width:`${(activeCount/50)*100}%`, height:'100%', background:T.ok, borderRadius:3 }}/>
+                        </div>
+                        {[
+                            { label:'Reps',     value:PT_USERS.filter(u=>u.role==='Sales Rep').length },
+                            { label:'Managers', value:PT_USERS.filter(u=>u.role==='Sales Manager').length },
+                            { label:'Admins',   value:PT_USERS.filter(u=>u.role==='Admin').length },
+                            { label:'Pending',  value:invitedCount.length, sub:'expires in 7d', color:T.warn },
+                        ].map((row,i) => (
+                            <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'5px 0', borderTop:`1px solid ${T.border}` }}>
+                                <span style={{ fontSize:12.5, color:T.inkMid }}>{row.label}</span>
+                                <div style={{ textAlign:'right' }}>
+                                    <span style={{ fontSize:13, fontWeight:700, color:row.color||T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{row.value}</span>
+                                    {row.sub && <div style={{ fontSize:10.5, color:T.inkMuted }}>{row.sub}</div>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Security health */}
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
+                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:3 }}>Security health</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:12 }}>Last 30 days.</div>
+                        {[
+                            { label:'MFA on',       value:'17/21', sub:'4 off',   color:T.ok },
+                            { label:'SSO',          value:'On',    sub:'all',     color:T.ok },
+                            { label:'Stale sessions',value:'2',    sub:'≤30d',    color:T.warn },
+                        ].map((row,i) => (
+                            <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'7px 0', borderTop: i>0 ? `1px solid ${T.border}` : 'none' }}>
+                                <span style={{ fontSize:12.5, color:T.inkMid }}>{row.label}</span>
+                                <div style={{ textAlign:'right' }}>
+                                    <div style={{ fontSize:13.5, fontWeight:700, color:row.color, fontFamily:'ui-monospace,Menlo,monospace' }}>{row.value}</div>
+                                    <div style={{ fontSize:10.5, color:T.inkMuted }}>{row.sub}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── TEAMS detail page ─────────────────────────────────────────
+const TeamsDetail = ({ settings, onBack }) => (
+    <div style={{ fontFamily:T.sans }}>
+        {/* Breadcrumb */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+            <span>/</span>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>People & Teams</button>
+            <span>/</span>
+            <span style={{ color:T.ink, fontWeight:600 }}>Teams</span>
+        </div>
+
+        {/* Title band */}
+        <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>
+            <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+                <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>Teams & managers</div>
+                <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                    <span>Team structure, managers, and reporting hierarchy</span>
+                    <span style={{ color:T.inkMuted }}>•</span>
+                    <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
+                    <span>8 teams · 8 managers</span>
+                    <span style={{ color:T.inkMuted }}>•</span>
+                    <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited 2 weeks ago by <b style={{ color:T.inkMid, fontWeight:500 }}>Morgan</b></span>
+                </div>
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+                <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Switch to org chart</button>
+                <button style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>New team</button>
+            </div>
+        </div>
+
+        {/* All teams table */}
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:14 }}>
+            <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>All teams</div>
+                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Drag rows to reorder. Click any team to edit its members, manager, and quotas.</div>
+            </div>
+            {/* Header */}
+            <div style={{ display:'grid', gridTemplateColumns:'24px 1fr 180px 70px 130px 90px 120px 60px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                {['','TEAM','MANAGER','MEMBERS','PIPELINE','QUOTA Q','ATTAIN','REGION',''].map((h,i) => (
+                    <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                ))}
+            </div>
+            {PT_TEAMS.map((team, i) => (
+                <div key={team.id}
+                    style={{ display:'grid', gridTemplateColumns:'24px 1fr 180px 70px 130px 90px 120px 60px 32px', gap:8, padding:'11px 16px', borderBottom: i<PT_TEAMS.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    <span style={{ color:T.border, fontSize:14, cursor:'grab' }}>⠿</span>
+                    {/* Team name with color bar */}
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <span style={{ width:4, height:16, borderRadius:2, background:team.color, flexShrink:0 }}/>
+                        <span style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{team.name}</span>
+                    </div>
+                    {/* Manager */}
+                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        <UserAvatar name={team.manager} size={20}/>
+                        <span style={{ fontSize:12.5, color:T.inkMid }}>{team.manager}</span>
+                    </div>
+                    {/* Members */}
+                    <div style={{ fontSize:13, color:T.ink }}>{team.members}</div>
+                    {/* Pipeline */}
+                    <div style={{ fontSize:12, color:T.inkMid }}>{team.pipeline}</div>
+                    {/* Quota Q */}
+                    <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{team.quotaQ || '—'}</div>
+                    {/* Attainment bar */}
+                    <div>{team.attainPct != null ? <AttainBar pct={team.attainPct}/> : <span style={{ color:T.border }}>—</span>}</div>
+                    {/* Region */}
+                    <div style={{ fontSize:11.5, color:T.inkMuted }}>{team.region}</div>
+                    {/* Kebab */}
+                    <button onClick={e=>e.stopPropagation()} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+                </div>
+            ))}
+        </div>
+
+        {/* Unassigned users */}
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
+            <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:3 }}>Unassigned users</div>
+            <div style={{ fontSize:12, color:T.inkMuted, marginBottom:8 }}>Active users not currently in a team.</div>
+            <div style={{ fontSize:12.5, color:T.ok }}>None — every active user is in a team. ✓</div>
+        </div>
+    </div>
+);
+
+// ── TERRITORIES detail page ───────────────────────────────────
+const TerritoriesDetail = ({ settings, onBack }) => (
+    <div style={{ fontFamily:T.sans }}>
+        {/* Breadcrumb */}
+        <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+            <span>/</span>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>People & Teams</button>
+            <span>/</span>
+            <span style={{ color:T.ink, fontWeight:600 }}>Territories</span>
+        </div>
+
+        {/* Title band */}
+        <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>
+            <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+                <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>Territories</div>
+                <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                    <span>Sales territory definitions and rep assignments</span>
+                    <span style={{ color:T.inkMuted }}>•</span>
+                    <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
+                    <span>8 territories · <span style={{ color:T.warn, fontWeight:600 }}>2 unassigned</span></span>
+                    <span style={{ color:T.inkMuted }}>•</span>
+                    <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited 3 months ago by <b style={{ color:T.inkMid, fontWeight:500 }}>Morgan</b></span>
+                </div>
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+                <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Import CSV</button>
+                <button style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>New territory</button>
+            </div>
+        </div>
+
+        {/* Territory table */}
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+            <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>All territories</div>
+                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any row to edit its rule, owner, and rep assignments.</div>
+            </div>
+            {/* Header */}
+            <div style={{ display:'grid', gridTemplateColumns:'24px 130px 80px 1fr 70px 80px 160px 50px 100px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                {['','TERRITORY','PARENT','RULE','ACCOUNTS','PIPELINE','OWNER','REPS','STATUS',''].map((h,i) => (
+                    <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                ))}
+            </div>
+            {PT_TERRITORIES.map((tr, i) => (
+                <div key={tr.id}
+                    style={{ display:'grid', gridTemplateColumns:'24px 130px 80px 1fr 70px 80px 160px 50px 100px 32px', gap:8, padding:'10px 16px', borderBottom: i<PT_TERRITORIES.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    <span style={{ color:T.border, fontSize:14, cursor:'grab' }}>⠿</span>
+                    {/* Name */}
+                    <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{tr.name}</div>
+                    {/* Parent */}
+                    <div style={{ fontSize:12, color:T.inkMuted }}>{tr.parent}</div>
+                    {/* Rule — monospace pill */}
+                    <div style={{ overflow:'hidden' }}>
+                        <span style={{ display:'inline-block', padding:'2px 6px', background:'rgba(58,90,122,0.08)', border:`1px solid rgba(58,90,122,0.15)`, borderRadius:3, fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.info, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'100%' }}>{tr.rule}</span>
+                    </div>
+                    {/* Accounts */}
+                    <div style={{ fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{tr.accounts}</div>
+                    {/* Pipeline */}
+                    <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{tr.pipeline}</div>
+                    {/* Owner */}
+                    <div style={{ display:'flex', alignItems:'center', gap:6, minWidth:0 }}>
+                        {tr.ownerInit ? <UserAvatar name={tr.owner} size={20}/> : <span style={{ width:20, height:20, borderRadius:'50%', background:T.border, display:'inline-block', flexShrink:0 }}/>}
+                        <span style={{ fontSize:12, color: tr.status==='Unassigned' ? T.inkMuted : T.inkMid, fontStyle: tr.status==='Unassigned' ? 'italic' : 'normal', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{tr.owner}</span>
+                    </div>
+                    {/* Reps */}
+                    <div style={{ fontSize:13, color:T.ink }}>{tr.reps}</div>
+                    {/* Status */}
+                    <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                        background: tr.status==='Active' ? 'rgba(77,107,61,0.12)' : 'rgba(184,115,51,0.12)',
+                        color: tr.status==='Active' ? T.ok : T.warn }}>
+                        {tr.status}
+                    </span>
+                    {/* Kebab */}
+                    <button onClick={e=>e.stopPropagation()} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
+// ── ROLES & PERMISSIONS detail page ──────────────────────────
+const RolesDetail = ({ settings, onBack }) => {
+    const [activeRole, setActiveRole] = useState('r3'); // default: Sales Rep
+
+    const role   = PT_ROLES.find(r=>r.id===activeRole);
+    const perms  = PT_PERMS[activeRole] || {};
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {/* Breadcrumb */}
+            <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
+                <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+                <span>/</span>
+                <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>People & Teams</button>
+                <span>/</span>
+                <span style={{ color:T.ink, fontWeight:600 }}>Roles & permissions</span>
+            </div>
+
+            {/* Title band */}
+            <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>
+                <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+                    <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>Roles & permissions</div>
+                    <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                        <span>5 roles · 9 objects · 7 actions</span>
+                        <span style={{ color:T.inkMuted }}>•</span>
+                        <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
+                        <span>Editing — <b style={{ color:T.ink }}>{role?.name}</b></span>
+                        <span style={{ color:T.inkMuted }}>•</span>
+                        <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited last week by <b style={{ color:T.inkMid, fontWeight:500 }}>Morgan</b></span>
+                    </div>
+                </div>
+                <div style={{ display:'flex', gap:8 }}>
+                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Duplicate role</button>
+                    <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Compare</button>
+                    <button style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>New role</button>
+                </div>
+            </div>
+
+            {/* Role tabs */}
+            <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${T.border}`, marginBottom:18 }}>
+                {PT_ROLES.map(r => {
+                    const active = r.id === activeRole;
+                    return (
+                        <button key={r.id} onClick={() => setActiveRole(r.id)}
+                            style={{
+                                padding:'10px 20px', fontSize:13, fontWeight:600, border:'none', background:'transparent',
+                                cursor:'pointer', fontFamily:T.sans, position:'relative',
+                                color: active ? T.ink : T.inkMid,
+                                borderBottom: active ? `2px solid ${T.goldInk}` : '2px solid transparent',
+                                display:'flex', alignItems:'center', gap:6,
+                            }}>
+                            <span>{r.name}</span>
+                            <span style={{ fontSize:11, color:T.inkMuted }}>{r.userCount}</span>
+                            {r.sys && <span style={{ padding:'1px 4px', fontSize:9, fontWeight:800, background:'rgba(42,38,34,0.07)', color:T.inkMuted, borderRadius:2, letterSpacing:0.4 }}>SYS</span>}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Permission matrix */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                {/* Matrix header */}
+                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div>
+                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Permission matrix</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>
+                            Own pipelines, build quotes, send for approval. Toggle scope per object × action. Changes apply to {role?.userCount} users immediately.
+                        </div>
+                    </div>
+                    {/* Legend */}
+                    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:T.inkMuted }}>
+                        <span>Legend:</span>
+                        {['ALL','TEAM','OWN','—'].map(s => <ScopeBadge key={s} scope={s}/>)}
+                    </div>
+                </div>
+
+                {/* Table — use native table for proper column alignment */}
+                <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans }}>
+                    <thead>
+                        <tr style={{ background:T.surface2 }}>
+                            <th style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'left', borderBottom:`1px solid ${T.border}`, width:200 }}>OBJECT</th>
+                            {PT_PERM_ACTIONS.map(a => (
+                                <th key={a} style={{ padding:'8px 12px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'center', borderBottom:`1px solid ${T.border}` }}>{a}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {PT_PERM_OBJECTS.map((obj, oi) => {
+                            const p = perms[obj.id] || {};
+                            return (
+                                <tr key={obj.id} style={{ borderBottom: oi < PT_PERM_OBJECTS.length-1 ? `1px solid ${T.border}` : 'none' }}
+                                    onMouseEnter={e=>{ Array.from(e.currentTarget.cells).forEach(c=>c.style.background=T.surface2); }}
+                                    onMouseLeave={e=>{ Array.from(e.currentTarget.cells).forEach(c=>c.style.background='transparent'); }}>
+                                    <td style={{ padding:'11px 16px' }}>
+                                        <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{obj.name}</div>
+                                        <div style={{ fontSize:11, color:T.inkMuted }}>{obj.sub}</div>
+                                    </td>
+                                    {/* VIEW */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><ScopeBadge scope={p.view || '—'}/></td>
+                                    {/* CREATE */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.create}/></td>
+                                    {/* EDIT */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.edit}/></td>
+                                    {/* DELETE */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.delete}/></td>
+                                    {/* EXPORT */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.export}/></td>
+                                    {/* SHARE */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><ScopeBadge scope={p.share || '—'}/></td>
+                                    {/* APPROVE */}
+                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.approve}/></td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
 // ADMIN WORKSPACE VIEW
 // ─────────────────────────────────────────────────────────────
 const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter }) => {
@@ -5848,6 +6559,11 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         'approval-tiers':       'approval-tiers',
         'quote-templates':      'quote-templates',
         'price-book':           'price-book',
+        // People & Teams
+        'users':        'users',
+        'teams':        'teams',
+        'territories':  'territories',
+        'roles':        'roles',
         // Sales process Group 2
         'custom-fields':        'custom-fields',
         'pain-points':          'pain-points',
@@ -5874,6 +6590,12 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'quote-templates') return <QuoteTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'approval-tiers')  return <ApprovalTiersDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'price-book')      return <PriceBookDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
+
+        // People & Teams detail pages
+        if (id === 'users')       return <UsersDetail       settings={settings} onBack={onBack}/>;
+        if (id === 'teams')       return <TeamsDetail        settings={settings} onBack={onBack}/>;
+        if (id === 'territories') return <TerritoriesDetail settings={settings} onBack={onBack}/>;
+        if (id === 'roles')       return <RolesDetail       settings={settings} onBack={onBack}/>;
 
         // Sales process Group 2 detail pages
         if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
