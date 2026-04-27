@@ -6537,6 +6537,932 @@ const RolesDetail = ({ settings, onBack }) => {
     );
 };
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTEGRATIONS — data + shared primitives + four detail pages + four modals
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Shared primitives ─────────────────────────────────────────
+
+// Colored 36×36 app tile (initials or emoji)
+const AppTile = ({ name, color='#3a5a7a', size=36, emoji }) => (
+    <span style={{
+        display:'inline-flex', alignItems:'center', justifyContent:'center',
+        width:size, height:size, borderRadius:6,
+        background:color, color:'#fff',
+        fontSize: emoji ? size*0.55 : size*0.38, fontWeight:700, fontFamily:T.sans,
+        flexShrink:0, letterSpacing:0, userSelect:'none',
+    }}>{emoji || name.slice(0,2).toUpperCase()}</span>
+);
+
+// Traffic/status dot
+const StatusDot = ({ tone='ok', label }) => {
+    const c = { ok:T.ok, warn:T.warn, danger:T.danger, muted:T.inkMuted }[tone] || T.ok;
+    return (
+        <span style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:11.5, color:c, fontFamily:T.sans }}>
+            <span style={{ width:7, height:7, borderRadius:'50%', background:c, flexShrink:0 }}/>
+            {label}
+        </span>
+    );
+};
+
+// Masked API key: acc_live_••••••••xK3p
+const KeyMono = ({ prefix='acc_live_', tail='xK3p' }) => (
+    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid, letterSpacing:0.3 }}>
+        {prefix}<span style={{ opacity:0.5 }}>{'•'.repeat(8)}</span>{tail}
+    </span>
+);
+
+// 7-bar mini sparkline for API traffic / automation runs
+const MiniSpark = ({ data=[], color=T.ok }) => {
+    const max = Math.max(...data, 1);
+    return (
+        <div style={{ display:'inline-flex', alignItems:'flex-end', gap:2, height:20 }}>
+            {data.map((v,i) => (
+                <div key={i} style={{ width:4, height:Math.max(3, (v/max)*18), background: color, borderRadius:1, opacity: i===data.length-1 ? 1 : 0.55 }}/>
+            ))}
+        </div>
+    );
+};
+
+// Health bar: success rate + attempts count
+const HealthBar = ({ pct, attempts }) => {
+    const c = pct >= 98 ? T.ok : pct >= 90 ? T.warn : T.danger;
+    return (
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <div style={{ width:52, height:5, background:T.border, borderRadius:3, overflow:'hidden', flexShrink:0 }}>
+                <div style={{ width:`${pct}%`, height:'100%', background:c, borderRadius:3 }}/>
+            </div>
+            <span style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{attempts} tries</span>
+        </div>
+    );
+};
+
+// HTTP status code pill
+const StatusCode = ({ code }) => {
+    const c = code < 300 ? { bg:'rgba(77,107,61,0.12)', fg:T.ok }
+            : code < 500 ? { bg:'rgba(184,115,51,0.12)', fg:T.warn }
+            :               { bg:'rgba(156,58,46,0.12)', fg:T.danger };
+    return <span style={{ padding:'2px 7px', borderRadius:3, fontSize:11.5, fontWeight:700, background:c.bg, color:c.fg, fontFamily:'ui-monospace,Menlo,monospace' }}>{code}</span>;
+};
+
+// Trigger chip
+const TriggerChip = ({ type='record', label }) => {
+    const isSchedule = type === 'schedule';
+    return (
+        <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 8px', borderRadius:10,
+            background: isSchedule ? 'rgba(58,90,122,0.10)' : 'rgba(200,185,154,0.20)',
+            color: isSchedule ? T.info : T.goldInk, fontSize:11.5, fontWeight:600, fontFamily:T.sans, whiteSpace:'nowrap' }}>
+            <span style={{ fontSize:10 }}>{isSchedule ? '⏱' : '⚡'}</span>
+            {label}
+        </span>
+    );
+};
+
+// ── Data ──────────────────────────────────────────────────────
+
+const INT_APPS = [
+    // Connected
+    { id:'slack',    name:'Slack',      category:'Messaging',    color:'#4a154b', emoji:'💬', connected:true,  tone:'ok',   traffic:'1,247 msgs/day',       desc:'Post deal updates, alerts, and digest to channels.' },
+    { id:'gmail',    name:'Gmail',      category:'Email',        color:'#d93025', emoji:'✉',  connected:true,  tone:'ok',   traffic:'842 emails/day',        desc:'Sync sent/received emails to contact timelines.' },
+    { id:'outlook',  name:'Outlook',    category:'Email',        color:'#0078d4', emoji:'📧', connected:true,  tone:'warn', traffic:'Token refresh in 6d',   desc:'Sync sent/received emails to contact timelines.' },
+    { id:'zoom',     name:'Zoom',       category:'Video',        color:'#2d8cff', emoji:'📹', connected:true,  tone:'ok',   traffic:'34 meetings/week',      desc:'Log call recordings and transcripts to timelines.' },
+    { id:'docusign', name:'DocuSign',   category:'eSign',        color:'#f4b100', emoji:'✍',  connected:true,  tone:'ok',   traffic:'12 envelopes/day',      desc:'Send quotes for signature and track status.' },
+    { id:'linkedin', name:'LinkedIn',   category:'Prospecting',  color:'#0a66c2', emoji:'in', connected:true,  tone:'warn', traffic:'No traffic — verify scope', desc:'Auto-enrich leads with company & role data.' },
+    // Popular not connected
+    { id:'gcal',     name:'Google Calendar', category:'Calendar',   color:'#4285f4', emoji:'📅', connected:false, popular:true, desc:'Sync meetings with contacts automatically.' },
+    { id:'snowflake',name:'Snowflake',  category:'Data warehouse',color:'#29b5e8', emoji:'❄',  connected:false, popular:true, desc:'Push Accelerep data to your data warehouse.' },
+    { id:'clearbit', name:'Clearbit',   category:'Enrichment',   color:'#2869ff', emoji:'◈',  connected:false, popular:true, desc:'Real-time lead enrichment from Clearbit.' },
+    // Catalog
+    { id:'hubspot',  name:'HubSpot',    category:'CRM',          color:'#ff7a59', emoji:'🔶', connected:false, desc:'Bi-directional contact & deal sync.' },
+    { id:'salesforce',name:'Salesforce',category:'CRM',          color:'#00a1e0', emoji:'☁',  connected:false, desc:'Mirror pipeline to Salesforce objects.' },
+    { id:'intercom', name:'Intercom',   category:'Support',      color:'#6afdef', emoji:'💭', connected:false, desc:'Attach support tickets to accounts.' },
+    { id:'zendesk',  name:'Zendesk',    category:'Support',      color:'#03363d', emoji:'Z',  connected:false, desc:'Surface open tickets in deal views.' },
+    { id:'stripe',   name:'Stripe',     category:'Billing',      color:'#635bff', emoji:'💳', connected:false, desc:'Match invoices to closed-won deals.' },
+    { id:'gong',     name:'Gong',       category:'Sales intel',  color:'#7c3aed', emoji:'🎙', connected:false, desc:'Surface call insights on contacts.' },
+];
+
+const INT_API_KEYS = [
+    { id:'k1', name:'Production — pipeline sync', by:'Morgan Reyes', created:'Jan 14, 2024', prefix:'acc_live_', tail:'K3pQ', scopes:['leads:read','opps:read','opps:write','quotes:read'], rateLimit:'5,000 req/min', lastUsed:'2 minutes ago', traffic:[820,910,770,880,920,840,960], status:'Live' },
+    { id:'k2', name:'Reporting export — BI tool',  by:'Priya Sharma',  created:'Mar 2, 2024',  prefix:'acc_live_', tail:'R7wZ', scopes:['reports:read','contacts:read'], rateLimit:'1,000 req/min', lastUsed:'1 hour ago',    traffic:[120,140,110,130,150,125,145], status:'Live' },
+    { id:'k3', name:'Quote PDF webhook receiver',  by:'Jeff Hammond',  created:'May 18, 2024', prefix:'acc_live_', tail:'P2mX', scopes:['quotes:read','webhooks:read'], rateLimit:'500 req/min',   lastUsed:'yesterday',      traffic:[30,25,40,35,28,42,38], status:'Live' },
+    { id:'k4', name:'Sandbox — dev testing',        by:'Priya Sharma',  created:'Jun 1, 2024',  prefix:'acc_test_', tail:'D9nK', scopes:['leads:read','contacts:read','leads:write'], rateLimit:'500 req/min',   lastUsed:'3 days ago',     traffic:[5,12,8,3,0,4,7], status:'Test' },
+    { id:'k5', name:'Legacy mobile app (deprecated)',by:'Morgan Reyes', created:'Nov 1, 2023',  prefix:'acc_live_', tail:'L1vX', scopes:['leads:read','contacts:read'], rateLimit:'200 req/min',   lastUsed:'42 days ago',    traffic:[0,0,1,0,0,0,2], status:'Stale' },
+];
+
+const INT_WEBHOOKS = [
+    { id:'wh1', name:'Pipeline stage changes', url:'https://hooks.zapier.com/hooks/catch/12345/abcdef', events:['opp.stage_changed','opp.won','opp.lost'], successPct:100, attempts:284, lastDelivery:'2 minutes ago', status:'Healthy' },
+    { id:'wh2', name:'Quote approved → ERP',   url:'https://erp.acme.com/api/crm-events',              events:['quote.approved','quote.sent'],            successPct:98,  attempts:47,  lastDelivery:'1 hour ago',     status:'Healthy' },
+    { id:'wh3', name:'Acme billing reconcile', url:'https://billing.acme.com/webhooks/crm',             events:['quote.approved','account.updated'],       successPct:62,  attempts:34,  lastDelivery:'failing — 9h ago',status:'Failing' },
+    { id:'wh4', name:'Lead → Slack notify',    url:'https://hooks.slack.com/services/T123/B456/xyz',    events:['lead.created','lead.qualified'],           successPct:99,  attempts:512, lastDelivery:'4 minutes ago',  status:'Healthy' },
+];
+
+const INT_WEBHOOK_DELIVERIES = [
+    { id:'d1', time:'2 min ago',  endpoint:'Pipeline stage changes', event:'opp.stage_changed', code:200, latencyMs:182,  attempt:1 },
+    { id:'d2', time:'4 min ago',  endpoint:'Lead → Slack notify',    event:'lead.created',       code:200, latencyMs:94,   attempt:1 },
+    { id:'d3', time:'9h ago',     endpoint:'Acme billing reconcile', event:'quote.approved',     code:503, latencyMs:8420, attempt:4 },
+    { id:'d4', time:'1h ago',     endpoint:'Quote approved → ERP',   event:'quote.approved',     code:200, latencyMs:312,  attempt:1 },
+    { id:'d5', time:'12h ago',    endpoint:'Acme billing reconcile', event:'account.updated',    code:502, latencyMs:9100, attempt:3 },
+    { id:'d6', time:'yesterday',  endpoint:'Pipeline stage changes', event:'opp.won',            code:200, latencyMs:201,  attempt:1 },
+];
+
+const INT_AUTOMATIONS = [
+    { id:'a1',  name:'New lead → assign + notify',    owner:'Morgan Reyes', triggerType:'record',   trigger:'lead.created',       when:'lead.source = "website"',          then:'Assign round-robin · Slack #inbound',  runs:284, spark:[30,38,42,28,35,40,36], successPct:100,  lastRun:'2 min ago',  active:true },
+    { id:'a2',  name:'Deal stall alert',               owner:'Morgan Reyes', triggerType:'schedule', trigger:'schedule.daily',      when:'opp.last_activity > 7d',           then:'Email manager · Flag in pipeline',     runs:14,  spark:[1,2,1,2,3,2,3],  successPct:100,  lastRun:'9h ago',     active:true },
+    { id:'a3',  name:'Quote approved → DocuSign',      owner:'Priya Sharma', triggerType:'record',   trigger:'quote.approved',      when:'quote.value > 5000',               then:'Send DocuSign envelope',              runs:47,  spark:[4,6,8,5,7,9,8],  successPct:98,   lastRun:'1h ago',     active:true },
+    { id:'a4',  name:'Closed-won → ERP handoff',       owner:'Priya Sharma', triggerType:'record',   trigger:'opp.won',             when:'opp.type = "New business"',         then:'POST billing.acme.com · Notify CS',   runs:18,  spark:[1,2,3,2,1,3,2],  successPct:94,   lastRun:'3h ago',     active:true, issue:'3 ERP 503 errors this week' },
+    { id:'a5',  name:'MFA enforcement sweep',          owner:'Morgan Reyes', triggerType:'schedule', trigger:'schedule.weekly',     when:'user.mfa = false',                  then:'Email reminder · Flag in Users view',  runs:4,   spark:[1,0,1,1,0,0,1],  successPct:100,  lastRun:'Mon 9am',    active:true },
+    { id:'a6',  name:'Contract renewal 60d warning',   owner:'Priya Sharma', triggerType:'schedule', trigger:'schedule.daily',      when:'account.renewal_date ≤ 60d',        then:'Create task · Email AM',              runs:8,   spark:[0,1,0,1,2,1,2],  successPct:100,  lastRun:'9h ago',     active:true },
+    { id:'a7',  name:'High-value lead escalation',     owner:'Jeff Hammond', triggerType:'record',   trigger:'lead.score_updated',  when:'lead.score ≥ 85',                   then:'Assign AE · Slack #hot-leads',        runs:22,  spark:[2,3,4,3,2,4,3],  successPct:100,  lastRun:'30 min ago', active:true },
+    { id:'a8',  name:'Lost deal survey',               owner:'Morgan Reyes', triggerType:'record',   trigger:'opp.lost',            when:'always',                            then:'Send Typeform survey via email',       runs:9,   spark:[0,1,2,1,1,2,2],  successPct:100,  lastRun:'2 days ago', active:true },
+    { id:'a9',  name:'Territory re-assignment',        owner:'Priya Sharma', triggerType:'record',   trigger:'account.updated',     when:'account.state changed',             then:'Re-assign territory round-robin',     runs:31,  spark:[3,4,5,4,3,5,4],  successPct:97,   lastRun:'1h ago',     active:true },
+    { id:'a10', name:'Low-margin quote flag',          owner:'Priya Sharma', triggerType:'record',   trigger:'quote.created',       when:'quote.margin < 50%',                then:'Flag for manager approval',           runs:12,  spark:[1,2,1,1,2,2,1],  successPct:100,  lastRun:'4h ago',     active:true },
+    { id:'a11', name:'Weekly pipeline digest',         owner:'Morgan Reyes', triggerType:'schedule', trigger:'schedule.weekly',     when:'team.pipeline_value changed',       then:'Email team summary · Slack #sales',   runs:4,   spark:[1,1,0,1,0,1,0],  successPct:100,  lastRun:'Mon 8am',    active:true },
+    { id:'a12', name:'AE handoff on MQL',              owner:'Jeff Hammond', triggerType:'record',   trigger:'lead.qualified',      when:'lead.score ≥ 70',                   then:'Convert → Opportunity · Assign AE',   runs:38,  spark:[3,5,4,6,4,7,5],  successPct:100,  lastRun:'15 min ago', active:true },
+    // Paused
+    { id:'a13', name:'Competitor mention alert',       owner:'Devon Park',   triggerType:'record',   trigger:'contact.note_added',  when:'note contains competitor keywords', then:'Slack #competitive',                  runs:0,   spark:[0,0,0,0,0,0,0],  successPct:null, lastRun:'paused',     active:false },
+    { id:'a14', name:'EMEA overnight digest',          owner:'Ben Whitaker', triggerType:'schedule', trigger:'schedule.daily',      when:'team = "EMEA" · time = 08:00 CET',  then:'Email EMEA team summary',             runs:0,   spark:[0,0,0,0,0,0,0],  successPct:null, lastRun:'paused',     active:false },
+    { id:'a15', name:'Partner co-sell notify',         owner:'Morgan Reyes', triggerType:'record',   trigger:'opp.created',         when:'opp.source = "partner"',            then:'Email partner contact',               runs:0,   spark:[0,0,0,0,0,0,0],  successPct:null, lastRun:'paused',     active:false },
+];
+
+// ── Breadcrumb helper ─────────────────────────────────────────
+const IntCrumb = ({ page, onBack }) => (
+    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+        <span>/</span>
+        <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Integrations</button>
+        <span>/</span>
+        <span style={{ color:T.ink, fontWeight:600 }}>{page}</span>
+    </div>
+);
+
+// Title band shared pattern
+const IntTitle = ({ title, sub, actions, dirty }) => (
+    <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20 }}>
+        <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+            <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3, fontFamily:T.sans }}>
+                {title}{dirty && <span style={{ fontSize:12, fontWeight:500, color:T.warn, marginLeft:12 }}>● Unsaved</span>}
+            </div>
+            <div style={{ fontSize:13, color:T.inkMid, marginTop:3, fontFamily:T.sans }}>{sub}</div>
+        </div>
+        <div style={{ display:'flex', gap:8 }}>{actions}</div>
+    </div>
+);
+
+const IntBtn = ({ label, primary, onClick }) => (
+    <button onClick={onClick}
+        style={{ padding:'7px 14px', background: primary ? T.ink : T.surface, color: primary ? '#fbf8f3' : T.ink,
+            border: primary ? 'none' : `1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans, whiteSpace:'nowrap' }}
+        onMouseEnter={e=>e.currentTarget.style.background= primary ? '#3d3530' : T.surface2}
+        onMouseLeave={e=>e.currentTarget.style.background= primary ? T.ink : T.surface}>
+        {label}
+    </button>
+);
+
+// ── MODALS ────────────────────────────────────────────────────
+
+// Shared modal shell
+const IntModal = ({ width=560, onClose, children }) => (
+    <div onClick={onClose}
+        style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:T.sans }}>
+        <div onClick={e=>e.stopPropagation()}
+            style={{ background:T.surface, borderRadius:8, width, maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)' }}>
+            {children}
+        </div>
+    </div>
+);
+
+const IntModalHeader = ({ title, sub, onClose, left }) => (
+    <div style={{ padding:'18px 22px 14px', borderBottom:`1px solid ${T.border}`, flexShrink:0, display:'flex', alignItems:'flex-start', gap:12 }}>
+        {left}
+        <div style={{ flex:1 }}>
+            <div style={{ fontSize:17, fontWeight:700, color:T.ink, letterSpacing:-0.2 }}>{title}</div>
+            {sub && <div style={{ fontSize:12.5, color:T.inkMuted, marginTop:2 }}>{sub}</div>}
+        </div>
+        <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', padding:'2px 4px', lineHeight:1, borderRadius:4 }}
+            onMouseEnter={e=>e.currentTarget.style.color=T.ink} onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>×</button>
+    </div>
+);
+
+const IntModalFooter = ({ left, children }) => (
+    <div style={{ padding:'12px 22px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+        <div style={{ fontSize:11.5, color:T.inkMuted, fontStyle:'italic' }}>{left}</div>
+        <div style={{ display:'flex', gap:8 }}>{children}</div>
+    </div>
+);
+
+// 1. Connect app modal
+const ConnectAppModal = ({ app, onClose }) => {
+    const requiredScopes = ['Read contacts','Read & write calendar events','Send emails on your behalf'];
+    const optionalScopes = ['Read email metadata','Access contact photos'];
+    const [optOn, setOptOn] = useState([true, false]);
+    return (
+        <IntModal width={540} onClose={onClose}>
+            <IntModalHeader onClose={onClose}
+                left={<AppTile name={app?.name||'GC'} color={app?.color||'#4285f4'} emoji={app?.emoji} size={36}/>}
+                title={`Connect ${app?.name||'app'}`}
+                sub={`${app?.category||'Integration'} · by ${app?.name||'app'}`}/>
+            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
+                {/* Account row */}
+                <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:T.surface2, borderRadius:6, border:`1px solid ${T.border}`, marginBottom:16 }}>
+                    <UserAvatar name="Morgan Reyes" size={28}/>
+                    <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>Morgan Reyes</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted }}>morgan@accelerep.com</div>
+                    </div>
+                    <button style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Switch →</button>
+                </div>
+                {/* Required scopes */}
+                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:8, fontFamily:T.sans }}>Required permissions</div>
+                {requiredScopes.map((s,i) => (
+                    <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:`1px solid ${T.border}` }}>
+                        <span style={{ fontSize:13, color:T.ok }}>✓</span>
+                        <span style={{ flex:1, fontSize:13, color:T.ink }}>{s}</span>
+                        <span style={{ padding:'2px 6px', borderRadius:10, background:'rgba(77,107,61,0.12)', color:T.ok, fontSize:10.5, fontWeight:700 }}>Required</span>
+                    </div>
+                ))}
+                {/* Optional scopes */}
+                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', margin:'14px 0 8px', fontFamily:T.sans }}>Optional</div>
+                {optionalScopes.map((s,i) => (
+                    <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:`1px solid ${T.border}` }}>
+                        <span onClick={() => setOptOn(p=>{const n=[...p];n[i]=!n[i];return n;})}
+                            style={{ width:14, height:14, border:`1.5px solid ${optOn[i]?T.ok:T.border}`, borderRadius:2, background:optOn[i]?T.ok:'transparent', cursor:'pointer', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                            {optOn[i] && <span style={{ color:'#fff', fontSize:9, lineHeight:1 }}>✓</span>}
+                        </span>
+                        <span style={{ flex:1, fontSize:13, color:T.ink }}>{s}</span>
+                        <span style={{ padding:'2px 6px', borderRadius:10, background:'rgba(184,115,51,0.10)', color:T.warn, fontSize:10.5, fontWeight:700 }}>Optional</span>
+                    </div>
+                ))}
+                {/* Privacy callout */}
+                <div style={{ marginTop:14, padding:'10px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4 }}>
+                    <div style={{ fontSize:12, color:T.info, fontWeight:600, marginBottom:3 }}>Privacy note</div>
+                    <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.5 }}>Accelerep only reads data you explicitly grant. We never store email content — only metadata for timeline sync.</div>
+                </div>
+            </div>
+            <IntModalFooter left="You'll be redirected to Google to authorize.">
+                <IntBtn label="Cancel" onClick={onClose}/>
+                <IntBtn label={`Authorize ${app?.name||'app'}`} primary onClick={onClose}/>
+            </IntModalFooter>
+        </IntModal>
+    );
+};
+
+// 2. New API key modal — post-creation reveal state
+const NewApiKeyModal = ({ onClose }) => {
+    const [step, setStep] = useState('form'); // form | reveal
+    const [name, setName] = useState('');
+    const [env,  setEnv]  = useState('live');
+    const mockKey = 'acc_live_sk_9fKpQ2mXr7wZ3nDk8vLj1hYtBcEs4uGo';
+    const copied = React.useRef(false);
+
+    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
+
+    return (
+        <IntModal width={580} onClose={onClose}>
+            <IntModalHeader onClose={onClose} title={step==='form' ? 'Create API key' : 'Key created — copy it now'} sub={step==='form' ? 'Keys give programmatic access to Accelerep data.' : undefined}/>
+            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
+                {step === 'form' ? (
+                    <>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 120px', gap:12, marginBottom:14 }}>
+                            <div>
+                                <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Key name</label>
+                                <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Production pipeline sync" style={inp}/>
+                            </div>
+                            <div>
+                                <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Environment</label>
+                                <select value={env} onChange={e=>setEnv(e.target.value)} style={{ ...inp, appearance:'none', cursor:'pointer' }}>
+                                    <option value="live">Live</option>
+                                    <option value="test">Test</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style={{ marginBottom:14 }}>
+                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:6 }}>Scopes</label>
+                            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                                {['leads:read','leads:write','contacts:read','opps:read','opps:write','quotes:read','webhooks:read'].map(s => (
+                                    <span key={s} style={{ padding:'3px 8px', borderRadius:3, background:'rgba(58,90,122,0.10)', color:T.info, fontSize:11.5, fontFamily:'ui-monospace,Menlo,monospace' }}>{s}</span>
+                                ))}
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        {/* Success tile */}
+                        <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', background:'rgba(77,107,61,0.08)', border:`1px solid rgba(77,107,61,0.2)`, borderRadius:6, marginBottom:16 }}>
+                            <span style={{ fontSize:22, color:T.ok }}>✓</span>
+                            <div>
+                                <div style={{ fontSize:13.5, fontWeight:700, color:T.ok }}>Key created successfully</div>
+                                <div style={{ fontSize:12, color:T.inkMid, marginTop:1 }}>Copy it now — you won't be able to see it again.</div>
+                            </div>
+                        </div>
+                        {/* Dark key panel */}
+                        <div style={{ background:T.ink, borderRadius:6, padding:'14px 16px', marginBottom:14 }}>
+                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+                                <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:'#a8f0c8', wordBreak:'break-all', flex:1 }}>{mockKey}</code>
+                                <button onClick={()=>{ navigator.clipboard?.writeText(mockKey); }}
+                                    style={{ padding:'5px 12px', background:'rgba(255,255,255,0.12)', color:'#fbf8f3', border:'1px solid rgba(255,255,255,0.18)', borderRadius:4, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, flexShrink:0 }}>
+                                    Copy
+                                </button>
+                            </div>
+                        </div>
+                        {/* Warn callout */}
+                        <div style={{ padding:'10px 14px', background:'rgba(184,115,51,0.09)', borderLeft:`3px solid ${T.warn}`, borderRadius:4, marginBottom:14 }}>
+                            <div style={{ fontSize:12, color:T.warn, fontWeight:600, marginBottom:2 }}>Store this key securely</div>
+                            <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.5 }}>Never commit it to source control. Use environment variables or a secrets manager (Vault, 1Password, AWS SSM).</div>
+                        </div>
+                        {/* curl snippet */}
+                        <div style={{ background:'rgba(42,38,34,0.04)', border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px' }}>
+                            <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:6 }}>Test with curl</div>
+                            <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMid, lineHeight:1.6, display:'block' }}>
+                                {`curl -H "Authorization: Bearer ${mockKey.slice(0,22)}..." \\\n  https://api.accelerep.com/v1/leads`}
+                            </code>
+                        </div>
+                    </>
+                )}
+            </div>
+            <IntModalFooter left={step==='reveal' ? 'Download as .env' : ''}>
+                {step === 'form' ? (
+                    <>
+                        <IntBtn label="Cancel" onClick={onClose}/>
+                        <IntBtn label="Create key" primary onClick={()=>setStep('reveal')}/>
+                    </>
+                ) : (
+                    <IntBtn label="I've stored it — close" primary onClick={onClose}/>
+                )}
+            </IntModalFooter>
+        </IntModal>
+    );
+};
+
+// 3. New webhook modal
+const NewWebhookModal = ({ onClose }) => {
+    const [name, setName] = useState('');
+    const [url,  setUrl]  = useState('');
+    const [checked, setChecked] = useState(new Set(['opp.stage_changed','opp.won','quote.approved']));
+    const eventGroups = [
+        { group:'Pipeline',  events:['opp.stage_changed','opp.won','opp.lost','opp.created','opp.updated'] },
+        { group:'Quoting',   events:['quote.approved','quote.sent','quote.viewed','quote.signed'] },
+        { group:'Accounts',  events:['account.updated','account.created','contact.created','lead.created','lead.qualified'] },
+    ];
+    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
+    const toggle = (ev) => setChecked(p=>{ const n=new Set(p); n.has(ev)?n.delete(ev):n.add(ev); return n; });
+    return (
+        <IntModal width={620} onClose={onClose}>
+            <IntModalHeader onClose={onClose} title="New webhook endpoint" sub="We'll POST a signed JSON payload to your URL on each event."/>
+            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
+                    <div>
+                        <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Name</label>
+                        <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Pipeline → Zapier" style={inp}/>
+                    </div>
+                    <div>
+                        <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Signing secret</label>
+                        <select style={{ ...inp, appearance:'none', cursor:'pointer' }}>
+                            <option>HMAC-SHA256 (recommended)</option>
+                            <option>None</option>
+                        </select>
+                    </div>
+                </div>
+                <div style={{ marginBottom:14 }}>
+                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Endpoint URL</label>
+                    <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://hooks.example.com/accelerep" style={{ ...inp, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}/>
+                </div>
+                <div style={{ marginBottom:14 }}>
+                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Retry policy</label>
+                    <select style={{ ...inp, appearance:'none', cursor:'pointer', width:'50%' }}>
+                        <option>Exponential backoff (3 attempts)</option>
+                        <option>Fixed 5-minute intervals</option>
+                        <option>No retry</option>
+                    </select>
+                </div>
+                {/* Event picker */}
+                <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:8 }}>
+                    Events <span style={{ color:T.inkMuted, fontWeight:400 }}>({checked.size} selected)</span>
+                </div>
+                {eventGroups.map(({ group, events }) => (
+                    <div key={group} style={{ marginBottom:12 }}>
+                        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', padding:'5px 0', borderBottom:`1px solid ${T.border}`, marginBottom:4, fontFamily:T.sans }}>{group}</div>
+                        {events.map(ev => (
+                            <div key={ev} onClick={()=>toggle(ev)}
+                                style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 4px', cursor:'pointer', borderBottom:`1px solid ${T.border}` }}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                                onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                <span style={{ width:14, height:14, border:`1.5px solid ${checked.has(ev)?T.ok:T.border}`, borderRadius:2, background:checked.has(ev)?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                    {checked.has(ev) && <span style={{ color:'#fff', fontSize:9 }}>✓</span>}
+                                </span>
+                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.ink }}>{ev}</span>
+                            </div>
+                        ))}
+                    </div>
+                ))}
+            </div>
+            <IntModalFooter left="A signing secret will be revealed once on creation.">
+                <IntBtn label="Cancel" onClick={onClose}/>
+                <IntBtn label="Create endpoint" primary onClick={onClose}/>
+            </IntModalFooter>
+        </IntModal>
+    );
+};
+
+// 4. New automation modal — 4-step stepper
+const NewAutomationModal = ({ onClose }) => {
+    const [step, setStep] = useState(1);
+    const [autoName, setAutoName] = useState('');
+    const [selectedTrigger, setSelectedTrigger] = useState('opp.stage_changed');
+    const triggers = [
+        { key:'opp.stage_changed', label:'Deal stage changed', type:'record', icon:'⚡' },
+        { key:'opp.won',           label:'Deal won',           type:'record', icon:'⚡' },
+        { key:'lead.created',      label:'Lead created',       type:'record', icon:'⚡' },
+        { key:'quote.approved',    label:'Quote approved',     type:'record', icon:'⚡' },
+        { key:'schedule.daily',    label:'Daily schedule',     type:'schedule',icon:'⏱' },
+        { key:'schedule.weekly',   label:'Weekly schedule',    type:'schedule',icon:'⏱' },
+    ];
+    const steps = ['Trigger','Condition','Actions','Review'];
+    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
+    return (
+        <IntModal width={720} onClose={onClose}>
+            <IntModalHeader onClose={onClose} title="New automation" sub="Define a trigger, conditions, and the actions to take."/>
+            {/* Stepper */}
+            <div style={{ display:'flex', borderBottom:`1px solid ${T.border}`, padding:'0 22px', flexShrink:0 }}>
+                {steps.map((s,i) => {
+                    const n = i+1;
+                    const active = step===n, done = step>n;
+                    return (
+                        <div key={s} style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 16px 10px 0', fontSize:12.5, fontWeight:600, cursor: done ? 'pointer' : 'default', color: active ? T.ink : done ? T.ok : T.inkMuted, borderBottom: active ? `2px solid ${T.goldInk}` : '2px solid transparent' }}
+                            onClick={()=>{ if(done) setStep(n); }}>
+                            <span style={{ width:20, height:20, borderRadius:'50%', border:`1.5px solid ${active?T.goldInk:done?T.ok:T.border}`, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:11, background: done ? T.ok : 'transparent', color: done ? '#fff' : active ? T.goldInk : T.inkMuted }}>
+                                {done ? '✓' : n}
+                            </span>
+                            {s}
+                        </div>
+                    );
+                })}
+            </div>
+            {/* Step body */}
+            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
+                {step===1 && (
+                    <>
+                        <div style={{ marginBottom:14 }}>
+                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Automation name</label>
+                            <input value={autoName} onChange={e=>setAutoName(e.target.value)} placeholder="e.g. New lead → assign + notify" style={inp}/>
+                        </div>
+                        <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:8 }}>Trigger event</div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                            {triggers.map(tr => {
+                                const sel = selectedTrigger===tr.key;
+                                return (
+                                    <div key={tr.key} onClick={()=>setSelectedTrigger(tr.key)}
+                                        style={{ padding:'10px 14px', border:`1.5px solid ${sel?T.goldInk:T.border}`, borderRadius:6, cursor:'pointer', display:'flex', alignItems:'center', gap:10, background: sel?'rgba(200,185,154,0.10)':T.surface }}>
+                                        <span style={{ fontSize:16 }}>{tr.icon}</span>
+                                        <div>
+                                            <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{tr.label}</div>
+                                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMuted }}>{tr.key}</div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </>
+                )}
+                {step===2 && (
+                    <div>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, marginBottom:12 }}>When condition</div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 1fr', gap:10 }}>
+                            <select style={{ ...inp, appearance:'none', cursor:'pointer' }}>
+                                <option>opp.stage</option><option>opp.value</option><option>opp.owner</option>
+                            </select>
+                            <select style={{ ...inp, appearance:'none', cursor:'pointer' }}>
+                                <option>changed to</option><option>equals</option><option>is greater than</option>
+                            </select>
+                            <input placeholder="Closed Won" style={{ ...inp, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}/>
+                        </div>
+                    </div>
+                )}
+                {step===3 && (
+                    <div>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, marginBottom:12 }}>Then do</div>
+                        {/* Action row */}
+                        <div style={{ padding:'12px 14px', border:`1px solid ${T.border}`, borderRadius:6, display:'flex', alignItems:'center', gap:10, marginBottom:8, background:T.surface }}>
+                            <AppTile name="SL" color="#4a154b" emoji="💬" size={24}/>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>Post to Slack channel</div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted }}>#sales-alerts · include deal value, owner, stage</div>
+                            </div>
+                            <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer' }}>×</button>
+                        </div>
+                        {/* Add action slot */}
+                        <div style={{ padding:'12px 14px', border:`1.5px dashed ${T.border}`, borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center', gap:8, cursor:'pointer', color:T.inkMuted, fontSize:12.5 }}
+                            onMouseEnter={e=>e.currentTarget.style.borderColor=T.goldInk}
+                            onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                            <span>+</span> Add action
+                        </div>
+                    </div>
+                )}
+                {step===4 && (
+                    <div>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, marginBottom:12 }}>Review & activate</div>
+                        {[
+                            { label:'Name',      value: autoName || 'Untitled automation' },
+                            { label:'Trigger',   value: triggers.find(t=>t.key===selectedTrigger)?.label },
+                            { label:'Condition', value: 'opp.stage changed to Closed Won' },
+                            { label:'Actions',   value: 'Post to Slack #sales-alerts' },
+                        ].map((r,i) => (
+                            <div key={i} style={{ display:'grid', gridTemplateColumns:'130px 1fr', gap:10, padding:'9px 0', borderBottom:`1px solid ${T.border}` }}>
+                                <div style={{ fontSize:12, fontWeight:600, color:T.inkMid }}>{r.label}</div>
+                                <div style={{ fontSize:13, color:T.ink }}>{r.value}</div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+            <IntModalFooter left={step===4 ? 'Automation activates immediately on save.' : `Step ${step} of 4`}>
+                <IntBtn label="Save as draft" onClick={onClose}/>
+                {step < 4
+                    ? <IntBtn label="Next →" primary onClick={()=>setStep(s=>s+1)}/>
+                    : <IntBtn label="Activate automation" primary onClick={onClose}/>}
+            </IntModalFooter>
+        </IntModal>
+    );
+};
+
+// ── ① Connected Apps ──────────────────────────────────────────
+const ConnectedAppsDetail = ({ onBack }) => {
+    const [connectModal, setConnectModal] = useState(null);
+    const [catFilter, setCatFilter] = useState('All');
+    const connected = INT_APPS.filter(a=>a.connected);
+    const popular   = INT_APPS.filter(a=>a.popular);
+    const catalog   = INT_APPS.filter(a=>!a.connected && !a.popular);
+    const cats = ['All',...new Set(catalog.map(a=>a.category))];
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {connectModal && <ConnectAppModal app={connectModal} onClose={()=>setConnectModal(null)}/>}
+            <IntCrumb page="Connected apps" onBack={onBack}/>
+            <IntTitle title="Connected apps" sub={`${connected.length} connected · browse and manage your integration catalog`}
+                actions={[<IntBtn key="mkt" label="Browse marketplace"/>, <IntBtn key="req" label="+ Request integration" primary/>]}/>
+
+            {/* Section 1 — Connected */}
+            <div style={{ marginBottom:24 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:12 }}>Connected ({connected.length})</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:14 }}>
+                    {connected.map(app => (
+                        <div key={app.id} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16, display:'flex', flexDirection:'column', gap:10 }}>
+                            <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
+                                <AppTile name={app.name} color={app.color} emoji={app.emoji} size={36}/>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{app.name}</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted }}>{app.category}</div>
+                                </div>
+                            </div>
+                            <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.4 }}>{app.desc}</div>
+                            <div style={{ paddingTop:8, borderTop:`1px solid ${T.border}` }}>
+                                <StatusDot tone={app.tone} label={app.traffic}/>
+                            </div>
+                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                                <span style={{ fontSize:11, color:T.inkMuted }}>by {app.name} · connected today</span>
+                                <button style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Manage →</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Section 2 — Popular */}
+            <div style={{ marginBottom:24 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:10 }}>Popular</div>
+                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                    {popular.map((app,i) => (
+                        <div key={app.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', borderBottom: i<popular.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                            <AppTile name={app.name} color={app.color} emoji={app.emoji} size={32}/>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{app.name}</div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted }}>{app.desc}</div>
+                            </div>
+                            <span style={{ fontSize:11.5, color:T.inkMuted, marginRight:8 }}>{app.category}</span>
+                            <button onClick={()=>setConnectModal(app)}
+                                style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Connect</button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Section 3 — All apps catalog */}
+            <div>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>All apps</div>
+                    <div style={{ display:'flex', gap:4 }}>
+                        {cats.map(c => (
+                            <button key={c} onClick={()=>setCatFilter(c)}
+                                style={{ padding:'3px 10px', fontSize:11.5, fontWeight:600, borderRadius:10, border:`1px solid ${catFilter===c?T.ink:T.border}`, background:catFilter===c?T.ink:'transparent', color:catFilter===c?'#fbf8f3':T.inkMid, cursor:'pointer', fontFamily:T.sans }}>{c}</button>
+                        ))}
+                    </div>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
+                    {catalog.filter(a=>catFilter==='All'||a.category===catFilter).map(app => (
+                        <div key={app.id} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:'12px 14px', display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}
+                            onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderStrong}
+                            onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                            <AppTile name={app.name} color={app.color} emoji={app.emoji} size={28}/>
+                            <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{app.name}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted }}>{app.category}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── ② API Keys ────────────────────────────────────────────────
+const ApiKeysDetail = ({ onBack }) => {
+    const [filter, setFilter] = useState('All');
+    const [showModal, setShowModal] = useState(false);
+    const visible = INT_API_KEYS.filter(k => filter==='All' || k.status===filter);
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showModal && <NewApiKeyModal onClose={()=>setShowModal(false)}/>}
+            <IntCrumb page="API keys" onBack={onBack}/>
+            <IntTitle title="API keys" sub="Workspace REST API credentials · 3 active keys · last edited 2 months ago by Admin"
+                actions={[
+                    <IntBtn key="docs" label="View docs ↗"/>,
+                    <IntBtn key="new" label="+ Create key" primary onClick={()=>setShowModal(true)}/>,
+                ]}/>
+
+            {/* Filter + table */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:18 }}>
+                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Keys</div>
+                    <div style={{ display:'flex', gap:0, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:2 }}>
+                        {['All','Live','Test','Stale'].map(f => (
+                            <button key={f} onClick={()=>setFilter(f)}
+                                style={{ padding:'4px 10px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans, background:filter===f?T.ink:'transparent', color:filter===f?'#fbf8f3':T.inkMid }}>{f}</button>
+                        ))}
+                    </div>
+                </div>
+                {/* Header */}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 200px 160px 100px 120px 120px 90px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                    {['NAME','KEY','SCOPES','RATE LIMIT','LAST USED','7D TRAFFIC','STATUS',''].map((h,i) => (
+                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                    ))}
+                </div>
+                {visible.map((k,i) => {
+                    const stale = k.status==='Stale';
+                    return (
+                        <div key={k.id} style={{ display:'grid', gridTemplateColumns:'1fr 200px 160px 100px 120px 120px 90px 32px', gap:8, padding:'11px 16px', borderBottom:i<visible.length-1?`1px solid ${T.border}`:'none', alignItems:'center', opacity: stale ? 0.72 : 1 }}>
+                            {/* Name */}
+                            <div>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{k.name}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted }}>by {k.by} · {k.created}</div>
+                            </div>
+                            {/* Key */}
+                            <KeyMono prefix={k.prefix} tail={k.tail}/>
+                            {/* Scopes */}
+                            <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
+                                {k.scopes.slice(0,2).map(s => (
+                                    <span key={s} style={{ padding:'1px 5px', borderRadius:3, background:'rgba(58,90,122,0.10)', color:T.info, fontSize:10, fontFamily:'ui-monospace,Menlo,monospace' }}>{s}</span>
+                                ))}
+                                {k.scopes.length > 2 && <span style={{ fontSize:10, color:T.inkMuted }}>+{k.scopes.length-2}</span>}
+                            </div>
+                            {/* Rate limit */}
+                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>{k.rateLimit}</div>
+                            {/* Last used */}
+                            <div style={{ fontSize:12, color: stale ? T.danger : T.inkMid }}>{k.lastUsed}</div>
+                            {/* Sparkline + calls */}
+                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                <MiniSpark data={k.traffic} color={stale?T.border:T.ok}/>
+                            </div>
+                            {/* Status */}
+                            <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                background: k.status==='Live'?'rgba(77,107,61,0.12)':k.status==='Test'?'rgba(58,90,122,0.10)':'rgba(184,115,51,0.12)',
+                                color: k.status==='Live'?T.ok:k.status==='Test'?T.info:T.warn }}>
+                                {k.status}
+                            </span>
+                            <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Workspace defaults */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:18 }}>
+                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:14 }}>Workspace defaults</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:18 }}>
+                    {[
+                        { label:'Default rate limit', value:'1,000 req/min' },
+                        { label:'Default expiration', value:'365 days' },
+                        { label:'Default IP allowlist', value:'0.0.0.0/0 (any)' },
+                    ].map((f,i) => (
+                        <div key={i}>
+                            <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</div>
+                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, color:T.ink }}>{f.value}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── ③ Webhooks ────────────────────────────────────────────────
+const WebhooksDetail = ({ onBack, focusFailing=false }) => {
+    const [showModal, setShowModal] = useState(false);
+    const failing = INT_WEBHOOKS.filter(w=>w.status==='Failing');
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showModal && <NewWebhookModal onClose={()=>setShowModal(false)}/>}
+            <IntCrumb page="Webhooks" onBack={onBack}/>
+            <IntTitle title="Webhooks" sub="4 endpoints · 1 failing · subscribe to CRM events and push to your services"
+                actions={[
+                    <IntBtn key="del" label="View deliveries"/>,
+                    <IntBtn key="ref" label="Event reference ↗"/>,
+                    <IntBtn key="new" label="+ New endpoint" primary onClick={()=>setShowModal(true)}/>,
+                ]}/>
+
+            {/* Failing callout */}
+            {failing.length > 0 && (
+                <div style={{ padding:'12px 16px', background:'rgba(156,58,46,0.07)', borderLeft:`3px solid ${T.danger}`, borderRadius:6, marginBottom:18, display:'flex', alignItems:'center', gap:14 }}>
+                    <span style={{ fontSize:18, color:T.danger }}>⚠</span>
+                    <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:T.danger }}>1 endpoint failing</div>
+                        <div style={{ fontSize:12, color:T.inkMid, marginTop:2 }}><b>{failing[0].name}</b> — last attempt 9h ago · 38% success rate · 4 retries exhausted</div>
+                    </div>
+                    <button style={{ padding:'6px 14px', background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Investigate</button>
+                </div>
+            )}
+
+            {/* Endpoints table */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:18 }}>
+                <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Endpoints</div>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 180px 130px 130px 90px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                    {['ENDPOINT','EVENTS','SUCCESS 30D','LAST DELIVERY','STATUS',''].map((h,i) => (
+                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                    ))}
+                </div>
+                {INT_WEBHOOKS.map((wh,i) => (
+                    <div key={wh.id} style={{ display:'grid', gridTemplateColumns:'1fr 180px 130px 130px 90px 32px', gap:8, padding:'11px 16px', borderBottom:i<INT_WEBHOOKS.length-1?`1px solid ${T.border}`:'none', alignItems:'center',
+                        background: wh.status==='Failing' ? 'rgba(156,58,46,0.03)' : 'transparent' }}>
+                        {/* Endpoint */}
+                        <div>
+                            <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{wh.name}</div>
+                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMuted, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{wh.url}</div>
+                        </div>
+                        {/* Events */}
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
+                            {wh.events.slice(0,1).map(ev => (
+                                <span key={ev} style={{ padding:'1px 5px', borderRadius:3, background:'rgba(58,90,122,0.09)', color:T.info, fontSize:10, fontFamily:'ui-monospace,Menlo,monospace' }}>{ev}</span>
+                            ))}
+                            {wh.events.length>1 && <span style={{ fontSize:10, color:T.inkMuted }}>+{wh.events.length-1}</span>}
+                        </div>
+                        {/* Health bar */}
+                        <HealthBar pct={wh.successPct} attempts={wh.attempts}/>
+                        {/* Last delivery */}
+                        <div style={{ fontSize:12, color: wh.status==='Failing' ? T.danger : T.inkMid }}>{wh.lastDelivery}</div>
+                        {/* Status */}
+                        <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                            background: wh.status==='Healthy'?'rgba(77,107,61,0.12)':'rgba(156,58,46,0.12)',
+                            color: wh.status==='Healthy'?T.ok:T.danger }}>
+                            {wh.status}
+                        </span>
+                        <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+                    </div>
+                ))}
+            </div>
+
+            {/* Recent deliveries */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Recent deliveries</div>
+                    <button style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>View all →</button>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'90px 1fr 160px 80px 80px 1fr', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                    {['TIME','ENDPOINT','EVENT','STATUS','LATENCY',''].map((h,i) => (
+                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                    ))}
+                </div>
+                {INT_WEBHOOK_DELIVERIES.map((d,i) => (
+                    <div key={d.id} style={{ display:'grid', gridTemplateColumns:'90px 1fr 160px 80px 80px 1fr', gap:8, padding:'9px 16px', borderBottom:i<INT_WEBHOOK_DELIVERIES.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                        <div style={{ fontSize:11.5, color:T.inkMuted }}>{d.time}</div>
+                        <div style={{ fontSize:12.5, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.endpoint}</div>
+                        <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.info }}>{d.event}</span>
+                        <StatusCode code={d.code}/>
+                        <div style={{ fontSize:12, color: d.latencyMs > 5000 ? T.warn : T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{d.latencyMs > 1000 ? `${(d.latencyMs/1000).toFixed(1)}s` : `${d.latencyMs}ms`}</div>
+                        <div style={{ fontSize:11, color:T.inkMuted }}>{d.attempt > 1 ? `#${d.attempt} retry` : '#1'}</div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// ── ④ Automations ─────────────────────────────────────────────
+const AutomationsDetail = ({ onBack }) => {
+    const [filter, setFilter] = useState('All');
+    const [showModal, setShowModal] = useState(false);
+
+    const active  = INT_AUTOMATIONS.filter(a=>a.active);
+    const paused  = INT_AUTOMATIONS.filter(a=>!a.active);
+    const failing = INT_AUTOMATIONS.filter(a=>a.active && a.issue);
+    const totalRuns = INT_AUTOMATIONS.reduce((s,a)=>s+a.runs,0);
+    const avgSuccess = Math.round(active.filter(a=>a.successPct!=null).reduce((s,a)=>s+(a.successPct||0),0) / active.filter(a=>a.successPct!=null).length);
+
+    const visible = INT_AUTOMATIONS.filter(a => {
+        if (filter==='Active')  return a.active;
+        if (filter==='Paused')  return !a.active;
+        if (filter==='Failing') return a.issue;
+        return true;
+    });
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showModal && <NewAutomationModal onClose={()=>setShowModal(false)}/>}
+            <IntCrumb page="Automations" onBack={onBack}/>
+            <IntTitle title="Automations" sub={`${active.length} active · ${paused.length} paused · rules, triggers, and scheduled jobs`}
+                actions={[
+                    <IntBtn key="tpl" label="Browse templates"/>,
+                    <IntBtn key="his" label="View run history"/>,
+                    <IntBtn key="new" label="+ New automation" primary onClick={()=>setShowModal(true)}/>,
+                ]}/>
+
+            {/* Stats strip */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:14, marginBottom:20 }}>
+                {[
+                    { label:'Rules',          value:INT_AUTOMATIONS.length, color:T.ink },
+                    { label:'Runs / 30d',     value:totalRuns,              color:T.ink },
+                    { label:'Success rate',   value:`${avgSuccess}%`,       color:avgSuccess>=98?T.ok:T.warn },
+                    { label:'Failed (24h)',   value:failing.length,         color:failing.length>0?T.danger:T.ok },
+                ].map((s,i) => (
+                    <div key={i} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:'16px 18px' }}>
+                        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:8, fontFamily:T.sans }}>{s.label}</div>
+                        <div style={{ fontSize:28, fontWeight:700, color:s.color, fontFamily:T.serif, fontStyle:'italic', letterSpacing:-0.5 }}>{s.value}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Rules table */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Rules</div>
+                    <div style={{ display:'flex', gap:0, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:2 }}>
+                        {['All','Active','Paused','Failing'].map(f => (
+                            <button key={f} onClick={()=>setFilter(f)}
+                                style={{ padding:'4px 10px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans, background:filter===f?T.ink:'transparent', color:filter===f?'#fbf8f3':T.inkMid }}>{f}</button>
+                        ))}
+                    </div>
+                </div>
+                {/* Header */}
+                <div style={{ display:'grid', gridTemplateColumns:'60px 1fr 160px 120px 1fr 80px 80px 100px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                    {['ON','NAME','TRIGGER','WHEN','THEN','RUNS','SUCCESS','LAST RUN',''].map((h,i) => (
+                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                    ))}
+                </div>
+                {visible.map((rule, i) => (
+                    <div key={rule.id}
+                        style={{ display:'grid', gridTemplateColumns:'60px 1fr 160px 120px 1fr 80px 80px 100px 32px', gap:8, padding:'10px 16px', borderBottom:i<visible.length-1?`1px solid ${T.border}`:'none', alignItems:'center', opacity:rule.active?1:0.62 }}>
+                        {/* On/off toggle pill */}
+                        <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:10, fontSize:11, fontWeight:700,
+                            background: rule.active?'rgba(77,107,61,0.12)':'rgba(138,131,120,0.14)',
+                            color: rule.active?T.ok:T.inkMuted, cursor:'pointer' }}>
+                            <span style={{ width:7, height:7, borderRadius:'50%', background:rule.active?T.ok:T.inkMuted }}/>
+                            {rule.active?'On':'Off'}
+                        </span>
+                        {/* Name */}
+                        <div>
+                            <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{rule.name}</div>
+                            <div style={{ fontSize:11, color:T.inkMuted }}>{rule.owner}</div>
+                            {rule.issue && <div style={{ fontSize:11, color:T.danger, marginTop:2 }}>⚠ {rule.issue}</div>}
+                        </div>
+                        {/* Trigger chip */}
+                        <TriggerChip type={rule.triggerType} label={rule.trigger}/>
+                        {/* When */}
+                        <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMid, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{rule.when}</div>
+                        {/* Then */}
+                        <div style={{ fontSize:12, color:T.inkMid, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{rule.then}</div>
+                        {/* Runs sparkline */}
+                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                            <MiniSpark data={rule.spark} color={rule.active?T.ok:T.border}/>
+                            <span style={{ fontSize:11, color:T.inkMuted }}>{rule.runs}</span>
+                        </div>
+                        {/* Success % */}
+                        <div style={{ fontSize:12, fontWeight:600, color: rule.successPct == null ? T.inkMuted : rule.successPct < 95 ? T.warn : T.ok }}>
+                            {rule.successPct != null ? `${rule.successPct}%` : '—'}
+                        </div>
+                        {/* Last run */}
+                        <div style={{ fontSize:11.5, color:T.inkMuted }}>{rule.lastRun}</div>
+                        {/* Kebab */}
+                        <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 // ADMIN WORKSPACE VIEW
 // ─────────────────────────────────────────────────────────────
 const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter }) => {
@@ -6559,6 +7485,11 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         'approval-tiers':       'approval-tiers',
         'quote-templates':      'quote-templates',
         'price-book':           'price-book',
+        // Integrations
+        'apps':         'apps',
+        'api-keys':     'api-keys',
+        'webhooks':     'webhooks',
+        'automations':  'automations',
         // People & Teams
         'users':        'users',
         'teams':        'teams',
@@ -6590,6 +7521,12 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'quote-templates') return <QuoteTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'approval-tiers')  return <ApprovalTiersDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'price-book')      return <PriceBookDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
+
+        // Integrations detail pages
+        if (id === 'apps')        return <ConnectedAppsDetail onBack={onBack}/>;
+        if (id === 'api-keys')    return <ApiKeysDetail      onBack={onBack}/>;
+        if (id === 'webhooks')    return <WebhooksDetail     onBack={onBack}/>;
+        if (id === 'automations') return <AutomationsDetail  onBack={onBack}/>;
 
         // People & Teams detail pages
         if (id === 'users')       return <UsersDetail       settings={settings} onBack={onBack}/>;
@@ -6712,7 +7649,8 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
                                     <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{it.name}</div>
                                     <div style={{ fontSize:11, color:T.inkMid, marginTop:1, fontFamily:T.sans }}>{it.statusDetail}</div>
                                 </div>
-                                <button style={{ padding:'4px 10px', fontSize:11, fontWeight:600, background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Fix</button>
+                                <button onClick={() => setActiveItem(SETTINGS_ITEMS.find(i=>i.id===it.id)||it)}
+                                    style={{ padding:'4px 10px', fontSize:11, fontWeight:600, background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Fix →</button>
                             </div>
                         ))}
                         {attentionItems.length === 0 && <div style={{ fontSize:12, color:T.ok, fontFamily:T.sans }}>All checks passing ✓</div>}
