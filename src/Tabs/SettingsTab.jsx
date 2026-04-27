@@ -8422,6 +8422,898 @@ const AuditDetail = ({ onBack }) => {
     );
 };
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS → DATA — data fixtures + primitives + four detail pages + four modals
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Fixtures ──────────────────────────────────────────────────
+
+const DATA_IMPORT = {
+    lastRun: { ts:'3 days ago', rows:812, errors:14, by:'morgan@accelerep.com', object:'Accounts' },
+    history: [
+        { id:'imp-014', ts:'3 days ago',  object:'Accounts',      rows:812,  errors:14, status:'partial',   by:'morgan@accelerep.com' },
+        { id:'imp-013', ts:'1 week ago',  object:'Contacts',      rows:2410, errors:0,  status:'success',   by:'morgan@accelerep.com' },
+        { id:'imp-012', ts:'2 weeks ago', object:'Leads',         rows:1680, errors:3,  status:'partial',   by:'jeff@accelerep.com'   },
+        { id:'imp-011', ts:'3 weeks ago', object:'Opportunities', rows:248,  errors:0,  status:'success',   by:'morgan@accelerep.com' },
+        { id:'imp-010', ts:'1 month ago', object:'Accounts',      rows:412,  errors:0,  status:'success',   by:'morgan@accelerep.com' },
+    ],
+    wizard: {
+        step:'map',
+        file:{ name:'salesforce-accounts-2026-q1.csv', size:'4.2 MB', rows:812, encoding:'UTF-8' },
+        columns:[
+            { csv:'Account Name',  target:'name',          type:'text',     sample:'Acme Corp',          confidence:0.99, required:true  },
+            { csv:'Domain',        target:'domain',        type:'url',      sample:'acme.com',           confidence:0.97, required:true  },
+            { csv:'Annual Revenue',target:'annualRevenue', type:'currency', sample:'$12,400,000',        confidence:0.94 },
+            { csv:'Employees',     target:'employeeCount', type:'number',   sample:'320',                confidence:0.99 },
+            { csv:'Industry',      target:'industry',      type:'enum',     sample:'Manufacturing',      confidence:0.91 },
+            { csv:'Tier',          target:'customerTier',  type:'enum',     sample:'Enterprise',         confidence:0.84 },
+            { csv:'Owner Email',   target:'ownerEmail',    type:'email',    sample:'morgan@accelerep…',  confidence:0.99 },
+            { csv:'Created (UTC)', target:'createdAt',     type:'datetime', sample:'2024-04-12T10:14Z',  confidence:0.96 },
+            { csv:'Notes',         target:'__skip__',      type:'text',     sample:'pricing call w/ CTO',confidence:0.42 },
+            { csv:'Salesforce ID', target:'externalId',    type:'text',     sample:'0014x000abcd1234',   confidence:0.88 },
+        ],
+        dedupe:{ match:'domain', onMatch:'update', skipBlanks:true },
+        preview:{ willCreate:612, willUpdate:186, willSkip:14, errors:[
+            { row:47,  field:'domain',        msg:'Invalid format: "n/a"' },
+            { row:112, field:'annualRevenue', msg:'Could not parse "TBD"' },
+            { row:304, field:'industry',      msg:'"Crypto" not in industry taxonomy' },
+        ]},
+    },
+};
+
+const DATA_EXPORT = {
+    schedules:[
+        { id:'sch-01', name:'Weekly account snapshot',         scope:'Accounts (all)',                cadence:'Weekly · Mon 06:00 UTC', destination:'s3://acme-export/accounts/',  format:'CSV',       last:'2 days ago', size:'12.4 MB', enabled:true,  status:'ok' },
+        { id:'sch-02', name:'Pipeline weekly digest',          scope:'Opportunities (open)',          cadence:'Weekly · Fri 22:00 UTC', destination:'email:finance@…',             format:'XLSX',      last:'5 days ago', size:'480 KB',  enabled:true,  status:'ok' },
+        { id:'sch-03', name:'Daily activity log',              scope:'Activity (all touchpoints)',    cadence:'Daily · 02:00 UTC',      destination:'snowflake:stg.activity',      format:'NDJSON.gz', last:'14h ago',    size:'88 MB',   enabled:true,  status:'ok' },
+        { id:'sch-04', name:'Marketing handoff',               scope:'Leads (closed-won)',            cadence:'Weekly · Wed 08:00 UTC', destination:'webhook:hubspot.com/…',       format:'JSON',      last:'failing 3×', size:'—',       enabled:true,  status:'failing' },
+        { id:'sch-05', name:'GDPR DSR archive',                scope:'Per-subject (PII bundle)',      cadence:'On request',             destination:'secure download link',        format:'ZIP',       last:'3 weeks ago',size:'2.1 MB',  enabled:true,  status:'ok' },
+        { id:'sch-06', name:'Closed deals quarterly (paused)', scope:'Opportunities (won)',           cadence:'Quarterly · 1st 00:00',  destination:'sftp://reporting.acme/…',     format:'CSV',       last:'6 weeks ago',size:'—',       enabled:false, status:'ok' },
+    ],
+    recent:[
+        { ts:'today, 14:02', name:'Ad-hoc · Q1 deals',         by:'jeff@accelerep.com',   rows:248,   format:'XLSX',size:'120 KB', ms:412 },
+        { ts:'today, 09:14', name:'Weekly account snapshot',   by:'system (schedule)',    rows:14210, format:'CSV', size:'12.4 MB',ms:2840 },
+        { ts:'yesterday',    name:'Ad-hoc · NA territory map', by:'morgan@accelerep.com', rows:612,   format:'CSV', size:'88 KB',  ms:220 },
+        { ts:'2 days ago',   name:'Pipeline weekly digest',    by:'system (schedule)',    rows:412,   format:'XLSX',size:'480 KB', ms:980 },
+        { ts:'4 days ago',   name:'Ad-hoc · contact opt-outs', by:'priya@accelerep.com',  rows:47,    format:'CSV', size:'8 KB',   ms:90 },
+    ],
+    dsrQueue:[
+        { id:'dsr-018', subject:'k.harper@example.com', type:'access',  submitted:'2 days ago',  sla:'28 days remaining', status:'in-progress' },
+        { id:'dsr-017', subject:'matt@thirdrock.io',    type:'erasure', submitted:'1 week ago',  sla:'23 days remaining', status:'in-progress' },
+        { id:'dsr-016', subject:'p.mehta@globex.test',  type:'access',  submitted:'3 weeks ago', sla:'completed',         status:'completed'   },
+    ],
+};
+
+const DATA_BACKUP = {
+    retentionDays:30,
+    region:'us-east-1 (primary) · eu-west-1 (replica)',
+    totalSize:'58.4 MB',
+    lastBackup:{ ts:'4 hours ago', size:'2.4 GB', duration:'14m 22s' },
+    snapshots:[
+        { id:'bk_snap_2026_04_27_0314', ts:'today, 03:14',    type:'auto',   size:'2.4 GB', records:14210, duration:'14m 22s' },
+        { id:'bk_snap_2026_04_26_0314', ts:'yesterday, 03:14',type:'auto',   size:'2.4 GB', records:14201, duration:'14m 04s' },
+        { id:'bk_snap_2026_04_25_1840', ts:'yesterday, 18:40',type:'manual', size:'2.4 GB', records:14198, duration:'14m 12s' },
+        { id:'bk_snap_2026_04_25_0314', ts:'2 days ago',      type:'auto',   size:'2.3 GB', records:14180, duration:'13m 58s' },
+        { id:'bk_snap_2026_04_24_0314', ts:'3 days ago',      type:'auto',   size:'2.3 GB', records:14174, duration:'14m 11s' },
+        { id:'bk_snap_2026_04_23_0314', ts:'4 days ago',      type:'auto',   size:'2.3 GB', records:14160, duration:'15m 02s' },
+        { id:'bk_snap_2026_04_22_0314', ts:'5 days ago',      type:'auto',   size:'2.3 GB', records:14138, duration:'14m 30s' },
+        { id:'bk_snap_2026_04_21_0314', ts:'6 days ago',      type:'auto',   size:'2.2 GB', records:14094, duration:'13m 41s' },
+        { id:'bk_snap_2026_04_20_0314', ts:'1 week ago',      type:'auto',   size:'2.2 GB', records:14070, duration:'14m 08s' },
+        { id:'bk_snap_2026_04_19_0314', ts:'8 days ago',      type:'auto',   size:'2.2 GB', records:14041, duration:'13m 54s' },
+    ],
+};
+
+const DATA_FEATURES = {
+    flags:[
+        { id:'deal-scoring',     name:'Deal scoring',           desc:'AI-driven probability and next-step suggestions on opportunities',      on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'writing-assist',   name:'Writing assist',         desc:'Inline AI writing help in notes, emails, and proposals',                on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'meeting-summaries',name:'Meeting summaries',      desc:'Auto-summarize Zoom/Teams calls and post to record',                    on:true,  scope:'workspace · 75% rollout', beta:true,  new:false },
+        { id:'sentiment',        name:'Email sentiment',        desc:'Score reply sentiment on incoming threads',                             on:false, scope:'off',                     beta:true,  new:true  },
+        { id:'forecast-roll',    name:'Forecast rollup',        desc:'Hierarchical forecast with manager adjustments',                        on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'territory-rules',  name:'Territory rules engine', desc:'Auto-assign accounts to territories on create/update',                  on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'lead-routing',     name:'Lead routing',           desc:'Round-robin + skill-based lead distribution',                           on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'duplicate-merge',  name:'Smart duplicate merge',  desc:'Suggest merges when accounts/contacts collide',                         on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'health-scores',    name:'Account health scores',  desc:'Health 0–100 per account based on usage and sentiment',                 on:false, scope:'off',                     beta:true,  new:false },
+        { id:'mobile-offline',   name:'Mobile offline mode',    desc:'Cache and sync recent records on iOS/Android',                          on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'mobile-voice',     name:'Mobile voice notes',     desc:'Dictate notes on the go with auto-transcription',                       on:true,  scope:'workspace · 100%',        beta:false, new:true  },
+        { id:'quote-redlines',   name:'Quote redlines',         desc:'Track legal redline rounds on quote PDFs',                              on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'esign-bulk',       name:'Bulk e-sign',            desc:'Send the same agreement to many counterparties at once',                on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'public-api-v2',    name:'Public API v2',          desc:'New REST + webhooks; v1 deprecation in 90 days',                        on:true,  scope:'workspace · 100%',        beta:true,  new:false },
+        { id:'graphql',          name:'GraphQL endpoint',       desc:'Read-only GraphQL on top of v2',                                        on:false, scope:'off',                     beta:true,  new:false },
+        { id:'audit-streaming',  name:'Audit log streaming',    desc:'Push audit events to Splunk / Datadog / S3',                            on:true,  scope:'workspace · 100%',        beta:false, new:false },
+        { id:'workflows-loops',  name:'Workflow loops',         desc:'For-each automation steps over collections',                            on:false, scope:'off',                     beta:true,  new:false },
+        { id:'commit-categories',name:'Commit categories',      desc:'Pipeline / Best Case / Commit / Closed buckets',                        on:true,  scope:'workspace · 100%',        beta:false, new:false },
+    ],
+};
+
+const DATA_AI = {
+    enabled:true, model:'claude-sonnet-4-5', fallback:'claude-haiku-4-5',
+    region:'US · us-east-2', tokenBudget:25000000, tokensUsed:4280000,
+    trainingOptIn:false, zeroRetention:true, piiRedaction:true, byok:false, byokProvider:'—',
+    dpaSignedAt:'2025-11-04',
+    usage:{ tokens30d:4280000, requests30d:29680, avgLatency:'1.4s', piiBlocked:142,
+        byFeature:[
+            { feature:'Writing assist',    requests:18420, tokens:2104000, pctBudget:8.4, avgLatency:'1.1s' },
+            { feature:'Deal scoring',      requests:9420,  tokens:1408000, pctBudget:5.6, avgLatency:'0.9s' },
+            { feature:'Meeting summaries', requests:1840,  tokens:612000,  pctBudget:2.4, avgLatency:'4.2s' },
+            { feature:'Email sentiment',   requests:0,     tokens:0,       pctBudget:0,   avgLatency:'—'    },
+            { feature:'Account health',    requests:0,     tokens:0,       pctBudget:0,   avgLatency:'—'    },
+        ],
+    },
+};
+
+// ── Shared primitives ─────────────────────────────────────────
+
+// Step rail for the import wizard
+const DataStepRail = ({ step }) => {
+    const steps = [
+        { id:'upload',  label:'Upload' },
+        { id:'map',     label:'Map columns' },
+        { id:'dedupe',  label:'Dedupe' },
+        { id:'preview', label:'Preview' },
+        { id:'done',    label:'Run' },
+    ];
+    const idx = steps.findIndex(s => s.id === step);
+    return (
+        <div style={{ display:'flex', alignItems:'center', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 16px', marginBottom:16, gap:0 }}>
+            {steps.map((s,i) => {
+                const done = i < idx; const active = i === idx;
+                return (
+                    <React.Fragment key={s.id}>
+                        <span style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, fontWeight: active ? 700 : 500, color: active ? T.ink : done ? T.ok : T.inkMuted }}>
+                            <span style={{ width:18, height:18, borderRadius:'50%', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700,
+                                background: done ? T.ok : active ? T.goldInk : 'transparent',
+                                color: (done||active) ? '#fbf8f3' : T.inkMuted,
+                                border: (!done && !active) ? `1px solid ${T.border}` : 'none' }}>
+                                {done ? '✓' : i+1}
+                            </span>
+                            {s.label}
+                        </span>
+                        {i < steps.length-1 && <span style={{ width:32, height:1, background:T.border, margin:'0 10px', flexShrink:0 }}/>}
+                    </React.Fragment>
+                );
+            })}
+        </div>
+    );
+};
+
+// Stat card with serif italic numerals
+const DataStatCard = ({ label, value, mono, warn }) => (
+    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:14 }}>
+        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:6, fontFamily:T.sans }}>{label}</div>
+        <div style={{ fontFamily: mono ? 'ui-monospace,Menlo,monospace' : T.serif, fontStyle: mono ? 'normal' : 'italic', fontWeight:700, fontSize: mono ? 18 : 26, color: warn ? T.warn : T.ink }}>{value}</div>
+    </div>
+);
+
+// Feature flag row
+const DataFlagRow = ({ f, last }) => {
+    const [on, setOn] = useState(f.on);
+    return (
+        <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 0', borderBottom: last ? 'none' : `1px solid ${T.border}` }}>
+            <span onClick={()=>setOn(v=>!v)}
+                style={{ width:30, height:18, borderRadius:9, background: on ? T.ok : T.border, position:'relative', flexShrink:0, cursor:'pointer', display:'inline-block' }}>
+                <span style={{ position:'absolute', top:2, left: on ? 14 : 2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+            </span>
+            <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, display:'flex', alignItems:'center', gap:6 }}>
+                    {f.name}
+                    {f.beta && <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(58,90,122,0.10)', color:T.info, fontSize:10.5, fontWeight:700 }}>Beta</span>}
+                    {f.new  && <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(184,115,51,0.10)', color:T.warn, fontSize:10.5, fontWeight:700 }}>New</span>}
+                </div>
+                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>{f.desc}</div>
+            </div>
+            <div style={{ fontSize:11.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', textAlign:'right', minWidth:160 }}>{f.scope}</div>
+        </div>
+    );
+};
+
+// Data section card (reuses same visual as SecCard but no dependency)
+const DataCard = ({ title, desc, headAction, children }) => (
+    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20, marginBottom:16, fontFamily:T.sans }}>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14 }}>
+            <div>
+                <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>{title}</div>
+                {desc && <div style={{ fontSize:12.5, color:T.inkMid, marginTop:3 }}>{desc}</div>}
+            </div>
+            {headAction}
+        </div>
+        {children}
+    </div>
+);
+
+// Table header row
+const DTableHead = ({ cols }) => (
+    <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+        {cols.map((h,i) => <th key={i} style={{ textAlign:'left', padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans }}>{h}</th>)}
+    </tr>
+);
+
+// QPill equivalent for Data pages
+const DPill = ({ tone='neutral', children }) => {
+    const m = {
+        ok:      { bg:'rgba(77,107,61,0.12)',   fg:T.ok      },
+        warn:    { bg:'rgba(184,115,51,0.12)',  fg:T.warn    },
+        danger:  { bg:'rgba(156,58,46,0.12)',   fg:T.danger  },
+        info:    { bg:'rgba(58,90,122,0.10)',   fg:T.info    },
+        neutral: { bg:'rgba(138,131,120,0.12)', fg:T.inkMid  },
+    };
+    const c = m[tone]||m.neutral;
+    return <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700, background:c.bg, color:c.fg, fontFamily:T.sans, whiteSpace:'nowrap' }}>{children}</span>;
+};
+
+// Data page crumb
+const DataCrumb = ({ page, onBack }) => (
+    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10, fontFamily:T.sans }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
+        <span>/</span>
+        <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Data</button>
+        <span>/</span>
+        <span style={{ color:T.ink, fontWeight:600 }}>{page}</span>
+    </div>
+);
+
+// Data title band
+const DataTitle = ({ title, sub, badge, updatedBy, updatedAt, actions, dirty }) => (
+    <div style={{ display:'flex', alignItems:'flex-end', justifyContent:'space-between', paddingBottom:16, borderBottom:`1px solid ${T.border}`, marginBottom:20, fontFamily:T.sans }}>
+        <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
+            <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>
+                {title}{dirty && <span style={{ fontSize:12, fontWeight:500, color:T.warn, marginLeft:12 }}>● Unsaved</span>}
+            </div>
+            <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                <span>{sub}</span>
+                {badge && <><span style={{ color:T.inkMuted }}>•</span><span style={{ color:T.ok, fontWeight:600 }}>✓ {badge}</span></>}
+                {updatedBy && <><span style={{ color:T.inkMuted }}>•</span><span style={{ fontSize:11.5, color:T.inkMuted }}>Last: {updatedAt} by <b style={{ color:T.inkMid, fontWeight:500 }}>{updatedBy}</b></span></>}
+            </div>
+        </div>
+        <div style={{ display:'flex', gap:8 }}>{actions}</div>
+    </div>
+);
+
+const DataBtn = ({ label, primary, danger:isDanger, onClick, disabled }) => (
+    <button onClick={onClick} disabled={disabled}
+        style={{ padding:'7px 14px', fontFamily:T.sans, fontSize:12.5, fontWeight:600, cursor:disabled?'default':'pointer', borderRadius:T.r, whiteSpace:'nowrap',
+            background: isDanger ? T.danger : primary ? T.ink : T.surface,
+            color: (isDanger||primary) ? '#fbf8f3' : T.ink,
+            border: (isDanger||primary) ? 'none' : `1px solid ${T.borderStrong}`,
+            opacity: disabled ? 0.6 : 1, transition:'opacity 100ms' }}>
+        {label}
+    </button>
+);
+
+// ── MODALS ────────────────────────────────────────────────────
+
+// Shared modal shell (re-uses same pattern as IntModal from Integrations)
+const DataModal = ({ width=640, onClose, children }) => (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:700, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:T.sans }}>
+        <div onClick={e=>e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width, maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)' }}>
+            {children}
+        </div>
+    </div>
+);
+const DataModalHead = ({ title, sub, onClose }) => (
+    <div style={{ padding:'18px 22px 14px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
+            <div>
+                <div style={{ fontSize:16, fontWeight:700, color:T.ink }}>{title}</div>
+                {sub && <div style={{ fontSize:12.5, color:T.inkMuted, marginTop:2 }}>{sub}</div>}
+            </div>
+            <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', lineHeight:1, padding:'2px 4px' }}>×</button>
+        </div>
+    </div>
+);
+const DataModalFoot = ({ children }) => (
+    <div style={{ padding:'12px 22px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', gap:8, justifyContent:'flex-end', flexShrink:0 }}>{children}</div>
+);
+
+// 1. New import modal
+const NewImportModal = ({ onClose }) => (
+    <DataModal onClose={onClose}>
+        <DataModalHead title="New import" sub="Step 1 of 5 — upload a CSV." onClose={onClose}/>
+        <div style={{ flex:1, overflowY:'auto', padding:22 }}>
+            <div style={{ marginBottom:12 }}>
+                <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>Object</label>
+                <select style={{ width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' }}>
+                    <option>Accounts</option><option>Contacts</option><option>Leads</option><option>Opportunities</option>
+                </select>
+            </div>
+            <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:8, fontFamily:T.sans }}>File</div>
+            <div style={{ border:`2px dashed ${T.borderStrong}`, borderRadius:4, padding:'32px 20px', textAlign:'center', background:T.surface2, cursor:'pointer', marginBottom:14 }}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.goldInk}
+                onMouseLeave={e=>e.currentTarget.style.borderColor=T.borderStrong}>
+                <div style={{ fontSize:28, color:T.inkMuted, marginBottom:8 }}>↑</div>
+                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>Drop CSV here, or <span style={{ color:T.goldInk, textDecoration:'underline' }}>browse</span></div>
+                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:6 }}>UTF-8 · max 100 MB · max 250,000 rows</div>
+            </div>
+            <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:8, fontFamily:T.sans }}>Or start from a saved mapping</div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                {['Salesforce → Accounts','HubSpot → Contacts','Outreach → Leads','Apollo → Contacts'].map(p => (
+                    <span key={p} style={{ padding:'5px 10px', borderRadius:3, background:T.surface2, border:`1px solid ${T.border}`, fontSize:11.5, cursor:'pointer', fontFamily:T.sans }}
+                        onMouseEnter={e=>e.currentTarget.style.borderColor=T.goldInk}
+                        onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>{p}</span>
+                ))}
+            </div>
+        </div>
+        <DataModalFoot>
+            <DataBtn label="Cancel" onClick={onClose}/>
+            <DataBtn label="Continue → Map columns" primary onClick={onClose}/>
+        </DataModalFoot>
+    </DataModal>
+);
+
+// 2. New scheduled export modal
+const NewExportModal = ({ onClose }) => {
+    const selStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' };
+    const inpStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' };
+    const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
+    return (
+        <DataModal onClose={onClose}>
+            <DataModalHead title="New scheduled export" sub="Recurring delivery to S3, SFTP, email, or webhook." onClose={onClose}/>
+            <div style={{ flex:1, overflowY:'auto', padding:22 }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                    <FL label="Name"><input defaultValue="Weekly accounts → S3" style={inpStyle}/></FL>
+                    <FL label="Object"><select style={selStyle}><option>Accounts</option><option>Contacts</option><option>Opportunities</option></select></FL>
+                    <FL label="Filter (CRMQL)"><input defaultValue="updated_at > now() - 7d" style={{ ...inpStyle, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}/></FL>
+                    <FL label="Format"><select style={selStyle}><option>CSV</option><option>XLSX</option><option>NDJSON.gz</option><option>JSON</option></select></FL>
+                    <FL label="Frequency"><select style={selStyle}><option>Weekly · Mondays 06:00 UTC</option><option>Daily · 02:00 UTC</option><option>Monthly</option></select></FL>
+                    <FL label="Destination"><select style={selStyle}><option>S3 · acme-exports/accounts/</option><option>SFTP</option><option>Email</option><option>Webhook</option></select></FL>
+                </div>
+            </div>
+            <DataModalFoot>
+                <DataBtn label="Run once now"/>
+                <DataBtn label="Cancel" onClick={onClose}/>
+                <DataBtn label="Create schedule" primary onClick={onClose}/>
+            </DataModalFoot>
+        </DataModal>
+    );
+};
+
+// 3. Restore from snapshot modal (type-to-confirm RESTORE)
+const RestoreModal = ({ snap, onClose }) => {
+    const [confirm, setConfirm] = useState('');
+    const [notify, setNotify]   = useState(true);
+    const ready = confirm.trim().toUpperCase() === 'RESTORE';
+    return (
+        <DataModal width={540} onClose={onClose}>
+            <DataModalHead onClose={onClose}
+                title={<span style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span style={{ width:32, height:32, borderRadius:4, background:'rgba(156,58,46,0.12)', color:T.danger, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700, flexShrink:0 }}>⚠</span>
+                    Restore from snapshot?
+                </span>}
+                sub={`This will overwrite records with snapshot data from ${snap?.ts || 'yesterday'}.`}/>
+            <div style={{ flex:1, overflowY:'auto', padding:22 }}>
+                <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', marginBottom:14, fontSize:12 }}>
+                    {[
+                        { label:'Snapshot',            value: snap?.id || 'bk_snap_2026_04_26_0314', mono:true },
+                        { label:'Records to restore',  value:'3', bold:true },
+                        { label:'Conflicts to resolve',value:'3 will be overwritten', color:T.warn },
+                        { label:'Pre-restore snapshot', value:'✓ will run first', color:T.ok },
+                    ].map((r,i) => (
+                        <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: i<3?5:0 }}>
+                            <span style={{ color:T.inkMid }}>{r.label}</span>
+                            <span style={{ fontFamily:r.mono?'ui-monospace,Menlo,monospace':'inherit', fontWeight:r.bold?600:500, color:r.color||T.ink }}>{r.value}</span>
+                        </div>
+                    ))}
+                </div>
+                <div style={{ marginBottom:12 }}>
+                    <label style={{ display:'block', fontSize:12, fontWeight:600, color:T.inkMid, marginBottom:6 }}>
+                        Type <b style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.ink }}>RESTORE</b> to confirm
+                    </label>
+                    <input value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="RESTORE"
+                        style={{ width:'100%', padding:'8px 10px', border:`1.5px solid ${ready?T.danger:T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' }}/>
+                </div>
+                <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:12.5, cursor:'pointer' }} onClick={()=>setNotify(v=>!v)}>
+                    <span style={{ width:14, height:14, border:`1.5px solid ${notify?T.ok:T.border}`, borderRadius:2, background:notify?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                        {notify && <span style={{ color:'#fff', fontSize:9 }}>✓</span>}
+                    </span>
+                    Notify workspace admins after restore completes
+                </label>
+            </div>
+            <DataModalFoot>
+                <DataBtn label="Cancel" onClick={onClose}/>
+                <DataBtn label="Restore now" danger disabled={!ready} onClick={()=>{ if(ready) onClose(); }}/>
+            </DataModalFoot>
+        </DataModal>
+    );
+};
+
+// 4. Reset AI training data modal (type-to-confirm RESET)
+const ResetAiModal = ({ onClose }) => {
+    const [confirm, setConfirm] = useState('');
+    const [notify, setNotify]   = useState(true);
+    const ready = confirm.trim().toUpperCase() === 'RESET';
+    return (
+        <DataModal width={540} onClose={onClose}>
+            <DataModalHead onClose={onClose}
+                title={<span style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span style={{ width:32, height:32, borderRadius:4, background:'rgba(156,58,46,0.12)', color:T.danger, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700, flexShrink:0 }}>⚠</span>
+                    Reset AI training data?
+                </span>}
+                sub="Permanently delete this workspace's prompts and outputs from the AI provider."/>
+            <div style={{ flex:1, overflowY:'auto', padding:22 }}>
+                <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', marginBottom:14, fontSize:12 }}>
+                    {[
+                        { label:'Workspace',       value:'accelerep · acme', mono:true },
+                        { label:'Records to purge',value:'~84,200 prompts / outputs', bold:true },
+                        { label:'Provider',        value:'Anthropic · Claude Sonnet 4.5', mono:true },
+                        { label:'SLA',             value:'Up to 30 days to propagate' },
+                    ].map((r,i) => (
+                        <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: i<3?5:0 }}>
+                            <span style={{ color:T.inkMid }}>{r.label}</span>
+                            <span style={{ fontFamily:r.mono?'ui-monospace,Menlo,monospace':'inherit', fontWeight:r.bold?600:400, color:T.ink }}>{r.value}</span>
+                        </div>
+                    ))}
+                </div>
+                <div style={{ padding:'10px 12px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:3, marginBottom:14, fontSize:12 }}>
+                    <span style={{ fontWeight:700, color:T.danger }}>This cannot be undone.</span>
+                    <span style={{ color:T.inkMid }}> Past AI suggestions referenced from records will continue to display, but the underlying training corpus will be erased.</span>
+                </div>
+                <div style={{ marginBottom:12 }}>
+                    <label style={{ display:'block', fontSize:12, fontWeight:600, color:T.inkMid, marginBottom:6 }}>
+                        Type <b style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.ink }}>RESET</b> to confirm
+                    </label>
+                    <input value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="RESET"
+                        style={{ width:'100%', padding:'8px 10px', border:`1.5px solid ${ready?T.danger:T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' }}/>
+                </div>
+                <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:12.5, cursor:'pointer' }} onClick={()=>setNotify(v=>!v)}>
+                    <span style={{ width:14, height:14, border:`1.5px solid ${notify?T.ok:T.border}`, borderRadius:2, background:notify?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                        {notify && <span style={{ color:'#fff', fontSize:9 }}>✓</span>}
+                    </span>
+                    Open a tracking ticket and email the workspace owner
+                </label>
+            </div>
+            <DataModalFoot>
+                <DataBtn label="Cancel" onClick={onClose}/>
+                <DataBtn label="Request reset" danger disabled={!ready} onClick={()=>{ if(ready) onClose(); }}/>
+            </DataModalFoot>
+        </DataModal>
+    );
+};
+
+// ── ① Import Detail ───────────────────────────────────────────
+const ImportDetail = ({ onBack }) => {
+    const [showModal, setShowModal] = useState(false);
+    const w = DATA_IMPORT.wizard;
+    const mapped = w.columns.filter(c => c.target !== '__skip__').length;
+
+    const th = { padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans, textAlign:'left' };
+    const td = (extra={}) => ({ padding:'8px 12px', fontFamily:T.sans, ...extra });
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showModal && <NewImportModal onClose={()=>setShowModal(false)}/>}
+            <DataCrumb page="Import" onBack={onBack}/>
+            <DataTitle
+                title="Import data"
+                sub="CSV import for accounts, contacts, leads, opportunities"
+                updatedBy={DATA_IMPORT.lastRun.by}
+                updatedAt={DATA_IMPORT.lastRun.ts}
+                actions={[
+                    <DataBtn key="h" label="View history" onClick={()=>setShowModal(true)}/>,
+                    <DataBtn key="m" label="Save mapping as preset"/>,
+                    <DataBtn key="c" label="Continue → Dedupe" primary/>,
+                ]}/>
+
+            {/* Warn callout when last run had errors */}
+            {DATA_IMPORT.lastRun.errors > 0 && (
+                <div style={{ padding:'11px 16px', background:'rgba(184,115,51,0.09)', borderLeft:`3px solid ${T.warn}`, borderRadius:4, marginBottom:16, display:'flex', alignItems:'center', gap:12 }}>
+                    <span style={{ color:T.warn, fontSize:15 }}>⚠</span>
+                    <div style={{ flex:1, fontSize:12.5, color:T.inkMid }}>
+                        <b style={{ color:T.warn }}>Last import had {DATA_IMPORT.lastRun.errors} row errors.</b> Review the error report before re-running, or load that mapping to retry.
+                    </div>
+                    <DataBtn label="Download error report"/>
+                    <DataBtn label="Reload mapping"/>
+                </div>
+            )}
+
+            <DataStepRail step={w.step}/>
+
+            {/* File section */}
+            <DataCard title="File" desc="Step 1 — uploaded.">
+                <div style={{ display:'flex', alignItems:'center', gap:14, padding:'4px 0' }}>
+                    <div style={{ width:44, height:56, borderRadius:3, background:T.surface2, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', flexShrink:0 }}>CSV</div>
+                    <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{w.file.name}</div>
+                        <div style={{ fontSize:11.5, color:T.inkMid, marginTop:2 }}>{w.file.size} · {w.file.rows.toLocaleString()} rows · {w.file.encoding}</div>
+                    </div>
+                    <select style={{ padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer', appearance:'none' }}>
+                        <option>Accounts</option>
+                    </select>
+                    <DataBtn label="Replace file"/>
+                </div>
+            </DataCard>
+
+            {/* Map columns */}
+            <DataCard title={`Map columns (${mapped} of ${w.columns.length} mapped)`} desc="Step 2 — confirm Accelerep field for each CSV column. Low-confidence rows highlighted."
+                headAction={<span style={{ fontSize:11.5, color:T.info, cursor:'pointer', fontWeight:600 }}>Auto-map all →</span>}>
+                <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
+                        <thead><tr style={{ background:T.surface2 }}>{['CSV column','Sample value','Type','Accelerep field','Confidence',''].map((h,i) => <th key={i} style={{ ...th }}>{h}</th>)}</tr></thead>
+                        <tbody>
+                            {w.columns.map((c,i) => {
+                                const low = c.confidence < 0.85;
+                                const skip = c.target === '__skip__';
+                                return (
+                                    <tr key={c.csv} style={{ borderBottom: i<w.columns.length-1?`1px solid ${T.border}`:'none', background: low && !skip ? 'rgba(184,115,51,0.08)' : 'transparent', opacity: skip ? 0.55 : 1 }}>
+                                        <td style={{ ...td(), fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, fontWeight:600 }}>
+                                            {c.csv}
+                                            {c.required && !skip && <span style={{ marginLeft:6, padding:'1px 5px', borderRadius:10, background:'rgba(184,115,51,0.12)', color:T.warn, fontSize:10, fontWeight:700 }}>Required</span>}
+                                        </td>
+                                        <td style={{ ...td(), fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMid, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.sample}</td>
+                                        <td style={{ ...td() }}>
+                                            <span style={{ padding:'2px 7px', borderRadius:10, background:'rgba(138,131,120,0.12)', color:T.inkMid, fontSize:11, fontWeight:600 }}>{c.type}</span>
+                                        </td>
+                                        <td style={{ ...td() }}>
+                                            <select defaultValue={skip ? 'Skip column' : c.target} style={{ padding:'5px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer', appearance:'none', minWidth:180 }}>
+                                                <option>{skip ? 'Skip column' : c.target}</option>
+                                            </select>
+                                        </td>
+                                        <td style={{ ...td() }}>
+                                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                                <div style={{ width:60, height:5, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:3, overflow:'hidden' }}>
+                                                    <div style={{ width:`${Math.round(c.confidence*100)}%`, height:'100%', background: c.confidence > 0.9 ? T.ok : c.confidence > 0.7 ? T.warn : T.danger }}/>
+                                                </div>
+                                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMid }}>{Math.round(c.confidence*100)}%</span>
+                                            </div>
+                                        </td>
+                                        <td style={{ ...td(), textAlign:'right' }}>
+                                            <span style={{ fontSize:11, color:T.inkMid, cursor:'pointer', fontWeight:600 }}>{skip ? 'Map →' : 'Skip'}</span>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </DataCard>
+
+            {/* Dedupe rules */}
+            <DataCard title="Dedupe rules" desc="Step 3 — what to do when an incoming row matches an existing record.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16, marginBottom:14 }}>
+                    {[
+                        { label:'Match on',            value:'Domain (case-insensitive)' },
+                        { label:'On match',            value:'Update existing'            },
+                        { label:'Blank values in CSV', value:'Skip — keep existing'       },
+                    ].map((f,i) => (
+                        <div key={i}>
+                            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</label>
+                            <select defaultValue={f.value} style={{ width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' }}>
+                                <option>{f.value}</option>
+                            </select>
+                        </div>
+                    ))}
+                </div>
+                <div style={{ padding:'10px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid }}>
+                    <span style={{ fontWeight:700, color:T.info }}>Note.</span> Falls back to Salesforce ID when the chosen key is empty.
+                </div>
+            </DataCard>
+
+            {/* Preview */}
+            <DataCard title="Preview" desc="Step 4 — inspect what the import will do before committing.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12, marginBottom:16 }}>
+                    <DataStatCard label="Will create" value={w.preview.willCreate}/>
+                    <DataStatCard label="Will update" value={w.preview.willUpdate}/>
+                    <DataStatCard label="Will skip"   value={w.preview.willSkip} />
+                    <DataStatCard label="Errors"      value={w.preview.errors.length} warn/>
+                </div>
+                {w.preview.errors.length > 0 && (
+                    <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                        <div style={{ display:'grid', gridTemplateColumns:'60px 1fr 1fr', gap:8, padding:'7px 12px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                            {['Row','Field','Message'].map((h,i) => <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase' }}>{h}</div>)}
+                        </div>
+                        {w.preview.errors.map((e,i) => (
+                            <div key={i} style={{ display:'grid', gridTemplateColumns:'60px 1fr 1fr', gap:8, padding:'8px 12px', borderBottom:i<w.preview.errors.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMuted }}>{e.row}</span>
+                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{e.field}</span>
+                                <span style={{ fontSize:12.5, color:T.warn }}>{e.msg}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </DataCard>
+        </div>
+    );
+};
+
+// ── ② Export Detail ───────────────────────────────────────────
+const ExportDetail = ({ onBack }) => {
+    const [showModal, setShowModal] = useState(false);
+    const e = DATA_EXPORT;
+    const failing = e.schedules.find(s => s.status === 'failing');
+    const activeCount = e.schedules.filter(s => s.enabled).length;
+    const openDsr = e.dsrQueue.filter(d => d.status !== 'completed').length;
+    const th = { padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans, textAlign:'left' };
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showModal && <NewExportModal onClose={()=>setShowModal(false)}/>}
+            <DataCrumb page="Export" onBack={onBack}/>
+            <DataTitle
+                title="Export"
+                sub="Scheduled and ad-hoc exports; GDPR data subject requests"
+                badge={`${activeCount} active schedules · ${openDsr} open DSR`}
+                updatedBy="Morgan Reyes" updatedAt="3 months ago"
+                actions={[
+                    <DataBtn key="adhoc" label="Run ad-hoc export"/>,
+                    <DataBtn key="new" label="+ New scheduled export" primary onClick={()=>setShowModal(true)}/>,
+                ]}/>
+
+            {/* Failing callout */}
+            {failing && (
+                <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:13 }}>
+                    <b style={{ color:T.danger }}>"{failing.name}" failing.</b>
+                    <span style={{ color:T.inkMid, marginLeft:6 }}>Last attempt {failing.last}.</span>
+                </div>
+            )}
+
+            {/* Scheduled exports table */}
+            <DataCard title={`Scheduled exports (${e.schedules.length})`} desc="Recurring exports to S3, Snowflake, email, or webhook.">
+                <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
+                        <thead><tr style={{ background:T.surface2 }}>{['Name','Scope','Cadence','Destination','Format','Last run','Status',''].map((h,i)=><th key={i} style={th}>{h}</th>)}</tr></thead>
+                        <tbody>
+                            {e.schedules.map((s,i) => {
+                                const tone = !s.enabled ? 'neutral' : s.status==='failing' ? 'danger' : 'ok';
+                                const label = !s.enabled ? 'Paused' : s.status==='failing' ? 'Failing' : 'Active';
+                                return (
+                                    <tr key={s.id} style={{ borderBottom:i<e.schedules.length-1?`1px solid ${T.border}`:'none', opacity:s.enabled?1:0.62 }}>
+                                        <td style={{ padding:'10px 12px', fontWeight:600 }}>{s.name}</td>
+                                        <td style={{ padding:'10px 12px', fontSize:12, color:T.inkMid }}>{s.scope}</td>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{s.cadence}</td>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.destination}</td>
+                                        <td style={{ padding:'10px 12px' }}><DPill tone="neutral">{s.format}</DPill></td>
+                                        <td style={{ padding:'10px 12px', color:T.inkMid, fontSize:12 }}>{s.last} · {s.size}</td>
+                                        <td style={{ padding:'10px 12px' }}><DPill tone={tone}>{label}</DPill></td>
+                                        <td style={{ padding:'10px 12px', textAlign:'right' }}>
+                                            <span style={{ fontSize:11, color:T.info, cursor:'pointer', fontWeight:600 }}>Edit</span>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </DataCard>
+
+            {/* Recent activity */}
+            <DataCard title="Recent activity" desc="One-off and scheduled runs in the last few days.">
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
+                    <thead><tr style={{ background:T.surface2 }}>{['When','Name','By','Rows','Format','Size','Duration'].map((h,i)=><th key={i} style={th}>{h}</th>)}</tr></thead>
+                    <tbody>
+                        {e.recent.map((r,i) => (
+                            <tr key={i} style={{ borderBottom:i<e.recent.length-1?`1px solid ${T.border}`:'none' }}>
+                                <td style={{ padding:'10px 12px', color:T.inkMuted }}>{r.ts}</td>
+                                <td style={{ padding:'10px 12px', fontWeight:500 }}>{r.name}</td>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{r.by}</td>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{r.rows.toLocaleString()}</td>
+                                <td style={{ padding:'10px 12px' }}><DPill tone="neutral">{r.format}</DPill></td>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{r.size}</td>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{r.ms}ms</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </DataCard>
+
+            {/* GDPR / DSR queue */}
+            <DataCard title={`GDPR / DSR queue (${openDsr} open)`} desc="Data Subject Requests — export or delete a subject's data within 30 days.">
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
+                    <thead><tr style={{ background:T.surface2 }}>{['Ticket','Subject','Type','Submitted','SLA','Status'].map((h,i)=><th key={i} style={th}>{h}</th>)}</tr></thead>
+                    <tbody>
+                        {e.dsrQueue.map((d,i) => (
+                            <tr key={d.id} style={{ borderBottom:i<e.dsrQueue.length-1?`1px solid ${T.border}`:'none' }}>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{d.id}</td>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{d.subject}</td>
+                                <td style={{ padding:'10px 12px' }}><DPill tone={d.type==='erasure'?'danger':'neutral'}>{d.type==='erasure'?'Erasure':'Access'}</DPill></td>
+                                <td style={{ padding:'10px 12px', color:T.inkMid }}>{d.submitted}</td>
+                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMid }}>{d.sla}</td>
+                                <td style={{ padding:'10px 12px' }}><DPill tone={d.status==='completed'?'ok':'info'}>{d.status==='completed'?'Completed':'In progress'}</DPill></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </DataCard>
+        </div>
+    );
+};
+
+// ── ③ Backup Detail ───────────────────────────────────────────
+const BackupDetail = ({ onBack }) => {
+    const [restoreSnap, setRestoreSnap] = useState(null);
+    const b = DATA_BACKUP;
+    const th = { padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans, textAlign:'left' };
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {restoreSnap && <RestoreModal snap={restoreSnap} onClose={()=>setRestoreSnap(null)}/>}
+            <DataCrumb page="Backup & restore" onBack={onBack}/>
+            <DataTitle
+                title="Backup & restore"
+                sub="Automated daily snapshots and point-in-time restore"
+                badge={`Daily · last: ${b.lastBackup.ts} · ${b.lastBackup.size}`}
+                updatedBy="System" updatedAt="4 hours ago"
+                actions={[
+                    <DataBtn key="res" label="Restore from backup" onClick={()=>setRestoreSnap(b.snapshots[0])}/>,
+                    <DataBtn key="run" label="Run backup now" primary/>,
+                ]}/>
+
+            {/* Stats */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12, marginBottom:16 }}>
+                <DataStatCard label="Last backup"    value={b.lastBackup.ts}         mono/>
+                <DataStatCard label="Backups stored" value={b.snapshots.length}      />
+                <DataStatCard label="Total size"     value={b.totalSize}             />
+                <DataStatCard label="Retention"      value={`${b.retentionDays} days`}/>
+            </div>
+
+            {/* Schedule form */}
+            <DataCard title="Schedule" desc="Backups are automated; you can also run a snapshot at any time.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
+                    {[
+                        { label:'Frequency',          value:'Daily'                              },
+                        { label:'Time of day (UTC)',   value:'03:00', mono:true                   },
+                        { label:'Retention',           value:`${b.retentionDays} days`            },
+                        { label:'Region',              value:b.region                             },
+                        { label:'Encryption',          value:'AES-256 · workspace key'            },
+                        { label:'Notify on failure',   value:'#sec-ops + email Morgan'            },
+                    ].map((f,i) => (
+                        <div key={i}>
+                            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</label>
+                            <input defaultValue={f.value} readOnly style={{ width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily: f.mono?'ui-monospace,Menlo,monospace':T.sans, outline:'none', background:T.surface, boxSizing:'border-box', cursor:'default' }}/>
+                        </div>
+                    ))}
+                </div>
+            </DataCard>
+
+            {/* Snapshots table */}
+            <DataCard title="Recent snapshots" desc="Each snapshot is a complete point-in-time copy of all CRM data and settings."
+                headAction={<span style={{ fontSize:11.5, color:T.info, cursor:'pointer', fontWeight:600 }}>Configure storage →</span>}>
+                <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans, minWidth:700 }}>
+                        <thead><tr style={{ background:T.surface2 }}>{['Snapshot ID','When','Type','Size','Records','Duration','Status',''].map((h,i)=><th key={i} style={th}>{h}</th>)}</tr></thead>
+                        <tbody>
+                            {b.snapshots.map((s,i) => (
+                                <tr key={s.id} style={{ borderBottom:i<b.snapshots.length-1?`1px solid ${T.border}`:'none' }}>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{s.id}</td>
+                                    <td style={{ padding:'10px 12px', color:T.inkMid }}>{s.ts}</td>
+                                    <td style={{ padding:'10px 12px' }}><DPill tone={s.type==='manual'?'info':'neutral'}>{s.type==='manual'?'Manual':'Automated'}</DPill></td>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{s.size}</td>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{s.records.toLocaleString()}</td>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{s.duration}</td>
+                                    <td style={{ padding:'10px 12px' }}><DPill tone="ok">Ready</DPill></td>
+                                    <td style={{ padding:'10px 12px', textAlign:'right', display:'flex', gap:12 }}>
+                                        <button onClick={()=>setRestoreSnap(s)} style={{ fontSize:11, color:T.info, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans }}>Restore</button>
+                                        <button style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans }}>Download</button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </DataCard>
+        </div>
+    );
+};
+
+// ── ④ Features & AI Detail ────────────────────────────────────
+const FeaturesDetail = ({ onBack }) => {
+    const [showReset, setShowReset] = useState(false);
+    const [aiRegion, setAiRegion]   = useState(DATA_AI.region);
+    const [dirty, setDirty]         = useState(false);
+    const f  = DATA_FEATURES;
+    const ai = DATA_AI;
+    const onCount = f.flags.filter(x=>x.on).length;
+    const betaOn  = f.flags.filter(x=>x.beta && x.on).length;
+
+    const selSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer',
+        backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+        backgroundRepeat:'no-repeat', backgroundPosition:'right 10px center', paddingRight:28 };
+    const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' };
+    const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showReset && <ResetAiModal onClose={()=>setShowReset(false)}/>}
+            <DataCrumb page="Features & AI" onBack={onBack}/>
+            <DataTitle
+                title="Features & AI"
+                sub="App-wide feature flags and AI controls (model, residency, training, redaction)"
+                badge={`${onCount} of ${f.flags.length} on · AI enabled · ${ai.region}`}
+                updatedBy="Morgan Reyes" updatedAt="1 month ago"
+                dirty={dirty}
+                actions={[
+                    <DataBtn key="exp" label="Export config"/>,
+                    <DataBtn key="sav" label="Save changes" primary onClick={()=>setDirty(false)}/>,
+                ]}/>
+
+            {/* Beta callout */}
+            {betaOn > 0 && (
+                <div style={{ padding:'11px 16px', background:'rgba(58,90,122,0.08)', borderLeft:`3px solid ${T.info}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.inkMid }}>
+                    <b style={{ color:T.info }}>Beta features active.</b> Workspace has {betaOn} beta flag{betaOn>1?'s':''} enabled. Behavior may change between releases.
+                </div>
+            )}
+
+            {/* Feature flags */}
+            <DataCard title={`Feature flags (${onCount} / ${f.flags.length} on)`} desc="Workspace-wide toggles. Some flags affect billing or pricing.">
+                <div style={{ display:'flex', gap:6, marginBottom:10 }}>
+                    {['All','Sales','Quoting','Reports','AI','Beta'].map((p,i) => (
+                        <span key={p} style={{ padding:'4px 10px', borderRadius:3, background:i===0?T.ink:T.surface2, color:i===0?'#fbf8f3':T.inkMid, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>{p}</span>
+                    ))}
+                </div>
+                {f.flags.map((flag,i) => <DataFlagRow key={flag.id} f={flag} last={i===f.flags.length-1}/>)}
+            </DataCard>
+
+            {/* AI model & access */}
+            <DataCard title="AI · Model & access" desc="Which model powers AI features and which roles can use them.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
+                    <FL label="Model"><select style={selSt}><option>{ai.model}</option></select></FL>
+                    <FL label="Fallback"><select style={selSt}><option>{ai.fallback}</option></select></FL>
+                    <FL label="Available to"><select style={selSt}><option>All roles except Finance</option></select></FL>
+                    <FL label="Daily token budget"><input defaultValue={ai.tokenBudget.toLocaleString()} style={inpSt}/></FL>
+                    <FL label="Used today"><input readOnly value={`${ai.tokensUsed.toLocaleString()} (${Math.round(ai.tokensUsed/ai.tokenBudget*100)}%)`} style={{ ...inpSt, cursor:'default' }}/></FL>
+                    <FL label="On budget exceed"><select style={selSt}><option>Throttle to 1 req/s</option></select></FL>
+                </div>
+            </DataCard>
+
+            {/* AI data residency & training */}
+            <DataCard title="AI · Data residency & training" desc="Where requests are processed and whether your data trains the model.">
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
+                    {[
+                        { id:'us', region:'US · us-east-2', latency:'+0ms'           },
+                        { id:'eu', region:'EU · eu-west-1', latency:'+82ms (from US)' },
+                    ].map(r => {
+                        const sel = aiRegion === r.region;
+                        return (
+                            <div key={r.id} onClick={()=>{ setAiRegion(r.region); setDirty(true); }}
+                                style={{ border:`1px solid ${sel?T.goldInk:T.border}`, background:sel?'rgba(200,185,154,0.10)':T.surface, borderRadius:6, padding:'12px 14px', cursor:'pointer', transition:'border-color 100ms' }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                    <span style={{ width:14, height:14, borderRadius:'50%', border:`1.5px solid ${sel?T.goldInk:T.inkMuted}`, position:'relative', flexShrink:0 }}>
+                                        {sel && <span style={{ position:'absolute', inset:3, borderRadius:'50%', background:T.goldInk }}/>}
+                                    </span>
+                                    <span style={{ fontSize:13, fontWeight:600, color:T.ink }}>{r.region}</span>
+                                </div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:4, marginLeft:22 }}>Latency: {r.latency}</div>
+                            </div>
+                        );
+                    })}
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                    {[
+                        { id:'training',  on:!ai.trainingOptIn, label:'Training opt-out',    desc:'Your prompts and outputs do not train the model.' },
+                        { id:'logging',   on:ai.zeroRetention,  label:'Zero data retention', desc:'AI provider stores no request data after response.' },
+                        { id:'redaction', on:ai.piiRedaction,   label:'PII redaction',        desc:'Personal email, phone, SSN replaced with placeholders pre-prompt.' },
+                        { id:'byok',      on:ai.byok,           label:'BYOK (bring your own key)', desc: ai.byok ? `Active · ${ai.byokProvider}` : 'Use your own model API key for AI requests.' },
+                    ].map(t => (
+                        <div key={t.id} style={{ border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', background: t.on ? 'rgba(77,107,61,0.07)' : T.surface, display:'flex', alignItems:'flex-start', gap:10 }}>
+                            <span style={{ width:18, height:18, borderRadius:3, border:`1.5px solid ${t.on?T.ok:T.border}`, background:t.on?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#fbf8f3', fontSize:11, fontWeight:700, flexShrink:0, marginTop:1 }}>
+                                {t.on ? '✓' : ''}
+                            </span>
+                            <div>
+                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{t.label}</div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>{t.desc}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </DataCard>
+
+            {/* AI governance */}
+            <DataCard title="AI · Governance" desc="Compliance metadata and danger-zone actions.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16, marginBottom:16 }}>
+                    <FL label="DPA signed"><input readOnly value={ai.dpaSignedAt} style={{ ...inpSt, cursor:'default' }}/></FL>
+                    <FL label="Audit logging"><select style={selSt}><option>All AI requests · 13mo retention</option></select></FL>
+                    <FL label="Block list (regex, comma-separated)"><input placeholder="e.g. \\bSSN\\b, \\bpassword\\b" style={{ ...inpSt, fontFamily:'ui-monospace,Menlo,monospace' }}/></FL>
+                </div>
+                {/* Danger zone */}
+                <div style={{ padding:'14px 16px', background:'rgba(156,58,46,0.06)', borderLeft:`3px solid ${T.danger}`, borderRadius:4 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:T.danger, marginBottom:4 }}>Reset training data</div>
+                    <div style={{ fontSize:12.5, color:T.inkMid, marginBottom:10 }}>Removes any data your workspace has contributed to model training. Takes up to 30 days at the provider.</div>
+                    <DataBtn label="Request reset" danger onClick={()=>setShowReset(true)}/>
+                </div>
+            </DataCard>
+        </div>
+    );
+};
+
 // ADMIN WORKSPACE VIEW
 // ─────────────────────────────────────────────────────────────
 const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter }) => {
@@ -8444,6 +9336,11 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         'approval-tiers':       'approval-tiers',
         'quote-templates':      'quote-templates',
         'price-book':           'price-book',
+        // Data
+        'import':   'import',
+        'export':   'export',
+        'backup':   'backup',
+        'features': 'features',
         // Security
         'sso':              'sso',
         'mfa':              'mfa',
@@ -8486,6 +9383,12 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'quote-templates') return <QuoteTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'approval-tiers')  return <ApprovalTiersDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'price-book')      return <PriceBookDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
+
+        // Data detail pages
+        if (id === 'import')   return <ImportDetail   onBack={onBack}/>;
+        if (id === 'export')   return <ExportDetail   onBack={onBack}/>;
+        if (id === 'backup')   return <BackupDetail   onBack={onBack}/>;
+        if (id === 'features') return <FeaturesDetail onBack={onBack}/>;
 
         // Security detail pages
         if (id === 'sso')              return <SsoDetail       onBack={onBack}/>;
