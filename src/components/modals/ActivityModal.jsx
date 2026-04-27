@@ -3,16 +3,40 @@ import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
 
 export default function ActivityModal({ activity, opportunities, contacts, accounts, onClose, onSave, initialContext, onSaveNewContact, onSaveNewAccount, onAddContact, onAddAccount, onAddOpportunity, errorMessage, onDismissError, saving }) {
+
+    // Build initial selectedContacts from existing activity (supports both legacy contactId and new contactIds)
+    const buildInitialContacts = () => {
+        if (!activity) {
+            // Pre-populate from initialContext if a single contactId is passed
+            if (initialContext?.contactId) {
+                const c = (contacts || []).find(ct => ct.id === initialContext.contactId);
+                return c ? [c] : [];
+            }
+            return [];
+        }
+        // Edit mode: prefer contactIds array, fall back to legacy contactId
+        if (Array.isArray(activity.contactIds) && activity.contactIds.length > 0) {
+            return activity.contactIds.map(id => (contacts || []).find(c => c.id === id)).filter(Boolean);
+        }
+        if (activity.contactId) {
+            const c = (contacts || []).find(ct => ct.id === activity.contactId);
+            return c ? [c] : [];
+        }
+        return [];
+    };
+
     const [formData, setFormData] = useState(activity || {
         type: 'Call',
         date: [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
         opportunityId: initialContext?.opportunityId || '',
-        contactId: initialContext?.contactId || '',
+        contactId: '',
+        contactIds: [],
         companyName: '',
         notes: '',
         addToCalendar: false
     });
 
+    const [selectedContacts, setSelectedContacts] = useState(buildInitialContacts);
     const [nestedModal, setNestedModal] = useState(null);
     const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(600, 500, 400, 300);
@@ -29,12 +53,37 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
     const activityTypes = ['Call', 'Email', 'Meeting', 'Demo', 'Proposal Sent', 'Follow-up', 'Other'];
 
     const handleChange = (field, value) => {
-        setFormData({ ...formData, [field]: value });
+        setFormData(prev => ({ ...prev, [field]: value }));
+    };
+
+    // Add a contact to the multi-select list
+    const handleAddContact = (contact) => {
+        if (!contact) return;
+        setSelectedContacts(prev => {
+            if (prev.find(c => c.id === contact.id)) return prev; // already selected
+            return [...prev, contact];
+        });
+        // Auto-populate company if blank
+        if (contact.company && !companySearch) setCompanySearch(contact.company);
+        setContactSearch('');
+        setShowContactSuggestions(false);
+    };
+
+    // Remove a contact chip
+    const handleRemoveContact = (contactId) => {
+        setSelectedContacts(prev => prev.filter(c => c.id !== contactId));
     };
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        onSave({ ...formData, companyName: companySearch });
+        const contactIds = selectedContacts.map(c => c.id);
+        onSave({
+            ...formData,
+            companyName: companySearch,
+            contactIds,
+            // Keep legacy contactId as first selected contact for backward compat
+            contactId: contactIds[0] || '',
+        });
     };
 
     // Get unique company names from accounts and contacts
@@ -52,9 +101,19 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
     });
 
     // Filter companies
-    const filteredCompanies = companyNames.filter(name => 
+    const filteredCompanies = companyNames.filter(name =>
         name.toLowerCase().startsWith((companySearch || '').toLowerCase())
     );
+
+    // Filter contacts — exclude already-selected ones
+    const selectedContactIds = new Set(selectedContacts.map(c => c.id));
+    const filteredContacts = contactSearch.length === 0 ? [] : (contacts || []).filter(c => {
+        if (selectedContactIds.has(c.id)) return false;
+        const s = contactSearch.toLowerCase();
+        return `${c.firstName} ${c.lastName}`.toLowerCase().startsWith(s) ||
+               c.firstName.toLowerCase().startsWith(s) ||
+               c.lastName.toLowerCase().startsWith(s);
+    });
 
     return (
         <>
@@ -109,9 +168,28 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
                             />
                         </div>
 
-                        {/* Contact typeahead */}
-                        <div className="form-group" style={{ position: 'relative' }}>
-                            <label>Contact</label>
+                        {/* ── Contact multi-select ── */}
+                        <div className="form-group full" style={{ position: 'relative' }}>
+                            <label>Contacts</label>
+
+                            {/* Selected contact chips */}
+                            {selectedContacts.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginBottom: '0.5rem' }}>
+                                    {selectedContacts.map(c => (
+                                        <div key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', padding: '0.25rem 0.5rem 0.25rem 0.625rem', background: '#f0ece4', border: '1px solid #e5e2db', borderRadius: '20px', fontSize: '0.8125rem', fontWeight: '600', color: '#1c1917' }}>
+                                            <span>{c.firstName} {c.lastName}</span>
+                                            {c.company && <span style={{ fontWeight: '400', color: '#78716c', fontSize: '0.75rem' }}>· {c.company}</span>}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveContact(c.id)}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1, color: '#78716c', fontSize: '1rem', display: 'flex', alignItems: 'center' }}
+                                            >×</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Contact search input */}
                             <input
                                 type="text"
                                 value={contactSearch}
@@ -120,37 +198,34 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
                                     setShowContactSuggestions(e.target.value.length > 0);
                                 }}
                                 onFocus={() => setShowContactSuggestions(contactSearch.length > 0)}
-                                placeholder="Type contact name..."
+                                placeholder={selectedContacts.length === 0 ? 'Type to search contacts...' : 'Add another contact...'}
                                 autoComplete="off"
                             />
-                            {formData.contactId && (
-                                <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#f1f3f5', borderRadius: '4px', fontSize: '0.875rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span>{(() => { const c = contacts.find(ct => ct.id === formData.contactId); return c ? `${c.firstName} ${c.lastName}${c.company ? ` — ${c.company}` : ''}` : ''; })()}</span>
-                                    <button type="button" onClick={() => { handleChange('contactId', ''); setContactSearch(''); }}
-                                        style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.2rem', padding: 0 }}>×</button>
-                                </div>
-                            )}
+
+                            {/* Suggestions dropdown */}
                             {showContactSuggestions && (
-                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                                    {contacts
-                                        .filter(c => {
-                                            const s = contactSearch.toLowerCase();
-                                            return `${c.firstName} ${c.lastName}`.toLowerCase().startsWith(s) ||
-                                                   c.firstName.toLowerCase().startsWith(s) ||
-                                                   c.lastName.toLowerCase().startsWith(s);
-                                        })
-                                        .map(c => (
-                                            <div key={c.id}
-                                                onClick={() => { handleChange('contactId', c.id); setContactSearch(''); setShowContactSuggestions(false); if (c.company && !companySearch) setCompanySearch(c.company); }}
-                                                style={{ padding: '0.75rem', cursor: 'pointer', borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }}
-                                                onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
-                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                            >
-                                                <div style={{ fontWeight: '600' }}>{c.firstName} {c.lastName}</div>
-                                                <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>{[c.company, c.email].filter(Boolean).join(' • ')}</div>
-                                            </div>
-                                        ))}
-                                    <div onMouseDown={e => e.preventDefault()} onClick={() => { setShowContactSuggestions(false); setNestedModal({ type: 'contact', firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }}
+                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                    {filteredContacts.map(c => (
+                                        <div key={c.id}
+                                            onMouseDown={e => e.preventDefault()}
+                                            onClick={() => handleAddContact(c)}
+                                            style={{ padding: '0.75rem', cursor: 'pointer', borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }}
+                                            onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                        >
+                                            <div style={{ fontWeight: '600' }}>{c.firstName} {c.lastName}</div>
+                                            <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>{[c.company, c.email].filter(Boolean).join(' • ')}</div>
+                                        </div>
+                                    ))}
+                                    {filteredContacts.length === 0 && contactSearch && (
+                                        <div style={{ padding: '0.5rem 0.75rem', color: '#94a3b8', fontSize: '0.8125rem' }}>No matching contacts</div>
+                                    )}
+                                    <div onMouseDown={e => e.preventDefault()}
+                                        onClick={() => {
+                                            setShowContactSuggestions(false);
+                                            setNestedModal({ type: 'contact', firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' });
+                                            setContactSearch('');
+                                        }}
                                         style={{ padding: '0.75rem', cursor: 'pointer', color: '#2563eb', fontWeight: '600', borderTop: '1px solid #e2e8f0', transition: 'background 0.2s' }}
                                         onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
                                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -281,7 +356,15 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
                     <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
                         <h2 style={{ marginBottom: '1rem' }}>New Contact</h2>
                         <NestedNewContactForm firstName={nestedModal.firstName} lastName={nestedModal.lastName}
-                            onSave={(data) => { if (onSaveNewContact) { const saved = onSaveNewContact(data); if (saved) { setFormData(prev => ({ ...prev, contactId: saved.id })); if (saved.company && !companySearch) setCompanySearch(saved.company); } } setNestedModal(null); }}
+                            onSave={(data) => {
+                                if (onSaveNewContact) {
+                                    const saved = onSaveNewContact(data);
+                                    if (saved) {
+                                        handleAddContact(saved);
+                                    }
+                                }
+                                setNestedModal(null);
+                            }}
                             onCancel={() => setNestedModal(null)} />
                     </div>
                 </div>
