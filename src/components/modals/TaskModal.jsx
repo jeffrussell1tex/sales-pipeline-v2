@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import TimePicker from '../ui/TimePicker';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
+import { NestedNewContactForm, NestedNewAccountForm } from './ContactModal';
 
 export default function TaskModal({ task, taskTypes, opportunities, accounts, contacts, settings, onClose, onSave, onAddTaskType, onSaveNewContact, onSaveNewAccount, onAddOpportunity, onAddContact, onAddAccount, errorMessage, onDismissError, saving }) {
     const [formData, setFormData] = useState(task ? { ...task, status: task.status || (task.completed ? 'Completed' : 'Open'), assignedTo: task.assignedTo || '', priority: task.priority || 'Medium', addToCalendar: false } : {
