@@ -12,6 +12,8 @@ schedule = "* * * * *"
   to = "https://frontend-api.clerk.services/:splat"
   status = 200
   force = true
+  [redirects.headers]
+    X-Forwarded-Host = "salespipelinetracker.com"
 
 [[redirects]]
   from = "/*"
