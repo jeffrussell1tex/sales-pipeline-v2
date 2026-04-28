@@ -1,6 +1,8 @@
+import { dbFetch } from '../../utils/storage';
 import React, { useState, useRef, useCallback } from 'react';
 import { useApp } from '../../AppContext';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
+import ActivityModal from '../modals/ActivityModal';
 import ResizeHandles from '../../hooks/ResizeHandles';
 
 
@@ -50,7 +52,8 @@ export default function ViewingContactPanel({
         const c = STAGE_COLORS[stage] || '#8a8378';
         return { display:'inline-block', padding:'0.2rem 0.625rem', borderRadius:3, fontSize:'0.6875rem', fontWeight:600, fontFamily:'inherit', background:c+'22', color:c, border:`1px solid ${c}44` };
     };
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable({ transparent: meetingPrepOpen });
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef, zIndex } = useDraggable({ transparent: meetingPrepOpen });
+    const [panelActivityContext, setPanelActivityContext] = useState(null);
     const { size, getResizeHandleProps } = useResizable(760, 580, 480, 380);
 
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
@@ -154,7 +157,7 @@ export default function ViewingContactPanel({
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
                     <button
-                        onClick={() => { setActivityInitialContext({ companyName: ct.company || '', contactName: ctFullName }); setEditingActivity(null); setShowActivityModal(true); }}
+                        onClick={() => setPanelActivityContext({ companyName: ct.company || '', contactName: ctFullName })}
                         style={{ height: '32px', padding: '0 0.875rem', borderRadius: '8px', border: '1px solid #c8b99a', background: '#c8b99a', color: '#7a6a48', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 1px 0 rgba(0,0,0,0.15) inset' }}
                         onMouseEnter={e => { e.currentTarget.style.background = '#d4c8a8'; e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.2)'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = '#c8b99a'; e.currentTarget.style.boxShadow = '0 1px 0 rgba(0,0,0,0.15) inset'; }}
@@ -456,6 +459,39 @@ export default function ViewingContactPanel({
 
             <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
         </div>
+
+        {/* Local ActivityModal — always above this panel */}
+        {panelActivityContext && (
+            <ActivityModal
+                activity={null}
+                opportunities={opportunities}
+                contacts={contacts}
+                accounts={accounts}
+                initialContext={panelActivityContext}
+                zIndexBase={zIndex + 1}
+                onClose={() => setPanelActivityContext(null)}
+                onSave={(activityData) => {
+                    handleSaveActivity(activityData, {
+                        editingActivity: null,
+                        currentUser,
+                        opportunities,
+                        setShowActivityModal: () => setPanelActivityContext(null),
+                        setFollowUpPrompt: () => {},
+                        setQuickLogOpen: () => {},
+                        setQuickLogForm: () => {},
+                        setQuickLogContactResults: () => {},
+                    });
+                }}
+                onSaveNewContact={(data) => {
+                    const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                    const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
+                    setContacts(prev => [...prev, nc]);
+                    dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nc) })
+                        .catch(err => console.error('inline contact save failed:', err));
+                    return nc;
+                }}
+            />
+        )}
         </>
     );
 }

@@ -22,7 +22,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
  */
 
 let _globalZ = 10000;
-function nextZ() { _globalZ = Math.min(_globalZ + 1, 10250); return _globalZ; }
+function nextZ() { return ++_globalZ; }
 
 function isMobileViewport() {
     return window.innerWidth <= 640;
@@ -256,6 +256,7 @@ export function useDraggable({ transparent = false } = {}) {
         isMobile: mobile,
         bringToFront,
         containerRef,
+        zIndex,
     };
 }
 
