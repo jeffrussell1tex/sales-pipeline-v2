@@ -1549,6 +1549,37 @@ dbFetch('/.netlify/functions/users?me=true')
                 </ErrorBoundary>
             )}
 
+            {/* ════ VIEWING PANELS ════ */}
+            {viewingAccount && (
+                <ViewingAccountPanel
+                    setEditingOpp={setEditingOpp} setShowModal={setShowModal}
+                    setEditingContact={setEditingContact} setShowContactModal={setShowContactModal}
+                    setEditingAccount={setEditingAccount} setEditingSubAccount={setEditingSubAccount} setShowAccountModal={setShowAccountModal}
+                    setEditingTask={setEditingTask} setShowTaskModal={setShowTaskModal}
+                    setEditingActivity={setEditingActivity} setShowActivityModal={setShowActivityModal} setActivityInitialContext={setActivityInitialContext}
+                    setShowCsvImportModal={setShowCsvImportModal} setShowLeadImportModal={setShowLeadImportModal} setShowOutlookImportModal={setShowOutlookImportModal}
+                    setShowSpiffClaimModal={setShowSpiffClaimModal} setSpiffClaimContext={setSpiffClaimContext}
+                    setShowShortcuts={setShowShortcuts}
+                />
+            )}
+            {viewingContact && (
+                <ViewingContactPanel
+                    setEditingOpp={setEditingOpp} setShowModal={setShowModal}
+                    setEditingContact={setEditingContact} setShowContactModal={setShowContactModal}
+                    setEditingTask={setEditingTask} setShowTaskModal={setShowTaskModal}
+                    setEditingActivity={setEditingActivity} setShowActivityModal={setShowActivityModal} setActivityInitialContext={setActivityInitialContext}
+                />
+            )}
+            {viewingTask && (
+                <ViewingTaskPanel
+                    setEditingTask={setEditingTask} setShowTaskModal={setShowTaskModal}
+                    setEditingOpp={setEditingOpp} setShowModal={setShowModal}
+                    setEditingContact={setEditingContact} setShowContactModal={setShowContactModal}
+                    setEditingAccount={setEditingAccount} setEditingSubAccount={setEditingSubAccount} setShowAccountModal={setShowAccountModal}
+                    setEditingActivity={setEditingActivity} setShowActivityModal={setShowActivityModal} setActivityInitialContext={setActivityInitialContext}
+                />
+            )}
+
             {/* ════ MEETING PREP PANEL ════ */}
             {meetingPrepOpen && meetingPrepEvent && (() => {
                 const ev = meetingPrepEvent;
