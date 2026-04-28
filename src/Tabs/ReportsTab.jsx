@@ -921,7 +921,7 @@ ${bodyHtml}
                               { label:'End of week', value:totalPipelineValue, kind:'total' },
                             ];
                             const maxWF = Math.max(startPipe, totalPipelineValue) * 1.1 || 1;
-                            const chartW=600, chartH=180, barW=66;
+                            const chartW=520, chartH=140, barW=58;
                             const gap=(chartW-barW*wfSteps.length)/(wfSteps.length+1);
                             const yS=(v)=>chartH-(Math.max(0,v)/maxWF)*chartH;
                             let running=0;
@@ -1060,7 +1060,7 @@ ${bodyHtml}
                                 <Panel>
                                   <SecHdr title="Pipeline movement" sub="Last 7 days — what changed"
                                     right={<span style={{ fontSize:14, fontWeight:700, color:netDelta>=0?T.ok:T.danger, fontFamily:T.sans }}>{netDelta>=0?'+':''}{fmt(netDelta)}</span>}/>
-                                  <svg width="100%" viewBox={`0 0 ${chartW} ${chartH+48}`} style={{ display:'block' }}>
+                                  <svg width="100%" viewBox={`0 0 ${chartW} ${chartH+48}`} style={{ display:'block', maxHeight: 200 }}>
                                     {[0.25,0.5,0.75,1].map(f=>(
                                       <line key={f} x1={0} x2={chartW} y1={chartH-chartH*f} y2={chartH-chartH*f} stroke={T.border} strokeWidth={0.5} strokeDasharray="2 4"/>
                                     ))}
@@ -1068,8 +1068,8 @@ ${bodyHtml}
                                     {wfBars.map((b,i)=>(
                                       <g key={i}>
                                         <rect x={b.x} y={b.y} width={barW} height={b.h} fill={wfColor(b.kind)} opacity={b.kind==='total'?1:0.85} rx={2}/>
-                                        <text x={b.x+barW/2} y={b.y-6} fontSize="10.5" fontWeight="600" textAnchor="middle" fill={T.ink} fontFamily={T.sans}>{b.vl}</text>
-                                        <text x={b.x+barW/2} y={chartH+18} fontSize="10.5" fontWeight="500" textAnchor="middle" fill={T.inkMid} fontFamily={T.sans}>{b.label}</text>
+                                        <text x={b.x+barW/2} y={b.y-5} fontSize="9.5" fontWeight="600" textAnchor="middle" fill={T.ink} fontFamily={T.sans}>{b.vl}</text>
+                                        <text x={b.x+barW/2} y={chartH+16} fontSize="9.5" fontWeight="500" textAnchor="middle" fill={T.inkMid} fontFamily={T.sans}>{b.label}</text>
                                       </g>
                                     ))}
                                   </svg>
