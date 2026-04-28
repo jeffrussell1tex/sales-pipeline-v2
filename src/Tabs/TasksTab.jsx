@@ -316,6 +316,47 @@ export default function TasksTab() {
 
     const setViewPersist = v => { setView(v); localStorage.setItem('tab:tasks:subView', v); };
 
+    // ── Status filter ───────────────────────────────────────────
+    const [statusFilter, setStatusFilter] = useState('open'); // open | completed | all
+
+    // ── Completed task helpers ────────────────────────────
+    const fmtCompletedAgo = (iso) => {
+        if (!iso) return '—';
+        const now  = new Date();
+        const then = new Date(iso);
+        const diffMin = Math.round((now - then) / 60000);
+        if (diffMin < 60)       return diffMin + 'm ago';
+        if (diffMin < 60 * 24) return Math.round(diffMin / 60) + 'h ago';
+        const diffDay = Math.round(diffMin / 60 / 24);
+        if (diffDay === 1)      return 'yesterday';
+        if (diffDay < 7)        return diffDay + 'd ago';
+        return then.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+    const groupCompletedByDay = (taskList) => {
+        const map = new Map();
+        for (const t of taskList) {
+            const iso = t.completedAt || t.updatedAt || t.dueDate;
+            if (!iso) continue;
+            const day = iso.split('T')[0];
+            if (!map.has(day)) map.set(day, []);
+            map.get(day).push(t);
+        }
+        return [...map.entries()]
+            .sort(([a], [b]) => b.localeCompare(a))
+            .map(([day, dayTasks]) => ({
+                day,
+                tasks: dayTasks.sort((a, b) => (b.completedAt || b.updatedAt || '').localeCompare(a.completedAt || a.updatedAt || '')),
+            }));
+    };
+    const completedDateLabel = (dayStr) => {
+        const d    = new Date(dayStr + 'T12:00:00');
+        const now  = new Date(); now.setHours(0, 0, 0, 0);
+        const diff = Math.round((now - d) / 86400000);
+        if (diff === 0) return 'Today';
+        if (diff === 1) return 'Yesterday';
+        return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    };
+
     // ── Dates ─────────────────────────────────────────────────
     const today     = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d; }, []);
     const todayStr  = useMemo(() => today.toISOString().split('T')[0], [today]);
@@ -342,6 +383,19 @@ export default function TasksTab() {
         if (typeFilter  !== 'All')  list = list.filter(t => t.type === typeFilter);
         return list;
     }, [visibleTasks, ownerFilter, typeFilter, currentUser]);
+
+    // Completed tasks — filtered by owner + type
+    const completedTasks = useMemo(() => {
+        let list = visibleTasks.filter(t => {
+            const s = t.status || (t.completed ? 'Completed' : 'Open');
+            return s === 'Completed';
+        });
+        if (ownerFilter === 'Mine') list = list.filter(t => !t.assignedTo || t.assignedTo === currentUser);
+        if (typeFilter  !== 'All')  list = list.filter(t => t.type === typeFilter);
+        return list;
+    }, [visibleTasks, ownerFilter, typeFilter, currentUser]);
+
+    const completedDays = useMemo(() => groupCompletedByDay(completedTasks), [completedTasks]);
 
     // ── Buckets ───────────────────────────────────────────────
     const { overdue, todayTasks, tomorrowTasks, thisWeekTasks, laterTasks } = useMemo(() => {
@@ -388,9 +442,109 @@ export default function TasksTab() {
         { id: 'voicelog', label: 'Voice log', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg> },
     ];
 
-    // ── Filter row (list view only) ───────────────────────────
+    // ── StatusSegmented control ───────────────────────────────────────────
+    const StatusSegmented = () => {
+        const items = [
+            { k: 'open',      label: 'Open',      n: filtered.length },
+            { k: 'completed', label: 'Completed',  n: completedTasks.length },
+            { k: 'all',       label: 'All',        n: filtered.length + completedTasks.length },
+        ];
+        return (
+            <div style={{ display: 'flex', border: '1px solid ' + T.border, borderRadius: T.r, overflow: 'hidden', background: T.surface }}>
+                {items.map((s, i) => {
+                    const active = statusFilter === s.k;
+                    return (
+                        <button key={s.k} onClick={() => setStatusFilter(s.k)} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            padding: '6px 12px', border: 'none',
+                            borderLeft: i > 0 ? '1px solid ' + T.border : 'none',
+                            background: active ? T.ink : T.surface,
+                            color: active ? T.surface : T.ink,
+                            fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans, transition: 'all 120ms',
+                        }}>
+                            {s.k === 'completed' && (
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={active ? T.surface : T.ok} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M4 12l5 5L20 6"/>
+                                </svg>
+                            )}
+                            {s.label}
+                            <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.7, fontVariantNumeric: 'tabular-nums' }}>{s.n}</span>
+                        </button>
+                    );
+                })}
+            </div>
+        );
+    };
+
+    // ── CompletedRow ───────────────────────────────────────────────
+    const CompletedRow = ({ task }) => {
+        const meta     = getTypeMeta(task.type);
+        const opp      = task.opportunityId ? opportunities.find(o => o.id === task.opportunityId) : null;
+        const account  = opp?.account || task.account || '';
+        const compIso  = task.completedAt || task.updatedAt || null;
+        const compTime = compIso
+            ? new Date(compIso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase()
+            : null;
+        return (
+            <div
+                onClick={() => setViewingTask(task)}
+                style={{ display: 'grid', gridTemplateColumns: '22px 28px 1fr auto', gap: 12, padding: '10px 14px', borderBottom: '1px solid ' + T.border, alignItems: 'center', cursor: 'pointer', opacity: 0.78 }}
+                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+                <div style={{ width: 20, height: 20, borderRadius: '50%', background: T.ok, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>
+                </div>
+                <div style={{ width: 24, height: 24, borderRadius: T.r, background: meta.color + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', color: meta.color, flexShrink: 0 }}>
+                    {meta.icon}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: T.inkMid, textDecoration: 'line-through', textDecorationColor: T.borderStrong, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {task.title}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3, fontSize: 11, color: T.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                        {account && <><span style={{ color: T.inkMid }}>{account}</span><span style={{ opacity: 0.4 }}>·</span></>}
+                        {task.outcome && <><span style={{ color: T.ok, fontWeight: 600 }}>{task.outcome}</span><span style={{ opacity: 0.4 }}>·</span></>}
+                        {compTime && <span>completed {compTime}</span>}
+                    </div>
+                </div>
+                <div style={{ fontSize: 11, color: T.inkMuted, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                    {compIso ? fmtCompletedAgo(compIso) : '—'}
+                </div>
+            </div>
+        );
+    };
+
+    // ── CompletedList ───────────────────────────────────────────────
+    const CompletedList = () => {
+        if (completedDays.length === 0) {
+            return (
+                <div style={{ padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans, fontStyle: 'italic' }}>
+                    No completed tasks{typeFilter !== 'All' ? ' of type "' + typeFilter + '"' : ''} in the last 30 days.
+                </div>
+            );
+        }
+        return (
+            <>
+                {completedDays.map(({ day, tasks: dayTasks }) => (
+                    <React.Fragment key={day}>
+                        <div style={{ padding: '10px 16px 8px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid ' + T.border, background: T.surface2 }}>
+                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.ok, flexShrink: 0 }} />
+                            <span style={{ fontSize: 10, fontWeight: 700, color: T.ink, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: T.sans }}>{completedDateLabel(day)}</span>
+                            <span style={{ fontSize: 11, color: T.inkMuted, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{dayTasks.length}</span>
+                        </div>
+                        {dayTasks.map(t => <CompletedRow key={t.id} task={t} />)}
+                    </React.Fragment>
+                ))}
+            </>
+        );
+    };
+
+    // ── Filter row (list view only) ───────────────────────────────────────────
     const FilterRow = () => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', padding: '8px 0' }}>
+            <StatusSegmented />
+            <div style={{ width: 1, height: 20, background: T.border, margin: '0 4px' }} />
             {['Mine', 'Auto-generated', 'Team'].map(o => {
                 const count  = o === 'Mine' ? filtered.length : o === 'Auto-generated' ? autoGenCount : null;
                 const active = ownerFilter === o;
@@ -442,19 +596,26 @@ export default function TasksTab() {
         const todayLabel    = `${dayNames[today.getDay()]} ${monthNames[today.getMonth()]} ${today.getDate()}`;
         return (
             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
-                {filtered.length === 0 ? (
-                    <div style={{ padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
-                        No open tasks{typeFilter !== 'All' ? ` of type "${typeFilter}"` : ''}.
-                        {canEdit && <> <button onClick={handleAddTask} style={{ background: 'none', border: 'none', color: T.info, cursor: 'pointer', fontFamily: T.sans, fontSize: 13, fontWeight: 600 }}>Add one →</button></>}
-                    </div>
-                ) : (
-                    <>
-                        <Bucket id="overdue"   label="Overdue"   tasks={overdue}       color={T.danger}  rowProps={rowProps} />
-                        <Bucket id="today"     label="Today"     sublabel={todayLabel}  tasks={todayTasks} color={T.info} rowProps={rowProps} />
-                        <Bucket id="tomorrow"  label="Tomorrow"  sublabel={tomorrowLabel} tasks={tomorrowTasks} color={T.inkMid} rowProps={rowProps} />
-                        <Bucket id="thisweek"  label="This Week" tasks={thisWeekTasks}  color={T.inkMuted} defaultOpen={false} rowProps={rowProps} />
-                        <Bucket id="later"     label="Later"     tasks={laterTasks}     color={T.inkMuted} defaultOpen={false} rowProps={rowProps} />
-                    </>
+                {/* Open / All — bucket groups */}
+                {(statusFilter === 'open' || statusFilter === 'all') && (
+                    filtered.length === 0 && statusFilter === 'open' ? (
+                        <div style={{ padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
+                            No open tasks{typeFilter !== 'All' ? ' of type "' + typeFilter + '"' : ''}.
+                            {canEdit && <> <button onClick={handleAddTask} style={{ background: 'none', border: 'none', color: T.info, cursor: 'pointer', fontFamily: T.sans, fontSize: 13, fontWeight: 600 }}>Add one →</button></>}
+                        </div>
+                    ) : (
+                        <>
+                            <Bucket id="overdue"   label="Overdue"   tasks={overdue}         color={T.danger}   rowProps={rowProps} />
+                            <Bucket id="today"     label="Today"     sublabel={todayLabel}    tasks={todayTasks}    color={T.info}    rowProps={rowProps} />
+                            <Bucket id="tomorrow"  label="Tomorrow"  sublabel={tomorrowLabel} tasks={tomorrowTasks} color={T.inkMid}  rowProps={rowProps} />
+                            <Bucket id="thisweek"  label="This Week" tasks={thisWeekTasks}    color={T.inkMuted}  defaultOpen={false} rowProps={rowProps} />
+                            <Bucket id="later"     label="Later"     tasks={laterTasks}       color={T.inkMuted}  defaultOpen={false} rowProps={rowProps} />
+                        </>
+                    )
+                )}
+                {/* Completed / All — date-grouped completed rows */}
+                {(statusFilter === 'completed' || statusFilter === 'all') && (
+                    <CompletedList />
                 )}
             </div>
         );
@@ -652,6 +813,8 @@ export default function TasksTab() {
                         <span style={{ fontWeight: 600, color: T.ink }}>{todayTasks.length}</span> due today
                         <span style={{ margin: '0 6px', color: T.border }}>·</span>
                         <span style={{ fontWeight: 600, color: T.ink }}>{filtered.length}</span> total
+                        <span style={{ margin: '0 6px', color: T.border }}>·</span>
+                        <span style={{ fontWeight: 600, color: T.ink }}>{completedTasks.length}</span> completed this week
                         {calendarConnected && <><span style={{ margin: '0 6px', color: T.border }}>·</span><span style={{ color: T.ok }}>calendar synced</span></>}
                     </div>
                 </div>
