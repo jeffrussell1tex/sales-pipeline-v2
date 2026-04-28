@@ -22,7 +22,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
  */
 
 let _globalZ = 10000;
-function nextZ() { return ++_globalZ; }
+function nextZ() { _globalZ = Math.min(_globalZ + 1, 10250); return _globalZ; }
 
 function isMobileViewport() {
     return window.innerWidth <= 640;
@@ -219,9 +219,10 @@ export function useDraggable({ transparent = false } = {}) {
     const overlayStyle = {
         position:      'fixed',
         inset:         0,
-        background:    'rgba(0,0,0,0.45)',
+        background:    transparent ? 'transparent' : 'rgba(0,0,0,0.45)',
         zIndex:        mobile ? MOBILE_Z - 1 : zIndex - 1,
         pointerEvents: 'none',
+        transition:    'background 200ms',
     };
 
     const clickCatcherStyle = {
