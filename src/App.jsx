@@ -1600,10 +1600,10 @@ dbFetch('/.netlify/functions/users?me=true')
                     <>
                         {/* Backdrop */}
                         <div onClick={() => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }}
-                            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 9000 }} />
+                            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 10500 }} />
 
                         {/* Slide-in panel */}
-                        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '420px', background: '#fff', zIndex: 9001, boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+                        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '420px', background: '#fff', zIndex: 10501, boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
 
                             {/* Header */}
                             <div style={{ background: '#1c1917', padding: '1.25rem 1.5rem', color: '#f5f1eb', flexShrink: 0 }}>

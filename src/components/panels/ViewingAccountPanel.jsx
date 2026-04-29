@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
@@ -525,8 +526,8 @@ export default function ViewingAccountPanel({
             <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
         </div>
 
-        {/* Local ActivityModal — renders above this panel by inheriting zIndex */}
-        {panelActivityContext && (
+        {/* ActivityModal via Portal — renders at document.body to escape panel stacking context */}
+        {panelActivityContext && ReactDOM.createPortal(
             <ActivityModal
                 activity={null}
                 opportunities={opportunities}
@@ -555,7 +556,8 @@ export default function ViewingAccountPanel({
                         .catch(err => console.error('inline contact save failed:', err));
                     return nc;
                 }}
-            />
+            />,
+            document.body
         )}
         </>
     );

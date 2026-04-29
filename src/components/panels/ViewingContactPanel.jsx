@@ -1,5 +1,6 @@
 import { dbFetch } from '../../utils/storage';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { useApp } from '../../AppContext';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ActivityModal from '../modals/ActivityModal';
@@ -462,8 +463,8 @@ export default function ViewingContactPanel({
             <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
         </div>
 
-        {/* Local ActivityModal — always above this panel */}
-        {panelActivityContext && (
+        {/* ActivityModal via Portal — renders at document.body to escape panel stacking context */}
+        {panelActivityContext && ReactDOM.createPortal(
             <ActivityModal
                 activity={null}
                 opportunities={opportunities}
@@ -492,7 +493,8 @@ export default function ViewingContactPanel({
                         .catch(err => console.error('inline contact save failed:', err));
                     return nc;
                 }}
-            />
+            />,
+            document.body
         )}
         </>
     );
