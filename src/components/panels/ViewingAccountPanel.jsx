@@ -1,9 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import ReactDOM from 'react-dom';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
-import ActivityModal from '../modals/ActivityModal';
 import ResizeHandles from '../../hooks/ResizeHandles';
 
 
@@ -23,7 +21,7 @@ export default function ViewingAccountPanel({
         currentUser, userRole, canSeeAll,
         getStageColor, calculateDealHealth, getQuarter, getQuarterLabel,
         showConfirm, softDelete, addAudit,
-        setShowActivityModal,
+        setShowActivityModal, setActivityInitialContext,
         setActiveTab,
         handleDelete, handleSave,
         handleDeleteContact, handleSaveContact,
@@ -70,11 +68,9 @@ export default function ViewingAccountPanel({
             border: `1px solid ${c}44`,
         };
     };
-    // Reset any stale global activity modal state when this panel mounts
-    useEffect(() => { setShowActivityModal(false); }, []);
+
 
         const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef, zIndex } = useDraggable({ transparent: meetingPrepOpen });
-    const [panelActivityContext, setPanelActivityContext] = useState(null);
     const { size, getResizeHandleProps } = useResizable(860, 600, 520, 400);
 
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
@@ -202,7 +198,7 @@ export default function ViewingAccountPanel({
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
                     <button
-                        onClick={() => setPanelActivityContext({ companyName: acc.name })}
+                        onClick={() => { setActivityInitialContext({ companyName: acc.name }); setShowActivityModal(true); }}
                         style={{ height: '32px', padding: '0 0.875rem', borderRadius: '8px', border: '1px solid #c8b99a', background: '#c8b99a', color: '#7a6a48', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 1px 0 rgba(0,0,0,0.15) inset' }}
                         onMouseEnter={e => { e.currentTarget.style.background = '#d4c8a8'; e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.2)'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = '#c8b99a'; e.currentTarget.style.boxShadow = '0 1px 0 rgba(0,0,0,0.15) inset'; }}
@@ -232,7 +228,7 @@ export default function ViewingAccountPanel({
                         </button>
                     )}
                     <button
-                        onClick={() => { setViewingAccount(null); handleEditAccount(acc); }}
+                        onClick={() => handleEditAccount(acc)}
                         style={{ height: '32px', padding: '0 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#f5f1eb', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
                         Edit Account</button>
                     <span style={{ fontSize: '0.6875rem', color: 'rgba(245,241,235,0.35)', fontWeight: '500', letterSpacing: '0.03em', marginLeft: '0.25rem' }}>⠿ drag</span>
@@ -526,39 +522,6 @@ export default function ViewingAccountPanel({
             <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
         </div>
 
-        {/* ActivityModal via Portal — renders at document.body to escape panel stacking context */}
-        {panelActivityContext && ReactDOM.createPortal(
-            <ActivityModal
-                activity={null}
-                opportunities={opportunities}
-                contacts={contacts}
-                accounts={accounts}
-                initialContext={panelActivityContext}
-                zIndexBase={zIndex + 1}
-                onClose={() => setPanelActivityContext(null)}
-                onSave={(activityData) => {
-                    handleSaveActivity(activityData, {
-                        editingActivity: null,
-                        currentUser,
-                        opportunities,
-                        setShowActivityModal: () => setPanelActivityContext(null),
-                        setFollowUpPrompt: () => {},
-                        setQuickLogOpen: () => {},
-                        setQuickLogForm: () => {},
-                        setQuickLogContactResults: () => {},
-                    });
-                }}
-                onSaveNewContact={(data) => {
-                    const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                    const nc = { ...data, id: newId, createdAt: new Date().toISOString() };
-                    setContacts(prev => [...prev, nc]);
-                    dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nc) })
-                        .catch(err => console.error('inline contact save failed:', err));
-                    return nc;
-                }}
-            />,
-            document.body
-        )}
         </>
     );
 }
