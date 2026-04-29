@@ -22,6 +22,7 @@ export default function ViewingAccountPanel({
         currentUser, userRole, canSeeAll,
         getStageColor, calculateDealHealth, getQuarter, getQuarterLabel,
         showConfirm, softDelete, addAudit,
+        setShowActivityModal,
         setActiveTab,
         handleDelete, handleSave,
         handleDeleteContact, handleSaveContact,
@@ -68,7 +69,10 @@ export default function ViewingAccountPanel({
             border: `1px solid ${c}44`,
         };
     };
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef, zIndex } = useDraggable({ transparent: meetingPrepOpen });
+    // Reset any stale global activity modal state when this panel mounts
+    useEffect(() => { setShowActivityModal(false); }, []);
+
+        const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef, zIndex } = useDraggable({ transparent: meetingPrepOpen });
     const [panelActivityContext, setPanelActivityContext] = useState(null);
     const { size, getResizeHandleProps } = useResizable(860, 600, 520, 400);
 

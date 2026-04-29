@@ -19,7 +19,8 @@ export default function ViewingContactPanel({
         opportunities, accounts, contacts, tasks, activities, settings,
         currentUser, userRole, canSeeAll,
         getStageColor, calculateDealHealth, getQuarter, getQuarterLabel,
-        showConfirm, softDelete, addAudit,
+        showConfirm, softDelete,
+        setShowActivityModal, addAudit,
         setActiveTab,
         handleDeleteContact, handleSaveContact,
         handleDeleteTask, handleCompleteTask,
@@ -52,7 +53,9 @@ export default function ViewingContactPanel({
         const c = STAGE_COLORS[stage] || '#8a8378';
         return { display:'inline-block', padding:'0.2rem 0.625rem', borderRadius:3, fontSize:'0.6875rem', fontWeight:600, fontFamily:'inherit', background:c+'22', color:c, border:`1px solid ${c}44` };
     };
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef, zIndex } = useDraggable({ transparent: meetingPrepOpen });
+    useEffect(() => { setShowActivityModal(false); }, []);
+
+        const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef, zIndex } = useDraggable({ transparent: meetingPrepOpen });
     const [panelActivityContext, setPanelActivityContext] = useState(null);
     const { size, getResizeHandleProps } = useResizable(760, 580, 480, 380);
 
