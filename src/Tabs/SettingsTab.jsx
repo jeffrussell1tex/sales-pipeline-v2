@@ -7232,14 +7232,14 @@ const UsersDetail = ({ settings, onBack }) => {
                             <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any row to open the user profile. Use bulk select for role changes, deactivation, or MFA enforcement.</div>
                         </div>
                         {/* Table header */}
-                        <div style={{ display:'grid', gridTemplateColumns:'32px 1fr 140px 120px 120px 120px 40px 90px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                        <div style={{ display:'grid', gridTemplateColumns:'32px 1fr 120px 110px 110px 100px 40px 80px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
                             {['','NAME','ROLE','TEAM','MANAGER','LAST ACTIVE','MFA','STATUS',''].map((h,i) => (
                                 <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
                             ))}
                         </div>
                         {visible.map((u, i) => (
                             <div key={u.id}
-                                style={{ display:'grid', gridTemplateColumns:'32px 1fr 140px 120px 120px 120px 40px 90px 32px', gap:8, padding:'10px 16px', borderBottom: i<visible.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
+                                style={{ display:'grid', gridTemplateColumns:'32px 1fr 120px 110px 110px 100px 40px 80px 32px', gap:8, padding:'10px 16px', borderBottom: i<visible.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
                                 onClick={() => { setViewingUser(u._raw || u); setPeopleView('profile'); }}
                                 onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
                                 onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
@@ -7247,9 +7247,9 @@ const UsersDetail = ({ settings, onBack }) => {
                                 <div onClick={e=>{ e.stopPropagation(); setSelected(prev => { const n=new Set(prev); n.has(u.id)?n.delete(u.id):n.add(u.id); return n; }); }}
                                     style={{ width:14, height:14, border:`1.5px solid ${selected.has(u.id)?T.ink:T.border}`, borderRadius:2, background:selected.has(u.id)?T.ink:'transparent', cursor:'pointer', flexShrink:0 }}/>
                                 {/* Name + email */}
-                                <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
-                                    <UserAvatar name={u.name} size={26}/>
-                                    <div style={{ minWidth:0 }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0, overflow:'hidden' }}>
+                                    <div style={{ flexShrink:0 }}><UserAvatar name={u.name} size={26}/></div>
+                                    <div style={{ minWidth:0, flex:1 }}>
                                         <div style={{ fontSize:13, fontWeight:600, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{u.name}</div>
                                         <div style={{ fontSize:11, color:T.inkMuted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{u.email}</div>
                                     </div>
