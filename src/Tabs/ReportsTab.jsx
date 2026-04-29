@@ -1056,28 +1056,111 @@ ${bodyHtml}
                                   </div>
                                 )}
 
-                                {/* Pipeline waterfall */}
+                                {/* Pipeline movement — horizontal flow ribbon (Alt B) */}
                                 <Panel>
-                                  <SecHdr title="Pipeline movement" sub="Last 7 days — what changed"
-                                    right={<span style={{ fontSize:14, fontWeight:700, color:netDelta>=0?T.ok:T.danger, fontFamily:T.sans }}>{netDelta>=0?'+':''}{fmt(netDelta)}</span>}/>
-                                  <svg width="100%" viewBox={`0 0 ${chartW} ${chartH+48}`} style={{ display:'block' }}>
-                                    {[0.25,0.5,0.75,1].map(f=>(
-                                      <line key={f} x1={0} x2={chartW} y1={chartH-chartH*f} y2={chartH-chartH*f} stroke={T.border} strokeWidth={0.5} strokeDasharray="2 4"/>
-                                    ))}
-                                    {wfBars.map((b,i)=>{ if(i===wfBars.length-1)return null; const n=wfBars[i+1]; const ly=b.kind==='total'?b.y:(b.value>=0?b.y:b.y+b.h); return <line key={'c'+i} x1={b.x+barW} y1={ly} x2={n.x} y2={ly} stroke={T.borderStrong} strokeWidth={1} strokeDasharray="3 3"/>; })}
-                                    {wfBars.map((b,i)=>(
-                                      <g key={i}>
-                                        <rect x={b.x} y={b.y} width={barW} height={b.h} fill={wfColor(b.kind)} opacity={b.kind==='total'?1:0.85} rx={2}/>
-                                        <text x={b.x+barW/2} y={b.y-6} fontSize="10.5" fontWeight="600" textAnchor="middle" fill={T.ink} fontFamily={T.sans}>{b.vl}</text>
-                                        <text x={b.x+barW/2} y={chartH+18} fontSize="10.5" fontWeight="500" textAnchor="middle" fill={T.inkMid} fontFamily={T.sans}>{b.label}</text>
-                                      </g>
-                                    ))}
-                                  </svg>
-                                  <div style={{ display:'flex', gap:14, marginTop:4, fontSize:11, color:T.inkMid, fontFamily:T.sans }}>
-                                    {[{c:T.ink,l:'Totals'},{c:T.ok,l:'Added'},{c:'#3a5530',l:'Won'},{c:T.danger,l:'Slipped'}].map(({c,l})=>(
-                                      <span key={l} style={{ display:'inline-flex', alignItems:'center', gap:5 }}><span style={{ width:10,height:10,background:c,borderRadius:2 }}/>{l}</span>
-                                    ))}
+                                  {/* ── Header row ───────────────────────────────────── */}
+                                  <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginBottom:10 }}>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                      <div style={{ fontFamily:'Georgia,"Tiempos",serif', fontStyle:'italic', fontSize:16, fontWeight:400, letterSpacing:-0.2, color:T.ink, lineHeight:1.2 }}>Pipeline movement</div>
+                                      <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>Last 7 days — composition of week-over-week movement</div>
+                                    </div>
+                                    <div style={{ display:'flex', alignItems:'baseline', gap:6, flexShrink:0 }}>
+                                      <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>Net change</span>
+                                      <span style={{ fontSize:15, fontWeight:700, fontFamily:T.sans, fontFeatureSettings:'"tnum"', color:netDelta>=0?T.ok:T.danger }}>{netDelta>=0?'+':'−'}{fmt(Math.abs(netDelta))}</span>
+                                    </div>
                                   </div>
+
+                                  {/* ── Anchor totals row ─────────────────────────────── */}
+                                  {(() => {
+                                    // Ribbon segments: carried-over | slipped | won | lost | added
+                                    // Total width = endOfWeek + slipped2 + totalWonRevenue + added2
+                                    // (i.e. startOfWeek + added2 — decomposed into all flows)
+                                    const ribbonTotal = Math.max(startPipe + added2, 1);
+                                    const segments = [
+                                      { key:'carried', label:'Carried over', value:Math.max(startPipe - slipped2 - totalWonRevenue, 0), kind:'carried', count:null },
+                                      { key:'slipped', label:'Slipped',      value:slipped2,          kind:'neg',     count:slippedOpps2.length },
+                                      { key:'won',     label:'Won',           value:totalWonRevenue,   kind:'won',     count:null },
+                                      { key:'lost',    label:'Lost',          value:0,                 kind:'neg',     count:null },
+                                      { key:'added',   label:'Added',         value:added2,            kind:'added',   count:addedOpps2.length },
+                                    ];
+                                    const segColor = (kind) => {
+                                      if (kind==='carried') return T.ink;
+                                      if (kind==='won')     return '#3a5530';
+                                      if (kind==='added')   return T.ok;
+                                      return T.danger;
+                                    };
+                                    const segBg = (kind) => {
+                                      if (kind==='added') return `repeating-linear-gradient(135deg,${T.ok},${T.ok} 4px,${T.ok}99 4px,${T.ok}99 8px)`;
+                                      return segColor(kind);
+                                    };
+                                    const legendBg = (kind) => {
+                                      if (kind==='added') return `repeating-linear-gradient(135deg,${T.ok},${T.ok} 2px,${T.ok}88 2px,${T.ok}88 4px)`;
+                                      return segColor(kind);
+                                    };
+                                    const fmtLegendVal = (seg) => {
+                                      if (seg.kind==='carried') return fmt(seg.value);
+                                      if (seg.kind==='added')   return '+' + fmt(seg.value);
+                                      return '−' + fmt(seg.value);
+                                    };
+                                    const subLabel = (seg) => {
+                                      if (seg.key==='slipped' && seg.count!=null) return seg.count + ' deal' + (seg.count!==1?'s':'');
+                                      if (seg.key==='won'     && wonOpps.length)  return wonOpps.length + ' closed';
+                                      if (seg.key==='added'   && seg.count!=null) return seg.count + ' deal' + (seg.count!==1?'s':'');
+                                      return null;
+                                    };
+
+                                    return (
+                                      <>
+                                        <div style={{ display:'flex', alignItems:'baseline', gap:14, marginTop:10, marginBottom:8 }}>
+                                          <div>
+                                            <div style={{ fontSize:10, fontWeight:600, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, fontFamily:T.sans }}>Start of week</div>
+                                            <div style={{ fontSize:22, fontWeight:600, color:T.ink, fontFeatureSettings:'"tnum"', letterSpacing:-0.5, fontFamily:T.sans }}>{fmt(startPipe)}</div>
+                                          </div>
+                                          <div style={{ flex:1 }}/>
+                                          <div style={{ textAlign:'right' }}>
+                                            <div style={{ fontSize:10, fontWeight:600, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, fontFamily:T.sans }}>End of week</div>
+                                            <div style={{ fontSize:22, fontWeight:600, color:T.ink, fontFeatureSettings:'"tnum"', letterSpacing:-0.5, fontFamily:T.sans }}>{fmt(totalPipelineValue)}</div>
+                                          </div>
+                                        </div>
+
+                                        {/* ── Ribbon ──────────────────────────────────── */}
+                                        <div style={{ display:'flex', height:34, width:'100%', borderRadius:3, overflow:'hidden' }}>
+                                          {segments.filter(s=>s.value>0).map((seg, i, arr) => {
+                                            const pct = (seg.value / ribbonTotal) * 100;
+                                            const isFirst = i === 0;
+                                            const isLast  = i === arr.length - 1;
+                                            return (
+                                              <div key={seg.key}
+                                                title={seg.label + ' ' + fmt(seg.value)}
+                                                style={{
+                                                  width: pct + '%',
+                                                  height: '100%',
+                                                  background: segBg(seg.kind),
+                                                  borderRight: isLast ? 'none' : '1px solid ' + T.surface,
+                                                  borderRadius: isFirst ? '3px 0 0 3px' : isLast ? '0 3px 3px 0' : 0,
+                                                  flexShrink: 0,
+                                                }}
+                                              />
+                                            );
+                                          })}
+                                        </div>
+
+                                        {/* ── Legend / breakdown row ──────────────────── */}
+                                        <div style={{ display:'flex', gap:24, marginTop:12, flexWrap:'wrap' }}>
+                                          {segments.map(seg => (
+                                            <div key={seg.key} style={{ display:'flex', gap:7, alignItems:'flex-start', flex:1, minWidth:90 }}>
+                                              <div style={{ width:10, height:10, borderRadius:2, background:legendBg(seg.kind), flexShrink:0, marginTop:4 }}/>
+                                              <div>
+                                                <div style={{ fontSize:11, fontWeight:500, color:T.inkMid, fontFamily:T.sans }}>{seg.label}</div>
+                                                <div style={{ fontSize:14, fontWeight:600, color:T.ink, fontFeatureSettings:'"tnum"', letterSpacing:-0.2, fontFamily:T.sans }}>{fmtLegendVal(seg)}</div>
+                                                {subLabel(seg) && <div style={{ fontSize:10, color:T.inkMuted, marginTop:1, fontFamily:T.sans }}>{subLabel(seg)}</div>}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
                                 </Panel>
 
                                 {/* Forecast + Forecast accuracy */}

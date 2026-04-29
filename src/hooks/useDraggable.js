@@ -28,7 +28,7 @@ function isMobileViewport() {
     return window.innerWidth <= 640;
 }
 
-export function useDraggable() {
+export function useDraggable({ transparent = false } = {}) {
     const [pos, setPos]               = useState(null);
     const [zIndex, setZIndex]         = useState(10000);
     const [isDragging, setIsDragging] = useState(false);
@@ -219,9 +219,10 @@ export function useDraggable() {
     const overlayStyle = {
         position:      'fixed',
         inset:         0,
-        background:    'rgba(0,0,0,0.45)',
+        background:    transparent ? 'transparent' : 'rgba(0,0,0,0.45)',
         zIndex:        mobile ? MOBILE_Z - 1 : zIndex - 1,
         pointerEvents: 'none',
+        transition:    'background 200ms',
     };
 
     const clickCatcherStyle = {
@@ -229,7 +230,7 @@ export function useDraggable() {
         inset:         0,
         zIndex:        mobile ? MOBILE_Z - 1 : zIndex - 1,
         background:    'transparent',
-        pointerEvents: isDragging ? 'none' : 'auto',
+        pointerEvents: isDragging || transparent ? 'none' : 'auto',
     };
 
     const dragHandleProps = {
@@ -255,6 +256,7 @@ export function useDraggable() {
         isMobile: mobile,
         bringToFront,
         containerRef,
+        zIndex,
     };
 }
 

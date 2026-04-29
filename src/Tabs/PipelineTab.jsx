@@ -3,6 +3,7 @@ import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 import KanbanView from '../components/KanbanView';
 import FunnelView from '../components/FunnelView';
+import ListView from '../components/ListView';
 
 // ── Design tokens ─────────────────────────────────────────────
 const T = {
@@ -821,156 +822,10 @@ export default function PipelineTab() {
 
                 {/* ── LIST VIEW ──────────────────────────────────── */}
                 {pipelineView === 'table' && (
-                    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rMd, overflow: 'auto', fontFamily: T.sans }}>
-                        {/* Sticky header row */}
-                        <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: listGridCols,
-                            alignItems: 'center', padding: '0 14px', height: 36,
-                            background: T.surface2, borderBottom: `1px solid ${T.border}`,
-                            fontSize: 10, fontWeight: 700, color: T.inkMuted,
-                            letterSpacing: 0.6, textTransform: 'uppercase',
-                            position: 'sticky', top: 0, zIndex: 1,
-                        }}>
-                            {/* Select-all checkbox */}
-                            {selectMode ? (
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                    onClick={() => setSelectedOpps(prev => prev.length === smartFilteredOpps.length ? [] : smartFilteredOpps.map(o => o.id))}>
-                                    <div style={{ width: 14, height: 14, borderRadius: 3, border: `1.5px solid ${selectedOpps.length === smartFilteredOpps.length && smartFilteredOpps.length > 0 ? T.ink : T.borderStrong}`, background: selectedOpps.length === smartFilteredOpps.length && smartFilteredOpps.length > 0 ? T.ink : 'transparent', cursor: 'pointer' }} />
-                                </div>
-                            ) : <div/>}
-
-                            <SortHeader label="Deal"    field="opportunityName" currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} />
-                            <SortHeader label="Account" field="account"         currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} />
-                            {canSeeAll && <SortHeader label="Rep" field="salesRep" currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} />}
-                            <div>Stage</div>
-                            <SortHeader label="Revenue" field="arr"                currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} style={{ textAlign: 'right', justifyContent: 'flex-end' }} />
-                            <SortHeader label="Close" field="forecastedCloseDate" currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} />
-                            <div>AI</div>
-                            <div>Health</div>
-                            <SortHeader label="Days" field="stageChangedDate" currentField={pipelineSortField} currentDir={pipelineSortDir} onSort={handleSort} />
-                            <div/>
-                        </div>
-
-                        {/* Data rows */}
-                        {smartFilteredOpps
-                            .sort((a, b) => {
-                                const dir = pipelineSortDir === 'asc' ? 1 : -1;
-                                switch (pipelineSortField) {
-                                    case 'opportunityName': return dir * (a.opportunityName||a.account||'').localeCompare(b.opportunityName||b.account||'');
-                                    case 'salesRep':        return dir * (a.salesRep||'').localeCompare(b.salesRep||'');
-                                    case 'account':         return dir * (a.account||'').localeCompare(b.account||'');
-                                    case 'arr':             return dir * ((parseFloat(a.arr)||0) - (parseFloat(b.arr)||0));
-                                    case 'stageChangedDate': {
-                                        const da = a.stageChangedDate ? new Date(a.stageChangedDate+'T12:00:00').getTime() : 0;
-                                        const db = b.stageChangedDate ? new Date(b.stageChangedDate+'T12:00:00').getTime() : 0;
-                                        return dir * (da - db);
-                                    }
-                                    default: return dir * (new Date(a.forecastedCloseDate||'9999') - new Date(b.forecastedCloseDate||'9999'));
-                                }
-                            })
-                            .map(opp => {
-                                const health      = calculateDealHealth(opp);
-                                const daysInStage = opp.stageChangedDate ? Math.max(0, Math.floor((new Date() - new Date(opp.stageChangedDate + 'T12:00:00')) / 86400000)) : null;
-                                const stale       = daysInStage !== null && daysInStage > 14;
-                                const closeDays   = opp.forecastedCloseDate ? Math.round((new Date(opp.forecastedCloseDate + 'T12:00:00') - new Date()) / 86400000) : null;
-                                const overdue     = closeDays !== null && closeDays < 0;
-                                const aiRisk      = opp.aiScore && opp.aiScore.score < 50;
-                                const isSelected  = selectedOpps.includes(opp.id);
-
-                                return (
-                                    <div key={opp.id}
-                                        onClick={() => selectMode
-                                            ? setSelectedOpps(prev => prev.includes(opp.id) ? prev.filter(x => x !== opp.id) : [...prev, opp.id])
-                                            : (setEditingOpp(opp), setShowModal(true))
-                                        }
-                                        style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: listGridCols,
-                                            alignItems: 'center', padding: '0 14px', height: 42,
-                                            borderBottom: `1px solid ${T.border}`,
-                                            background: isSelected ? 'rgba(42,38,34,0.04)' : 'transparent',
-                                            fontSize: 12, color: T.ink, cursor: 'pointer', transition: 'background 100ms',
-                                        }}
-                                        onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = T.surface2; }}
-                                        onMouseLeave={e => { e.currentTarget.style.background = isSelected ? 'rgba(42,38,34,0.04)' : 'transparent'; }}>
-
-                                        {/* Checkbox */}
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                                            onClick={e => { e.stopPropagation(); setSelectedOpps(prev => prev.includes(opp.id) ? prev.filter(x => x !== opp.id) : [...prev, opp.id]); }}>
-                                            {selectMode && (
-                                                <div style={{ width: 16, height: 16, borderRadius: 3, border: `1.5px solid ${isSelected ? T.ink : T.borderStrong}`, background: isSelected ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
-                                                    {isSelected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={T.surface} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Deal — with next step tooltip on hover */}
-                                        <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}
-                                            title={opp.nextStep ? `Next step: ${opp.nextStep}` : undefined}>
-                                            {opp.opportunityName || opp.account}
-                                            {opp.nextStep && (
-                                                <span style={{ marginLeft: 5, fontSize: 10, color: T.goldInk, fontWeight: 400, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                    → {opp.nextStep.length > 40 ? opp.nextStep.slice(0, 40) + '…' : opp.nextStep}
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        {/* Account */}
-                                        <div style={{ color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 12 }}>{opp.account}</div>
-
-                                        {/* Rep — canSeeAll only */}
-                                        {canSeeAll && (
-                                            <div style={{ color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8, fontSize: 11 }}>
-                                                {opp.salesRep || opp.assignedTo || '—'}
-                                            </div>
-                                        )}
-
-                                        {/* Stage */}
-                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.rSm, fontSize: 11, fontWeight: 500, width: 'fit-content' }}>
-                                            <div style={{ width: 6, height: 6, borderRadius: 1, background: stageColor(opp.stage) }}/>{opp.stage}
-                                        </div>
-
-                                        {/* Revenue */}
-                                        <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', textAlign: 'right', color: T.ink }}>
-                                            ${(parseFloat(opp.arr)||0) >= 1000 ? Math.round((parseFloat(opp.arr)||0)/1000) + 'K' : (parseFloat(opp.arr)||0).toLocaleString()}
-                                        </div>
-
-                                        {/* Close */}
-                                        <div style={{ fontSize: 11, color: overdue ? T.danger : T.inkMid, fontWeight: overdue ? 600 : 400 }}>
-                                            {opp.forecastedCloseDate ? new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
-                                        </div>
-
-                                        {/* AI */}
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                                            {opp.aiScore ? (
-                                                <><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={aiRisk ? T.danger : T.inkMid} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></svg>
-                                                <span style={{ fontSize: 11, color: aiRisk ? T.danger : T.inkMid }}>{opp.aiScore.score}</span></>
-                                            ) : <span style={{ fontSize: 11, color: T.inkMuted }}>—</span>}
-                                        </div>
-
-                                        {/* Health */}
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger }}/>
-                                            <span style={{ fontSize: 11, color: T.inkMid }}>{health.score}</span>
-                                        </div>
-
-                                        {/* Days in stage */}
-                                        <div style={{ fontSize: 11, color: stale ? T.danger : T.inkMuted, fontWeight: stale ? 600 : 400 }}>
-                                            {daysInStage !== null ? daysInStage + 'd' : '—'}
-                                        </div>
-
-                                        {/* ⋯ */}
-                                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4 }}><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        {smartFilteredOpps.length === 0 && (
-                            <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 13 }}>No deals match the current filter.</div>
-                        )}
-                    </div>
+                    <ListView
+                        pipelineFilteredOpps={smartFilteredOpps}
+                        handleEdit={handleEdit}
+                    />
                 )}
 
                 {/* ── FUNNEL VIEW ──────────────────────────────────── */}

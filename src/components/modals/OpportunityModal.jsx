@@ -1772,7 +1772,7 @@ export default function OpportunityModal({
                                             <textarea value={formData.notes} onChange={e => handleChange('notes', e.target.value)}
                                                 placeholder="Deal context, background, key details…"
                                                 rows={3}
-                                                style={{ width: '100%', padding: '10px 12px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontFamily: T.serif, fontStyle: 'italic', resize: 'vertical', background: T.surface, color: T.ink, outline: 'none', boxSizing: 'border-box', lineHeight: 1.6 }}/>
+                                                style={{ width: '100%', padding: '10px 12px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, fontFamily: T.sans, resize: 'vertical', background: T.surface, color: T.ink, outline: 'none', boxSizing: 'border-box', lineHeight: 1.6 }}/>
                                         </div>
                                     )}
 
