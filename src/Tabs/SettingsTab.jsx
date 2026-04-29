@@ -7315,76 +7315,116 @@ const UsersDetail = ({ settings, onBack }) => {
                     </div>
                 </div>
 
-                {/* Right rail */}
-                <div style={{ display:'flex', flexDirection:'column', gap:14, position:'sticky', top:0 }}>
-                    {/* Pending invites */}
-                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
-                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
-                            <button onClick={() => setPeopleView('pending')} style={{ fontSize:13.5, fontWeight:700, color:T.ink, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, padding:0, textAlign:'left' }}>Pending invites →</button>
-                            <button style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Resend all</button>
-                        </div>
-                        <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:10 }}>Sent but not yet accepted.</div>
-                        {invitedCount.map(u => (
-                            <div key={u.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:`1px solid ${T.border}` }}>
-                                <UserAvatar name={u.name} size={28}/>
-                                <div style={{ flex:1, minWidth:0 }}>
-                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{u.name}</div>
-                                    <div style={{ fontSize:11, color:T.inkMuted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.email}</div>
-                                </div>
-                                <span style={{ fontSize:11, color:T.warn, fontWeight:600, flexShrink:0 }}>{u.invitedDaysAgo === 1 ? 'yesterday' : `${u.invitedDaysAgo}d ago`}</span>
-                            </div>
-                        ))}
-                    </div>
+                {/* Right rail — all values derived from live displayUsers */}
+                {(() => {
+                    const cap          = 50; // seat cap — update when plan changes
+                    const seatPct      = Math.round((activeCount / cap) * 100);
+                    const seatColor    = seatPct >= 90 ? T.danger : seatPct >= 75 ? T.warn : T.ok;
 
-                    {/* Seat usage */}
-                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
-                        <button onClick={() => setPeopleView('seats')} style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:4, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, padding:0, display:'block', textAlign:'left' }}>Seat usage →</button>
-                        <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:12 }}>Workspace limits.</div>
-                        {/* Main bar */}
-                        <div style={{ display:'flex', alignItems:'baseline', gap:4, marginBottom:6 }}>
-                            <span style={{ fontSize:18, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{activeCount}</span>
-                            <span style={{ fontSize:13, color:T.inkMuted }}>/ 50</span>
-                            <div style={{ flex:1 }}/>
-                            <span style={{ fontSize:11.5, fontWeight:600, color:T.ok }}>84%</span>
-                        </div>
-                        <div style={{ height:5, background:T.border, borderRadius:3, marginBottom:12, overflow:'hidden' }}>
-                            <div style={{ width:`${(activeCount/50)*100}%`, height:'100%', background:T.ok, borderRadius:3 }}/>
-                        </div>
-                        {[
-                            { label:'Reps',     value:PT_USERS.filter(u=>u.role==='Sales Rep').length },
-                            { label:'Managers', value:PT_USERS.filter(u=>u.role==='Sales Manager').length },
-                            { label:'Admins',   value:PT_USERS.filter(u=>u.role==='Admin').length },
-                            { label:'Pending',  value:invitedCount.length, sub:'expires in 7d', color:T.warn },
-                        ].map((row,i) => (
-                            <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'5px 0', borderTop:`1px solid ${T.border}` }}>
-                                <span style={{ fontSize:12.5, color:T.inkMid }}>{row.label}</span>
-                                <div style={{ textAlign:'right' }}>
-                                    <span style={{ fontSize:13, fontWeight:700, color:row.color||T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{row.value}</span>
-                                    {row.sub && <div style={{ fontSize:10.5, color:T.inkMuted }}>{row.sub}</div>}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                    // Role breakdown from real userType field
+                    const repCount     = displayUsers.filter(u => u.status==='Active' && (u.role==='User'     || u.role==='Sales Rep')).length;
+                    const mgrCount     = displayUsers.filter(u => u.status==='Active' && (u.role==='Manager'  || u.role==='Sales Manager')).length;
+                    const adminCount   = displayUsers.filter(u => u.status==='Active' && (u.role==='Admin')).length;
+                    const pendingCount = invitedCount.length;
 
-                    {/* Security health */}
-                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
-                        <button onClick={() => setPeopleView('security')} style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:3, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, padding:0, display:'block', textAlign:'left' }}>Security health →</button>
-                        <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:12 }}>Last 30 days.</div>
-                        {[
-                            { label:'MFA on',       value:'17/21', sub:'4 off',   color:T.ok },
-                            { label:'SSO',          value:'On',    sub:'all',     color:T.ok },
-                            { label:'Stale sessions',value:'2',    sub:'≤30d',    color:T.warn },
-                        ].map((row,i) => (
-                            <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'7px 0', borderTop: i>0 ? `1px solid ${T.border}` : 'none' }}>
-                                <span style={{ fontSize:12.5, color:T.inkMid }}>{row.label}</span>
-                                <div style={{ textAlign:'right' }}>
-                                    <div style={{ fontSize:13.5, fontWeight:700, color:row.color, fontFamily:'ui-monospace,Menlo,monospace' }}>{row.value}</div>
-                                    <div style={{ fontSize:10.5, color:T.inkMuted }}>{row.sub}</div>
+                    // MFA — real users: derived from smsNotifications.enabled as proxy;
+                    // for real Clerk MFA, this field would come from the /users endpoint
+                    const mfaOn  = displayUsers.filter(u => u.status==='Active' && u.mfa).length;
+                    const mfaOff = activeCount - mfaOn;
+
+                    return (
+                        <div style={{ display:'flex', flexDirection:'column', gap:14, position:'sticky', top:0 }}>
+                            {/* Pending invites */}
+                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
+                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
+                                    <button onClick={() => setPeopleView('pending')} style={{ fontSize:13.5, fontWeight:700, color:T.ink, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, padding:0, textAlign:'left' }}>Pending invites →</button>
+                                    {pendingCount > 0 && <button style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Resend all</button>}
                                 </div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom: pendingCount > 0 ? 10 : 0 }}>Sent but not yet accepted.</div>
+                                {pendingCount === 0
+                                    ? <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', marginTop:6 }}>No pending invites.</div>
+                                    : invitedCount.map(u => (
+                                        <div key={u.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderTop:`1px solid ${T.border}` }}>
+                                            <UserAvatar name={u.name} size={28}/>
+                                            <div style={{ flex:1, minWidth:0 }}>
+                                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{u.name}</div>
+                                                <div style={{ fontSize:11, color:T.inkMuted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.email}</div>
+                                            </div>
+                                            {u.invitedDaysAgo != null && (
+                                                <span style={{ fontSize:11, color:T.warn, fontWeight:600, flexShrink:0 }}>
+                                                    {u.invitedDaysAgo === 1 ? 'yesterday' : `${u.invitedDaysAgo}d ago`}
+                                                </span>
+                                            )}
+                                        </div>
+                                    ))
+                                }
                             </div>
-                        ))}
-                    </div>
-                </div>
+
+                            {/* Seat usage */}
+                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
+                                <button onClick={() => setPeopleView('seats')} style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:4, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, padding:0, display:'block', textAlign:'left' }}>Seat usage →</button>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:12 }}>Workspace limits.</div>
+                                <div style={{ display:'flex', alignItems:'baseline', gap:4, marginBottom:6 }}>
+                                    <span style={{ fontSize:18, fontWeight:700, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{activeCount}</span>
+                                    <span style={{ fontSize:13, color:T.inkMuted }}>/ {cap}</span>
+                                    <div style={{ flex:1 }}/>
+                                    <span style={{ fontSize:11.5, fontWeight:600, color:seatColor }}>{seatPct}%</span>
+                                </div>
+                                <div style={{ height:5, background:T.border, borderRadius:3, marginBottom:12, overflow:'hidden' }}>
+                                    <div style={{ width:`${Math.min(seatPct,100)}%`, height:'100%', background:seatColor, borderRadius:3 }}/>
+                                </div>
+                                {[
+                                    { label:'Reps',     value:repCount },
+                                    { label:'Managers', value:mgrCount },
+                                    { label:'Admins',   value:adminCount },
+                                    ...(pendingCount > 0 ? [{ label:'Pending', value:pendingCount, sub:'expires in 7d', color:T.warn }] : []),
+                                ].map((row,i) => (
+                                    <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'5px 0', borderTop:`1px solid ${T.border}` }}>
+                                        <span style={{ fontSize:12.5, color:T.inkMid }}>{row.label}</span>
+                                        <div style={{ textAlign:'right' }}>
+                                            <span style={{ fontSize:13, fontWeight:700, color:row.color||T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{row.value}</span>
+                                            {row.sub && <div style={{ fontSize:10.5, color:T.inkMuted }}>{row.sub}</div>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Security health */}
+                            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
+                                <button onClick={() => setPeopleView('security')} style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:3, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, padding:0, display:'block', textAlign:'left' }}>Security health →</button>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, marginBottom:12 }}>Last 30 days.</div>
+                                {[
+                                    {
+                                        label: 'MFA on',
+                                        value: `${mfaOn}/${activeCount}`,
+                                        sub:   mfaOff > 0 ? `${mfaOff} off` : 'all enrolled',
+                                        color: mfaOff > 0 ? T.warn : T.ok,
+                                    },
+                                    {
+                                        label: 'SSO',
+                                        value: (settings.extra?.ssoEnabled || settings.ssoEnabled) ? 'On' : '—',
+                                        sub:   (settings.extra?.ssoEnabled || settings.ssoEnabled) ? 'configured' : 'not configured',
+                                        color: (settings.extra?.ssoEnabled || settings.ssoEnabled) ? T.ok : T.inkMuted,
+                                    },
+                                    {
+                                        label: 'Stale sessions',
+                                        value: '—',
+                                        sub:   'from Clerk dashboard',
+                                        color: T.inkMuted,
+                                    },
+                                ].map((row,i) => (
+                                    <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'7px 0', borderTop: i>0 ? `1px solid ${T.border}` : 'none' }}>
+                                        <span style={{ fontSize:12.5, color:T.inkMid }}>{row.label}</span>
+                                        <div style={{ textAlign:'right' }}>
+                                            <div style={{ fontSize:13.5, fontWeight:700, color:row.color, fontFamily:'ui-monospace,Menlo,monospace' }}>{row.value}</div>
+                                            <div style={{ fontSize:10.5, color:T.inkMuted }}>{row.sub}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
         </div>
     );
