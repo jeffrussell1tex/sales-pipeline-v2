@@ -12,7 +12,7 @@ export default function ViewingAccountPanel({
     setEditingContact, setShowContactModal,
     setEditingAccount, setEditingSubAccount, setShowAccountModal,
     setEditingTask, setShowTaskModal,
-    setEditingActivity, setShowActivityModal, setActivityInitialContext,
+    setEditingActivity,
     setShowCsvImportModal, setShowLeadImportModal, setShowOutlookImportModal,
     setShowSpiffClaimModal, setSpiffClaimContext,
     setShowShortcuts,
@@ -80,7 +80,6 @@ export default function ViewingAccountPanel({
     };
     const handleEditTask    = (t) => { setEditingTask(t); setShowTaskModal(true); };
     const handleEditOpp     = (o) => { setEditingOpp(o); setShowModal(true); };
-    const handleAddActivity = (ctx) => { setActivityInitialContext(ctx || null); setEditingActivity(null); setShowActivityModal(true); };
 
     const [panelTab, setPanelTab] = React.useState(
         () => localStorage.getItem('panel:account:tab') || 'overview'

@@ -287,7 +287,7 @@ export default function ModalLayer() {
                     setEditingContact={setEditingContact} setShowContactModal={setShowContactModal}
                     setEditingAccount={setEditingAccount} setEditingSubAccount={setEditingSubAccount} setShowAccountModal={setShowAccountModal}
                     setEditingTask={setEditingTask} setShowTaskModal={setShowTaskModal}
-                    setEditingActivity={setEditingActivity} setShowActivityModal={setShowActivityModal} setActivityInitialContext={setActivityInitialContext}
+                    setEditingActivity={setEditingActivity}
                     setShowSpiffClaimModal={setShowSpiffClaimModal} setSpiffClaimContext={setSpiffClaimContext}
                     setShowCsvImportModal={setShowCsvImportModal} setShowLeadImportModal={setShowLeadImportModal} setShowOutlookImportModal={setShowOutlookImportModal}
                     setShowShortcuts={setShowShortcuts}
@@ -298,7 +298,7 @@ export default function ModalLayer() {
                     setEditingContact={setEditingContact} setShowContactModal={setShowContactModal}
                     setEditingAccount={setEditingAccount} setEditingSubAccount={setEditingSubAccount} setShowAccountModal={setShowAccountModal}
                     setEditingTask={setEditingTask} setShowTaskModal={setShowTaskModal}
-                    setEditingActivity={setEditingActivity} setShowActivityModal={setShowActivityModal} setActivityInitialContext={setActivityInitialContext}
+                    setEditingActivity={setEditingActivity}
                     setShowSpiffClaimModal={setShowSpiffClaimModal} setSpiffClaimContext={setSpiffClaimContext}
                 />
 

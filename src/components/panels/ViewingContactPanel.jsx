@@ -12,7 +12,7 @@ export default function ViewingContactPanel({
     setEditingContact, setShowContactModal,
     setEditingAccount, setEditingSubAccount, setShowAccountModal,
     setEditingTask, setShowTaskModal,
-    setEditingActivity, setShowActivityModal, setActivityInitialContext,
+    setEditingActivity,
     setShowSpiffClaimModal, setSpiffClaimContext,
 }) {
     const {
@@ -59,7 +59,6 @@ export default function ViewingContactPanel({
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
     const handleEditAccount = (a) => { setEditingAccount(a); setEditingSubAccount(null); setShowAccountModal(true); };
     const handleEditTask    = (t) => { setEditingTask(t); setShowTaskModal(true); };
-    const handleAddActivity = (ctx) => { setActivityInitialContext(ctx || null); setEditingActivity(null); setShowActivityModal(true); };
 
     const [panelTab, setPanelTab] = React.useState(
         () => localStorage.getItem('panel:contact:tab') || 'overview'
