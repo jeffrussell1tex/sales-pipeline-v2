@@ -6073,7 +6073,7 @@ const PeoplePriBtn = ({ children, onClick, disabled }) => (
 );
 
 const SectionCard = ({ title, description, headAction, children }) => (
-    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, marginBottom:16, overflow:'hidden', fontFamily:T.sans }}>
+    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, marginBottom:16, fontFamily:T.sans }}>
         {(title || headAction) && (
             <div style={{ padding:'14px 18px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12 }}>
                 <div>
@@ -7226,7 +7226,7 @@ const UsersDetail = ({ settings, onBack }) => {
                     </div>
 
                     {/* User table */}
-                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8 }}>
                         <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
                             <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>All users</div>
                             <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any row to open the user profile. Use bulk select for role changes, deactivation, or MFA enforcement.</div>
