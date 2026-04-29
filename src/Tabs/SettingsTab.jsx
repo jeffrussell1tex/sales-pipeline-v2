@@ -2938,7 +2938,7 @@ const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTab, setA
                                                     style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:0, lineHeight:1 }}>⋯</button>
                                                 {openTierKebab === i && (
                                                     <div onClick={e => e.stopPropagation()}
-                                                        style={{ position:'absolute', right:0, top:'100%', zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200, overflow:'hidden' }}>
+                                                        style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200 }}>
                                                         {[
                                                             { label:'Edit tier', action: () => { setEditingTierIdx(i); setEditingTierVal({}); setOpenTierKebab(null); } },
                                                             { label:'Duplicate',  action: () => handleDuplicateTier(i) },
@@ -6599,7 +6599,7 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
                                                     onMouseLeave={e => e.currentTarget.style.background = 'none'}>⋯</button>
                                                 {openPendingKebab === u.id && (
                                                     <div onClick={e => e.stopPropagation()}
-                                                        style={{ position:'absolute', right:0, top:'100%', zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:180, overflow:'hidden' }}>
+                                                        style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:180 }}>
                                                         {[
                                                             { label:'Copy invite link', action: () => handleCopyLink(u.id) },
                                                             { label:'Edit role',         action: () => setOpenPendingKebab(null) },
@@ -7284,7 +7284,7 @@ const UsersDetail = ({ settings, onBack }) => {
                                         onMouseLeave={e => e.currentTarget.style.background = 'none'}>⋯</button>
                                     {openUserKebab === u.id && (
                                         <div onClick={e => e.stopPropagation()}
-                                            style={{ position:'absolute', right:0, top:'100%', zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200, overflow:'hidden' }}>
+                                            style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200 }}>
                                             {[
                                                 { label:'View profile', action: () => { setViewingUser(u._raw || u); setPeopleView('profile'); setOpenUserKebab(null); } },
                                                 { label:'Reset password', action: () => { setOpenUserKebab(null); /* Clerk handles via email */ } },
@@ -7391,7 +7391,18 @@ const UsersDetail = ({ settings, onBack }) => {
 };
 
 // ── TEAMS detail page ─────────────────────────────────────────
-const TeamsDetail = ({ settings, onBack }) => (
+const TeamsDetail = ({ settings, onBack }) => {
+    const [openTeamKebab, setOpenTeamKebab] = useState(null); // team id
+    const { showConfirm } = useApp();
+
+    React.useEffect(() => {
+        if (openTeamKebab === null) return;
+        const handler = () => setOpenTeamKebab(null);
+        document.addEventListener('click', handler);
+        return () => document.removeEventListener('click', handler);
+    }, [openTeamKebab]);
+
+    return (
     <div style={{ fontFamily:T.sans }}>
         {/* Breadcrumb */}
         <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
@@ -7423,7 +7434,7 @@ const TeamsDetail = ({ settings, onBack }) => (
         </div>
 
         {/* All teams table */}
-        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:14 }}>
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, marginBottom:14 }}>
             <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
                 <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>All teams</div>
                 <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Drag rows to reorder. Click any team to edit its members, manager, and quotas.</div>
@@ -7461,7 +7472,30 @@ const TeamsDetail = ({ settings, onBack }) => (
                     {/* Region */}
                     <div style={{ fontSize:11.5, color:T.inkMuted }}>{team.region}</div>
                     {/* Kebab */}
-                    <button onClick={e=>e.stopPropagation()} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+                    <div style={{ position:'relative' }}>
+                        <button onClick={e => { e.stopPropagation(); setOpenTeamKebab(openTeamKebab === team.id ? null : team.id); }}
+                            style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:'2px 4px', lineHeight:1, borderRadius:T.r }}
+                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                            onMouseLeave={e => e.currentTarget.style.background = 'none'}>⋯</button>
+                        {openTeamKebab === team.id && (
+                            <div onClick={e => e.stopPropagation()}
+                                style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200 }}>
+                                {[
+                                    { label:'Edit team',        action: () => setOpenTeamKebab(null) },
+                                    { label:'Change manager',   action: () => setOpenTeamKebab(null) },
+                                    { label:'View members',     action: () => setOpenTeamKebab(null) },
+                                    { label:'Delete team',      action: () => { setOpenTeamKebab(null); showConfirm(`Delete team "${team.name}"? Members will become unassigned.`, () => {}); }, danger: true },
+                                ].map((item, mi) => (
+                                    <button key={mi} onClick={item.action}
+                                        style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.danger ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                        onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(156,58,46,0.06)' : T.surface2}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             ))}
         </div>
@@ -7473,10 +7507,22 @@ const TeamsDetail = ({ settings, onBack }) => (
             <div style={{ fontSize:12.5, color:T.ok }}>None — every active user is in a team. ✓</div>
         </div>
     </div>
-);
+    );
+};
 
 // ── TERRITORIES detail page ───────────────────────────────────
-const TerritoriesDetail = ({ settings, onBack }) => (
+const TerritoriesDetail = ({ settings, onBack }) => {
+    const [openTerrKebab, setOpenTerrKebab] = useState(null); // territory id
+    const { showConfirm } = useApp();
+
+    React.useEffect(() => {
+        if (openTerrKebab === null) return;
+        const handler = () => setOpenTerrKebab(null);
+        document.addEventListener('click', handler);
+        return () => document.removeEventListener('click', handler);
+    }, [openTerrKebab]);
+
+    return (
     <div style={{ fontFamily:T.sans }}>
         {/* Breadcrumb */}
         <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
@@ -7508,7 +7554,7 @@ const TerritoriesDetail = ({ settings, onBack }) => (
         </div>
 
         {/* Territory table */}
-        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8 }}>
             <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
                 <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>All territories</div>
                 <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any row to edit its rule, owner, and rep assignments.</div>
@@ -7551,16 +7597,50 @@ const TerritoriesDetail = ({ settings, onBack }) => (
                         {tr.status}
                     </span>
                     {/* Kebab */}
-                    <button onClick={e=>e.stopPropagation()} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+                    <div style={{ position:'relative' }}>
+                        <button onClick={e => { e.stopPropagation(); setOpenTerrKebab(openTerrKebab === tr.id ? null : tr.id); }}
+                            style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:'2px 4px', lineHeight:1, borderRadius:T.r }}
+                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                            onMouseLeave={e => e.currentTarget.style.background = 'none'}>⋯</button>
+                        {openTerrKebab === tr.id && (
+                            <div onClick={e => e.stopPropagation()}
+                                style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200 }}>
+                                {[
+                                    { label:'Edit territory',   action: () => setOpenTerrKebab(null) },
+                                    { label:'Assign owner',     action: () => setOpenTerrKebab(null) },
+                                    { label:'Assign reps',      action: () => setOpenTerrKebab(null) },
+                                    { label:'Edit rule',        action: () => setOpenTerrKebab(null) },
+                                    { label:'Delete territory', action: () => { setOpenTerrKebab(null); showConfirm(`Delete territory "${tr.name}"? Assigned reps will become unassigned.`, () => {}); }, danger: true },
+                                ].map((item, mi) => (
+                                    <button key={mi} onClick={item.action}
+                                        style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.danger ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                        onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(156,58,46,0.06)' : T.surface2}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             ))}
         </div>
     </div>
-);
+    );
+};
 
 // ── ROLES & PERMISSIONS detail page ──────────────────────────
 const RolesDetail = ({ settings, onBack }) => {
     const [activeRole, setActiveRole] = useState('r3'); // default: Sales Rep
+    const [openRoleKebab, setOpenRoleKebab] = useState(null); // role id
+    const { showConfirm } = useApp();
+
+    React.useEffect(() => {
+        if (openRoleKebab === null) return;
+        const handler = () => setOpenRoleKebab(null);
+        document.addEventListener('click', handler);
+        return () => document.removeEventListener('click', handler);
+    }, [openRoleKebab]);
 
     const role   = PT_ROLES.find(r=>r.id===activeRole);
     const perms  = PT_PERMS[activeRole] || {};
@@ -7603,24 +7683,51 @@ const RolesDetail = ({ settings, onBack }) => {
                 {PT_ROLES.map(r => {
                     const active = r.id === activeRole;
                     return (
-                        <button key={r.id} onClick={() => setActiveRole(r.id)}
-                            style={{
-                                padding:'10px 20px', fontSize:13, fontWeight:600, border:'none', background:'transparent',
-                                cursor:'pointer', fontFamily:T.sans, position:'relative',
-                                color: active ? T.ink : T.inkMid,
-                                borderBottom: active ? `2px solid ${T.goldInk}` : '2px solid transparent',
-                                display:'flex', alignItems:'center', gap:6,
-                            }}>
-                            <span>{r.name}</span>
-                            <span style={{ fontSize:11, color:T.inkMuted }}>{r.userCount}</span>
-                            {r.sys && <span style={{ padding:'1px 4px', fontSize:9, fontWeight:800, background:'rgba(42,38,34,0.07)', color:T.inkMuted, borderRadius:2, letterSpacing:0.4 }}>SYS</span>}
-                        </button>
+                        <div key={r.id} style={{ position:'relative', display:'flex', alignItems:'center' }}>
+                            <button onClick={() => setActiveRole(r.id)}
+                                style={{
+                                    padding:'10px 16px 10px 20px', fontSize:13, fontWeight:600, border:'none', background:'transparent',
+                                    cursor:'pointer', fontFamily:T.sans,
+                                    color: active ? T.ink : T.inkMid,
+                                    borderBottom: active ? `2px solid ${T.goldInk}` : '2px solid transparent',
+                                    display:'flex', alignItems:'center', gap:6,
+                                }}>
+                                <span>{r.name}</span>
+                                <span style={{ fontSize:11, color:T.inkMuted }}>{r.userCount}</span>
+                                {r.sys && <span style={{ padding:'1px 4px', fontSize:9, fontWeight:800, background:'rgba(42,38,34,0.07)', color:T.inkMuted, borderRadius:2, letterSpacing:0.4 }}>SYS</span>}
+                            </button>
+                            {/* Per-role kebab */}
+                            <div style={{ position:'relative', marginRight:6 }}>
+                                <button onClick={e => { e.stopPropagation(); setOpenRoleKebab(openRoleKebab === r.id ? null : r.id); }}
+                                    style={{ background:'none', border:'none', color: active ? T.inkMid : T.border, fontSize:14, cursor:'pointer', padding:'2px 4px', lineHeight:1, borderRadius:T.r }}
+                                    onMouseEnter={e => { e.currentTarget.style.color = T.inkMid; e.currentTarget.style.background = T.surface2; }}
+                                    onMouseLeave={e => { e.currentTarget.style.color = active ? T.inkMid : T.border; e.currentTarget.style.background = 'none'; }}>⋯</button>
+                                {openRoleKebab === r.id && (
+                                    <div onClick={e => e.stopPropagation()}
+                                        style={{ position:'absolute', left:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:190 }}>
+                                        {[
+                                            { label:'Duplicate role',   action: () => setOpenRoleKebab(null) },
+                                            { label:'Rename',           action: () => setOpenRoleKebab(null) },
+                                            { label:`View ${r.userCount} users`, action: () => setOpenRoleKebab(null) },
+                                            ...(!r.sys ? [{ label:'Delete role', action: () => { setOpenRoleKebab(null); showConfirm(`Delete role "${r.name}"? Users with this role will need to be reassigned.`, () => {}); }, danger: true }] : []),
+                                        ].map((item, mi) => (
+                                            <button key={mi} onClick={item.action}
+                                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.danger ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                                onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(156,58,46,0.06)' : T.surface2}
+                                                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                {item.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     );
                 })}
             </div>
 
             {/* Permission matrix */}
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8 }}>
                 {/* Matrix header */}
                 <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                     <div>
