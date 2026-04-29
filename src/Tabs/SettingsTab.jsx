@@ -6504,6 +6504,15 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
     // In real app, pending invites are tracked in DB — for now surface from settings.users with status 'invited'
     // Using design mock data to show the intended UI
     const pendingUsers = (settings.users || []).filter(u => u.status === 'invited');
+    const [openPendingKebab, setOpenPendingKebab] = useState(null); // invite id
+    const [localPending, setLocalPending] = useState(null); // tracks revocations in session
+
+    React.useEffect(() => {
+        if (openPendingKebab === null) return;
+        const handler = () => setOpenPendingKebab(null);
+        document.addEventListener('click', handler);
+        return () => document.removeEventListener('click', handler);
+    }, [openPendingKebab]);
 
     const mockPending = [
         { id:'p1', name:'Anika Bose',    email:'anika@accelerep.com',   role:'Sales Rep', team:'SMB West', invitedBy:'Jeff Hammond', sent:'Yesterday',    opened:true,  expires:'in 4d' },
@@ -6512,9 +6521,16 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
         { id:'p4', name:'Marcus Wallace',email:'marcus@accelerep.com',  role:'CS',        team:null,       invitedBy:'Morgan Reyes', sent:'8 days ago',   opened:false, expires:'Expired', expired:true },
     ];
 
-    const displayPending = pendingUsers.length > 0
+    const basePending = pendingUsers.length > 0
         ? pendingUsers.map((u,i) => ({ id:u.id||i, name:u.name, email:u.email||'', role:u.userType||'Sales Rep', team:u.team||'—', invitedBy:'—', sent:'Recently', opened:false, expires:'in 7d' }))
         : mockPending;
+
+    const displayPending = localPending !== null ? localPending : basePending;
+
+    const handleRevoke  = (id) => { setLocalPending((displayPending).filter(u => u.id !== id)); setOpenPendingKebab(null); };
+    const handleResend  = (id) => { setOpenPendingKebab(null); /* POST to resend invite */ };
+    const handleCopyLink= (id) => { setOpenPendingKebab(null); navigator.clipboard?.writeText(`https://accelerep.com/invite/${id}`).catch(()=>{}); };
+    const handleReinvite= (id) => { setLocalPending(displayPending.map(u => u.id===id ? { ...u, expired:false, expires:'in 7d', sent:'just now' } : u)); setOpenPendingKebab(null); };
 
     const openCount    = displayPending.filter(u => !u.expired).length;
     const openedCount  = displayPending.filter(u => u.opened).length;
@@ -6567,10 +6583,40 @@ const UsersPendingPage = ({ settings, onBack, onUsers }) => {
                                 <div style={{ fontSize:11, color:T.inkMuted, minWidth:70 }}>Sent {u.sent}</div>
                                 <div style={{ fontSize:11, color: u.opened ? T.ok : T.inkMuted, minWidth:60 }}>{u.opened ? '● Opened' : '○ Not yet'}</div>
                                 <div style={{ fontSize:11, fontWeight:600, color: u.expired ? T.danger : u.warn ? T.warn : T.inkMid, minWidth:55 }}>{u.expires}</div>
-                                <div style={{ display:'flex', gap:6 }}>
+                                <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                                     {u.expired
-                                        ? <><PeopleSecBtn>Re-invite</PeopleSecBtn><PeopleSecBtn>Revoke</PeopleSecBtn></>
-                                        : <><PeopleSecBtn>Resend</PeopleSecBtn><PeopleSecBtn>Edit</PeopleSecBtn></>}
+                                        ? <>
+                                            <PeopleSecBtn onClick={() => handleReinvite(u.id)}>Re-invite</PeopleSecBtn>
+                                            <PeopleSecBtn onClick={() => handleRevoke(u.id)}>Revoke</PeopleSecBtn>
+                                        </>
+                                        : <>
+                                            <PeopleSecBtn onClick={() => handleResend(u.id)}>Resend</PeopleSecBtn>
+                                            <PeopleSecBtn>Edit</PeopleSecBtn>
+                                            <div style={{ position:'relative' }}>
+                                                <button onClick={e => { e.stopPropagation(); setOpenPendingKebab(openPendingKebab === u.id ? null : u.id); }}
+                                                    style={{ background:'none', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMuted, fontSize:15, cursor:'pointer', padding:'4px 8px', lineHeight:1 }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}>⋯</button>
+                                                {openPendingKebab === u.id && (
+                                                    <div onClick={e => e.stopPropagation()}
+                                                        style={{ position:'absolute', right:0, top:'100%', zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:180, overflow:'hidden' }}>
+                                                        {[
+                                                            { label:'Copy invite link', action: () => handleCopyLink(u.id) },
+                                                            { label:'Edit role',         action: () => setOpenPendingKebab(null) },
+                                                            { label:'Revoke invite',     action: () => handleRevoke(u.id), danger: true },
+                                                        ].map((item, mi) => (
+                                                            <button key={mi} onClick={item.action}
+                                                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.danger ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                                                onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(156,58,46,0.06)' : T.surface2}
+                                                                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                                {item.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </>
+                                    }
                                 </div>
                             </div>
                         ))}
@@ -7065,6 +7111,16 @@ const UsersDetail = ({ settings, onBack }) => {
     const [selected, setSelected] = useState(new Set());
     const [peopleView, setPeopleView] = useState(null); // null|'invite'|'import'|'export'|'pending'|'seats'|'security'|'profile'
     const [viewingUser, setViewingUser] = useState(null);
+    const [openUserKebab, setOpenUserKebab] = useState(null); // user id
+    const { showConfirm, setSettings: _setSettings } = useApp();
+
+    // Close kebab on click-outside
+    React.useEffect(() => {
+        if (openUserKebab === null) return;
+        const handler = () => setOpenUserKebab(null);
+        document.addEventListener('click', handler);
+        return () => document.removeEventListener('click', handler);
+    }, [openUserKebab]);
 
     const onUsers = () => { setPeopleView(null); setViewingUser(null); };
 
@@ -7221,7 +7277,39 @@ const UsersDetail = ({ settings, onBack }) => {
                                     </span>
                                 </div>
                                 {/* Kebab */}
-                                <button onClick={e=>e.stopPropagation()} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0, lineHeight:1 }}>⋯</button>
+                                <div style={{ position:'relative' }}>
+                                    <button onClick={e => { e.stopPropagation(); setOpenUserKebab(openUserKebab === u.id ? null : u.id); }}
+                                        style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:'2px 4px', lineHeight:1, borderRadius:T.r }}
+                                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'none'}>⋯</button>
+                                    {openUserKebab === u.id && (
+                                        <div onClick={e => e.stopPropagation()}
+                                            style={{ position:'absolute', right:0, top:'100%', zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200, overflow:'hidden' }}>
+                                            {[
+                                                { label:'View profile', action: () => { setViewingUser(u._raw || u); setPeopleView('profile'); setOpenUserKebab(null); } },
+                                                { label:'Reset password', action: () => { setOpenUserKebab(null); /* Clerk handles via email */ } },
+                                                u.status === 'Active' && { label:'Enforce MFA', action: () => { setOpenUserKebab(null); } },
+                                                u.status === 'Invited' && { label:'Resend invite', action: () => { setOpenUserKebab(null); } },
+                                                { label:'Deactivate', danger: true, action: () => {
+                                                    setOpenUserKebab(null);
+                                                    showConfirm(`Deactivate ${u.name}? They will immediately lose access to Accelerep.`, async () => {
+                                                        try {
+                                                            await dbFetch('/.netlify/functions/users', { method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id: u.id }) });
+                                                            _setSettings(prev => ({ ...prev, users: (prev.users||[]).filter(su => su.id !== u.id) }));
+                                                        } catch(err) { console.error('Deactivate failed:', err); }
+                                                    });
+                                                }},
+                                            ].filter(Boolean).map((item, mi) => (
+                                                <button key={mi} onClick={item.action}
+                                                    style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.danger ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(156,58,46,0.06)' : T.surface2}
+                                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                    {item.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         ))}
                     </div>
