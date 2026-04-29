@@ -1,5 +1,5 @@
 import { dbFetch } from '../../utils/storage';
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useApp } from '../../AppContext';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ActivityModal from '../modals/ActivityModal';
