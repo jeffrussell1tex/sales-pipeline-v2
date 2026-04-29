@@ -159,26 +159,7 @@ export default function ModalLayer() {
                 />
             )}
 
-            {showAccountModal && (
-                <AccountModal
-                    account={editingAccount || editingSubAccount}
-                    isSubAccount={!!parentAccountForSub || !!editingSubAccount}
-                    parentTier={parentAccountForSub?._forceTier
-                        || parentAccountForSub?.accountTier
-                        || (parentAccountForSub?.parentAccountId ? 'business_unit' : parentAccountForSub ? 'account' : null)}
-                    settings={settings}
-                    onClose={() => { setShowAccountModal(false); setAccountModalError(null); setAccountModalSaving(false); }}
-                    onDismissError={() => setAccountModalError(null)}
-                    onSave={(formData) => handleSaveAccount(
-                        { ...formData, _forceTier: parentAccountForSub?._forceTier },
-                        { editingAccount, editingSubAccount, parentAccountForSub, accountCreatedFromOppForm, pendingOppFormData, setShowAccountModal, setLastCreatedAccountName, setEditingOpp, setShowModal, setAccountCreatedFromOppForm, setPendingOppFormData }
-                    )}
-                    onAddRep={() => { setShowUserModal(true); setEditingUser(null); }}
-                    existingAccounts={accounts}
-                    errorMessage={accountModalError}
-                    saving={accountModalSaving}
-                />
-            )}
+
 
             {showUserModal && (
                 <UserModal
@@ -301,6 +282,28 @@ export default function ModalLayer() {
                     setEditingActivity={setEditingActivity}
                     setShowSpiffClaimModal={setShowSpiffClaimModal} setSpiffClaimContext={setSpiffClaimContext}
                 />
+
+            {/* AccountModal rendered after panels so DOM order guarantees it paints above panel backdrops at equal z-index */}
+            {showAccountModal && (
+                <AccountModal
+                    account={editingAccount || editingSubAccount}
+                    isSubAccount={!!parentAccountForSub || !!editingSubAccount}
+                    parentTier={parentAccountForSub?._forceTier
+                        || parentAccountForSub?.accountTier
+                        || (parentAccountForSub?.parentAccountId ? 'business_unit' : parentAccountForSub ? 'account' : null)}
+                    settings={settings}
+                    onClose={() => { setShowAccountModal(false); setAccountModalError(null); setAccountModalSaving(false); }}
+                    onDismissError={() => setAccountModalError(null)}
+                    onSave={(formData) => handleSaveAccount(
+                        { ...formData, _forceTier: parentAccountForSub?._forceTier },
+                        { editingAccount, editingSubAccount, parentAccountForSub, accountCreatedFromOppForm, pendingOppFormData, setShowAccountModal, setLastCreatedAccountName, setEditingOpp, setShowModal, setAccountCreatedFromOppForm, setPendingOppFormData }
+                    )}
+                    onAddRep={() => { setShowUserModal(true); setEditingUser(null); }}
+                    existingAccounts={accounts}
+                    errorMessage={accountModalError}
+                    saving={accountModalSaving}
+                />
+            )}
 
             {/* Notes Popover */}
             {/* ── Keyboard Shortcuts Overlay ───────────────────────── */}
