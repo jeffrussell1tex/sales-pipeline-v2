@@ -198,7 +198,7 @@ export default function ViewingAccountPanel({
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
                     <button
-                        onClick={() => { setActivityInitialContext({ companyName: acc.name }); setShowActivityModal(true); }}
+                        onClick={(e) => { e.stopPropagation(); setActivityInitialContext({ companyName: acc.name }); setShowActivityModal(true); }}
                         style={{ height: '32px', padding: '0 0.875rem', borderRadius: '8px', border: '1px solid #c8b99a', background: '#c8b99a', color: '#7a6a48', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 1px 0 rgba(0,0,0,0.15) inset' }}
                         onMouseEnter={e => { e.currentTarget.style.background = '#d4c8a8'; e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.2)'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = '#c8b99a'; e.currentTarget.style.boxShadow = '0 1px 0 rgba(0,0,0,0.15) inset'; }}
@@ -228,7 +228,7 @@ export default function ViewingAccountPanel({
                         </button>
                     )}
                     <button
-                        onClick={() => handleEditAccount(acc)}
+                        onClick={(e) => { e.stopPropagation(); handleEditAccount(acc); }}
                         style={{ height: '32px', padding: '0 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: '#f5f1eb', fontSize: '0.75rem', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
                         Edit Account</button>
                     <span style={{ fontSize: '0.6875rem', color: 'rgba(245,241,235,0.35)', fontWeight: '500', letterSpacing: '0.03em', marginLeft: '0.25rem' }}>⠿ drag</span>
