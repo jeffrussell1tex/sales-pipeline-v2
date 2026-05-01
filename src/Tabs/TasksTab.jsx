@@ -504,10 +504,15 @@ function applyFilters(feed, { source, type, range, account, scope, currentUser, 
         }
 
         // When / range filter
+        // Overdue open tasks are always shown regardless of range — hiding them causes users to miss work.
         // Strategy: work entirely in local YYYY-MM-DD strings to avoid UTC offset bugs.
         // completedAt/updatedAt are UTC ISO strings — convert to local date string first.
         // dueDate is already a local YYYY-MM-DD string — use directly.
-        if (range !== 'all') {
+        const td0 = new Date();
+        const todayDateStr0 = td0.getFullYear() + '-' + String(td0.getMonth()+1).padStart(2,'0') + '-' + String(td0.getDate()).padStart(2,'0');
+        const isOverdueOpenTask = it.source === 'task-open' && it.dueDate && it.dueDate < todayDateStr0;
+
+        if (range !== 'all' && !isOverdueOpenTask) {
             // Get the reference date string in local time (YYYY-MM-DD)
             let refDateStr;
             if (it.source === 'task-open' && it.dueDate) {
