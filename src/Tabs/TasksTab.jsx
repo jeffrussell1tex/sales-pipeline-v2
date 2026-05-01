@@ -405,35 +405,58 @@ function ActivityLogRow({ activity, opportunities, accounts, setViewingTask }) {
 function AccountPicker({ accountOptions, value, onChange }) {
     const [open,  setOpen]  = useState(false);
     const [query, setQuery] = useState('');
-    const ref = useRef(null);
+    const ref     = useRef(null);
+    const btnRef  = useRef(null);
+    const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 260 });
+
+    // Recompute dropdown position each time it opens so it escapes overflow:hidden parents
+    const openDropdown = () => {
+        if (btnRef.current) {
+            const r = btnRef.current.getBoundingClientRect();
+            setDropPos({ top: r.bottom + 4, left: r.left, width: Math.max(260, r.width) });
+        }
+        setOpen(true);
+    };
 
     useEffect(() => {
         if (!open) return;
-        const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target) && btnRef.current && !btnRef.current.contains(e.target)) setOpen(false); };
         document.addEventListener('mousedown', onDoc);
         return () => document.removeEventListener('mousedown', onDoc);
     }, [open]);
 
-    const selected  = value === 'all' ? null : accountOptions.find(a => a.id === value);
-    const q         = query.trim().toLowerCase();
-    const filtered  = q ? accountOptions.filter(a => a.name.toLowerCase().includes(q)) : accountOptions;
+    const selected = value === 'all' ? null : accountOptions.find(a => a.id === value);
+    const q        = query.trim().toLowerCase();
+    const filtered = q ? accountOptions.filter(a => a.name.toLowerCase().includes(q)) : accountOptions;
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && filtered.length > 0) {
+            onChange(filtered[0].id);
+            setOpen(false);
+            setQuery('');
+        }
+        if (e.key === 'Escape') { setOpen(false); setQuery(''); }
+    };
 
     return (
-        <div ref={ref} style={{ position: 'relative' }}>
-            <button onClick={() => setOpen(o => !o)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', fontSize: 12, fontWeight: 500, background: selected ? T.ink : T.surface, color: selected ? T.surface : T.inkMid, border: `1px solid ${selected ? T.ink : T.borderStrong}`, borderRadius: 4, cursor: 'pointer', maxWidth: 200, fontFamily: T.sans }}>
+        <div style={{ position: 'relative' }}>
+            <button ref={btnRef} onClick={() => open ? setOpen(false) : openDropdown()}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', fontSize: 12, fontWeight: 500, background: selected ? T.ink : T.surface, color: selected ? T.surface : T.inkMid, border: `1px solid ${selected ? T.ink : T.borderStrong}`, borderRadius: 4, cursor: 'pointer', maxWidth: 200, fontFamily: T.sans }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected ? selected.name : 'All accounts'}</span>
                 <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
             </button>
 
             {open && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 40, width: 260, maxHeight: 320, display: 'flex', flexDirection: 'column', background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r+1, boxShadow: '0 8px 24px rgba(42,38,34,0.14)', overflow: 'hidden' }}>
+                <div ref={ref} style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, zIndex: 9999, width: dropPos.width, maxHeight: 320, display: 'flex', flexDirection: 'column', background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r+1, boxShadow: '0 8px 24px rgba(42,38,34,0.14)', overflow: 'hidden' }}>
                     <div style={{ padding: 8, borderBottom: `1px solid ${T.border}` }}>
-                        <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="Filter accounts…"
+                        <input autoFocus value={query}
+                            onChange={e => setQuery(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Search accounts… or press Enter"
                             style={{ width: '100%', padding: '6px 10px', fontSize: 12, background: T.bg, border: `1px solid ${T.border}`, borderRadius: 3, color: T.ink, outline: 'none', fontFamily: T.sans, boxSizing: 'border-box' }}/>
                     </div>
                     <div style={{ overflow: 'auto', flex: 1 }}>
-                        {/* All accounts option */}
                         <button onClick={() => { onChange('all'); setOpen(false); setQuery(''); }}
                             style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', fontSize: 12, fontWeight: value === 'all' ? 700 : 500, background: value === 'all' ? T.surface2 : 'transparent', color: T.ink, border: 'none', cursor: 'pointer', textAlign: 'left', borderBottom: `1px solid ${T.border}`, fontFamily: T.sans }}>
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={value === 'all' ? T.ok : 'transparent'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>
@@ -480,14 +503,31 @@ function applyFilters(feed, { source, type, range, account, scope, currentUser, 
             if (!acctName || acctName !== account) return false;
         }
 
-        // When / range filter — applied to the item's `when` field
+        // When / range filter
+        // Open tasks are filtered by dueDate; completed/logged by their `when` (past) timestamp.
+        // We use the relevant date string to compare against calendar boundaries.
         if (range !== 'all') {
-            const when = new Date(it.when);
-            const diffMs = now - when;
-            const diffDays = diffMs / 86400000;
-            if (range === 'today' && (diffDays > 1 || diffDays < -1)) return false;
-            if (range === 'week'  && (diffDays > 7 || diffDays < -7)) return false;
-            if (range === 'month' && (diffDays > 31 || diffDays < -31)) return false;
+            const today = new Date(now); // midnight today, already set above
+            // For open tasks use dueDate; for others use the `when` ISO string
+            const refDate = it.source === 'task-open' && it.dueDate
+                ? new Date(it.dueDate + 'T12:00:00')
+                : new Date(it.when);
+
+            if (range === 'today') {
+                // Must fall on today's calendar date exactly
+                const refDay = new Date(refDate); refDay.setHours(0,0,0,0);
+                if (refDay.getTime() !== today.getTime()) return false;
+            }
+            if (range === 'week') {
+                // Current calendar week: Sunday through Saturday containing today
+                const weekStart = new Date(today); weekStart.setDate(today.getDate() - today.getDay());
+                const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 7);
+                if (refDate < weekStart || refDate >= weekEnd) return false;
+            }
+            if (range === 'month') {
+                // Current calendar month
+                if (refDate.getMonth() !== today.getMonth() || refDate.getFullYear() !== today.getFullYear()) return false;
+            }
         }
 
         return true;
@@ -802,6 +842,7 @@ export default function TasksTab() {
         );
 
         return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
 
                 {/* ═══ TASKS — open work ═══ */}
@@ -866,8 +907,10 @@ export default function TasksTab() {
                     </>
                 )}
 
-                {/* ═══ COMPLETED — section banner + day-grouped history ═══ */}
-                {showActivity && activityDays.length > 0 && (
+            </div>
+            {/* ═══ COMPLETED — separate card with gap above ═══ */}
+            {showActivity && activityDays.length > 0 && (
+                <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
                     <>
                         <SectionBanner
                             eyebrow="Activity"
@@ -905,8 +948,9 @@ export default function TasksTab() {
                             ))}
                         </div>
                     </>
-                )}
 
+                </div>
+            )}
                 {/* Empty state */}
                 {isEmpty && (
                     <div style={{ textAlign: 'center', padding: '3.5rem 2rem', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
