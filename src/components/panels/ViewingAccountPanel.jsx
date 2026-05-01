@@ -204,13 +204,13 @@ export default function ViewingAccountPanel({
                         onMouseLeave={e => { e.currentTarget.style.background = '#c8b99a'; e.currentTarget.style.boxShadow = '0 1px 0 rgba(0,0,0,0.15) inset'; }}
                         onMouseDown={e => { e.currentTarget.style.background = '#bca984'; e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.2) inset'; }}
                         onMouseUp={e => { e.currentTarget.style.background = '#d4c8a8'; e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.2)'; }}
-                        title="+ Task"
+                        title="Log Task"
                     >
                         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"
                             stroke="#7a6a48" strokeWidth="1.6" strokeLinecap="round">
                             <path d="M8 3v10M3 8h10" />
                         </svg>
-                        + Task
+                        Log Task
                     </button>
                     {openOpps.length > 0 && (
                         <button

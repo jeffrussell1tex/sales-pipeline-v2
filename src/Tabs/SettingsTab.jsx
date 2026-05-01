@@ -9776,24 +9776,7 @@ const DATA_EXPORT = {
     ],
 };
 
-const DATA_BACKUP = {
-    retentionDays:30,
-    region:'us-east-1 (primary) · eu-west-1 (replica)',
-    totalSize:'58.4 MB',
-    lastBackup:{ ts:'4 hours ago', size:'2.4 GB', duration:'14m 22s' },
-    snapshots:[
-        { id:'bk_snap_2026_04_27_0314', ts:'today, 03:14',    type:'auto',   size:'2.4 GB', records:14210, duration:'14m 22s' },
-        { id:'bk_snap_2026_04_26_0314', ts:'yesterday, 03:14',type:'auto',   size:'2.4 GB', records:14201, duration:'14m 04s' },
-        { id:'bk_snap_2026_04_25_1840', ts:'yesterday, 18:40',type:'manual', size:'2.4 GB', records:14198, duration:'14m 12s' },
-        { id:'bk_snap_2026_04_25_0314', ts:'2 days ago',      type:'auto',   size:'2.3 GB', records:14180, duration:'13m 58s' },
-        { id:'bk_snap_2026_04_24_0314', ts:'3 days ago',      type:'auto',   size:'2.3 GB', records:14174, duration:'14m 11s' },
-        { id:'bk_snap_2026_04_23_0314', ts:'4 days ago',      type:'auto',   size:'2.3 GB', records:14160, duration:'15m 02s' },
-        { id:'bk_snap_2026_04_22_0314', ts:'5 days ago',      type:'auto',   size:'2.3 GB', records:14138, duration:'14m 30s' },
-        { id:'bk_snap_2026_04_21_0314', ts:'6 days ago',      type:'auto',   size:'2.2 GB', records:14094, duration:'13m 41s' },
-        { id:'bk_snap_2026_04_20_0314', ts:'1 week ago',      type:'auto',   size:'2.2 GB', records:14070, duration:'14m 08s' },
-        { id:'bk_snap_2026_04_19_0314', ts:'8 days ago',      type:'auto',   size:'2.2 GB', records:14041, duration:'13m 54s' },
-    ],
-};
+// DATA_BACKUP removed — BackupDetail loads live data from /.netlify/functions/backup
 
 const DATA_FEATURES = {
     flags:[
@@ -10059,11 +10042,44 @@ const NewExportModal = ({ onClose }) => {
     );
 };
 
-// 3. Restore from snapshot modal (type-to-confirm RESTORE)
+// 3. Restore from snapshot modal
+// Downloads the stored JSON payload so the admin has the data file.
+// A destructive server-side overwrite is intentionally not supported —
+// the safe flow is: download JSON → verify → reimport via Settings → Import.
 const RestoreModal = ({ snap, onClose }) => {
     const [confirm, setConfirm] = useState('');
     const [notify, setNotify]   = useState(true);
+    const [loading, setLoading] = useState(false);
+    const [error, setError]     = useState('');
     const ready = confirm.trim().toUpperCase() === 'RESTORE';
+
+    const handleDownload = async () => {
+        if (!ready) return;
+        setLoading(true);
+        setError('');
+        try {
+            const res = await dbFetch(
+                `/.netlify/functions/backup?id=${encodeURIComponent(snap.id)}&download=1`
+            );
+            if (!res.ok) throw new Error('Server error');
+            const text = await res.text();
+            const blob = new Blob([text], { type: 'application/json' });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
+            a.download = `${snap.id}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            onClose();
+        } catch (e) {
+            setError('Download failed. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <DataModal width={540} onClose={onClose}>
             <DataModalHead onClose={onClose}
@@ -10071,14 +10087,14 @@ const RestoreModal = ({ snap, onClose }) => {
                     <span style={{ width:32, height:32, borderRadius:4, background:'rgba(156,58,46,0.12)', color:T.danger, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700, flexShrink:0 }}>⚠</span>
                     Restore from snapshot?
                 </span>}
-                sub={`This will overwrite records with snapshot data from ${snap?.ts || 'yesterday'}.`}/>
+                sub={`Download the complete data export from ${snap?.ts || 'this snapshot'}.`}/>
             <div style={{ flex:1, overflowY:'auto', padding:22 }}>
                 <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', marginBottom:14, fontSize:12 }}>
                     {[
-                        { label:'Snapshot',            value: snap?.id || 'bk_snap_2026_04_26_0314', mono:true },
-                        { label:'Records to restore',  value:'3', bold:true },
-                        { label:'Conflicts to resolve',value:'3 will be overwritten', color:T.warn },
-                        { label:'Pre-restore snapshot', value:'✓ will run first', color:T.ok },
+                        { label:'Snapshot',        value: snap?.id || '—',                                         mono:true  },
+                        { label:'Records',         value: snap?.recordCount != null ? snap.recordCount.toLocaleString() : '—', bold:true },
+                        { label:'Size',            value: snap?.sizeLabel || '—'                                              },
+                        { label:'Download format', value: 'JSON · all entities',                                   color:T.ok },
                     ].map((r,i) => (
                         <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: i<3?5:0 }}>
                             <span style={{ color:T.inkMid }}>{r.label}</span>
@@ -10086,9 +10102,12 @@ const RestoreModal = ({ snap, onClose }) => {
                         </div>
                     ))}
                 </div>
+                <div style={{ padding:'10px 12px', background:'rgba(58,90,122,0.08)', borderLeft:`3px solid ${T.info}`, borderRadius:3, marginBottom:14, fontSize:12, color:T.inkMid }}>
+                    <b style={{ color:T.info }}>How restore works:</b> This downloads the full snapshot as a JSON file. To reimport records use Settings → Data → Import after reviewing the file.
+                </div>
                 <div style={{ marginBottom:12 }}>
                     <label style={{ display:'block', fontSize:12, fontWeight:600, color:T.inkMid, marginBottom:6 }}>
-                        Type <b style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.ink }}>RESTORE</b> to confirm
+                        Type <b style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.ink }}>RESTORE</b> to confirm download
                     </label>
                     <input value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="RESTORE"
                         style={{ width:'100%', padding:'8px 10px', border:`1.5px solid ${ready?T.danger:T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' }}/>
@@ -10097,12 +10116,13 @@ const RestoreModal = ({ snap, onClose }) => {
                     <span style={{ width:14, height:14, border:`1.5px solid ${notify?T.ok:T.border}`, borderRadius:2, background:notify?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                         {notify && <span style={{ color:'#fff', fontSize:9 }}>✓</span>}
                     </span>
-                    Notify workspace admins after restore completes
+                    Notify workspace admins after download
                 </label>
+                {error && <div style={{ marginTop:10, fontSize:12, color:T.danger, fontWeight:600 }}>{error}</div>}
             </div>
             <DataModalFoot>
                 <DataBtn label="Cancel" onClick={onClose}/>
-                <DataBtn label="Restore now" danger disabled={!ready} onClick={()=>{ if(ready) onClose(); }}/>
+                <DataBtn label={loading ? 'Downloading…' : 'Download snapshot'} danger disabled={!ready || loading} onClick={handleDownload}/>
             </DataModalFoot>
         </DataModal>
     );
@@ -10410,76 +10430,347 @@ const ExportDetail = ({ onBack }) => {
 
 // ── ③ Backup Detail ───────────────────────────────────────────
 const BackupDetail = ({ onBack }) => {
-    const [restoreSnap, setRestoreSnap] = useState(null);
-    const b = DATA_BACKUP;
+    // ── Data state
+    const [snapshots,    setSnapshots]    = useState([]);
+    const [schedule,     setSchedule]     = useState({ frequency:'Daily', timeUtc:'03:00', retentionDays:30, notifyOnFailure:'' });
+    const [loading,      setLoading]      = useState(true);
+    const [loadError,    setLoadError]    = useState('');
+
+    // ── Action state
+    const [restoreSnap,  setRestoreSnap]  = useState(null);
+    const [runningBackup,setRunningBackup]= useState(false);
+    const [backupError,  setBackupError]  = useState('');
+    const [backupSuccess,setBackupSuccess]= useState('');
+
+    // ── Schedule edit state
+    const [schedDirty,   setSchedDirty]   = useState(false);
+    const [schedSaving,  setSchedSaving]  = useState(false);
+    const [schedError,   setSchedError]   = useState('');
+    const [schedSaved,   setSchedSaved]   = useState(false);
+    const [editSched,    setEditSched]    = useState(null); // working copy while editing
+
+    // Derived from snapshots
+    const totalSizeBytes = snapshots.reduce((sum, s) => sum + (s.sizeBytes || 0), 0);
+    const totalSizeLabel = totalSizeBytes === 0 ? '—'
+        : totalSizeBytes < 1024 * 1024 ? `${(totalSizeBytes / 1024).toFixed(1)} KB`
+        : `${(totalSizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+
+    const lastSnap = snapshots[0] || null;
+
+    // ── Load on mount
+    React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            setLoading(true);
+            setLoadError('');
+            try {
+                const res  = await dbFetch('/.netlify/functions/backup');
+                const data = await res.json();
+                if (cancelled) return;
+                setSnapshots(data.snapshots || []);
+                if (data.schedule) {
+                    setSchedule(data.schedule);
+                    setEditSched(data.schedule);
+                }
+            } catch (e) {
+                if (!cancelled) setLoadError('Failed to load backup data. Please refresh.');
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    // ── Format helpers (client-side display)
+    const fmtWhen = (isoString) => {
+        if (!isoString) return '—';
+        const d   = new Date(isoString);
+        const now = new Date();
+        const diffMs  = now - d;
+        const diffMin = Math.round(diffMs / 60000);
+        const diffH   = Math.round(diffMs / 3600000);
+        const diffD   = Math.round(diffMs / 86400000);
+        if (diffMin < 2)  return 'just now';
+        if (diffMin < 60) return `${diffMin} minutes ago`;
+        if (diffH < 24)   return `${diffH} hour${diffH===1?'':'s'} ago`;
+        if (diffD === 1)  return 'yesterday, ' + d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', timeZone:'UTC' });
+        if (diffD < 7)    return `${diffD} days ago`;
+        if (diffD < 14)   return '1 week ago';
+        return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    };
+
+    // ── Run backup now
+    const handleRunBackup = async () => {
+        if (runningBackup) return;
+        setRunningBackup(true);
+        setBackupError('');
+        setBackupSuccess('');
+        try {
+            const res  = await dbFetch('/.netlify/functions/backup', { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Backup failed');
+
+            // Trigger browser download immediately
+            if (data.downloadData) {
+                const blob = new Blob([data.downloadData], { type: 'application/json' });
+                const url  = URL.createObjectURL(blob);
+                const a    = document.createElement('a');
+                a.href     = url;
+                a.download = `${data.id}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+
+            // Prepend new snapshot to list
+            setSnapshots(prev => [{
+                id:            data.id,
+                createdAt:     data.createdAt,
+                type:          'manual',
+                recordCount:   data.recordCount,
+                sizeBytes:     data.sizeBytes,
+                sizeLabel:     data.sizeLabel,
+                durationMs:    data.durationMs,
+                durationLabel: data.durationLabel,
+                status:        'ready',
+            }, ...prev]);
+
+            setBackupSuccess(`Backup complete · ${data.recordCount?.toLocaleString() || '—'} records · ${data.sizeLabel || '—'} · downloaded as ${data.id}.json`);
+        } catch (e) {
+            setBackupError(e.message || 'Backup failed. Please try again.');
+        } finally {
+            setRunningBackup(false);
+        }
+    };
+
+    // ── Save schedule
+    const handleSaveSchedule = async () => {
+        if (schedSaving) return;
+        setSchedSaving(true);
+        setSchedError('');
+        setSchedSaved(false);
+        try {
+            const res = await dbFetch('/.netlify/functions/backup', {
+                method: 'PUT',
+                body: JSON.stringify(editSched),
+            });
+            if (!res.ok) {
+                const d = await res.json();
+                throw new Error(d.error || 'Save failed');
+            }
+            setSchedule(editSched);
+            setSchedDirty(false);
+            setSchedSaved(true);
+            setTimeout(() => setSchedSaved(false), 3000);
+        } catch (e) {
+            setSchedError(e.message || 'Failed to save schedule.');
+        } finally {
+            setSchedSaving(false);
+        }
+    };
+
+    const updateSched = (field, value) => {
+        setEditSched(prev => ({ ...prev, [field]: value }));
+        setSchedDirty(true);
+        setSchedSaved(false);
+    };
+
     const th = { padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans, textAlign:'left' };
+    const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' };
+    const selSt = { ...inpSt, cursor:'pointer', appearance:'none',
+        backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+        backgroundRepeat:'no-repeat', backgroundPosition:'right 10px center', paddingRight:28 };
+
+    const curSched = editSched || schedule;
 
     return (
         <div style={{ fontFamily:T.sans }}>
             {restoreSnap && <RestoreModal snap={restoreSnap} onClose={()=>setRestoreSnap(null)}/>}
+
             <DataCrumb page="Backup & restore" onBack={onBack}/>
             <DataTitle
                 title="Backup & restore"
                 sub="Automated daily snapshots and point-in-time restore"
-                badge={`Daily · last: ${b.lastBackup.ts} · ${b.lastBackup.size}`}
-                updatedBy="System" updatedAt="4 hours ago"
+                badge={lastSnap ? `Daily · last: ${fmtWhen(lastSnap.createdAt)} · ${lastSnap.sizeLabel || '—'}` : undefined}
+                updatedBy="System"
+                updatedAt={lastSnap ? fmtWhen(lastSnap.createdAt) : '—'}
                 actions={[
-                    <DataBtn key="res" label="Restore from backup" onClick={()=>setRestoreSnap(b.snapshots[0])}/>,
-                    <DataBtn key="run" label="Run backup now" primary/>,
+                    <DataBtn key="res"
+                        label="Restore from backup"
+                        disabled={!lastSnap}
+                        onClick={() => lastSnap && setRestoreSnap(lastSnap)}/>,
+                    <DataBtn key="run"
+                        label={runningBackup ? 'Running…' : 'Run backup now'}
+                        primary
+                        disabled={runningBackup}
+                        onClick={handleRunBackup}/>,
                 ]}/>
 
-            {/* Stats */}
+            {/* Feedback banners */}
+            {backupSuccess && (
+                <div style={{ padding:'10px 16px', background:'rgba(77,107,61,0.10)', borderLeft:`3px solid ${T.ok}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.ok, fontWeight:600 }}>
+                    ✓ {backupSuccess}
+                </div>
+            )}
+            {backupError && (
+                <div style={{ padding:'10px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger, fontWeight:600 }}>
+                    ✕ {backupError}
+                </div>
+            )}
+            {loadError && (
+                <div style={{ padding:'10px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>
+                    {loadError}
+                </div>
+            )}
+
+            {/* KPI stat cards */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12, marginBottom:16 }}>
-                <DataStatCard label="Last backup"    value={b.lastBackup.ts}         mono/>
-                <DataStatCard label="Backups stored" value={b.snapshots.length}      />
-                <DataStatCard label="Total size"     value={b.totalSize}             />
-                <DataStatCard label="Retention"      value={`${b.retentionDays} days`}/>
+                <DataStatCard label="Last backup"
+                    value={loading ? '…' : lastSnap ? fmtWhen(lastSnap.createdAt) : 'Never'} mono/>
+                <DataStatCard label="Backups stored"
+                    value={loading ? '…' : snapshots.length}/>
+                <DataStatCard label="Total size"
+                    value={loading ? '…' : totalSizeLabel}/>
+                <DataStatCard label="Retention"
+                    value={`${schedule.retentionDays} days`}/>
             </div>
 
             {/* Schedule form */}
-            <DataCard title="Schedule" desc="Backups are automated; you can also run a snapshot at any time.">
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
-                    {[
-                        { label:'Frequency',          value:'Daily'                              },
-                        { label:'Time of day (UTC)',   value:'03:00', mono:true                   },
-                        { label:'Retention',           value:`${b.retentionDays} days`            },
-                        { label:'Region',              value:b.region                             },
-                        { label:'Encryption',          value:'AES-256 · workspace key'            },
-                        { label:'Notify on failure',   value:'#sec-ops + email Morgan'            },
-                    ].map((f,i) => (
-                        <div key={i}>
-                            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</label>
-                            <input defaultValue={f.value} readOnly style={{ width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily: f.mono?'ui-monospace,Menlo,monospace':T.sans, outline:'none', background:T.surface, boxSizing:'border-box', cursor:'default' }}/>
+            <DataCard title="Schedule"
+                desc="Backups are automated; you can also run a snapshot at any time."
+                headAction={
+                    schedDirty ? (
+                        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                            {schedSaved && <span style={{ fontSize:12, color:T.ok, fontWeight:600 }}>✓ Saved</span>}
+                            {schedError && <span style={{ fontSize:12, color:T.danger, fontWeight:600 }}>{schedError}</span>}
+                            <DataBtn label="Cancel" onClick={() => { setEditSched(schedule); setSchedDirty(false); setSchedError(''); }}/>
+                            <DataBtn label={schedSaving ? 'Saving…' : 'Save schedule'} primary disabled={schedSaving} onClick={handleSaveSchedule}/>
                         </div>
-                    ))}
+                    ) : schedSaved ? (
+                        <span style={{ fontSize:12, color:T.ok, fontWeight:600 }}>✓ Saved</span>
+                    ) : null
+                }>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
+                    {/* Frequency */}
+                    <div>
+                        <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>Frequency</label>
+                        <select value={curSched.frequency || 'Daily'} onChange={e => updateSched('frequency', e.target.value)} style={selSt}>
+                            <option>Daily</option>
+                            <option>Weekly</option>
+                            <option>Every 12 hours</option>
+                        </select>
+                    </div>
+                    {/* Time of day */}
+                    <div>
+                        <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>Time of day (UTC)</label>
+                        <input type="text" value={curSched.timeUtc || '03:00'} onChange={e => updateSched('timeUtc', e.target.value)}
+                            placeholder="03:00" style={{ ...inpSt, fontFamily:'ui-monospace,Menlo,monospace' }}/>
+                    </div>
+                    {/* Retention */}
+                    <div>
+                        <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>Retention</label>
+                        <select value={String(curSched.retentionDays || 30)} onChange={e => updateSched('retentionDays', Number(e.target.value))} style={selSt}>
+                            <option value="7">7 days</option>
+                            <option value="14">14 days</option>
+                            <option value="30">30 days</option>
+                            <option value="60">60 days</option>
+                            <option value="90">90 days</option>
+                        </select>
+                    </div>
+                    {/* Region — read-only (infra-level) */}
+                    <div>
+                        <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>Region</label>
+                        <input readOnly value="us-east-1 (primary) · eu-west-1 (replica)"
+                            style={{ ...inpSt, color:T.inkMuted, cursor:'default' }}/>
+                    </div>
+                    {/* Encryption — read-only */}
+                    <div>
+                        <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>Encryption</label>
+                        <input readOnly value="AES-256 · workspace key"
+                            style={{ ...inpSt, color:T.inkMuted, cursor:'default' }}/>
+                    </div>
+                    {/* Notify on failure */}
+                    <div>
+                        <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>Notify on failure</label>
+                        <input type="text" value={curSched.notifyOnFailure || ''} onChange={e => updateSched('notifyOnFailure', e.target.value)}
+                            placeholder="email or Slack handle" style={inpSt}/>
+                    </div>
                 </div>
             </DataCard>
 
             {/* Snapshots table */}
-            <DataCard title="Recent snapshots" desc="Each snapshot is a complete point-in-time copy of all CRM data and settings."
+            <DataCard title="Recent snapshots"
+                desc="Each snapshot is a complete point-in-time copy of all CRM data and settings."
                 headAction={<span style={{ fontSize:11.5, color:T.info, cursor:'pointer', fontWeight:600 }}>Configure storage →</span>}>
-                <div style={{ overflowX:'auto' }}>
-                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans, minWidth:700 }}>
-                        <thead><tr style={{ background:T.surface2 }}>{['Snapshot ID','When','Type','Size','Records','Duration','Status',''].map((h,i)=><th key={i} style={th}>{h}</th>)}</tr></thead>
-                        <tbody>
-                            {b.snapshots.map((s,i) => (
-                                <tr key={s.id} style={{ borderBottom:i<b.snapshots.length-1?`1px solid ${T.border}`:'none' }}>
-                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{s.id}</td>
-                                    <td style={{ padding:'10px 12px', color:T.inkMid }}>{s.ts}</td>
-                                    <td style={{ padding:'10px 12px' }}><DPill tone={s.type==='manual'?'info':'neutral'}>{s.type==='manual'?'Manual':'Automated'}</DPill></td>
-                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{s.size}</td>
-                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{s.records.toLocaleString()}</td>
-                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{s.duration}</td>
-                                    <td style={{ padding:'10px 12px' }}><DPill tone="ok">Ready</DPill></td>
-                                    <td style={{ padding:'10px 12px', textAlign:'right', display:'flex', gap:12 }}>
-                                        <button onClick={()=>setRestoreSnap(s)} style={{ fontSize:11, color:T.info, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans }}>Restore</button>
-                                        <button style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans }}>Download</button>
-                                    </td>
+                {loading ? (
+                    <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13 }}>Loading snapshots…</div>
+                ) : snapshots.length === 0 ? (
+                    <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13 }}>
+                        No backups yet. Click <b>Run backup now</b> to create your first snapshot.
+                    </div>
+                ) : (
+                    <div style={{ overflowX:'auto' }}>
+                        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans, minWidth:700 }}>
+                            <thead>
+                                <tr style={{ background:T.surface2 }}>
+                                    {['Snapshot ID','When','Type','Size','Records','Duration','Status',''].map((h,i) =>
+                                        <th key={i} style={th}>{h}</th>)}
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+                            </thead>
+                            <tbody>
+                                {snapshots.map((s, i) => (
+                                    <tr key={s.id} style={{ borderBottom: i < snapshots.length - 1 ? `1px solid ${T.border}` : 'none' }}>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{s.id}</td>
+                                        <td style={{ padding:'10px 12px', color:T.inkMid }}>{fmtWhen(s.createdAt)}</td>
+                                        <td style={{ padding:'10px 12px' }}>
+                                            <DPill tone={s.type === 'manual' ? 'info' : 'neutral'}>
+                                                {s.type === 'manual' ? 'Manual' : 'Automated'}
+                                            </DPill>
+                                        </td>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>
+                                            {s.sizeLabel || '—'}
+                                        </td>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>
+                                            {s.recordCount != null ? s.recordCount.toLocaleString() : '—'}
+                                        </td>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>
+                                            {s.durationLabel || '—'}
+                                        </td>
+                                        <td style={{ padding:'10px 12px' }}>
+                                            <DPill tone={s.status === 'ready' ? 'ok' : s.status === 'running' ? 'info' : 'danger'}>
+                                                {s.status === 'ready' ? 'Ready' : s.status === 'running' ? 'Running…' : 'Failed'}
+                                            </DPill>
+                                        </td>
+                                        <td style={{ padding:'10px 12px', textAlign:'right' }}>
+                                            <span style={{ display:'flex', gap:12, justifyContent:'flex-end' }}>
+                                                <button onClick={() => setRestoreSnap(s)}
+                                                    style={{ fontSize:11, color:T.info, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans }}>
+                                                    Restore
+                                                </button>
+                                                <button onClick={async () => {
+                                                    try {
+                                                        const res  = await dbFetch(`/.netlify/functions/backup?id=${encodeURIComponent(s.id)}&download=1`);
+                                                        const text = await res.text();
+                                                        const blob = new Blob([text], { type:'application/json' });
+                                                        const url  = URL.createObjectURL(blob);
+                                                        const a    = document.createElement('a');
+                                                        a.href = url; a.download = `${s.id}.json`;
+                                                        document.body.appendChild(a); a.click();
+                                                        document.body.removeChild(a);
+                                                        URL.revokeObjectURL(url);
+                                                    } catch { /* silent — user will notice the missing download */ }
+                                                }} style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans }}>
+                                                    Download
+                                                </button>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </DataCard>
         </div>
     );

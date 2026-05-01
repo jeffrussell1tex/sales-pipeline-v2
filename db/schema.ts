@@ -385,6 +385,33 @@ export const quotes = pgTable('quotes', {
     updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 });
 
+// ── BACKUPS ───────────────────────────────────────────────────────────────────
+// One row per snapshot. payload stores the full JSON export for download.
+export const backups = pgTable('backups', {
+    id:           text('id').primaryKey(),                         // e.g. bk_snap_2026_05_01_0314
+    orgId:        text('org_id').notNull(),
+    type:         varchar('type', { length: 20 }).notNull().default('manual'),  // 'manual' | 'automated'
+    status:       varchar('status', { length: 20 }).notNull().default('ready'), // 'ready' | 'running' | 'failed'
+    recordCount:  integer('record_count').default(0),
+    sizeBytes:    integer('size_bytes').default(0),
+    durationMs:   integer('duration_ms').default(0),
+    triggeredBy:  varchar('triggered_by', { length: 255 }),        // userId or 'system'
+    payload:      text('payload'),                                  // Full JSON export blob
+    createdAt:    timestamp('created_at').notNull().defaultNow(),
+});
+
+// ── BACKUP SCHEDULE ───────────────────────────────────────────────────────────
+// One row per org — stores schedule configuration
+export const backupSchedule = pgTable('backup_schedule', {
+    id:               text('id').primaryKey(),                      // `sched_${orgId}`
+    orgId:            text('org_id').notNull().unique(),
+    frequency:        varchar('frequency', { length: 50 }).default('Daily'),
+    timeUtc:          varchar('time_utc', { length: 10 }).default('03:00'),
+    retentionDays:    integer('retention_days').default(30),
+    notifyOnFailure:  varchar('notify_on_failure', { length: 500 }).default(''),
+    updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+});
+
 export const savedReports = pgTable('saved_reports', {
     id:          text('id').primaryKey(),
     orgId:       text('org_id').notNull(),
