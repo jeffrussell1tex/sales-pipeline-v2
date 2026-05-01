@@ -929,8 +929,7 @@ export default function TasksTab() {
                             eyebrow="Activity"
                             title="Completed &amp; logged"
                             subtitle="Done tasks and the calls, emails, meetings, and notes you've logged"
-                            accent={T.borderStrong}
-                            dim={true}
+                            accent={T.goldInk}
                             icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
                             badges={
                                 <div style={{ display: 'flex', gap: 14, fontSize: 11, color: T.inkMid }}>
