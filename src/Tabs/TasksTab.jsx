@@ -866,29 +866,29 @@ export default function TasksTab() {
                     </>
                 )}
 
-                {/* ═══ COMPLETED — visual break then day-grouped history ═══ */}
+                {/* ═══ COMPLETED — section banner + day-grouped history ═══ */}
                 {showActivity && activityDays.length > 0 && (
                     <>
-                        {/* Visual break between open and completed sections */}
-                        <div style={{ borderTop: '2px solid ' + T.borderStrong, margin: '0', background: T.surface2, padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <div style={{ width: 28, height: 28, borderRadius: 4, background: T.borderStrong, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>
-                            </div>
-                            <div>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>Completed</div>
-                                <div style={{ fontSize: 12, fontWeight: 600, color: T.ink, fontStyle: 'italic' }}>Done tasks &amp; logged activity</div>
-                            </div>
-                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 14, fontSize: 11, color: T.inkMid }}>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.ok }}/>
-                                    <span style={{ fontWeight: 600, color: T.ink }}>{activityItems.filter(o => o.source === 'task-completed').length}</span> tasks
-                                </span>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.gold }}/>
-                                    <span style={{ fontWeight: 600, color: T.ink }}>{activityItems.filter(o => o.source === 'log').length}</span> logged
-                                </span>
-                            </div>
-                        </div>
+                        <SectionBanner
+                            eyebrow="Activity"
+                            title="Completed &amp; logged"
+                            subtitle="Done tasks and the calls, emails, meetings, and notes you've logged"
+                            accent={T.borderStrong}
+                            dim={true}
+                            icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
+                            badges={
+                                <div style={{ display: 'flex', gap: 14, fontSize: 11, color: T.inkMid }}>
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: T.ok }}/>
+                                        <span style={{ fontWeight: 600, color: T.ink }}>{activityItems.filter(o => o.source === 'task-completed').length}</span> tasks completed
+                                    </span>
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: T.gold }}/>
+                                        <span style={{ fontWeight: 600, color: T.ink }}>{activityItems.filter(o => o.source === 'log').length}</span> activities logged
+                                    </span>
+                                </div>
+                            }
+                        />
                         <div style={{ background: T.surface2 }}>
                             {activityDays.map(({ day, items }) => (
                                 <React.Fragment key={day}>
