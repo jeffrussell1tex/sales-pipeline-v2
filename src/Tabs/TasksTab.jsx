@@ -474,10 +474,10 @@ function applyFilters(feed, { source, type, range, account, scope, currentUser, 
             if (it.assignedTo && it.assignedTo !== currentUser) return false;
         }
 
-        // Account filter
+        // Account filter — keyed by name (tasks store account as name string via opp.account)
         if (account && account !== 'all') {
-            const resolvedAcct = resolveAccount(it, opportunities, accounts);
-            if (!resolvedAcct || resolvedAcct.id !== account) return false;
+            const acctName = resolveAccountName(it, opportunities, accounts);
+            if (!acctName || acctName !== account) return false;
         }
 
         // When / range filter — applied to the item's `when` field
@@ -494,17 +494,30 @@ function applyFilters(feed, { source, type, range, account, scope, currentUser, 
     });
 }
 
-// Resolve account object for a feed item (task or activity)
-function resolveAccount(item, opportunities, accounts) {
-    if (item.accountId) return accounts.find(a => a.id === item.accountId) || null;
+// Resolve account name string for a feed item (task or activity).
+// Tasks link to accounts via opp.account (a name string), not an ID.
+// We use name as the canonical filter key throughout to stay consistent.
+function resolveAccountName(item, opportunities, accounts) {
+    // Direct accountId on the item (activities)
+    if (item.accountId) {
+        const a = accounts.find(a => a.id === item.accountId);
+        if (a) return a.name;
+    }
+    // Via opportunityId
     if (item.opportunityId) {
         const opp = opportunities.find(o => o.id === item.opportunityId);
-        if (opp && opp.accountId) return accounts.find(a => a.id === opp.accountId) || null;
-        if (opp && opp.account) {
-            // Fallback: match by name
-            return accounts.find(a => a.name === opp.account) || { id: opp.account, name: opp.account };
+        if (opp) {
+            // opp.accountId present
+            if (opp.accountId) {
+                const a = accounts.find(a => a.id === opp.accountId);
+                if (a) return a.name;
+            }
+            // opp.account is a name string (most common in this codebase)
+            if (opp.account) return opp.account;
         }
     }
+    // Direct account name on item (tasks sometimes store this)
+    if (item.account) return item.account;
     return null;
 }
 
@@ -638,12 +651,12 @@ export default function TasksTab() {
 
     // ── Account options for the picker ─────────────────────────
     const accountOptions = useMemo(() => {
-        const seen = new Map();
+        const seen = new Set();
         allFeedItems.forEach(it => {
-            const a = resolveAccount(it, opportunities, accounts);
-            if (a && a.id && !seen.has(a.id)) seen.set(a.id, a);
+            const name = resolveAccountName(it, opportunities, accounts);
+            if (name) seen.add(name);
         });
-        return [...seen.values()].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        return [...seen].sort((a, b) => a.localeCompare(b)).map(name => ({ id: name, name }));
     }, [allFeedItems, opportunities, accounts]);
 
     // ── Apply all filters ──────────────────────────────────────
