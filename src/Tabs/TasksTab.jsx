@@ -355,7 +355,8 @@ function ActivityLogRow({ activity, opportunities, accounts, setViewingTask }) {
 
     return (
         <div
-            style={{ display: 'grid', gridTemplateColumns: '22px 28px 1fr auto', gap: 12, padding: '11px 16px', borderBottom: `1px solid ${T.border}`, alignItems: 'flex-start', cursor: 'default' }}
+            onClick={() => setViewingTask(activity)}
+            style={{ display: 'grid', gridTemplateColumns: '22px 28px 1fr auto', gap: 12, padding: '11px 16px', borderBottom: `1px solid ${T.border}`, alignItems: 'flex-start', cursor: 'pointer' }}
             onMouseEnter={e => e.currentTarget.style.background = T.surface2}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
@@ -462,9 +463,8 @@ function applyFilters(feed, { source, type, range, account, scope, currentUser, 
     const now = new Date(); now.setHours(0, 0, 0, 0);
     return feed.filter(it => {
         // Source filter
-        if (source === 'open' && it.source !== 'task-open')      return false;
-        if (source === 'done' && it.source !== 'task-completed') return false;
-        if (source === 'log'  && it.source !== 'log')            return false;
+        if (source === 'open' && it.source !== 'task-open') return false;
+        if (source === 'done' && it.source === 'task-open') return false;
 
         // Type filter (tasks use .type, activities use .type)
         if (type !== 'all' && (it.type || '').toLowerCase() !== type.toLowerCase()) return false;
@@ -637,16 +637,14 @@ export default function TasksTab() {
     const rawCounts = useMemo(() => ({
         all:       allFeedItems.length,
         open:      allFeedItems.filter(f => f.source === 'task-open').length,
-        completed: allFeedItems.filter(f => f.source === 'task-completed').length,
-        log:       allFeedItems.filter(f => f.source === 'log').length,
+        completed: allFeedItems.filter(f => f.source !== 'task-open').length,
     }), [allFeedItems]);
 
     // ── Header counters (also unfiltered, per spec) ────────────
     const headerCounts = useMemo(() => ({
         overdue:   allFeedItems.filter(f => f.source === 'task-open' && f.dueDate && f.dueDate < todayStr).length,
         dueToday:  allFeedItems.filter(f => f.source === 'task-open' && f.dueDate === todayStr).length,
-        completed: allFeedItems.filter(f => f.source === 'task-completed').length,
-        logged:    allFeedItems.filter(f => f.source === 'log').length,
+        completed: allFeedItems.filter(f => f.source !== 'task-open').length,
     }), [allFeedItems, todayStr]);
 
     // ── Account options for the picker ─────────────────────────
@@ -680,9 +678,9 @@ export default function TasksTab() {
     // Activity section: group by day descending
     const activityDays = useMemo(() => groupByDay(activityItems), [activityItems]);
 
-    // Section visibility per spec
+    // Section visibility
     const showOpen     = source === 'all' || source === 'open';
-    const showActivity = source === 'all' || source === 'done' || source === 'log';
+    const showActivity = source === 'all' || source === 'done';
 
     // ── Calendar state (unchanged) ─────────────────────────────
     const allOpenTasks  = visibleTasks.filter(t => (t.status||'Open') !== 'Completed');
@@ -701,8 +699,7 @@ export default function TasksTab() {
     }), [weekStart, allOpenTasks, calendarEvents]);
 
     // ── Handlers ───────────────────────────────────────────────
-    const handleAddTask     = () => { setEditingTask(null); setShowTaskModal(true); };
-    const handleLogActivity = () => { setEditingActivity(null); setActivityInitialContext(null); setShowActivityModal(true); };
+    const handleAddTask = () => { setEditingTask(null); setShowTaskModal(true); };
 
     // Row props bundle for OpenTaskRow
     const rowProps = { opportunities, contacts, getStageColor, canEdit, handleCompleteTask, handleSaveTask, setViewingTask, setEditingTask, setShowTaskModal };
@@ -723,10 +720,9 @@ export default function TasksTab() {
                 {/* Source segmented control */}
                 <div style={{ display: 'inline-flex', borderRadius: T.r, border: `1px solid ${T.borderStrong}`, overflow: 'hidden', background: T.bg, flexShrink: 0 }}>
                     {[
-                        { k: 'all',  l: 'All',            n: rawCounts.all,       icon: null },
-                        { k: 'open', l: 'Open tasks',     n: rawCounts.open,      icon: null },
-                        { k: 'done', l: 'Completed',       n: rawCounts.completed, icon: 'check' },
-                        { k: 'log',  l: 'Activity logs',   n: rawCounts.log,       icon: 'edit' },
+                        { k: 'all',  l: 'All',         n: rawCounts.all,       icon: null },
+                        { k: 'open', l: 'Open tasks',  n: rawCounts.open,      icon: null },
+                        { k: 'done', l: 'Completed',   n: rawCounts.completed, icon: 'check' },
                     ].map(s => {
                         const active = source === s.k;
                         return (
@@ -798,7 +794,7 @@ export default function TasksTab() {
     // ── Unified List View ──────────────────────────────────────
     const ListView = () => {
         const todayLabel     = new Date(today).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-        const isEmpty        = (!showOpen || openItems.length === 0) && (!showActivity || activityDays.length === 0);
+        const isEmpty        = (!showOpen || openItems.length === 0) && (!showActivity || activityDays.length === 0) && filtered.length === 0;
 
         // Section badge helper
         const Badge = ({ children, color, bg }) => (
@@ -870,29 +866,29 @@ export default function TasksTab() {
                     </>
                 )}
 
-                {/* ═══ ACTIVITY — completed tasks + logged work ═══ */}
+                {/* ═══ COMPLETED — visual break then day-grouped history ═══ */}
                 {showActivity && activityDays.length > 0 && (
                     <>
-                        <SectionBanner
-                            eyebrow="Activity"
-                            title="Completed & logged"
-                            subtitle="Done tasks and the calls, emails, meetings, and notes you've logged"
-                            accent={T.borderStrong}
-                            dim={true}
-                            icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
-                            badges={
-                                <div style={{ display: 'flex', gap: 14, fontSize: 11, color: T.inkMid }}>
-                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: T.ok }}/>
-                                        <span style={{ fontWeight: 600, color: T.ink }}>{activityItems.filter(o => o.source === 'task-completed').length}</span> tasks completed
-                                    </span>
-                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: T.gold }}/>
-                                        <span style={{ fontWeight: 600, color: T.ink }}>{activityItems.filter(o => o.source === 'log').length}</span> activities logged
-                                    </span>
-                                </div>
-                            }
-                        />
+                        {/* Visual break between open and completed sections */}
+                        <div style={{ borderTop: '2px solid ' + T.borderStrong, margin: '0', background: T.surface2, padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: 4, background: T.borderStrong, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8 }}>Completed</div>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: T.ink, fontStyle: 'italic' }}>Done tasks &amp; logged activity</div>
+                            </div>
+                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 14, fontSize: 11, color: T.inkMid }}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.ok }}/>
+                                    <span style={{ fontWeight: 600, color: T.ink }}>{activityItems.filter(o => o.source === 'task-completed').length}</span> tasks
+                                </span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: T.gold }}/>
+                                    <span style={{ fontWeight: 600, color: T.ink }}>{activityItems.filter(o => o.source === 'log').length}</span> logged
+                                </span>
+                            </div>
+                        </div>
                         <div style={{ background: T.surface2 }}>
                             {activityDays.map(({ day, items }) => (
                                 <React.Fragment key={day}>
@@ -1110,20 +1106,12 @@ export default function TasksTab() {
                         )}
                         <span><span style={{ fontWeight: 600, color: T.ink }}>{headerCounts.dueToday}</span> due today</span>
                         <span style={{ color: T.border }}>·</span>
-                        <span><span style={{ fontWeight: 600, color: T.ink }}>{headerCounts.completed}</span> completed this week</span>
-                        <span style={{ color: T.border }}>·</span>
-                        <span><span style={{ fontWeight: 600, color: T.ink }}>{headerCounts.logged}</span> activities logged</span>
+                        <span><span style={{ fontWeight: 600, color: T.ink }}>{headerCounts.completed}</span> completed</span>
                         {calendarConnected && <><span style={{ color: T.border }}>·</span><span style={{ color: T.ok }}>calendar synced</span></>}
                     </div>
                 </div>
                 {/* Header action buttons */}
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                    {canEdit && (
-                        <button onClick={handleLogActivity} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: T.surface, border: `1px solid ${T.borderStrong}`, color: T.ink, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                            Log activity
-                        </button>
-                    )}
                     {canEdit && (
                         <button onClick={handleAddTask} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: T.ink, border: 'none', color: T.surface, borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
