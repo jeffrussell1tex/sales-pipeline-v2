@@ -504,29 +504,42 @@ function applyFilters(feed, { source, type, range, account, scope, currentUser, 
         }
 
         // When / range filter
-        // Open tasks are filtered by dueDate; completed/logged by their `when` (past) timestamp.
-        // We use the relevant date string to compare against calendar boundaries.
+        // Strategy: work entirely in local YYYY-MM-DD strings to avoid UTC offset bugs.
+        // completedAt/updatedAt are UTC ISO strings — convert to local date string first.
+        // dueDate is already a local YYYY-MM-DD string — use directly.
         if (range !== 'all') {
-            const today = new Date(now); // midnight today, already set above
-            // For open tasks use dueDate; for others use the `when` ISO string
-            const refDate = it.source === 'task-open' && it.dueDate
-                ? new Date(it.dueDate + 'T12:00:00')
-                : new Date(it.when);
+            // Get the reference date string in local time (YYYY-MM-DD)
+            let refDateStr;
+            if (it.source === 'task-open' && it.dueDate) {
+                refDateStr = it.dueDate; // already local YYYY-MM-DD
+            } else {
+                // Convert the when timestamp to local date string
+                const d = new Date(it.when);
+                refDateStr = d.getFullYear() + '-'
+                    + String(d.getMonth() + 1).padStart(2, '0') + '-'
+                    + String(d.getDate()).padStart(2, '0');
+            }
+
+            // today as local YYYY-MM-DD
+            const td = new Date();
+            const todayDateStr = td.getFullYear() + '-'
+                + String(td.getMonth() + 1).padStart(2, '0') + '-'
+                + String(td.getDate()).padStart(2, '0');
 
             if (range === 'today') {
-                // Must fall on today's calendar date exactly
-                const refDay = new Date(refDate); refDay.setHours(0,0,0,0);
-                if (refDay.getTime() !== today.getTime()) return false;
+                if (refDateStr !== todayDateStr) return false;
             }
             if (range === 'week') {
-                // Current calendar week: Sunday through Saturday containing today
-                const weekStart = new Date(today); weekStart.setDate(today.getDate() - today.getDay());
-                const weekEnd   = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 7);
-                if (refDate < weekStart || refDate >= weekEnd) return false;
+                // Sunday of current week through Saturday (inclusive)
+                const todayD = new Date(todayDateStr + 'T00:00:00');
+                const sunOffset = todayD.getDay(); // 0=Sun
+                const weekSunStr = (() => { const d = new Date(todayD); d.setDate(d.getDate() - sunOffset); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); })();
+                const weekSatStr = (() => { const d = new Date(todayD); d.setDate(d.getDate() + (6 - sunOffset)); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); })();
+                if (refDateStr < weekSunStr || refDateStr > weekSatStr) return false;
             }
             if (range === 'month') {
-                // Current calendar month
-                if (refDate.getMonth() !== today.getMonth() || refDate.getFullYear() !== today.getFullYear()) return false;
+                // Same YYYY-MM prefix
+                if (refDateStr.slice(0, 7) !== todayDateStr.slice(0, 7)) return false;
             }
         }
 
@@ -842,7 +855,7 @@ export default function TasksTab() {
         );
 
         return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
 
                 {/* ═══ TASKS — open work ═══ */}
