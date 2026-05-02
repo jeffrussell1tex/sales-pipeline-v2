@@ -7432,49 +7432,68 @@ const UsersDetail = ({ settings, onBack }) => {
 
 // ── TEAMS detail page ─────────────────────────────────────────
 // ── New/Edit Team Modal ───────────────────────────────────────
+// Data model matches TeamBuilder.jsx:
+// team = { id, name, territory, vertical, managerId, repIds[] }
+// Users have: { id, name, team (string name), teamId, territory, vertical, userType }
+
 const TEAM_COLORS = ['#2a2622','#4d6b3d','#3a5a7a','#7a6a48','#9c5a3a','#5e4e7a','#3a6a6a','#6b2a22','#3a5530','#7a4a6a'];
 
 const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
-    const allUsers = (settings.users || []).filter(u => u.name);
-    const [name,    setName]    = useState(team?.name    || '');
-    const [color,   setColor]   = useState(team?.color   || TEAM_COLORS[0]);
-    const [manager, setManager] = useState(team?.manager || '');
-    const [region,  setRegion]  = useState(team?.region  || '');
-    const [saving,  setSaving]  = useState(false);
-    const [err,     setErr]     = useState('');
+    const allUsers  = (settings.users || []).filter(u => u.name);
+    const managers  = allUsers.filter(u => u.userType === 'Manager' || u.userType === 'Admin' || u.role === 'Manager' || u.role === 'Admin');
+    const reps      = allUsers.filter(u => u.userType === 'User' || u.role === 'User' || u.userType === 'Sales Rep' || (!u.userType && !u.role));
+    const territories = (settings.territories || []).map(t => t.name || t).filter(Boolean);
+    const verticals   = (settings.verticalMarkets || settings.verticals || []).map(v => v.name || v).filter(Boolean);
+    const teams       = settings.teams || [];
 
     const isEdit = !!team;
+    const [name,       setName]       = useState(team?.name       || '');
+    const [territory,  setTerritory]  = useState(team?.territory  || '');
+    const [vertical,   setVertical]   = useState(team?.vertical   || '');
+    const [managerId,  setManagerId]  = useState(team?.managerId  || '');
+    const [repIds,     setRepIds]     = useState(team?.repIds     || []);
+    const [color,      setColor]      = useState(team?.color      || TEAM_COLORS[0]);
+    const [saving,     setSaving]     = useState(false);
+    const [err,        setErr]        = useState('');
+
+    const toggleRep = (id) => setRepIds(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
 
     const handleSave = async () => {
         if (!name.trim()) { setErr('Team name is required.'); return; }
-        setSaving(true);
-        setErr('');
+        setSaving(true); setErr('');
         try {
-            const existing = (settings.teams || []);
-            let updated;
-            if (isEdit) {
-                updated = existing.map(t => t.id === team.id
-                    ? { ...t, name: name.trim(), color, manager, region }
-                    : t);
-            } else {
-                const newTeam = {
-                    id:        `tm_${Date.now()}`,
-                    name:      name.trim(),
-                    color,
-                    manager,
-                    region,
-                    pipeline:  '—',
-                    quotaQ:    null,
-                    attainPct: null,
-                };
-                updated = [...existing, newTeam];
-            }
-            const res  = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updated }) });
+            const id = isEdit ? team.id : `team_${Date.now()}`;
+            const saved = { id, name: name.trim(), territory, vertical, managerId, repIds, color };
+            const updatedTeams = isEdit ? teams.map(t => t.id === id ? saved : t) : [...teams, saved];
+
+            // Update user team/territory/vertical fields to match — mirrors TeamBuilder.saveTeam
+            const updatedUsers = allUsers.map(u => {
+                const wasInThisTeam = u.teamId === id;
+                const isNowRep      = repIds.includes(u.id);
+                const isNowManager  = managerId === u.id;
+                if (isNowRep || isNowManager) return { ...u, team: saved.name, territory: saved.territory, vertical: saved.vertical, teamId: id };
+                if (wasInThisTeam)            return { ...u, team: '', territory: '', vertical: '', teamId: '' };
+                return u;
+            });
+
+            // Persist to settings (teams + users)
+            const res  = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Save failed');
-            // Update both local callback state and global settings
-            setSettings(prev => ({ ...prev, teams: updated }));
-            onSave(updated);
+
+            // Persist changed user rows to /users
+            const changedUsers = updatedUsers.filter((u, i) => {
+                const orig = allUsers[i];
+                return orig && (u.team !== orig.team || u.teamId !== orig.teamId);
+            });
+            for (const u of changedUsers) {
+                try {
+                    await dbFetch(`/.netlify/functions/users`, { method:'PUT', body: JSON.stringify({ id: u.id, team: u.team, territory: u.territory, vertical: u.vertical, teamId: u.teamId }) });
+                } catch(e) { console.error('Failed to persist user team', u.name, e); }
+            }
+
+            setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
+            onSave(updatedTeams);
             onClose();
         } catch(e) {
             setErr(e.message || 'Save failed.');
@@ -7484,57 +7503,95 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
     };
 
     const inp = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, background:T.surface, fontFamily:T.sans, outline:'none', boxSizing:'border-box' };
+    const sel = { ...inp, cursor:'pointer' };
     const lbl = { display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 };
 
     return (
         <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}
             onClick={onClose}>
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:460, boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:520, maxHeight:'90vh', overflowY:'auto', boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }}
                 onClick={e=>e.stopPropagation()}>
-                {/* Header */}
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}`, position:'sticky', top:0, background:T.surface, zIndex:1 }}>
                     <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>{isEdit ? 'Edit team' : 'New team'}</div>
-                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer', lineHeight:1, padding:'0 2px' }}>×</button>
+                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer', lineHeight:1 }}>×</button>
                 </div>
-                {/* Body */}
                 <div style={{ padding:'20px', display:'flex', flexDirection:'column', gap:14 }}>
                     <div>
-                        <label style={lbl}>Team name</label>
+                        <label style={lbl}>Team name *</label>
                         <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. SMB West" style={inp} autoFocus/>
                     </div>
                     <div>
                         <label style={lbl}>Manager</label>
-                        <select value={manager} onChange={e=>setManager(e.target.value)} style={{ ...inp, cursor:'pointer' }}>
+                        <select value={managerId} onChange={e=>setManagerId(e.target.value)} style={sel}>
                             <option value="">— Select manager —</option>
-                            {allUsers.map(u => <option key={u.id||u.name} value={u.name}>{u.name} · {u.userType || u.role || 'User'}</option>)}
+                            {managers.map(u => <option key={u.id} value={u.id}>{u.name} · {u.userType || u.role}</option>)}
                         </select>
+                        {managers.length === 0 && <div style={{ fontSize:11.5, color:T.warn, marginTop:4 }}>No Manager/Admin users found.</div>}
                     </div>
                     <div>
-                        <label style={lbl}>Region</label>
-                        <input value={region} onChange={e=>setRegion(e.target.value)} placeholder="e.g. NAM-West, EMEA, Global" style={inp}/>
+                        <label style={lbl}>Territory</label>
+                        {territories.length > 0 ? (
+                            <select value={territory} onChange={e=>setTerritory(e.target.value)} style={sel}>
+                                <option value="">— None —</option>
+                                {territories.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                        ) : (
+                            <input value={territory} onChange={e=>setTerritory(e.target.value)} placeholder="e.g. NAM-West" style={inp}/>
+                        )}
+                    </div>
+                    <div>
+                        <label style={lbl}>Vertical</label>
+                        {verticals.length > 0 ? (
+                            <select value={vertical} onChange={e=>setVertical(e.target.value)} style={sel}>
+                                <option value="">— None —</option>
+                                {verticals.map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                        ) : (
+                            <input value={vertical} onChange={e=>setVertical(e.target.value)} placeholder="e.g. Healthcare" style={inp}/>
+                        )}
                     </div>
                     <div>
                         <label style={lbl}>Team color</label>
-                        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                        <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
                             {TEAM_COLORS.map(c => (
-                                <button key={c} onClick={()=>setColor(c)} style={{
-                                    width:26, height:26, borderRadius:'50%', background:c, border: color===c ? `3px solid ${T.ink}` : `2px solid transparent`,
-                                    cursor:'pointer', outline:'none', boxSizing:'border-box', flexShrink:0,
-                                }}/>
+                                <button key={c} onClick={()=>setColor(c)} style={{ width:24, height:24, borderRadius:'50%', background:c, border: color===c ? `3px solid ${T.ink}` : '2px solid transparent', cursor:'pointer', outline:'none', boxSizing:'border-box' }}/>
                             ))}
-                            {/* Preview */}
-                            <div style={{ display:'flex', alignItems:'center', gap:6, marginLeft:6 }}>
-                                <span style={{ width:4, height:20, borderRadius:2, background:color }}/>
-                                <span style={{ fontSize:12.5, fontWeight:700, color:T.ink }}>{name || 'Team name'}</span>
+                            <div style={{ display:'flex', alignItems:'center', gap:6, marginLeft:4 }}>
+                                <span style={{ width:4, height:18, borderRadius:2, background:color }}/>
+                                <span style={{ fontSize:12, fontWeight:700, color:T.ink }}>{name || 'Preview'}</span>
                             </div>
                         </div>
                     </div>
+                    <div>
+                        <label style={lbl}>Sales Reps ({repIds.length} selected)</label>
+                        {reps.length === 0 ? (
+                            <div style={{ fontSize:12, color:T.inkMuted }}>No Sales Rep users found.</div>
+                        ) : (
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, maxHeight:180, overflowY:'auto', padding:8, border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface }}>
+                                {reps.map(u => {
+                                    const selected   = repIds.includes(u.id);
+                                    const otherTeam  = (settings.teams||[]).find(t => t.id !== team?.id && (t.repIds||[]).includes(u.id));
+                                    return (
+                                        <div key={u.id} onClick={() => toggleRep(u.id)}
+                                            style={{ display:'flex', alignItems:'center', gap:7, padding:'6px 8px', borderRadius:4, cursor:'pointer', background: selected ? 'rgba(58,90,122,0.08)' : T.surface2, border: selected ? `1px solid rgba(58,90,122,0.25)` : `1px solid ${T.border}`, userSelect:'none' }}>
+                                            <span style={{ width:14, height:14, borderRadius:3, border: selected ? 'none' : `1.5px solid ${T.border}`, background: selected ? T.info : 'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                                {selected && <span style={{ color:'#fff', fontSize:9, fontWeight:700 }}>✓</span>}
+                                            </span>
+                                            <div>
+                                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{u.name}</div>
+                                                {otherTeam && <div style={{ fontSize:10.5, color:T.warn }}>In: {otherTeam.name}</div>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
                     {err && <div style={{ fontSize:12, color:T.danger, fontWeight:600 }}>{err}</div>}
                 </div>
-                {/* Footer */}
-                <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'14px 20px', borderTop:`1px solid ${T.border}` }}>
+                <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'14px 20px', borderTop:`1px solid ${T.border}`, position:'sticky', bottom:0, background:T.surface }}>
                     <button onClick={onClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
-                    <button onClick={handleSave} disabled={saving} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans, opacity: saving ? 0.7 : 1 }}>
+                    <button onClick={handleSave} disabled={saving} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans, opacity:saving?0.7:1 }}>
                         {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create team'}
                     </button>
                 </div>
@@ -7545,56 +7602,48 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
 
 // ── Org Chart view ────────────────────────────────────────────
 const OrgChartView = ({ teams, allUsers }) => {
-    // Group users by team
-    const membersByTeam = {};
-    for (const u of allUsers) {
-        if (u.team) (membersByTeam[u.team] ||= []).push(u);
-    }
-
-    const nodeStyle = { background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:'10px 14px', minWidth:140, textAlign:'center', position:'relative' };
-
+    const nodeStyle = { background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:'10px 14px', textAlign:'center' };
     return (
-        <div style={{ overflowX:'auto', paddingBottom:16 }}>
-            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:0, minWidth:700 }}>
-                {teams.map((team, ti) => {
-                    const members = membersByTeam[team.name] || [];
-                    const manager = members.find(u => u.name === team.manager) || { name: team.manager };
-                    const reps    = members.filter(u => u.name !== team.manager);
+        <div style={{ overflowX:'auto', paddingBottom:8 }}>
+            {teams.length === 0
+                ? <div style={{ color:T.inkMuted, fontSize:13, padding:16 }}>No teams yet.</div>
+                : teams.map(team => {
+                    const manager  = allUsers.find(u => u.id === team.managerId);
+                    const teamReps = allUsers.filter(u => (team.repIds||[]).includes(u.id));
                     return (
-                        <div key={team.id} style={{ display:'flex', flexDirection:'column', alignItems:'center', marginBottom:24, width:'100%' }}>
-                            {/* Team node */}
-                            <div style={{ ...nodeStyle, borderLeft:`4px solid ${team.color}`, padding:'10px 18px', minWidth:200 }}>
+                        <div key={team.id} style={{ display:'flex', flexDirection:'column', alignItems:'center', marginBottom:28 }}>
+                            <div style={{ ...nodeStyle, borderLeft:`4px solid ${team.color||T.inkMuted}`, minWidth:200, textAlign:'left', padding:'10px 16px' }}>
                                 <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{team.name}</div>
-                                {team.region && team.region !== '—' && <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>{team.region}</div>}
-                                <div style={{ fontSize:11.5, color:T.inkMid, marginTop:4 }}>{members.length} member{members.length !== 1 ? 's' : ''}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>
+                                    {team.territory && `📍 ${team.territory}`}{team.territory && team.vertical && ' · '}{team.vertical && `🏭 ${team.vertical}`}
+                                </div>
+                                <div style={{ fontSize:11.5, color:T.inkMid, marginTop:4 }}>
+                                    {teamReps.length} rep{teamReps.length !== 1 ? 's' : ''}
+                                </div>
                             </div>
-                            {/* Connector line */}
-                            {(manager.name || reps.length > 0) && (
-                                <div style={{ width:2, height:16, background:T.border }}/>
-                            )}
-                            {/* Manager + reps row */}
-                            {(manager.name || reps.length > 0) && (
-                                <div style={{ display:'flex', gap:12, flexWrap:'wrap', justifyContent:'center' }}>
-                                    {manager.name && (
-                                        <div style={{ ...nodeStyle, borderTop:`3px solid ${team.color}` }}>
-                                            <UserAvatar name={manager.name} size={28}/>
-                                            <div style={{ fontSize:11.5, fontWeight:700, color:T.ink, marginTop:5 }}>{manager.name}</div>
+                            {(manager || teamReps.length > 0) && <div style={{ width:2, height:14, background:T.border }}/>}
+                            {(manager || teamReps.length > 0) && (
+                                <div style={{ display:'flex', gap:10, flexWrap:'wrap', justifyContent:'center' }}>
+                                    {manager && (
+                                        <div style={{ ...nodeStyle, borderTop:`3px solid ${team.color||T.inkMuted}`, minWidth:120 }}>
+                                            <UserAvatar name={manager.name} size={26}/>
+                                            <div style={{ fontSize:11.5, fontWeight:700, color:T.ink, marginTop:4 }}>{manager.name}</div>
                                             <div style={{ fontSize:10.5, color:T.inkMuted }}>Manager</div>
                                         </div>
                                     )}
-                                    {reps.map(u => (
-                                        <div key={u.id||u.name} style={{ ...nodeStyle, background:T.surface2 }}>
-                                            <UserAvatar name={u.name} size={24}/>
+                                    {teamReps.map(u => (
+                                        <div key={u.id} style={{ ...nodeStyle, background:T.surface2, minWidth:100 }}>
+                                            <UserAvatar name={u.name} size={22}/>
                                             <div style={{ fontSize:11, fontWeight:600, color:T.ink, marginTop:4 }}>{u.name}</div>
-                                            <div style={{ fontSize:10, color:T.inkMuted }}>{u.userType || u.role || 'Rep'}</div>
+                                            <div style={{ fontSize:10, color:T.inkMuted }}>{u.userType||'Rep'}</div>
                                         </div>
                                     ))}
                                 </div>
                             )}
                         </div>
                     );
-                })}
-            </div>
+                })
+            }
         </div>
     );
 };
@@ -7603,35 +7652,13 @@ const OrgChartView = ({ teams, allUsers }) => {
 const TeamsDetail = ({ settings, setSettings, onBack }) => {
     const { showConfirm } = useApp();
 
-    // ── Derive live teams ─────────────────────────────────────
-    // Use settings.teams if stored, otherwise synthesise from user.team fields
     const allUsers = (settings.users || []).filter(u => u.name);
+    const teams    = settings.teams || [];
 
-    const deriveTeams = () => {
-        if (settings.teams && settings.teams.length > 0) return settings.teams;
-        // Build from user team field groupings
-        const map = {};
-        for (const u of allUsers) {
-            if (!u.team) continue;
-            if (!map[u.team]) map[u.team] = { id:`tm_${u.team}`, name:u.team, color:'#3a5a7a', manager:'', region:'—', pipeline:'—', quotaQ:null, attainPct:null };
-            if (u.userType === 'Manager' || u.userType === 'Admin') map[u.team].manager = u.name;
-        }
-        return Object.values(map);
-    };
-
-    const [teams,       setTeams]       = useState(deriveTeams);
     const [openKebab,   setOpenKebab]   = useState(null);
     const [editingTeam, setEditingTeam] = useState(null); // null | 'new' | team obj
-    const [viewMode,    setViewMode]    = useState('table'); // 'table' | 'org'
+    const [viewMode,    setViewMode]    = useState('table');
 
-    // Keep local teams in sync if parent settings.teams changes (e.g. after save)
-    React.useEffect(() => {
-        if (settings.teams && settings.teams.length > 0) {
-            setTeams(settings.teams);
-        }
-    }, [settings.teams]);
-
-    // Close kebab on outside click
     React.useEffect(() => {
         if (openKebab === null) return;
         const h = () => setOpenKebab(null);
@@ -7639,44 +7666,42 @@ const TeamsDetail = ({ settings, setSettings, onBack }) => {
         return () => document.removeEventListener('click', h);
     }, [openKebab]);
 
-    // Derive unassigned users: active users with no team assignment
-    const unassigned = allUsers.filter(u => !u.team && u.active !== false && u.userType !== 'Admin');
+    // Unassigned: active users with no teamId
+    const unassigned = allUsers.filter(u => !u.teamId && u.active !== false && u.userType !== 'Admin');
 
-    // Member count from live user data
-    const memberCount = (teamName) => allUsers.filter(u => u.team === teamName).length;
+    // Member count from repIds
+    const memberCount = (team) => (team.repIds || []).length + (team.managerId ? 1 : 0);
 
-    // Handle team saved (from modal) — modal already called setSettings
-    const handleTeamSaved = (updatedTeams) => {
-        setTeams(updatedTeams);
-    };
+    const handleTeamSaved = (updatedTeams) => { /* setSettings already called inside TeamModal */ };
 
-    // Handle delete
     const handleDelete = (team) => {
         setOpenKebab(null);
         showConfirm(`Delete team "${team.name}"? Members will become unassigned.`, async () => {
-            const updated = teams.filter(t => t.id !== team.id);
+            const updatedTeams = teams.filter(t => t.id !== team.id);
+            const updatedUsers = allUsers.map(u => u.teamId === team.id ? { ...u, team:'', teamId:'', territory:'', vertical:'' } : u);
             try {
-                const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updated }) });
+                const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
                 if (res.ok) {
-                    setTeams(updated);
-                    setSettings(prev => ({ ...prev, teams: updated }));
+                    setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
+                    // Clear team on affected users in DB
+                    for (const u of allUsers.filter(u => u.teamId === team.id)) {
+                        try { await dbFetch(`/.netlify/functions/users`, { method:'PUT', body: JSON.stringify({ id: u.id, team:'', teamId:'', territory:'', vertical:'' }) }); } catch(e) {}
+                    }
                 }
             } catch(e) { console.error('Delete team failed', e); }
         });
     };
 
-    const teamCount   = teams.length;
-    const managerSet  = new Set(teams.map(t=>t.manager).filter(Boolean));
-
+    const teamCount  = teams.length;
+    const managerSet = new Set(teams.map(t => t.managerId).filter(Boolean));
     const inpSt = { padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans };
 
     return (
     <div style={{ fontFamily:T.sans }}>
-        {/* New/Edit team modal */}
         {editingTeam && (
             <TeamModal
                 team={editingTeam === 'new' ? null : editingTeam}
-                settings={{ ...settings, teams }}
+                settings={settings}
                 setSettings={setSettings}
                 onSave={handleTeamSaved}
                 onClose={() => setEditingTeam(null)}/>
@@ -7720,26 +7745,22 @@ const TeamsDetail = ({ settings, setSettings, onBack }) => {
             </div>
         </div>
 
-        {/* ── Org chart view ── */}
+        {/* Org chart view */}
         {viewMode === 'org' && (
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:24, marginBottom:14 }}>
                 <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:16 }}>Org chart</div>
-                {teams.length === 0
-                    ? <div style={{ color:T.inkMuted, fontSize:13 }}>No teams yet.</div>
-                    : <OrgChartView teams={teams} allUsers={allUsers}/>
-                }
+                <OrgChartView teams={teams} allUsers={allUsers}/>
             </div>
         )}
 
-        {/* ── Table view ── */}
+        {/* Table view */}
         {viewMode === 'table' && (
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, marginBottom:14 }}>
             <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
                 <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>All teams</div>
                 <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any team to edit its members, manager, and quotas.</div>
             </div>
-            {/* Header */}
-            <div style={{ display:'grid', gridTemplateColumns:'24px 1fr 180px 70px 130px 90px 120px 80px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+            <div style={{ display:'grid', gridTemplateColumns:'24px 1fr 200px 80px 130px 90px 120px 80px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
                 {['','TEAM','MANAGER','MEMBERS','PIPELINE','QUOTA Q','ATTAIN','REGION',''].map((h,i) => (
                     <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
                 ))}
@@ -7749,48 +7770,45 @@ const TeamsDetail = ({ settings, setSettings, onBack }) => {
                     No teams yet. Click <b>New team</b> to create your first team.
                 </div>
             ) : teams.map((team, i) => {
-                const liveMembers = memberCount(team.name);
+                const manager = allUsers.find(u => u.id === team.managerId);
+                const count   = memberCount(team);
                 return (
                 <div key={team.id}
-                    style={{ display:'grid', gridTemplateColumns:'24px 1fr 180px 70px 130px 90px 120px 80px 32px', gap:8, padding:'11px 16px', borderBottom: i<teams.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
+                    style={{ display:'grid', gridTemplateColumns:'24px 1fr 200px 80px 130px 90px 120px 80px 32px', gap:8, padding:'11px 16px', borderBottom: i<teams.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
                     onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
-                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                    <span style={{ color:T.border, fontSize:14, cursor:'grab' }}>⠿</span>
-                    {/* Team name */}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                    onClick={() => setEditingTeam(team)}>
+                    <span style={{ color:T.border, fontSize:14, cursor:'grab' }} onClick={e=>e.stopPropagation()}>⠿</span>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                         <span style={{ width:4, height:16, borderRadius:2, background:team.color||T.inkMuted, flexShrink:0 }}/>
                         <span style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{team.name}</span>
+                        {team.territory && <span style={{ fontSize:11, color:T.inkMuted }}>· {team.territory}</span>}
                     </div>
-                    {/* Manager */}
                     <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        {team.manager ? <><UserAvatar name={team.manager} size={20}/><span style={{ fontSize:12.5, color:T.inkMid }}>{team.manager}</span></> : <span style={{ fontSize:12, color:T.border }}>—</span>}
+                        {manager
+                            ? <><UserAvatar name={manager.name} size={20}/><span style={{ fontSize:12.5, color:T.inkMid }}>{manager.name}</span></>
+                            : <span style={{ fontSize:12, color:T.border }}>—</span>}
                     </div>
-                    {/* Members — live count from users */}
-                    <div style={{ fontSize:13, color:T.ink }}>{liveMembers}</div>
-                    {/* Pipeline */}
+                    <div style={{ fontSize:13, color:T.ink }}>{count}</div>
                     <div style={{ fontSize:12, color:T.inkMid }}>{team.pipeline || '—'}</div>
-                    {/* Quota Q */}
                     <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{team.quotaQ || '—'}</div>
-                    {/* Attainment */}
                     <div>{team.attainPct != null ? <AttainBar pct={team.attainPct}/> : <span style={{ color:T.border }}>—</span>}</div>
-                    {/* Region */}
-                    <div style={{ fontSize:11.5, color:T.inkMuted }}>{team.region || '—'}</div>
-                    {/* Kebab */}
-                    <div style={{ position:'relative' }}>
+                    <div style={{ fontSize:11.5, color:T.inkMuted }}>{team.territory || '—'}</div>
+                    <div style={{ position:'relative' }} onClick={e=>e.stopPropagation()}>
                         <button onClick={e => { e.stopPropagation(); setOpenKebab(openKebab === team.id ? null : team.id); }}
                             style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:'2px 4px', lineHeight:1, borderRadius:T.r }}
                             onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
                             onMouseLeave={e=>e.currentTarget.style.background='none'}>⋯</button>
                         {openKebab === team.id && (
                             <div onClick={e=>e.stopPropagation()}
-                                style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:180 }}>
+                                style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:160 }}>
                                 {[
-                                    { label:'Edit team',      action: () => { setOpenKebab(null); setEditingTeam(team); } },
-                                    { label:'Delete team',    action: () => handleDelete(team), danger: true },
+                                    { label:'Edit team',   action: () => { setOpenKebab(null); setEditingTeam(team); } },
+                                    { label:'Delete team', action: () => handleDelete(team), danger: true },
                                 ].map((item, mi) => (
                                     <button key={mi} onClick={item.action}
-                                        style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.danger ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans }}
-                                        onMouseEnter={e=>e.currentTarget.style.background = item.danger ? 'rgba(156,58,46,0.06)' : T.surface2}
+                                        style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0?`1px solid ${T.border}`:'none', textAlign:'left', fontSize:13, color:item.danger?T.danger:T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                        onMouseEnter={e=>e.currentTarget.style.background=item.danger?'rgba(156,58,46,0.06)':T.surface2}
                                         onMouseLeave={e=>e.currentTarget.style.background='none'}>
                                         {item.label}
                                     </button>
@@ -7804,7 +7822,7 @@ const TeamsDetail = ({ settings, setSettings, onBack }) => {
         </div>
         )}
 
-        {/* Unassigned users — live from settings.users */}
+        {/* Unassigned users — live from settings.users, filtered by teamId */}
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
             <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:3 }}>Unassigned users</div>
             <div style={{ fontSize:12, color:T.inkMuted, marginBottom:10 }}>Active users not currently in a team.</div>
@@ -7833,6 +7851,7 @@ const TeamsDetail = ({ settings, setSettings, onBack }) => {
     </div>
     );
 };
+
 
 // ── TERRITORIES detail page ───────────────────────────────────
 const TerritoriesDetail = ({ settings, onBack }) => {
