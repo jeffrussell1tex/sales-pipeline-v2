@@ -7435,7 +7435,7 @@ const UsersDetail = ({ settings, onBack }) => {
 const TEAM_COLORS = ['#2a2622','#4d6b3d','#3a5a7a','#7a6a48','#9c5a3a','#5e4e7a','#3a6a6a','#6b2a22','#3a5530','#7a4a6a'];
 
 const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
-    const allUsers  = (settings.users || []).filter(u => u.name);
+    const allUsers  = (settings.users || []).filter(u => u.name && u.active !== false);
     const managers  = allUsers.filter(u => {
         const r = (u.userType || u.role || '').toLowerCase();
         return r.includes('manager') || r.includes('admin');
@@ -7673,7 +7673,12 @@ const TeamsDetail = ({ settings, setSettings, onBack }) => {
     const unassigned = allUsers.filter(u => !u.teamId && u.active !== false && u.userType !== 'Admin');
 
     // Member count from repIds
-    const memberCount = (team) => (team.repIds || []).length + (team.managerId ? 1 : 0);
+    const activeUserIds = new Set(allUsers.filter(u => u.active !== false).map(u => u.id));
+    const memberCount = (team) => {
+        const activeReps = (team.repIds || []).filter(id => activeUserIds.has(id)).length;
+        const hasActiveManager = team.managerId && activeUserIds.has(team.managerId);
+        return activeReps + (hasActiveManager ? 1 : 0);
+    };
 
     const handleTeamSaved = (updatedTeams) => { /* setSettings already called inside TeamModal */ };
 
@@ -7828,7 +7833,7 @@ const TeamsDetail = ({ settings, setSettings, onBack }) => {
                     No teams yet. Click <b>New team</b> to create your first team.
                 </div>
             ) : teams.map((team, i) => {
-                const manager = allUsers.find(u => u.id === team.managerId);
+                const manager = allUsers.find(u => u.id === team.managerId && u.active !== false);
                 const count   = memberCount(team);
                 return (
                 <div key={team.id}
