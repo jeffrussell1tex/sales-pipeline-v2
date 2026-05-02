@@ -10058,11 +10058,11 @@ const RestoreModal = ({ snap, onClose }) => {
         setLoading(true);
         setError('');
         try {
-            const data = await dbFetch(
+            const dlRes = await dbFetch(
                 `/.netlify/functions/backup?id=${encodeURIComponent(snap.id)}&download=1`
             );
-            if (data.error) throw new Error(data.error);
-            const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+            if (!dlRes.ok) throw new Error('Server error');
+            const text = await dlRes.text();
             const blob = new Blob([text], { type: 'application/json' });
             const url  = URL.createObjectURL(blob);
             const a    = document.createElement('a');
@@ -10464,7 +10464,8 @@ const BackupDetail = ({ onBack }) => {
             setLoading(true);
             setLoadError('');
             try {
-                const data = await dbFetch('/.netlify/functions/backup');
+                const res  = await dbFetch('/.netlify/functions/backup');
+                const data = await res.json();
                 if (cancelled) return;
                 setSnapshots(data.snapshots || []);
                 if (data.schedule) {
@@ -10507,8 +10508,9 @@ const BackupDetail = ({ onBack }) => {
         try {
             // POST creates the snapshot row and returns metadata (no payload inline
             // to stay within Netlify's 6MB response limit)
-            const data = await dbFetch('/.netlify/functions/backup', { method: 'POST' });
-            if (data.error) throw new Error(data.error);
+            const res  = await dbFetch('/.netlify/functions/backup', { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Backup failed');
 
             // Prepend new snapshot to list immediately
             setSnapshots(prev => [{
@@ -10525,13 +10527,13 @@ const BackupDetail = ({ onBack }) => {
 
             setBackupSuccess(`Backup complete · ${data.recordCount?.toLocaleString() || '—'} records · ${data.sizeLabel || '—'} · ${data.id}`);
 
-            // Now fetch the payload separately for download
-            // This is a separate request to avoid Netlify's 6MB response body limit
+            // Fetch the export as raw text — must use res.text() so the JSON string
+            // reaches the Blob constructor untouched (dbFetch returns a raw Response).
             try {
-                const dlData = await dbFetch(
+                const dlRes  = await dbFetch(
                     `/.netlify/functions/backup?id=${encodeURIComponent(data.id)}&download=1`
                 );
-                const text = typeof dlData === 'string' ? dlData : JSON.stringify(dlData, null, 2);
+                const text = await dlRes.text();
                 const blob = new Blob([text], { type: 'application/json' });
                 const url  = URL.createObjectURL(blob);
                 const a    = document.createElement('a');
@@ -10558,11 +10560,12 @@ const BackupDetail = ({ onBack }) => {
         setSchedError('');
         setSchedSaved(false);
         try {
-            const data = await dbFetch('/.netlify/functions/backup', {
+            const res  = await dbFetch('/.netlify/functions/backup', {
                 method: 'PUT',
                 body: JSON.stringify(editSched),
             });
-            if (data.error) throw new Error(data.error);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Save failed');
             setSchedule(editSched);
             setSchedDirty(false);
             setSchedSaved(true);
@@ -10754,11 +10757,11 @@ const BackupDetail = ({ onBack }) => {
                                                 </button>
                                                 <button onClick={async () => {
                                                     try {
-                                                        const data = await dbFetch(`/.netlify/functions/backup?id=${encodeURIComponent(s.id)}&download=1`);
-                                                        const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-                                                        const blob = new Blob([text], { type:'application/json' });
-                                                        const url  = URL.createObjectURL(blob);
-                                                        const a    = document.createElement('a');
+                                                        const dlRes = await dbFetch(`/.netlify/functions/backup?id=${encodeURIComponent(s.id)}&download=1`);
+                                                        const text  = await dlRes.text();
+                                                        const blob  = new Blob([text], { type:'application/json' });
+                                                        const url   = URL.createObjectURL(blob);
+                                                        const a     = document.createElement('a');
                                                         a.href = url; a.download = `${s.id}.json`;
                                                         document.body.appendChild(a); a.click();
                                                         document.body.removeChild(a);
