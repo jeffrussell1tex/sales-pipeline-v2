@@ -10505,23 +10505,12 @@ const BackupDetail = ({ onBack }) => {
         setBackupError('');
         setBackupSuccess('');
         try {
+            // POST creates the snapshot row and returns metadata (no payload inline
+            // to stay within Netlify's 6MB response limit)
             const data = await dbFetch('/.netlify/functions/backup', { method: 'POST' });
             if (data.error) throw new Error(data.error);
 
-            // Trigger browser download immediately
-            if (data.downloadData) {
-                const blob = new Blob([data.downloadData], { type: 'application/json' });
-                const url  = URL.createObjectURL(blob);
-                const a    = document.createElement('a');
-                a.href     = url;
-                a.download = `${data.id}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }
-
-            // Prepend new snapshot to list
+            // Prepend new snapshot to list immediately
             setSnapshots(prev => [{
                 id:            data.id,
                 createdAt:     data.createdAt,
@@ -10534,7 +10523,27 @@ const BackupDetail = ({ onBack }) => {
                 status:        'ready',
             }, ...prev]);
 
-            setBackupSuccess(`Backup complete · ${data.recordCount?.toLocaleString() || '—'} records · ${data.sizeLabel || '—'} · downloaded as ${data.id}.json`);
+            setBackupSuccess(`Backup complete · ${data.recordCount?.toLocaleString() || '—'} records · ${data.sizeLabel || '—'} · ${data.id}`);
+
+            // Now fetch the payload separately for download
+            // This is a separate request to avoid Netlify's 6MB response body limit
+            try {
+                const dlData = await dbFetch(
+                    `/.netlify/functions/backup?id=${encodeURIComponent(data.id)}&download=1`
+                );
+                const text = typeof dlData === 'string' ? dlData : JSON.stringify(dlData);
+                const blob = new Blob([text], { type: 'application/json' });
+                const url  = URL.createObjectURL(blob);
+                const a    = document.createElement('a');
+                a.href     = url;
+                a.download = `${data.id}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch {
+                // Download failed but backup succeeded — user can download from the table
+            }
         } catch (e) {
             setBackupError(e.message || 'Backup failed. Please try again.');
         } finally {
@@ -10566,7 +10575,7 @@ const BackupDetail = ({ onBack }) => {
     };
 
     const updateSched = (field, value) => {
-        setEditSched(prev => ({ ...prev, [field]: value }));
+        setEditSched(() => ({ ...(editSched || schedule), [field]: value }));
         setSchedDirty(true);
         setSchedSaved(false);
     };
@@ -10697,7 +10706,7 @@ const BackupDetail = ({ onBack }) => {
             {/* Snapshots table */}
             <DataCard title="Recent snapshots"
                 desc="Each snapshot is a complete point-in-time copy of all CRM data and settings."
-                headAction={<span style={{ fontSize:11.5, color:T.info, cursor:'pointer', fontWeight:600 }}>Configure storage →</span>}>
+                headAction={<span style={{ fontSize:11.5, color:T.inkMuted, fontStyle:'italic' }}>Storage: Neon PostgreSQL</span>}>
                 {loading ? (
                     <div style={{ padding:'2rem', textAlign:'center', color:T.inkMuted, fontSize:13 }}>Loading snapshots…</div>
                 ) : snapshots.length === 0 ? (

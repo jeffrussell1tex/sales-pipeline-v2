@@ -118,18 +118,26 @@ export const handler = async (event) => {
                 frequency: 'Daily', timeUtc: '03:00', retentionDays: 30, notifyOnFailure: '',
             };
 
-            const snapshots = rows.map(r => ({
-                id:            r.id,
-                createdAt:     r.createdAt,
-                type:          r.type,
-                recordCount:   r.recordCount,
-                sizeBytes:     r.sizeBytes,
-                sizeLabel:     formatSize(r.sizeBytes),
-                durationMs:    r.durationMs,
-                durationLabel: formatDuration(r.durationMs),
-                status:        r.status,
-                triggeredBy:   r.triggeredBy,
-            }));
+            const snapshots = rows.map(r => {
+                // Drizzle neon-http may return camelCase or snake_case depending on driver version
+                const recordCount   = r.recordCount   ?? r.record_count   ?? 0;
+                const sizeBytes     = r.sizeBytes      ?? r.size_bytes     ?? 0;
+                const durationMs    = r.durationMs     ?? r.duration_ms    ?? 0;
+                const triggeredBy   = r.triggeredBy    ?? r.triggered_by   ?? null;
+                const createdAt     = r.createdAt      ?? r.created_at     ?? null;
+                return {
+                    id:            r.id,
+                    createdAt,
+                    type:          r.type,
+                    recordCount,
+                    sizeBytes,
+                    sizeLabel:     formatSize(sizeBytes),
+                    durationMs,
+                    durationLabel: formatDuration(durationMs),
+                    status:        r.status,
+                    triggeredBy,
+                };
+            });
 
             return { statusCode: 200, headers, body: JSON.stringify({ snapshots, schedule }) };
         }
@@ -168,7 +176,8 @@ export const handler = async (event) => {
                     status:        'ready',
                     type:          'manual',
                     createdAt:     new Date().toISOString(),
-                    downloadData:  jsonPayload,
+                    // downloadData intentionally omitted — client fetches via GET ?download=1
+                    // to stay within Netlify's 6MB response body limit
                 }),
             };
         }
