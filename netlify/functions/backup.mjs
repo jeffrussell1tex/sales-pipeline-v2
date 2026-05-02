@@ -6,11 +6,12 @@ import { verifyAuth } from './auth.mjs';
 const headers = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 function formatDuration(ms) {
+    if (!ms) return '0m 00s';
     const s = Math.round(ms / 1000);
     const m = Math.floor(s / 60);
     const sec = s % 60;
@@ -34,6 +35,8 @@ function generateSnapId() {
     return `bk_snap_${y}_${mo}_${d}_${h}${mi}`;
 }
 
+// Collect all org data and return as a serialised JSON string + stats.
+// Called for both POST (record metrics) and GET ?download=1 (serve the file).
 async function collectOrgData(orgId) {
     const [opps, accs, conts, lds, tsks, acts, usrs, sets, qts, prods, pipes] = await Promise.all([
         db.select().from(opportunities).where(eq(opportunities.orgId, orgId)),
@@ -68,12 +71,33 @@ async function collectOrgData(orgId) {
         },
     };
 
-    const json = JSON.stringify(payload);
+    const json = JSON.stringify(payload, null, 2);
     const recordCount = opps.length + accs.length + conts.length + lds.length +
                         tsks.length + acts.length + usrs.length + qts.length + prods.length;
     const sizeBytes = Buffer.byteLength(json, 'utf8');
 
     return { json, recordCount, sizeBytes };
+}
+
+// Normalise a Drizzle row — neon-http may return camelCase or snake_case
+function normaliseRow(r) {
+    const recordCount   = r.recordCount   ?? r.record_count   ?? 0;
+    const sizeBytes     = r.sizeBytes     ?? r.size_bytes     ?? 0;
+    const durationMs    = r.durationMs    ?? r.duration_ms    ?? 0;
+    const triggeredBy   = r.triggeredBy   ?? r.triggered_by   ?? null;
+    const createdAt     = r.createdAt     ?? r.created_at     ?? null;
+    return {
+        id:            r.id,
+        createdAt,
+        type:          r.type,
+        recordCount,
+        sizeBytes,
+        sizeLabel:     formatSize(sizeBytes),
+        durationMs,
+        durationLabel: formatDuration(durationMs),
+        status:        r.status,
+        triggeredBy,
+    };
 }
 
 export const handler = async (event) => {
@@ -92,11 +116,23 @@ export const handler = async (event) => {
         if (event.httpMethod === 'GET') {
             const params = event.queryStringParameters || {};
 
-            // Download a stored snapshot payload
+            // ?id=xxx&download=1  →  regenerate export fresh and stream as a file download
+            // We do NOT store the payload in the DB. We regenerate it on demand.
+            // This avoids Netlify's 6 MB response body limit for the POST and keeps
+            // the backups table lean (metadata only).
             if (params.id && params.download === '1') {
+                // Verify this snapshot belongs to the org
                 const [snap] = await db.select().from(backups)
                     .where(and(eq(backups.id, params.id), eq(backups.orgId, orgId)));
-                if (!snap) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Snapshot not found' }) };
+                if (!snap) {
+                    return { statusCode: 404, headers, body: JSON.stringify({ error: 'Snapshot not found' }) };
+                }
+
+                const { json } = await collectOrgData(orgId);
+
+                // Return as a plain JSON file — Content-Disposition tells the browser to download it.
+                // NOTE: this endpoint is called directly via window.fetch (not dbFetch) on the
+                // frontend so the raw text body reaches the Blob constructor untouched.
                 return {
                     statusCode: 200,
                     headers: {
@@ -104,11 +140,11 @@ export const handler = async (event) => {
                         'Content-Type': 'application/json',
                         'Content-Disposition': `attachment; filename="${snap.id}.json"`,
                     },
-                    body: snap.payload || '{}',
+                    body: json,
                 };
             }
 
-            // List snapshots + schedule
+            // Normal GET — list snapshots + schedule config
             const [rows, schedRows] = await Promise.all([
                 db.select().from(backups).where(eq(backups.orgId, orgId)).orderBy(desc(backups.createdAt)).limit(30),
                 db.select().from(backupSchedule).where(eq(backupSchedule.orgId, orgId)).limit(1),
@@ -118,36 +154,20 @@ export const handler = async (event) => {
                 frequency: 'Daily', timeUtc: '03:00', retentionDays: 30, notifyOnFailure: '',
             };
 
-            const snapshots = rows.map(r => {
-                // Drizzle neon-http may return camelCase or snake_case depending on driver version
-                const recordCount   = r.recordCount   ?? r.record_count   ?? 0;
-                const sizeBytes     = r.sizeBytes      ?? r.size_bytes     ?? 0;
-                const durationMs    = r.durationMs     ?? r.duration_ms    ?? 0;
-                const triggeredBy   = r.triggeredBy    ?? r.triggered_by   ?? null;
-                const createdAt     = r.createdAt      ?? r.created_at     ?? null;
-                return {
-                    id:            r.id,
-                    createdAt,
-                    type:          r.type,
-                    recordCount,
-                    sizeBytes,
-                    sizeLabel:     formatSize(sizeBytes),
-                    durationMs,
-                    durationLabel: formatDuration(durationMs),
-                    status:        r.status,
-                    triggeredBy,
-                };
-            });
-
-            return { statusCode: 200, headers, body: JSON.stringify({ snapshots, schedule }) };
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({ snapshots: rows.map(normaliseRow), schedule }),
+            };
         }
 
-        // ── POST: run backup now ──────────────────────────────────────────────
+        // ── POST: create snapshot row (metadata only) ─────────────────────────
         if (event.httpMethod === 'POST') {
             const snapId  = generateSnapId();
             const startMs = Date.now();
 
-            const { json: jsonPayload, recordCount, sizeBytes } = await collectOrgData(orgId);
+            // Collect data to measure real record count and size
+            const { recordCount, sizeBytes } = await collectOrgData(orgId);
             const durationMs = Date.now() - startMs;
 
             await db.insert(backups).values({
@@ -158,7 +178,6 @@ export const handler = async (event) => {
                 recordCount,
                 sizeBytes,
                 durationMs,
-                payload:     jsonPayload,
                 triggeredBy: userId,
                 createdAt:   new Date(),
             });
@@ -176,8 +195,6 @@ export const handler = async (event) => {
                     status:        'ready',
                     type:          'manual',
                     createdAt:     new Date().toISOString(),
-                    // downloadData intentionally omitted — client fetches via GET ?download=1
-                    // to stay within Netlify's 6MB response body limit
                 }),
             };
         }

@@ -10062,7 +10062,7 @@ const RestoreModal = ({ snap, onClose }) => {
                 `/.netlify/functions/backup?id=${encodeURIComponent(snap.id)}&download=1`
             );
             if (data.error) throw new Error(data.error);
-            const text = typeof data === 'string' ? data : JSON.stringify(data);
+            const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
             const blob = new Blob([text], { type: 'application/json' });
             const url  = URL.createObjectURL(blob);
             const a    = document.createElement('a');
@@ -10531,7 +10531,7 @@ const BackupDetail = ({ onBack }) => {
                 const dlData = await dbFetch(
                     `/.netlify/functions/backup?id=${encodeURIComponent(data.id)}&download=1`
                 );
-                const text = typeof dlData === 'string' ? dlData : JSON.stringify(dlData);
+                const text = typeof dlData === 'string' ? dlData : JSON.stringify(dlData, null, 2);
                 const blob = new Blob([text], { type: 'application/json' });
                 const url  = URL.createObjectURL(blob);
                 const a    = document.createElement('a');
@@ -10755,7 +10755,7 @@ const BackupDetail = ({ onBack }) => {
                                                 <button onClick={async () => {
                                                     try {
                                                         const data = await dbFetch(`/.netlify/functions/backup?id=${encodeURIComponent(s.id)}&download=1`);
-                                                        const text = typeof data === 'string' ? data : JSON.stringify(data);
+                                                        const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
                                                         const blob = new Blob([text], { type:'application/json' });
                                                         const url  = URL.createObjectURL(blob);
                                                         const a    = document.createElement('a');

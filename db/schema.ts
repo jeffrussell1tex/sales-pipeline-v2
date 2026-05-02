@@ -396,7 +396,7 @@ export const backups = pgTable('backups', {
     sizeBytes:    integer('size_bytes').default(0),
     durationMs:   integer('duration_ms').default(0),
     triggeredBy:  varchar('triggered_by', { length: 255 }),        // userId or 'system'
-    payload:      text('payload'),                                  // Full JSON export blob
+    // payload intentionally not stored — export is regenerated fresh on each download request
     createdAt:    timestamp('created_at').notNull().defaultNow(),
 });
 
