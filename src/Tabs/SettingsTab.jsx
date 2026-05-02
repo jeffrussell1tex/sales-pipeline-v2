@@ -7440,8 +7440,14 @@ const TEAM_COLORS = ['#2a2622','#4d6b3d','#3a5a7a','#7a6a48','#9c5a3a','#5e4e7a'
 
 const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
     const allUsers  = (settings.users || []).filter(u => u.name);
-    const managers  = allUsers.filter(u => u.userType === 'Manager' || u.userType === 'Admin' || u.role === 'Manager' || u.role === 'Admin');
-    const reps      = allUsers.filter(u => u.userType === 'User' || u.role === 'User' || u.userType === 'Sales Rep' || (!u.userType && !u.role));
+    const managers  = allUsers.filter(u => {
+        const r = (u.userType || u.role || '').toLowerCase();
+        return r.includes('manager') || r.includes('admin');
+    });
+    const reps = allUsers.filter(u => {
+        const r = (u.userType || u.role || '').toLowerCase();
+        return !r.includes('manager') && !r.includes('admin');
+    });
     const territories = (settings.territories || []).map(t => t.name || t).filter(Boolean);
     const verticals   = (settings.verticalMarkets || settings.verticals || []).map(v => v.name || v).filter(Boolean);
     const teams       = settings.teams || [];
@@ -7655,9 +7661,10 @@ const TeamsDetail = ({ settings, setSettings, onBack }) => {
     const allUsers = (settings.users || []).filter(u => u.name);
     const teams    = settings.teams || [];
 
-    const [openKebab,   setOpenKebab]   = useState(null);
-    const [editingTeam, setEditingTeam] = useState(null); // null | 'new' | team obj
-    const [viewMode,    setViewMode]    = useState('table');
+    const [openKebab,    setOpenKebab]    = useState(null);
+    const [editingTeam,  setEditingTeam]  = useState(null); // null | 'new' | team obj
+    const [viewMode,     setViewMode]     = useState('table');
+    const [assigningUser,setAssigningUser]= useState(null); // user obj being assigned to a team
 
     React.useEffect(() => {
         if (openKebab === null) return;
@@ -7705,6 +7712,61 @@ const TeamsDetail = ({ settings, setSettings, onBack }) => {
                 setSettings={setSettings}
                 onSave={handleTeamSaved}
                 onClose={() => setEditingTeam(null)}/>
+        )}
+
+        {/* Assign user to existing team modal */}
+        {assigningUser && (
+            <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}
+                onClick={() => setAssigningUser(null)}>
+                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:400, boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }}
+                    onClick={e=>e.stopPropagation()}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}` }}>
+                        <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>Assign to team</div>
+                        <button onClick={() => setAssigningUser(null)} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer' }}>×</button>
+                    </div>
+                    <div style={{ padding:'16px 20px' }}>
+                        <div style={{ fontSize:12.5, color:T.inkMid, marginBottom:12 }}>
+                            Assigning <b>{assigningUser.name}</b> to a team will update their team and territory.
+                        </div>
+                        {teams.length === 0 ? (
+                            <div style={{ fontSize:13, color:T.inkMuted }}>No teams exist yet. Create a team first.</div>
+                        ) : (
+                            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                                {teams.map(t => (
+                                    <button key={t.id} onClick={async () => {
+                                        const updatedTeams = teams.map(tm => tm.id === t.id
+                                            ? { ...tm, repIds: [...(tm.repIds||[]), assigningUser.id] }
+                                            : tm);
+                                        const updatedUsers = allUsers.map(u => u.id === assigningUser.id
+                                            ? { ...u, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }
+                                            : u);
+                                        try {
+                                            const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
+                                            if (res.ok) {
+                                                await dbFetch('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: assigningUser.id, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }) });
+                                                setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
+                                            }
+                                        } catch(e) { console.error('Assign failed', e); }
+                                        setAssigningUser(null);
+                                    }} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, cursor:'pointer', fontFamily:T.sans, textAlign:'left' }}
+                                        onMouseEnter={e=>e.currentTarget.style.background='rgba(58,90,122,0.08)'}
+                                        onMouseLeave={e=>e.currentTarget.style.background=T.surface2}>
+                                        <span style={{ width:4, height:20, borderRadius:2, background:t.color||T.inkMuted, flexShrink:0 }}/>
+                                        <div>
+                                            <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{t.name}</div>
+                                            {t.territory && <div style={{ fontSize:11, color:T.inkMuted }}>{t.territory}</div>}
+                                        </div>
+                                        <span style={{ marginLeft:'auto', fontSize:11.5, color:T.inkMuted }}>{memberCount(t)} members</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div style={{ padding:'12px 20px', borderTop:`1px solid ${T.border}`, display:'flex', justifyContent:'flex-end' }}>
+                        <button onClick={() => setAssigningUser(null)} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    </div>
+                </div>
+            </div>
         )}
 
         {/* Breadcrumb */}
@@ -7839,7 +7901,7 @@ const TeamsDetail = ({ settings, setSettings, onBack }) => {
                                     <div style={{ fontSize:11.5, color:T.inkMuted }}>{u.email || ''}{u.userType ? ` · ${u.userType}` : ''}</div>
                                 </div>
                             </div>
-                            <button onClick={() => setEditingTeam('new')}
+                            <button onClick={() => setAssigningUser(u)}
                                 style={{ fontSize:11.5, fontWeight:600, color:T.info, background:'none', border:`1px solid ${T.border}`, borderRadius:T.r, padding:'4px 10px', cursor:'pointer', fontFamily:T.sans }}>
                                 Assign to team
                             </button>
