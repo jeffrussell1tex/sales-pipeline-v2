@@ -10058,11 +10058,11 @@ const RestoreModal = ({ snap, onClose }) => {
         setLoading(true);
         setError('');
         try {
-            const res = await dbFetch(
+            const data = await dbFetch(
                 `/.netlify/functions/backup?id=${encodeURIComponent(snap.id)}&download=1`
             );
-            if (!res.ok) throw new Error('Server error');
-            const text = await res.text();
+            if (data.error) throw new Error(data.error);
+            const text = typeof data === 'string' ? data : JSON.stringify(data);
             const blob = new Blob([text], { type: 'application/json' });
             const url  = URL.createObjectURL(blob);
             const a    = document.createElement('a');
@@ -10464,8 +10464,7 @@ const BackupDetail = ({ onBack }) => {
             setLoading(true);
             setLoadError('');
             try {
-                const res  = await dbFetch('/.netlify/functions/backup');
-                const data = await res.json();
+                const data = await dbFetch('/.netlify/functions/backup');
                 if (cancelled) return;
                 setSnapshots(data.snapshots || []);
                 if (data.schedule) {
@@ -10506,9 +10505,8 @@ const BackupDetail = ({ onBack }) => {
         setBackupError('');
         setBackupSuccess('');
         try {
-            const res  = await dbFetch('/.netlify/functions/backup', { method: 'POST' });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Backup failed');
+            const data = await dbFetch('/.netlify/functions/backup', { method: 'POST' });
+            if (data.error) throw new Error(data.error);
 
             // Trigger browser download immediately
             if (data.downloadData) {
@@ -10551,14 +10549,11 @@ const BackupDetail = ({ onBack }) => {
         setSchedError('');
         setSchedSaved(false);
         try {
-            const res = await dbFetch('/.netlify/functions/backup', {
+            const data = await dbFetch('/.netlify/functions/backup', {
                 method: 'PUT',
                 body: JSON.stringify(editSched),
             });
-            if (!res.ok) {
-                const d = await res.json();
-                throw new Error(d.error || 'Save failed');
-            }
+            if (data.error) throw new Error(data.error);
             setSchedule(editSched);
             setSchedDirty(false);
             setSchedSaved(true);
@@ -10750,8 +10745,8 @@ const BackupDetail = ({ onBack }) => {
                                                 </button>
                                                 <button onClick={async () => {
                                                     try {
-                                                        const res  = await dbFetch(`/.netlify/functions/backup?id=${encodeURIComponent(s.id)}&download=1`);
-                                                        const text = await res.text();
+                                                        const data = await dbFetch(`/.netlify/functions/backup?id=${encodeURIComponent(s.id)}&download=1`);
+                                                        const text = typeof data === 'string' ? data : JSON.stringify(data);
                                                         const blob = new Blob([text], { type:'application/json' });
                                                         const url  = URL.createObjectURL(blob);
                                                         const a    = document.createElement('a');
@@ -10759,7 +10754,7 @@ const BackupDetail = ({ onBack }) => {
                                                         document.body.appendChild(a); a.click();
                                                         document.body.removeChild(a);
                                                         URL.revokeObjectURL(url);
-                                                    } catch { /* silent — user will notice the missing download */ }
+                                                    } catch { /* silent */ }
                                                 }} style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontWeight:600, fontFamily:T.sans }}>
                                                     Download
                                                 </button>
