@@ -7434,7 +7434,7 @@ const UsersDetail = ({ settings, onBack }) => {
 // ── New/Edit Team Modal ───────────────────────────────────────
 const TEAM_COLORS = ['#2a2622','#4d6b3d','#3a5a7a','#7a6a48','#9c5a3a','#5e4e7a','#3a6a6a','#6b2a22','#3a5530','#7a4a6a'];
 
-const TeamModal = ({ team, settings, onSave, onClose }) => {
+const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
     const allUsers = (settings.users || []).filter(u => u.name);
     const [name,    setName]    = useState(team?.name    || '');
     const [color,   setColor]   = useState(team?.color   || TEAM_COLORS[0]);
@@ -7458,13 +7458,13 @@ const TeamModal = ({ team, settings, onSave, onClose }) => {
                     : t);
             } else {
                 const newTeam = {
-                    id:       `tm_${Date.now()}`,
-                    name:     name.trim(),
+                    id:        `tm_${Date.now()}`,
+                    name:      name.trim(),
                     color,
                     manager,
                     region,
-                    pipeline: '—',
-                    quotaQ:   null,
+                    pipeline:  '—',
+                    quotaQ:    null,
                     attainPct: null,
                 };
                 updated = [...existing, newTeam];
@@ -7472,6 +7472,8 @@ const TeamModal = ({ team, settings, onSave, onClose }) => {
             const res  = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updated }) });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Save failed');
+            // Update both local callback state and global settings
+            setSettings(prev => ({ ...prev, teams: updated }));
             onSave(updated);
             onClose();
         } catch(e) {
@@ -7598,7 +7600,7 @@ const OrgChartView = ({ teams, allUsers }) => {
 };
 
 // ── Teams Detail page ─────────────────────────────────────────
-const TeamsDetail = ({ settings, onBack }) => {
+const TeamsDetail = ({ settings, setSettings, onBack }) => {
     const { showConfirm } = useApp();
 
     // ── Derive live teams ─────────────────────────────────────
@@ -7622,6 +7624,13 @@ const TeamsDetail = ({ settings, onBack }) => {
     const [editingTeam, setEditingTeam] = useState(null); // null | 'new' | team obj
     const [viewMode,    setViewMode]    = useState('table'); // 'table' | 'org'
 
+    // Keep local teams in sync if parent settings.teams changes (e.g. after save)
+    React.useEffect(() => {
+        if (settings.teams && settings.teams.length > 0) {
+            setTeams(settings.teams);
+        }
+    }, [settings.teams]);
+
     // Close kebab on outside click
     React.useEffect(() => {
         if (openKebab === null) return;
@@ -7636,7 +7645,7 @@ const TeamsDetail = ({ settings, onBack }) => {
     // Member count from live user data
     const memberCount = (teamName) => allUsers.filter(u => u.team === teamName).length;
 
-    // Handle team saved (from modal)
+    // Handle team saved (from modal) — modal already called setSettings
     const handleTeamSaved = (updatedTeams) => {
         setTeams(updatedTeams);
     };
@@ -7648,7 +7657,10 @@ const TeamsDetail = ({ settings, onBack }) => {
             const updated = teams.filter(t => t.id !== team.id);
             try {
                 const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updated }) });
-                if (res.ok) setTeams(updated);
+                if (res.ok) {
+                    setTeams(updated);
+                    setSettings(prev => ({ ...prev, teams: updated }));
+                }
             } catch(e) { console.error('Delete team failed', e); }
         });
     };
@@ -7665,6 +7677,7 @@ const TeamsDetail = ({ settings, onBack }) => {
             <TeamModal
                 team={editingTeam === 'new' ? null : editingTeam}
                 settings={{ ...settings, teams }}
+                setSettings={setSettings}
                 onSave={handleTeamSaved}
                 onClose={() => setEditingTeam(null)}/>
         )}
@@ -11265,7 +11278,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
 
         // People & Teams detail pages
         if (id === 'users')       return <UsersDetail       settings={settings} onBack={onBack}/>;
-        if (id === 'teams')       return <TeamsDetail        settings={settings} onBack={onBack}/>;
+        if (id === 'teams')       return <TeamsDetail        settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'territories') return <TerritoriesDetail settings={settings} onBack={onBack}/>;
         if (id === 'roles')       return <RolesDetail       settings={settings} onBack={onBack}/>;
 
