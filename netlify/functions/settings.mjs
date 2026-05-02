@@ -137,9 +137,6 @@ export const handler = async (event) => {
                 customHolidays:       'customHolidays'       in data ? (data.customHolidays       || [])   : existingExtra.customHolidays       || [],
                 federalHolidays:      'federalHolidays'      in data ? (data.federalHolidays      || [])   : existingExtra.federalHolidays      || [],
                 // Quoting
-                approvalTiers:        row.extra?.approvalTiers        || null,
-                approvalTriggers:     row.extra?.approvalTriggers     || null,
-                // Quoting
                 approvalTiers:        'approvalTiers'        in data ? (data.approvalTiers        || null) : existingExtra.approvalTiers        || null,
                 approvalTriggers:     'approvalTriggers'     in data ? (data.approvalTriggers     || null) : existingExtra.approvalTriggers     || null,
                 // Sales process Group 1
