@@ -7162,7 +7162,7 @@ const UsersDetail = ({ settings, onBack }) => {
         status: 'Invited',
         _raw: u,
     }));
-    const displayUsers = [...(realUsers.length > 0 ? realUsers : PT_USERS), ...pendingRows];
+    const displayUsers = [...realUsers, ...pendingRows];
 
     const filterTabs = [
         { key:'All',        label:`All · ${displayUsers.length}` },
@@ -7310,7 +7310,7 @@ const UsersDetail = ({ settings, onBack }) => {
                                                     setOpenUserKebab(null);
                                                     showConfirm(`Deactivate ${u.name}? They will immediately lose access to Accelerep.`, async () => {
                                                         try {
-                                                            await dbFetch(`/.netlify/functions/users?id=${encodeURIComponent(u.id)}`, { method:'DELETE' });
+                                                            await dbFetch('/.netlify/functions/users', { method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id: u.id }) });
                                                             _setSettings(prev => ({ ...prev, users: (prev.users||[]).filter(su => su.id !== u.id) }));
                                                         } catch(err) { console.error('Deactivate failed:', err); }
                                                     });
