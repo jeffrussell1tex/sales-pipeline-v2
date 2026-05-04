@@ -227,6 +227,46 @@ export const handler = async (event) => {
         // ── POST (create) ─────────────────────────────────────────────────────
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body || '{}');
+
+            // ── Invite flow ───────────────────────────────────────────────────
+            // Payload: { action:'invite', invites:[{ email, role, team, territory }] }
+            // Creates a pending_ row for each invitee. When they sign up via Clerk
+            // and hit GET ?me=true, the real Clerk userId replaces the pending_ id.
+            if (data.action === 'invite') {
+                const invites = Array.isArray(data.invites) ? data.invites : [];
+                if (invites.length === 0) {
+                    return { statusCode: 400, headers, body: JSON.stringify({ error: 'No invites provided' }) };
+                }
+                const results = [];
+                const errors  = [];
+                for (const invite of invites) {
+                    const email = (invite.email || '').trim().toLowerCase();
+                    if (!email) { errors.push({ email: '', error: 'Email required' }); continue; }
+                    const pendingId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                    try {
+                        const row = await upsertUser(sanitize({
+                            id:        pendingId,
+                            email,
+                            name:      email.split('@')[0],
+                            userType:  invite.role      || 'User',
+                            team:      invite.team      || null,
+                            territory: invite.territory || null,
+                            active:    false,
+                            status:    'invited',
+                        }));
+                        results.push(flatten(row));
+                    } catch (err) {
+                        errors.push({ email, error: err.code === 'EMAIL_DUPLICATE' ? 'Already in workspace' : err.message });
+                    }
+                }
+                return {
+                    statusCode: errors.length === invites.length ? 400 : 201,
+                    headers,
+                    body: JSON.stringify({ invited: results, errors }),
+                };
+            }
+
+            // ── Single user create ────────────────────────────────────────────
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
