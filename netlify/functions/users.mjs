@@ -64,6 +64,7 @@ export const handler = async (event) => {
             digestTime:    data.digestTime    || '08:00',
             smsNotifications: data.smsNotifications || null,
             timezone:         data.timezone         || null,
+            status:           data.status            || null,
             // Quota fields — stored in profile jsonb so they survive DB round-trips
             annualQuota:   data.annualQuota   ?? null,
             q1Quota:       data.q1Quota       ?? null,
@@ -123,14 +124,23 @@ export const handler = async (event) => {
                 }
 
                 // If we found a row via email/name but id doesn't match (pending_ or old placeholder),
-                // update the id to the real Clerk userId so future lookups hit path 1.
+                // update id AND pull real name/role/active from Clerk so the row is fully promoted.
                 if (row && row.id !== userId) {
+                    const realName = displayName || row.name;
+                    const realRole = clerkUser.publicMetadata?.role || row.role || 'User';
                     try {
                         await db.update(users)
-                            .set({ id: userId, updatedAt: new Date() })
+                            .set({
+                                id:        userId,
+                                name:      realName,
+                                role:      realRole,
+                                active:    true,
+                                profile:   { ...(row.profile || {}), status: 'Active', userType: realRole },
+                                updatedAt: new Date(),
+                            })
                             .where(eq(users.id, row.id));
-                        row = { ...row, id: userId };
-                        console.log(`users.mjs: reconciled row → ${userId} for ${clerkEmail}`);
+                        row = { ...row, id: userId, name: realName, role: realRole, active: true };
+                        console.log(`users.mjs: reconciled pending_ → ${userId} (${realName}) for ${clerkEmail}`);
                     } catch (reconcileErr) {
                         console.warn('users.mjs: reconcile update failed:', reconcileErr.message);
                     }
@@ -229,9 +239,6 @@ export const handler = async (event) => {
             const data = JSON.parse(event.body || '{}');
 
             // ── Invite flow ───────────────────────────────────────────────────
-            // Payload: { action:'invite', invites:[{ email, role, team, territory }] }
-            // Creates a pending_ row for each invitee. When they sign up via Clerk
-            // and hit GET ?me=true, the real Clerk userId replaces the pending_ id.
             if (data.action === 'invite') {
                 const invites = Array.isArray(data.invites) ? data.invites : [];
                 if (invites.length === 0) {
@@ -252,7 +259,7 @@ export const handler = async (event) => {
                             team:      invite.team      || null,
                             territory: invite.territory || null,
                             active:    false,
-                            status:    'invited',
+                            status:    'Invited',
                         }));
                         results.push(flatten(row));
                     } catch (err) {

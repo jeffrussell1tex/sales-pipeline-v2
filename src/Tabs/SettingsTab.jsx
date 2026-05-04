@@ -7130,19 +7130,38 @@ const UsersDetail = ({ settings, onBack }) => {
     if (peopleView === 'profile' && viewingUser) return <UserProfilePage user={viewingUser} settings={settings} onBack={onBack} onUsers={onUsers}/>;
 
     // Merge real settings.users with PT_USERS display format for the table
-    const realUsers = (settings.users || []).filter(u => u.name).map(u => ({
-        id: u.id || u.name,
+    const realUsers = (settings.users || []).filter(u => u.name && !u.id?.startsWith('pending_')).map(u => {
+        // Derive display status from active flag and stored status field
+        let status = 'Active';
+        if (u.active === false) status = 'Deactivated';
+        else if (u.status === 'Invited' || u.status === 'invited') status = 'Invited';
+        return {
+            id: u.id || u.name,
+            name: u.name,
+            email: u.email || '',
+            role: u.userType || 'User',
+            team: u.team || null,
+            manager: u.manager || null,
+            lastActive: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : '—',
+            mfa: !!(u.smsNotifications?.enabled),
+            status,
+            _raw: u,
+        };
+    });
+    // Pending rows (pending_ id prefix) — shown separately in Invited filter
+    const pendingRows = (settings.users || []).filter(u => u.id?.startsWith('pending_') && u.name).map(u => ({
+        id: u.id,
         name: u.name,
         email: u.email || '',
         role: u.userType || 'User',
         team: u.team || null,
-        manager: u.manager || null,
-        lastActive: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : '—',
-        mfa: !!(u.smsNotifications?.enabled),
-        status: 'Active',
+        manager: null,
+        lastActive: '—',
+        mfa: false,
+        status: 'Invited',
         _raw: u,
     }));
-    const displayUsers = realUsers.length > 0 ? realUsers : PT_USERS;
+    const displayUsers = [...(realUsers.length > 0 ? realUsers : PT_USERS), ...pendingRows];
 
     const filterTabs = [
         { key:'All',        label:`All · ${displayUsers.length}` },
