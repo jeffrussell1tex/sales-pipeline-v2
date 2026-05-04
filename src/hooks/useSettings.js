@@ -95,13 +95,28 @@ export function useSettings() {
         if (clearFirst) {
             settingsReady.current = false;
             setSettings(DEFAULT_SETTINGS);
+            // Purge ALL cached data — org switch must start completely clean
             try { safeStorage.removeItem('salesSettings'); } catch(e) {}
             try { safeStorage.removeItem('salesUsers'); } catch(e) {}
+            // Also clear any other org-scoped keys that may exist
+            try {
+                const keysToRemove = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && (k.startsWith('sales') || k.startsWith('accel'))) keysToRemove.push(k);
+                }
+                keysToRemove.forEach(k => safeStorage.removeItem(k));
+            } catch(e) {}
         }
         // Always purge the stale users cache — users are authoritative from DB only
         try { safeStorage.removeItem('salesUsers'); } catch(e) {}
 
-        // Load settings and users in parallel, only mark ready when both complete
+        // Load settings and users in parallel, only mark ready when both complete.
+        // On org switch (clearFirst), delay the users fetch by 500ms to ensure
+        // Clerk has fully rotated the JWT to the new org before we make authenticated
+        // requests — this prevents stale-token cross-org data leakage.
+        const usersDelay = clearFirst ? 500 : 0;
+
         const settingsPromise = dbFetch('/.netlify/functions/settings')
             .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(data => {
@@ -110,7 +125,7 @@ export function useSettings() {
                     setSettings(prev => ({
                         ...DEFAULT_SETTINGS,
                         ...settingsFromDb,
-                        users: prev.users, // preserve users from cache/previous load
+                        users: prev.users,
                         taskTypes: settingsFromDb.taskTypes?.length ? settingsFromDb.taskTypes : DEFAULT_SETTINGS.taskTypes,
                         funnelStages: settingsFromDb.funnelStages?.length ? settingsFromDb.funnelStages : DEFAULT_SETTINGS.funnelStages,
                     }));
@@ -121,9 +136,11 @@ export function useSettings() {
             .catch(err => { console.error('Failed to load settings:', err); });
 
         const usersPromise = waitForToken().then(() =>
+            new Promise(resolve => setTimeout(resolve, usersDelay))
+        ).then(() =>
             dbFetch('/.netlify/functions/users')
                 .then(r => {
-                    if (!r.ok) return null; // 403 for reps — don't touch users array
+                    if (!r.ok) return null;
                     return r.json();
                 })
                 .then(data => {
