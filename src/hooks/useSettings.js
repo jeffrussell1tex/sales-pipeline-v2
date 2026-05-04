@@ -71,10 +71,17 @@ const DEFAULT_SETTINGS = {
 
 export function useSettings() {
     const settingsReady = useRef(false);
+    const orgIdRef = useRef(null); // track current org for cache key scoping
+
+    const getStorageKey = () => orgIdRef.current
+        ? `salesSettings_${orgIdRef.current}`
+        : 'salesSettings'; // fallback for initial paint before org known
 
     const [settings, setSettings] = useState(() => {
         // Bootstrap non-user settings from localStorage for instant paint,
         // but NEVER seed users from localStorage — always authoritative from DB.
+        // We can't scope by orgId here (not known yet) so we read the unscoped key
+        // as a best-effort bootstrap — it will be overwritten by DB data momentarily.
         try {
             const saved = safeStorage.getItem('salesSettings');
             if (saved) {
@@ -91,19 +98,23 @@ export function useSettings() {
     const loadSettings = (clerkUser, clearFirst = false) => {
         if (!clerkUser) return;
 
+        // Extract orgId from clerkUser's active org — used to scope the localStorage key
+        const orgId = clerkUser.organizationMemberships?.[0]?.organization?.id || null;
+        const prevOrgId = orgIdRef.current;
+        orgIdRef.current = orgId;
+
         // Reset state when switching orgs to prevent bleed-through
-        if (clearFirst) {
+        if (clearFirst || (prevOrgId && prevOrgId !== orgId)) {
             settingsReady.current = false;
             setSettings(DEFAULT_SETTINGS);
-            // Purge ALL cached data — org switch must start completely clean
-            try { safeStorage.removeItem('salesSettings'); } catch(e) {}
-            try { safeStorage.removeItem('salesUsers'); } catch(e) {}
-            // Also clear any other org-scoped keys that may exist
+            // Purge ALL sales/accel keys — org switch must start completely clean
             try {
                 const keysToRemove = [];
                 for (let i = 0; i < localStorage.length; i++) {
                     const k = localStorage.key(i);
-                    if (k && (k.startsWith('sales') || k.startsWith('accel'))) keysToRemove.push(k);
+                    if (k && (k.startsWith('salesSettings') || k.startsWith('salesUsers') || k.startsWith('accel'))) {
+                        keysToRemove.push(k);
+                    }
                 }
                 keysToRemove.forEach(k => safeStorage.removeItem(k));
             } catch(e) {}
@@ -112,10 +123,8 @@ export function useSettings() {
         try { safeStorage.removeItem('salesUsers'); } catch(e) {}
 
         // Load settings and users in parallel, only mark ready when both complete.
-        // On org switch (clearFirst), delay the users fetch by 500ms to ensure
-        // Clerk has fully rotated the JWT to the new org before we make authenticated
-        // requests — this prevents stale-token cross-org data leakage.
-        const usersDelay = clearFirst ? 500 : 0;
+        // On org switch, delay users fetch 500ms to ensure Clerk JWT has rotated.
+        const usersDelay = (clearFirst || (prevOrgId && prevOrgId !== orgId)) ? 500 : 0;
 
         const settingsPromise = dbFetch('/.netlify/functions/settings')
             .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -135,21 +144,21 @@ export function useSettings() {
             })
             .catch(err => { console.error('Failed to load settings:', err); });
 
-        const usersPromise = waitForToken().then(() =>
-            new Promise(resolve => setTimeout(resolve, usersDelay))
-        ).then(() =>
-            dbFetch('/.netlify/functions/users')
-                .then(r => {
-                    if (!r.ok) return null;
-                    return r.json();
-                })
-                .then(data => {
-                    if (data && data.users) {
-                        setSettings(prev => ({ ...prev, users: data.users }));
-                    }
-                })
-                .catch(() => {})
-        );
+        const usersPromise = waitForToken()
+            .then(() => new Promise(resolve => setTimeout(resolve, usersDelay)))
+            .then(() =>
+                dbFetch('/.netlify/functions/users')
+                    .then(r => {
+                        if (!r.ok) return null; // 403 for reps — don't touch users array
+                        return r.json();
+                    })
+                    .then(data => {
+                        if (data && data.users) {
+                            setSettings(prev => ({ ...prev, users: data.users }));
+                        }
+                    })
+                    .catch(() => {})
+            );
 
         // Mark ready only after both loads complete (or fail)
         Promise.allSettled([settingsPromise, usersPromise]).then(() => {
@@ -163,8 +172,8 @@ export function useSettings() {
         if (!settingsReady.current) return;
         const { users: _stripUsers, ...settingsToSave } = settings;
         try {
-            safeStorage.setItem('salesSettings', JSON.stringify(settingsToSave));
-            // Never cache users in localStorage — always read from DB on load
+            // Scope by orgId so switching orgs never reads another org's cached settings
+            safeStorage.setItem(getStorageKey(), JSON.stringify(settingsToSave));
         } catch(e) {}
         dbFetch('/.netlify/functions/settings', {
             method: 'PUT',

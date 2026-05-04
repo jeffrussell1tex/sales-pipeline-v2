@@ -6906,7 +6906,8 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
     const handleDeactivate = () => {
         showConfirm(`Deactivate ${user.name}? They will immediately lose access to Accelerep.`, async () => {
             try {
-                await dbFetch('/.netlify/functions/users', { method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id: user.id }) });
+                // users.mjs DELETE reads id from query string, not body
+                await dbFetch(`/.netlify/functions/users?id=${encodeURIComponent(user.id)}`, { method:'DELETE' });
                 setSettings(prev => ({ ...prev, users: (prev.users||[]).filter(u => u.id !== user.id) }));
                 onUsers();
             } catch(err) { setError('Failed to deactivate user.'); }
