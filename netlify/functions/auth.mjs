@@ -2,8 +2,10 @@ import { verifyToken, createClerkClient } from '@clerk/backend';
 
 // Short-lived in-memory cache keyed by token to avoid repeated Clerk API calls
 // during bulk imports (97 records × 3 concurrent = ~97 getUser calls → rate limit)
+// TTL is kept short (30s) and we always validate the token's own exp claim so that
+// org-switch scenarios can never serve a stale orgId beyond the token's lifetime.
 const authCache = new Map();
-const CACHE_TTL_MS = 60_000; // 60 seconds
+const CACHE_TTL_MS = 30_000; // 30 seconds — short enough to limit org-switch bleed
 
 export async function verifyAuth(event) {
     const authHeader = event.headers?.authorization || event.headers?.Authorization || '';
@@ -13,10 +15,25 @@ export async function verifyAuth(event) {
         return { error: 'Unauthorized: no token', status: 401 };
     }
 
-    // Return cached result if still fresh
+    // Return cached result only if still fresh AND the token itself hasn't expired.
+    // Clerk JWTs encode exp as seconds-since-epoch in the payload.
+    // We decode the payload without re-verifying (already verified on first cache fill)
+    // just to check exp — this is safe because we only trust cached results we verified.
     const cached = authCache.get(token);
     if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
-        return cached.result;
+        // Double-check the token's own exp claim hasn't passed
+        try {
+            const payloadB64 = token.split('.')[1];
+            const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+            if (payload.exp && Date.now() / 1000 < payload.exp) {
+                return cached.result;
+            }
+            // Token expired — evict from cache and fall through to re-verify
+            authCache.delete(token);
+        } catch {
+            // If we can't decode, evict and re-verify
+            authCache.delete(token);
+        }
     }
 
     const clerkSecretKey = process.env.CLERK_SECRET_KEY;

@@ -6164,17 +6164,17 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
 
             <div style={{ display:'grid', gridTemplateColumns:'1fr 300px', gap:18, alignItems:'start' }}>
                 <div>
-                    <SectionCard title="Recipients" description="Add one email per row. Set role, team, and manager inline."
+                    <SectionCard title="Recipients" description="Add one email per row. Set role and team inline."
                         headAction={<PeopleSecBtn onClick={addRow}>+ Add row</PeopleSecBtn>}>
                         {/* Table header */}
-                        <div style={{ display:'grid', gridTemplateColumns:'1.8fr 130px 130px 130px 130px 24px', gap:8, padding:'0 0 8px', marginBottom:4, borderBottom:`1px solid ${T.border}` }}>
-                            {['Email *','Role','Team','Manager','Territory',''].map((h,i) => (
+                        <div style={{ display:'grid', gridTemplateColumns:'1.8fr 130px 130px 130px 24px', gap:8, padding:'0 0 8px', marginBottom:4, borderBottom:`1px solid ${T.border}` }}>
+                            {['Email *','Role','Team','Territory',''].map((h,i) => (
                                 <div key={i} style={{ ...eb(T.inkMuted), fontSize:9.5 }}>{h}</div>
                             ))}
                         </div>
                         {rows.map((r, idx) => (
                             <div key={r.id} style={{ marginBottom:6 }}>
-                                <div style={{ display:'grid', gridTemplateColumns:'1.8fr 130px 130px 130px 130px 24px', gap:8, alignItems:'center' }}>
+                                <div style={{ display:'grid', gridTemplateColumns:'1.8fr 130px 130px 130px 24px', gap:8, alignItems:'center' }}>
                                     <div>
                                         <input style={{ ...inp, borderColor: r.error ? T.danger : T.border }} value={r.email} onChange={e=>updateRow(r.id,'email',e.target.value)} placeholder="user@company.com" type="email"/>
                                     </div>
@@ -6184,10 +6184,6 @@ const UsersInvitePage = ({ settings, onBack, onUsers }) => {
                                     <select style={sel} value={r.team} onChange={e=>updateRow(r.id,'team',e.target.value)}>
                                         <option value="">— choose —</option>
                                         {allTeams.map(t=><option key={t}>{t}</option>)}
-                                    </select>
-                                    <select style={sel} value={r.manager} onChange={e=>updateRow(r.id,'manager',e.target.value)}>
-                                        <option value="">— choose —</option>
-                                        {allReps.map(n=><option key={n}>{n}</option>)}
                                     </select>
                                     <select style={sel} value={r.territory} onChange={e=>updateRow(r.id,'territory',e.target.value)}>
                                         <option value="">— choose —</option>
@@ -6899,8 +6895,42 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
         try {
             const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form) });
             if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Save failed'); }
-            // Update settings.users locally
-            setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === form.id ? { ...u, ...form } : u) }));
+
+            // Sync team assignment into settings.teams repIds
+            let updatedTeams = settings.teams || [];
+            const oldTeamName = user.team;
+            const newTeamName = form.team;
+            if (oldTeamName !== newTeamName) {
+                updatedTeams = updatedTeams.map(t => {
+                    if (t.name === oldTeamName) return { ...t, repIds: (t.repIds||[]).filter(id => id !== user.id) };
+                    if (t.name === newTeamName) return { ...t, repIds: [...new Set([...(t.repIds||[]), user.id])] };
+                    return t;
+                });
+            }
+
+            // Sync manager into settings.teams managerId
+            const newManagerName = form.manager;
+            if (newManagerName && newTeamName) {
+                const mgr = (settings.users||[]).find(u => u.name === newManagerName);
+                if (mgr) {
+                    updatedTeams = updatedTeams.map(t =>
+                        t.name === newTeamName ? { ...t, managerId: mgr.id } : t
+                    );
+                }
+            }
+
+            // Persist updated teams if changed
+            if (JSON.stringify(updatedTeams) !== JSON.stringify(settings.teams || [])) {
+                dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) })
+                    .catch(e => console.error('Failed to sync teams:', e));
+            }
+
+            // Update local settings state
+            setSettings(prev => ({
+                ...prev,
+                users: (prev.users||[]).map(u => u.id === form.id ? { ...u, ...form } : u),
+                teams: updatedTeams,
+            }));
             setSaved(true); setTimeout(() => setSaved(false), 2500);
         } catch(err) {
             setError(err.message || 'Failed to save. Please try again.');
@@ -6910,7 +6940,8 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
     const handleDeactivate = () => {
         showConfirm(`Deactivate ${user.name}? They will immediately lose access to Accelerep.`, async () => {
             try {
-                await dbFetch('/.netlify/functions/users', { method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id: user.id }) });
+                // users.mjs DELETE reads id from query string, not body
+                await dbFetch(`/.netlify/functions/users?id=${encodeURIComponent(user.id)}`, { method:'DELETE' });
                 setSettings(prev => ({ ...prev, users: (prev.users||[]).filter(u => u.id !== user.id) }));
                 onUsers();
             } catch(err) { setError('Failed to deactivate user.'); }
@@ -7134,19 +7165,38 @@ const UsersDetail = ({ settings, onBack }) => {
     if (peopleView === 'profile' && viewingUser) return <UserProfilePage user={viewingUser} settings={settings} onBack={onBack} onUsers={onUsers}/>;
 
     // Merge real settings.users with PT_USERS display format for the table
-    const realUsers = (settings.users || []).filter(u => u.name).map(u => ({
-        id: u.id || u.name,
+    const realUsers = (settings.users || []).filter(u => u.name && !u.id?.startsWith('pending_')).map(u => {
+        // Derive display status from active flag and stored status field
+        let status = 'Active';
+        if (u.active === false) status = 'Deactivated';
+        else if (u.status === 'Invited' || u.status === 'invited') status = 'Invited';
+        return {
+            id: u.id || u.name,
+            name: u.name,
+            email: u.email || '',
+            role: u.userType || 'User',
+            team: u.team || null,
+            manager: u.manager || null,
+            lastActive: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : '—',
+            mfa: !!(u.smsNotifications?.enabled),
+            status,
+            _raw: u,
+        };
+    });
+    // Pending rows (pending_ id prefix) — shown separately in Invited filter
+    const pendingRows = (settings.users || []).filter(u => u.id?.startsWith('pending_') && u.name).map(u => ({
+        id: u.id,
         name: u.name,
         email: u.email || '',
         role: u.userType || 'User',
         team: u.team || null,
-        manager: u.manager || null,
-        lastActive: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : '—',
-        mfa: !!(u.smsNotifications?.enabled),
-        status: 'Active',
+        manager: null,
+        lastActive: '—',
+        mfa: false,
+        status: 'Invited',
         _raw: u,
     }));
-    const displayUsers = realUsers.length > 0 ? realUsers : PT_USERS;
+    const displayUsers = [...(realUsers.length > 0 ? realUsers : PT_USERS), ...pendingRows];
 
     const filterTabs = [
         { key:'All',        label:`All · ${displayUsers.length}` },
@@ -7431,19 +7481,421 @@ const UsersDetail = ({ settings, onBack }) => {
 };
 
 // ── TEAMS detail page ─────────────────────────────────────────
-const TeamsDetail = ({ settings, onBack }) => {
-    const [openTeamKebab, setOpenTeamKebab] = useState(null); // team id
+// ── New/Edit Team Modal ───────────────────────────────────────
+// Data model matches TeamBuilder.jsx:
+// team = { id, name, territory, vertical, managerId, repIds[] }
+// Users have: { id, name, team (string name), teamId, territory, vertical, userType }
+
+const TEAM_COLORS = ['#2a2622','#4d6b3d','#3a5a7a','#7a6a48','#9c5a3a','#5e4e7a','#3a6a6a','#6b2a22','#3a5530','#7a4a6a'];
+
+const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
+    const allUsers  = (settings.users || []).filter(u => u.name && u.active !== false);
+    const managers  = allUsers.filter(u => {
+        const r = (u.userType || u.role || '').toLowerCase();
+        return r.includes('manager') || r.includes('admin');
+    });
+    const reps = allUsers.filter(u => {
+        const r = (u.userType || u.role || '').toLowerCase();
+        return !r.includes('manager') && !r.includes('admin');
+    });
+    const territories = (settings.territories || []).map(t => t.name || t).filter(Boolean);
+    const verticals   = (settings.verticalMarkets || settings.verticals || []).map(v => v.name || v).filter(Boolean);
+    const teams       = settings.teams || [];
+
+    const isEdit = !!team;
+    const [name,       setName]       = useState(team?.name       || '');
+    const [territory,  setTerritory]  = useState(team?.territory  || '');
+    const [vertical,   setVertical]   = useState(team?.vertical   || '');
+    const [managerId,  setManagerId]  = useState(team?.managerId  || '');
+    const [repIds,     setRepIds]     = useState(team?.repIds     || []);
+    const [color,      setColor]      = useState(team?.color      || TEAM_COLORS[0]);
+    const [saving,     setSaving]     = useState(false);
+    const [err,        setErr]        = useState('');
+
+    const toggleRep = (id) => setRepIds(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
+
+    const handleSave = async () => {
+        if (!name.trim()) { setErr('Team name is required.'); return; }
+        setSaving(true); setErr('');
+        try {
+            const id = isEdit ? team.id : `team_${Date.now()}`;
+            const saved = { id, name: name.trim(), territory, vertical, managerId, repIds, color };
+            const updatedTeams = isEdit ? teams.map(t => t.id === id ? saved : t) : [...teams, saved];
+
+            // Update user team/territory/vertical fields to match — mirrors TeamBuilder.saveTeam
+            const updatedUsers = allUsers.map(u => {
+                const wasInThisTeam = u.teamId === id;
+                const isNowRep      = repIds.includes(u.id);
+                const isNowManager  = managerId === u.id;
+                if (isNowRep || isNowManager) return { ...u, team: saved.name, territory: saved.territory, vertical: saved.vertical, teamId: id };
+                if (wasInThisTeam)            return { ...u, team: '', territory: '', vertical: '', teamId: '' };
+                return u;
+            });
+
+            // Persist to settings (teams + users)
+            const res  = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Save failed');
+
+            // Persist changed user rows to /users
+            const changedUsers = updatedUsers.filter((u, i) => {
+                const orig = allUsers[i];
+                return orig && (u.team !== orig.team || u.teamId !== orig.teamId);
+            });
+            for (const u of changedUsers) {
+                try {
+                    await dbFetch(`/.netlify/functions/users`, { method:'PUT', body: JSON.stringify({ id: u.id, team: u.team, territory: u.territory, vertical: u.vertical, teamId: u.teamId }) });
+                } catch(e) { console.error('Failed to persist user team', u.name, e); }
+            }
+
+            setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
+            onSave(updatedTeams);
+            onClose();
+        } catch(e) {
+            setErr(e.message || 'Save failed.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const inp = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, background:T.surface, fontFamily:T.sans, outline:'none', boxSizing:'border-box' };
+    const sel = { ...inp, cursor:'pointer' };
+    const lbl = { display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 };
+
+    return (
+        <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}
+            onClick={onClose}>
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:520, maxHeight:'90vh', overflowY:'auto', boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }}
+                onClick={e=>e.stopPropagation()}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}`, position:'sticky', top:0, background:T.surface, zIndex:1 }}>
+                    <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>{isEdit ? 'Edit team' : 'New team'}</div>
+                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer', lineHeight:1 }}>×</button>
+                </div>
+                <div style={{ padding:'20px', display:'flex', flexDirection:'column', gap:14 }}>
+                    <div>
+                        <label style={lbl}>Team name *</label>
+                        <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. SMB West" style={inp} autoFocus/>
+                    </div>
+                    <div>
+                        <label style={lbl}>Manager</label>
+                        <select value={managerId} onChange={e=>setManagerId(e.target.value)} style={sel}>
+                            <option value="">— Select manager —</option>
+                            {managers.map(u => <option key={u.id} value={u.id}>{u.name} · {u.userType || u.role}</option>)}
+                        </select>
+                        {managers.length === 0 && <div style={{ fontSize:11.5, color:T.warn, marginTop:4 }}>No Manager/Admin users found.</div>}
+                    </div>
+                    <div>
+                        <label style={lbl}>Territory</label>
+                        {territories.length > 0 ? (
+                            <select value={territory} onChange={e=>setTerritory(e.target.value)} style={sel}>
+                                <option value="">— None —</option>
+                                {territories.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                        ) : (
+                            <input value={territory} onChange={e=>setTerritory(e.target.value)} placeholder="e.g. NAM-West" style={inp}/>
+                        )}
+                    </div>
+                    <div>
+                        <label style={lbl}>Vertical</label>
+                        {verticals.length > 0 ? (
+                            <select value={vertical} onChange={e=>setVertical(e.target.value)} style={sel}>
+                                <option value="">— None —</option>
+                                {verticals.map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                        ) : (
+                            <input value={vertical} onChange={e=>setVertical(e.target.value)} placeholder="e.g. Healthcare" style={inp}/>
+                        )}
+                    </div>
+                    <div>
+                        <label style={lbl}>Team color</label>
+                        <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+                            {TEAM_COLORS.map(c => (
+                                <button key={c} onClick={()=>setColor(c)} style={{ width:24, height:24, borderRadius:'50%', background:c, border: color===c ? `3px solid ${T.ink}` : '2px solid transparent', cursor:'pointer', outline:'none', boxSizing:'border-box' }}/>
+                            ))}
+                            <div style={{ display:'flex', alignItems:'center', gap:6, marginLeft:4 }}>
+                                <span style={{ width:4, height:18, borderRadius:2, background:color }}/>
+                                <span style={{ fontSize:12, fontWeight:700, color:T.ink }}>{name || 'Preview'}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label style={lbl}>Sales Reps ({repIds.length} selected)</label>
+                        {reps.length === 0 ? (
+                            <div style={{ fontSize:12, color:T.inkMuted }}>No Sales Rep users found.</div>
+                        ) : (
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, maxHeight:180, overflowY:'auto', padding:8, border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface }}>
+                                {reps.map(u => {
+                                    const selected   = repIds.includes(u.id);
+                                    const otherTeam  = (settings.teams||[]).find(t => t.id !== team?.id && (t.repIds||[]).includes(u.id));
+                                    return (
+                                        <div key={u.id} onClick={() => toggleRep(u.id)}
+                                            style={{ display:'flex', alignItems:'center', gap:7, padding:'6px 8px', borderRadius:4, cursor:'pointer', background: selected ? 'rgba(58,90,122,0.08)' : T.surface2, border: selected ? `1px solid rgba(58,90,122,0.25)` : `1px solid ${T.border}`, userSelect:'none' }}>
+                                            <span style={{ width:14, height:14, borderRadius:3, border: selected ? 'none' : `1.5px solid ${T.border}`, background: selected ? T.info : 'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                                {selected && <span style={{ color:'#fff', fontSize:9, fontWeight:700 }}>✓</span>}
+                                            </span>
+                                            <div>
+                                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{u.name}</div>
+                                                {otherTeam && <div style={{ fontSize:10.5, color:T.warn }}>In: {otherTeam.name}</div>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                    {err && <div style={{ fontSize:12, color:T.danger, fontWeight:600 }}>{err}</div>}
+                </div>
+                <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'14px 20px', borderTop:`1px solid ${T.border}`, position:'sticky', bottom:0, background:T.surface }}>
+                    <button onClick={onClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    <button onClick={handleSave} disabled={saving} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans, opacity:saving?0.7:1 }}>
+                        {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create team'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── Org Chart view ────────────────────────────────────────────
+const OrgChartView = ({ teams, allUsers }) => {
+    const connector = (
+        <div style={{ width:2, height:20, background:T.border, margin:'0 auto' }}/>
+    );
+    const hLine = (count) => count <= 1 ? null : (
+        <div style={{ position:'relative', height:20, display:'flex', alignItems:'flex-start', justifyContent:'center' }}>
+            <div style={{ position:'absolute', top:0, left:'10%', right:'10%', height:2, background:T.border }}/>
+        </div>
+    );
+
+    return (
+        <div style={{ overflowX:'auto', paddingBottom:8 }}>
+            {teams.length === 0
+                ? <div style={{ color:T.inkMuted, fontSize:13, padding:16 }}>No teams yet.</div>
+                : teams.map(team => {
+                    const manager = allUsers.find(u => u.id === team.managerId && u.active !== false);
+                    // Reps = repIds excluding the manager (prevent double-display)
+                    const reps = allUsers.filter(u =>
+                        (team.repIds||[]).includes(u.id) &&
+                        u.id !== team.managerId &&
+                        u.active !== false
+                    );
+
+                    return (
+                        <div key={team.id} style={{ display:'flex', flexDirection:'column', alignItems:'center', marginBottom:40 }}>
+
+                            {/* Level 1 — Team node */}
+                            <div style={{
+                                background:T.surface, border:`1px solid ${T.border}`,
+                                borderLeft:`4px solid ${team.color||T.inkMuted}`,
+                                borderRadius:6, padding:'10px 20px', textAlign:'left', minWidth:220,
+                            }}>
+                                <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>{team.name}</div>
+                                {(team.territory || team.vertical) && (
+                                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>
+                                        {team.territory && `📍 ${team.territory}`}
+                                        {team.territory && team.vertical && ' · '}
+                                        {team.vertical && `🏭 ${team.vertical}`}
+                                    </div>
+                                )}
+                                <div style={{ fontSize:11.5, color:T.inkMid, marginTop:4 }}>
+                                    {reps.length} rep{reps.length !== 1 ? 's' : ''}
+                                    {manager ? ` · mgr: ${manager.name}` : ''}
+                                </div>
+                            </div>
+
+                            {/* Connector: Team → Manager */}
+                            {manager && connector}
+
+                            {/* Level 2 — Manager node */}
+                            {manager && (
+                                <>
+                                    <div style={{
+                                        background:T.surface, border:`1px solid ${T.border}`,
+                                        borderTop:`3px solid ${team.color||T.inkMuted}`,
+                                        borderRadius:6, padding:'10px 16px', textAlign:'center', minWidth:140,
+                                    }}>
+                                        <UserAvatar name={manager.name} size={32}/>
+                                        <div style={{ fontSize:12.5, fontWeight:700, color:T.ink, marginTop:6 }}>{manager.name}</div>
+                                        <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2 }}>Manager</div>
+                                    </div>
+
+                                    {/* Connector: Manager → Reps */}
+                                    {reps.length > 0 && connector}
+
+                                    {/* Horizontal bar spanning reps */}
+                                    {reps.length > 1 && (
+                                        <div style={{ width: `${Math.min(reps.length * 130, 700)}px`, height:2, background:T.border }}/>
+                                    )}
+
+                                    {/* Level 3 — Rep nodes */}
+                                    {reps.length > 0 && (
+                                        <div style={{ display:'flex', gap:12, flexWrap:'wrap', justifyContent:'center', marginTop: reps.length > 1 ? 0 : 0 }}>
+                                            {reps.map(u => (
+                                                <div key={u.id} style={{
+                                                    background:T.surface2, border:`1px solid ${T.border}`,
+                                                    borderRadius:6, padding:'10px 14px', textAlign:'center', minWidth:110,
+                                                    display:'flex', flexDirection:'column', alignItems:'center',
+                                                }}>
+                                                    {reps.length > 1 && (
+                                                        <div style={{ width:2, height:12, background:T.border, marginBottom:6 }}/>
+                                                    )}
+                                                    <UserAvatar name={u.name} size={26}/>
+                                                    <div style={{ fontSize:11.5, fontWeight:600, color:T.ink, marginTop:5 }}>{u.name}</div>
+                                                    <div style={{ fontSize:10, color:T.inkMuted, marginTop:2 }}>{u.userType||'Rep'}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
+                            )}
+
+                            {/* If no manager but has reps — show reps directly under team */}
+                            {!manager && reps.length > 0 && (
+                                <>
+                                    {connector}
+                                    <div style={{ display:'flex', gap:12, flexWrap:'wrap', justifyContent:'center' }}>
+                                        {reps.map(u => (
+                                            <div key={u.id} style={{
+                                                background:T.surface2, border:`1px solid ${T.border}`,
+                                                borderRadius:6, padding:'10px 14px', textAlign:'center', minWidth:110,
+                                                display:'flex', flexDirection:'column', alignItems:'center',
+                                            }}>
+                                                <UserAvatar name={u.name} size={26}/>
+                                                <div style={{ fontSize:11.5, fontWeight:600, color:T.ink, marginTop:5 }}>{u.name}</div>
+                                                <div style={{ fontSize:10, color:T.inkMuted, marginTop:2 }}>{u.userType||'Rep'}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    );
+                })
+            }
+        </div>
+    );
+};
+
+// ── Teams Detail page ─────────────────────────────────────────
+const TeamsDetail = ({ settings, setSettings, onBack }) => {
     const { showConfirm } = useApp();
 
+    const allUsers = (settings.users || []).filter(u => u.name);
+    const teams    = settings.teams || [];
+
+    const [openKebab,    setOpenKebab]    = useState(null);
+    const [editingTeam,  setEditingTeam]  = useState(null); // null | 'new' | team obj
+    const [viewMode,     setViewMode]     = useState('table');
+    const [assigningUser,setAssigningUser]= useState(null); // user obj being assigned to a team
+
     React.useEffect(() => {
-        if (openTeamKebab === null) return;
-        const handler = () => setOpenTeamKebab(null);
-        document.addEventListener('click', handler);
-        return () => document.removeEventListener('click', handler);
-    }, [openTeamKebab]);
+        if (openKebab === null) return;
+        const h = () => setOpenKebab(null);
+        document.addEventListener('click', h);
+        return () => document.removeEventListener('click', h);
+    }, [openKebab]);
+
+    // Unassigned: active users with no teamId
+    const unassigned = allUsers.filter(u => !u.teamId && u.active !== false && u.userType !== 'Admin');
+
+    // Member count from repIds
+    const activeUserIds = new Set(allUsers.filter(u => u.active !== false).map(u => u.id));
+    const memberCount = (team) => {
+        const activeReps = (team.repIds || []).filter(id => activeUserIds.has(id)).length;
+        const hasActiveManager = team.managerId && activeUserIds.has(team.managerId);
+        return activeReps + (hasActiveManager ? 1 : 0);
+    };
+
+    const handleTeamSaved = (updatedTeams) => { /* setSettings already called inside TeamModal */ };
+
+    const handleDelete = (team) => {
+        setOpenKebab(null);
+        showConfirm(`Delete team "${team.name}"? Members will become unassigned.`, async () => {
+            const updatedTeams = teams.filter(t => t.id !== team.id);
+            const updatedUsers = allUsers.map(u => u.teamId === team.id ? { ...u, team:'', teamId:'', territory:'', vertical:'' } : u);
+            try {
+                const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
+                if (res.ok) {
+                    setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
+                    // Clear team on affected users in DB
+                    for (const u of allUsers.filter(u => u.teamId === team.id)) {
+                        try { await dbFetch(`/.netlify/functions/users`, { method:'PUT', body: JSON.stringify({ id: u.id, team:'', teamId:'', territory:'', vertical:'' }) }); } catch(e) {}
+                    }
+                }
+            } catch(e) { console.error('Delete team failed', e); }
+        });
+    };
+
+    const teamCount  = teams.length;
+    const managerSet = new Set(teams.map(t => t.managerId).filter(Boolean));
+    const inpSt = { padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans };
 
     return (
     <div style={{ fontFamily:T.sans }}>
+        {editingTeam && (
+            <TeamModal
+                team={editingTeam === 'new' ? null : editingTeam}
+                settings={settings}
+                setSettings={setSettings}
+                onSave={handleTeamSaved}
+                onClose={() => setEditingTeam(null)}/>
+        )}
+
+        {/* Assign user to existing team modal */}
+        {assigningUser && (
+            <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }}
+                onClick={() => setAssigningUser(null)}>
+                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:400, boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }}
+                    onClick={e=>e.stopPropagation()}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}` }}>
+                        <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>Assign to team</div>
+                        <button onClick={() => setAssigningUser(null)} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer' }}>×</button>
+                    </div>
+                    <div style={{ padding:'16px 20px' }}>
+                        <div style={{ fontSize:12.5, color:T.inkMid, marginBottom:12 }}>
+                            Assigning <b>{assigningUser.name}</b> to a team will update their team and territory.
+                        </div>
+                        {teams.length === 0 ? (
+                            <div style={{ fontSize:13, color:T.inkMuted }}>No teams exist yet. Create a team first.</div>
+                        ) : (
+                            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                                {teams.map(t => (
+                                    <button key={t.id} onClick={async () => {
+                                        const updatedTeams = teams.map(tm => tm.id === t.id
+                                            ? { ...tm, repIds: [...(tm.repIds||[]), assigningUser.id] }
+                                            : tm);
+                                        const updatedUsers = allUsers.map(u => u.id === assigningUser.id
+                                            ? { ...u, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }
+                                            : u);
+                                        try {
+                                            const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) });
+                                            if (res.ok) {
+                                                await dbFetch('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: assigningUser.id, team: t.name, teamId: t.id, territory: t.territory||'', vertical: t.vertical||'' }) });
+                                                setSettings(prev => ({ ...prev, teams: updatedTeams, users: updatedUsers }));
+                                            }
+                                        } catch(e) { console.error('Assign failed', e); }
+                                        setAssigningUser(null);
+                                    }} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, cursor:'pointer', fontFamily:T.sans, textAlign:'left' }}
+                                        onMouseEnter={e=>e.currentTarget.style.background='rgba(58,90,122,0.08)'}
+                                        onMouseLeave={e=>e.currentTarget.style.background=T.surface2}>
+                                        <span style={{ width:4, height:20, borderRadius:2, background:t.color||T.inkMuted, flexShrink:0 }}/>
+                                        <div>
+                                            <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{t.name}</div>
+                                            {t.territory && <div style={{ fontSize:11, color:T.inkMuted }}>{t.territory}</div>}
+                                        </div>
+                                        <span style={{ marginLeft:'auto', fontSize:11.5, color:T.inkMuted }}>{memberCount(t)} members</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div style={{ padding:'12px 20px', borderTop:`1px solid ${T.border}`, display:'flex', justifyContent:'flex-end' }}>
+                        <button onClick={() => setAssigningUser(null)} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* Breadcrumb */}
         <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
             <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
@@ -7461,75 +7913,92 @@ const TeamsDetail = ({ settings, onBack }) => {
                     <span>Team structure, managers, and reporting hierarchy</span>
                     <span style={{ color:T.inkMuted }}>•</span>
                     <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
-                    <span>8 teams · 8 managers</span>
-                    <span style={{ color:T.inkMuted }}>•</span>
-                    <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited 2 weeks ago by <b style={{ color:T.inkMid, fontWeight:500 }}>Morgan</b></span>
+                    <span>{teamCount} team{teamCount!==1?'s':''} · {managerSet.size} manager{managerSet.size!==1?'s':''}</span>
+                    {unassigned.length > 0 && <>
+                        <span style={{ color:T.inkMuted }}>•</span>
+                        <span style={{ color:T.warn, fontWeight:600 }}>{unassigned.length} unassigned</span>
+                    </>}
                 </div>
             </div>
             <div style={{ display:'flex', gap:8 }}>
-                <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Switch to org chart</button>
-                <button style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>New team</button>
+                <button style={inpSt}
+                    onClick={() => setViewMode(v => v === 'table' ? 'org' : 'table')}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                    onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
+                    {viewMode === 'table' ? 'Switch to org chart' : 'Switch to table'}
+                </button>
+                <button onClick={() => setEditingTeam('new')}
+                    style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>
+                    New team
+                </button>
             </div>
         </div>
 
-        {/* All teams table */}
+        {/* Org chart view */}
+        {viewMode === 'org' && (
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:24, marginBottom:14 }}>
+                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:16 }}>Org chart</div>
+                <OrgChartView teams={teams} allUsers={allUsers}/>
+            </div>
+        )}
+
+        {/* Table view */}
+        {viewMode === 'table' && (
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, marginBottom:14 }}>
             <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
                 <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>All teams</div>
-                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Drag rows to reorder. Click any team to edit its members, manager, and quotas.</div>
+                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any team to edit its members, manager, and quotas.</div>
             </div>
-            {/* Header */}
-            <div style={{ display:'grid', gridTemplateColumns:'24px 1fr 180px 70px 130px 90px 120px 60px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+            <div style={{ display:'grid', gridTemplateColumns:'24px 1fr 200px 80px 130px 90px 120px 80px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
                 {['','TEAM','MANAGER','MEMBERS','PIPELINE','QUOTA Q','ATTAIN','REGION',''].map((h,i) => (
                     <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
                 ))}
             </div>
-            {PT_TEAMS.map((team, i) => (
+            {teams.length === 0 ? (
+                <div style={{ padding:'32px 16px', textAlign:'center', color:T.inkMuted, fontSize:13 }}>
+                    No teams yet. Click <b>New team</b> to create your first team.
+                </div>
+            ) : teams.map((team, i) => {
+                const manager = allUsers.find(u => u.id === team.managerId && u.active !== false);
+                const count   = memberCount(team);
+                return (
                 <div key={team.id}
-                    style={{ display:'grid', gridTemplateColumns:'24px 1fr 180px 70px 130px 90px 120px 60px 32px', gap:8, padding:'11px 16px', borderBottom: i<PT_TEAMS.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
+                    style={{ display:'grid', gridTemplateColumns:'24px 1fr 200px 80px 130px 90px 120px 80px 32px', gap:8, padding:'11px 16px', borderBottom: i<teams.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
                     onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
-                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                    <span style={{ color:T.border, fontSize:14, cursor:'grab' }}>⠿</span>
-                    {/* Team name with color bar */}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                    onClick={() => setEditingTeam(team)}>
+                    <span style={{ color:T.border, fontSize:14, cursor:'grab' }} onClick={e=>e.stopPropagation()}>⠿</span>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                        <span style={{ width:4, height:16, borderRadius:2, background:team.color, flexShrink:0 }}/>
+                        <span style={{ width:4, height:16, borderRadius:2, background:team.color||T.inkMuted, flexShrink:0 }}/>
                         <span style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{team.name}</span>
+                        {team.territory && <span style={{ fontSize:11, color:T.inkMuted }}>· {team.territory}</span>}
                     </div>
-                    {/* Manager */}
                     <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <UserAvatar name={team.manager} size={20}/>
-                        <span style={{ fontSize:12.5, color:T.inkMid }}>{team.manager}</span>
+                        {manager
+                            ? <><UserAvatar name={manager.name} size={20}/><span style={{ fontSize:12.5, color:T.inkMid }}>{manager.name}</span></>
+                            : <span style={{ fontSize:12, color:T.border }}>—</span>}
                     </div>
-                    {/* Members */}
-                    <div style={{ fontSize:13, color:T.ink }}>{team.members}</div>
-                    {/* Pipeline */}
-                    <div style={{ fontSize:12, color:T.inkMid }}>{team.pipeline}</div>
-                    {/* Quota Q */}
+                    <div style={{ fontSize:13, color:T.ink }}>{count}</div>
+                    <div style={{ fontSize:12, color:T.inkMid }}>{team.pipeline || '—'}</div>
                     <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{team.quotaQ || '—'}</div>
-                    {/* Attainment bar */}
                     <div>{team.attainPct != null ? <AttainBar pct={team.attainPct}/> : <span style={{ color:T.border }}>—</span>}</div>
-                    {/* Region */}
-                    <div style={{ fontSize:11.5, color:T.inkMuted }}>{team.region}</div>
-                    {/* Kebab */}
-                    <div style={{ position:'relative' }}>
-                        <button onClick={e => { e.stopPropagation(); setOpenTeamKebab(openTeamKebab === team.id ? null : team.id); }}
+                    <div style={{ fontSize:11.5, color:T.inkMuted }}>{team.territory || '—'}</div>
+                    <div style={{ position:'relative' }} onClick={e=>e.stopPropagation()}>
+                        <button onClick={e => { e.stopPropagation(); setOpenKebab(openKebab === team.id ? null : team.id); }}
                             style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:'2px 4px', lineHeight:1, borderRadius:T.r }}
-                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                            onMouseLeave={e => e.currentTarget.style.background = 'none'}>⋯</button>
-                        {openTeamKebab === team.id && (
-                            <div onClick={e => e.stopPropagation()}
-                                style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200 }}>
+                            onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                            onMouseLeave={e=>e.currentTarget.style.background='none'}>⋯</button>
+                        {openKebab === team.id && (
+                            <div onClick={e=>e.stopPropagation()}
+                                style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:160 }}>
                                 {[
-                                    { label:'Edit team',        action: () => setOpenTeamKebab(null) },
-                                    { label:'Change manager',   action: () => setOpenTeamKebab(null) },
-                                    { label:'View members',     action: () => setOpenTeamKebab(null) },
-                                    { label:'Delete team',      action: () => { setOpenTeamKebab(null); showConfirm(`Delete team "${team.name}"? Members will become unassigned.`, () => {}); }, danger: true },
+                                    { label:'Edit team',   action: () => { setOpenKebab(null); setEditingTeam(team); } },
+                                    { label:'Delete team', action: () => handleDelete(team), danger: true },
                                 ].map((item, mi) => (
                                     <button key={mi} onClick={item.action}
-                                        style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.danger ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans }}
-                                        onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(156,58,46,0.06)' : T.surface2}
-                                        onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                        style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0?`1px solid ${T.border}`:'none', textAlign:'left', fontSize:13, color:item.danger?T.danger:T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                        onMouseEnter={e=>e.currentTarget.style.background=item.danger?'rgba(156,58,46,0.06)':T.surface2}
+                                        onMouseLeave={e=>e.currentTarget.style.background='none'}>
                                         {item.label}
                                     </button>
                                 ))}
@@ -7537,33 +8006,251 @@ const TeamsDetail = ({ settings, onBack }) => {
                         )}
                     </div>
                 </div>
-            ))}
+                );
+            })}
         </div>
+        )}
 
-        {/* Unassigned users */}
+        {/* Unassigned users — live from settings.users, filtered by teamId */}
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16 }}>
             <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:3 }}>Unassigned users</div>
-            <div style={{ fontSize:12, color:T.inkMuted, marginBottom:8 }}>Active users not currently in a team.</div>
-            <div style={{ fontSize:12.5, color:T.ok }}>None — every active user is in a team. ✓</div>
+            <div style={{ fontSize:12, color:T.inkMuted, marginBottom:10 }}>Active users not currently in a team.</div>
+            {unassigned.length === 0 ? (
+                <div style={{ fontSize:12.5, color:T.ok }}>None — every active user is in a team. ✓</div>
+            ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {unassigned.map(u => (
+                        <div key={u.id||u.name} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px', background:T.surface2, borderRadius:6, border:`1px solid ${T.border}` }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                <UserAvatar name={u.name} size={28}/>
+                                <div>
+                                    <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{u.name}</div>
+                                    <div style={{ fontSize:11.5, color:T.inkMuted }}>{u.email || ''}{u.userType ? ` · ${u.userType}` : ''}</div>
+                                </div>
+                            </div>
+                            <button onClick={() => setAssigningUser(u)}
+                                style={{ fontSize:11.5, fontWeight:600, color:T.info, background:'none', border:`1px solid ${T.border}`, borderRadius:T.r, padding:'4px 10px', cursor:'pointer', fontFamily:T.sans }}>
+                                Assign to team
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     </div>
     );
 };
 
+
 // ── TERRITORIES detail page ───────────────────────────────────
-const TerritoriesDetail = ({ settings, onBack }) => {
-    const [openTerrKebab, setOpenTerrKebab] = useState(null); // territory id
+// ── Territory Modal (New / Edit / Assign Owner / Assign Reps / Edit Rule) ────
+const TerritoryModal = ({ mode, territory, settings, setSettings, onClose }) => {
+    // mode: 'new' | 'edit' | 'owner' | 'reps' | 'rule'
+    const allUsers   = (settings.users || []).filter(u => u.name);
+    const territories = settings.territories || [];
+
+    const [name,    setName]    = useState(territory?.name    || '');
+    const [parent,  setParent]  = useState(territory?.parent  || '');
+    const [rule,    setRule]    = useState(territory?.rule    || '');
+    const [ownerId, setOwnerId] = useState(territory?.ownerId || '');
+    const [repIds,  setRepIds]  = useState(territory?.repIds  || []);
+    const [saving,  setSaving]  = useState(false);
+    const [err,     setErr]     = useState('');
+
+    const owners = allUsers; // any user can own a territory
+    const reps   = allUsers;
+    const toggleRep = (id) => setRepIds(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
+
+    const save = async () => {
+        if ((mode === 'new' || mode === 'edit') && !name.trim()) { setErr('Name is required.'); return; }
+        setSaving(true); setErr('');
+        try {
+            let updatedTerritories = [...territories];
+            let updatedUsers = [...allUsers];
+
+            if (mode === 'new') {
+                const newT = { id:`terr_${Date.now()}`, name:name.trim(), parent:parent.trim(), rule:rule.trim(), ownerId, repIds, accounts:0, pipeline:'—', status: ownerId ? 'Active' : 'Unassigned' };
+                updatedTerritories = [...territories, newT];
+            } else if (mode === 'edit') {
+                const oldName = territory.name;
+                updatedTerritories = territories.map(t => t.id === territory.id ? { ...t, name:name.trim(), parent:parent.trim() } : t);
+                // Sync rename onto users
+                updatedUsers = allUsers.map(u => u.territory === oldName ? { ...u, territory: name.trim() } : u);
+            } else if (mode === 'rule') {
+                updatedTerritories = territories.map(t => t.id === territory.id ? { ...t, rule:rule.trim() } : t);
+            } else if (mode === 'owner') {
+                const owner = allUsers.find(u => u.id === ownerId);
+                updatedTerritories = territories.map(t => t.id === territory.id
+                    ? { ...t, ownerId, ownerInit: owner ? owner.name.slice(0,2).toUpperCase() : null, owner: owner?.name || 'Unassigned', status: owner ? 'Active' : 'Unassigned' }
+                    : t);
+            } else if (mode === 'reps') {
+                updatedTerritories = territories.map(t => t.id === territory.id ? { ...t, repIds, reps: repIds.length } : t);
+                // Update u.territory for added/removed reps
+                updatedUsers = allUsers.map(u => {
+                    if (repIds.includes(u.id)) return { ...u, territory: territory.name };
+                    if ((territory.repIds||[]).includes(u.id) && !repIds.includes(u.id)) return { ...u, territory: '' };
+                    return u;
+                });
+            }
+
+            const res  = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ territories: updatedTerritories }) });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Save failed');
+
+            // Persist changed users
+            const changedUsers = updatedUsers.filter((u, i) => allUsers[i] && u.territory !== allUsers[i].territory);
+            for (const u of changedUsers) {
+                try { await dbFetch('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, territory: u.territory }) }); } catch(e) {}
+            }
+
+            setSettings(prev => ({ ...prev, territories: updatedTerritories, users: updatedUsers }));
+            onClose();
+        } catch(e) {
+            setErr(e.message || 'Save failed.');
+        } finally { setSaving(false); }
+    };
+
+    const title = { new:'New territory', edit:'Edit territory', owner:'Assign owner', reps:'Assign reps', rule:'Edit rule' }[mode];
+    const inp = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, background:T.surface, fontFamily:T.sans, outline:'none', boxSizing:'border-box' };
+    const lbl = { display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 };
+    const sel = { ...inp, cursor:'pointer' };
+    const parentOptions = [...new Set(territories.map(t => t.parent).filter(Boolean))];
+
+    return (
+        <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={onClose}>
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:460, maxHeight:'88vh', overflowY:'auto', boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }} onClick={e=>e.stopPropagation()}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}`, position:'sticky', top:0, background:T.surface, zIndex:1 }}>
+                    <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>{title}</div>
+                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer' }}>×</button>
+                </div>
+                <div style={{ padding:'20px', display:'flex', flexDirection:'column', gap:14 }}>
+                    {(mode === 'new' || mode === 'edit') && <>
+                        <div>
+                            <label style={lbl}>Territory name *</label>
+                            <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. NAM West" style={inp} autoFocus/>
+                        </div>
+                        <div>
+                            <label style={lbl}>Parent territory</label>
+                            <input value={parent} onChange={e=>setParent(e.target.value)}
+                                placeholder={parentOptions.length ? parentOptions.join(', ') : 'e.g. NAM, EMEA'}
+                                list="parent-opts" style={inp}/>
+                            <datalist id="parent-opts">{parentOptions.map(p=><option key={p} value={p}/>)}</datalist>
+                        </div>
+                    </>}
+                    {mode === 'rule' && (
+                        <div>
+                            <label style={lbl}>Assignment rule</label>
+                            <input value={rule} onChange={e=>setRule(e.target.value)}
+                                placeholder='e.g. State ∈ {CA, OR, WA}' style={inp} autoFocus/>
+                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:5 }}>Descriptive — used for display and routing reference only.</div>
+                        </div>
+                    )}
+                    {mode === 'owner' && (
+                        <div>
+                            <label style={lbl}>Territory owner</label>
+                            <select value={ownerId} onChange={e=>setOwnerId(e.target.value)} style={sel} autoFocus>
+                                <option value="">— Unassigned —</option>
+                                {owners.map(u => <option key={u.id} value={u.id}>{u.name} · {u.userType||u.role||'User'}</option>)}
+                            </select>
+                        </div>
+                    )}
+                    {mode === 'reps' && (
+                        <div>
+                            <label style={lbl}>Sales reps ({repIds.length} assigned)</label>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, maxHeight:220, overflowY:'auto', padding:8, border:`1px solid ${T.border}`, borderRadius:T.r }}>
+                                {reps.map(u => {
+                                    const selected = repIds.includes(u.id);
+                                    return (
+                                        <div key={u.id} onClick={()=>toggleRep(u.id)}
+                                            style={{ display:'flex', alignItems:'center', gap:7, padding:'6px 8px', borderRadius:4, cursor:'pointer', background: selected ? 'rgba(58,90,122,0.08)' : T.surface2, border: selected ? `1px solid rgba(58,90,122,0.25)` : `1px solid ${T.border}`, userSelect:'none' }}>
+                                            <span style={{ width:14, height:14, borderRadius:3, border: selected?'none':`1.5px solid ${T.border}`, background: selected?T.info:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                                {selected && <span style={{ color:'#fff', fontSize:9, fontWeight:700 }}>✓</span>}
+                                            </span>
+                                            <div>
+                                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{u.name}</div>
+                                                <div style={{ fontSize:10.5, color:T.inkMuted }}>{u.userType||'User'}</div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                    {err && <div style={{ fontSize:12, color:T.danger, fontWeight:600 }}>{err}</div>}
+                </div>
+                <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'14px 20px', borderTop:`1px solid ${T.border}`, position:'sticky', bottom:0, background:T.surface }}>
+                    <button onClick={onClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    <button onClick={save} disabled={saving} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans, opacity:saving?0.7:1 }}>
+                        {saving ? 'Saving…' : 'Save'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── Territories Detail page ───────────────────────────────────
+const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
     const { showConfirm } = useApp();
+    const allUsers    = (settings.users || []).filter(u => u.name);
+    const territories = settings.territories || [];
+
+    const [openTerrKebab, setOpenTerrKebab] = useState(null);
+    const [modal,         setModal]         = useState(null); // { mode, territory }
 
     React.useEffect(() => {
         if (openTerrKebab === null) return;
-        const handler = () => setOpenTerrKebab(null);
-        document.addEventListener('click', handler);
-        return () => document.removeEventListener('click', handler);
+        const h = () => setOpenTerrKebab(null);
+        document.addEventListener('click', h);
+        return () => document.removeEventListener('click', h);
     }, [openTerrKebab]);
+
+    const openModal = (mode, territory = null) => { setOpenTerrKebab(null); setModal({ mode, territory }); };
+
+    const handleDelete = (tr) => {
+        setOpenTerrKebab(null);
+        showConfirm(`Delete territory "${tr.name}"? Assigned reps will become unassigned.`, async () => {
+            const updatedTerritories = territories.filter(t => t.id !== tr.id);
+            const updatedUsers = allUsers.map(u => u.territory === tr.name ? { ...u, territory: '' } : u);
+            try {
+                const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ territories: updatedTerritories }) });
+                if (res.ok) {
+                    for (const u of allUsers.filter(u => u.territory === tr.name)) {
+                        try { await dbFetch('/.netlify/functions/users', { method:'PUT', body: JSON.stringify({ id: u.id, territory: '' }) }); } catch(e) {}
+                    }
+                    setSettings(prev => ({ ...prev, territories: updatedTerritories, users: updatedUsers }));
+                }
+            } catch(e) { console.error('Delete territory failed', e); }
+        });
+    };
+
+    // Live stats
+    const unassignedCount = territories.filter(t => !t.ownerId && t.status !== 'Active').length;
+    const totalCount      = territories.length;
+
+    // Resolve owner display from live users
+    const resolveOwner = (tr) => {
+        if (tr.ownerId) {
+            const u = allUsers.find(u => u.id === tr.ownerId);
+            return u ? { name: u.name, found: true } : { name: tr.owner || 'Unassigned', found: false };
+        }
+        return { name: tr.owner || 'Unassigned', found: false };
+    };
+
+    // Rep count from repIds or fall back to tr.reps
+    const repCount = (tr) => tr.repIds ? tr.repIds.length : (tr.reps || 0);
 
     return (
     <div style={{ fontFamily:T.sans }}>
+        {modal && (
+            <TerritoryModal
+                mode={modal.mode}
+                territory={modal.territory}
+                settings={settings}
+                setSettings={setSettings}
+                onClose={() => setModal(null)}/>
+        )}
+
         {/* Breadcrumb */}
         <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
             <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
@@ -7581,15 +8268,20 @@ const TerritoriesDetail = ({ settings, onBack }) => {
                     <span>Sales territory definitions and rep assignments</span>
                     <span style={{ color:T.inkMuted }}>•</span>
                     <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
-                    <span>8 territories · <span style={{ color:T.warn, fontWeight:600 }}>2 unassigned</span></span>
-                    <span style={{ color:T.inkMuted }}>•</span>
-                    <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited 3 months ago by <b style={{ color:T.inkMid, fontWeight:500 }}>Morgan</b></span>
+                    <span>
+                        {totalCount} territor{totalCount!==1?'ies':'y'}
+                        {unassignedCount > 0 && <> · <span style={{ color:T.warn, fontWeight:600 }}>{unassignedCount} unassigned</span></>}
+                    </span>
                 </div>
             </div>
             <div style={{ display:'flex', gap:8 }}>
                 <button style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Import CSV</button>
-                <button style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>New territory</button>
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                    onMouseLeave={e=>e.currentTarget.style.background=T.surface}>Import CSV</button>
+                <button onClick={() => openModal('new')}
+                    style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>
+                    New territory
+                </button>
             </div>
         </div>
 
@@ -7599,63 +8291,65 @@ const TerritoriesDetail = ({ settings, onBack }) => {
                 <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>All territories</div>
                 <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any row to edit its rule, owner, and rep assignments.</div>
             </div>
-            {/* Header */}
-            <div style={{ display:'grid', gridTemplateColumns:'24px 130px 80px 1fr 70px 80px 160px 50px 100px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+            <div style={{ display:'grid', gridTemplateColumns:'24px 140px 80px 1fr 70px 80px 160px 50px 100px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
                 {['','TERRITORY','PARENT','RULE','ACCOUNTS','PIPELINE','OWNER','REPS','STATUS',''].map((h,i) => (
                     <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
                 ))}
             </div>
-            {PT_TERRITORIES.map((tr, i) => (
+            {territories.length === 0 ? (
+                <div style={{ padding:'32px 16px', textAlign:'center', color:T.inkMuted, fontSize:13 }}>
+                    No territories yet. Click <b>New territory</b> to create your first.
+                </div>
+            ) : territories.map((tr, i) => {
+                const owner    = resolveOwner(tr);
+                const isActive = owner.found || tr.status === 'Active';
+                return (
                 <div key={tr.id}
-                    style={{ display:'grid', gridTemplateColumns:'24px 130px 80px 1fr 70px 80px 160px 50px 100px 32px', gap:8, padding:'10px 16px', borderBottom: i<PT_TERRITORIES.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
+                    style={{ display:'grid', gridTemplateColumns:'24px 140px 80px 1fr 70px 80px 160px 50px 100px 32px', gap:8, padding:'10px 16px', borderBottom: i<territories.length-1 ? `1px solid ${T.border}` : 'none', alignItems:'center', cursor:'pointer', transition:'background 80ms' }}
                     onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
-                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                    <span style={{ color:T.border, fontSize:14, cursor:'grab' }}>⠿</span>
-                    {/* Name */}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                    onClick={() => openModal('edit', tr)}>
+                    <span style={{ color:T.border, fontSize:14, cursor:'grab' }} onClick={e=>e.stopPropagation()}>⠿</span>
                     <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{tr.name}</div>
-                    {/* Parent */}
-                    <div style={{ fontSize:12, color:T.inkMuted }}>{tr.parent}</div>
-                    {/* Rule — monospace pill */}
+                    <div style={{ fontSize:12, color:T.inkMuted }}>{tr.parent || '—'}</div>
                     <div style={{ overflow:'hidden' }}>
-                        <span style={{ display:'inline-block', padding:'2px 6px', background:'rgba(58,90,122,0.08)', border:`1px solid rgba(58,90,122,0.15)`, borderRadius:3, fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.info, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'100%' }}>{tr.rule}</span>
+                        {tr.rule
+                            ? <span style={{ display:'inline-block', padding:'2px 6px', background:'rgba(58,90,122,0.08)', border:`1px solid rgba(58,90,122,0.15)`, borderRadius:3, fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.info, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:'100%' }}>{tr.rule}</span>
+                            : <span style={{ fontSize:11.5, color:T.border, fontStyle:'italic' }}>No rule set</span>}
                     </div>
-                    {/* Accounts */}
-                    <div style={{ fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{tr.accounts}</div>
-                    {/* Pipeline */}
-                    <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{tr.pipeline}</div>
-                    {/* Owner */}
+                    <div style={{ fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{tr.accounts ?? '—'}</div>
+                    <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{tr.pipeline || '—'}</div>
                     <div style={{ display:'flex', alignItems:'center', gap:6, minWidth:0 }}>
-                        {tr.ownerInit ? <UserAvatar name={tr.owner} size={20}/> : <span style={{ width:20, height:20, borderRadius:'50%', background:T.border, display:'inline-block', flexShrink:0 }}/>}
-                        <span style={{ fontSize:12, color: tr.status==='Unassigned' ? T.inkMuted : T.inkMid, fontStyle: tr.status==='Unassigned' ? 'italic' : 'normal', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{tr.owner}</span>
+                        {owner.found
+                            ? <UserAvatar name={owner.name} size={20}/>
+                            : <span style={{ width:20, height:20, borderRadius:'50%', background:T.border, display:'inline-block', flexShrink:0 }}/>}
+                        <span style={{ fontSize:12, color: isActive ? T.inkMid : T.inkMuted, fontStyle: isActive ? 'normal' : 'italic', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{owner.name}</span>
                     </div>
-                    {/* Reps */}
-                    <div style={{ fontSize:13, color:T.ink }}>{tr.reps}</div>
-                    {/* Status */}
+                    <div style={{ fontSize:13, color:T.ink }}>{repCount(tr)}</div>
                     <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
-                        background: tr.status==='Active' ? 'rgba(77,107,61,0.12)' : 'rgba(184,115,51,0.12)',
-                        color: tr.status==='Active' ? T.ok : T.warn }}>
-                        {tr.status}
+                        background: isActive ? 'rgba(77,107,61,0.12)' : 'rgba(184,115,51,0.12)',
+                        color: isActive ? T.ok : T.warn }}>
+                        {isActive ? 'Active' : 'Unassigned'}
                     </span>
-                    {/* Kebab */}
-                    <div style={{ position:'relative' }}>
+                    <div style={{ position:'relative' }} onClick={e=>e.stopPropagation()}>
                         <button onClick={e => { e.stopPropagation(); setOpenTerrKebab(openTerrKebab === tr.id ? null : tr.id); }}
                             style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:'2px 4px', lineHeight:1, borderRadius:T.r }}
-                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                            onMouseLeave={e => e.currentTarget.style.background = 'none'}>⋯</button>
+                            onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                            onMouseLeave={e=>e.currentTarget.style.background='none'}>⋯</button>
                         {openTerrKebab === tr.id && (
-                            <div onClick={e => e.stopPropagation()}
-                                style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:200 }}>
+                            <div onClick={e=>e.stopPropagation()}
+                                style={{ position:'absolute', right:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:180 }}>
                                 {[
-                                    { label:'Edit territory',   action: () => setOpenTerrKebab(null) },
-                                    { label:'Assign owner',     action: () => setOpenTerrKebab(null) },
-                                    { label:'Assign reps',      action: () => setOpenTerrKebab(null) },
-                                    { label:'Edit rule',        action: () => setOpenTerrKebab(null) },
-                                    { label:'Delete territory', action: () => { setOpenTerrKebab(null); showConfirm(`Delete territory "${tr.name}"? Assigned reps will become unassigned.`, () => {}); }, danger: true },
+                                    { label:'Edit territory',   action: () => openModal('edit',  tr) },
+                                    { label:'Assign owner',     action: () => openModal('owner', tr) },
+                                    { label:'Assign reps',      action: () => openModal('reps',  tr) },
+                                    { label:'Edit rule',        action: () => openModal('rule',  tr) },
+                                    { label:'Delete territory', action: () => handleDelete(tr), danger: true },
                                 ].map((item, mi) => (
                                     <button key={mi} onClick={item.action}
-                                        style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.danger ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans }}
-                                        onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(156,58,46,0.06)' : T.surface2}
-                                        onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                        style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0?`1px solid ${T.border}`:'none', textAlign:'left', fontSize:13, color:item.danger?T.danger:T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                        onMouseEnter={e=>e.currentTarget.style.background=item.danger?'rgba(156,58,46,0.06)':T.surface2}
+                                        onMouseLeave={e=>e.currentTarget.style.background='none'}>
                                         {item.label}
                                     </button>
                                 ))}
@@ -7663,7 +8357,8 @@ const TerritoriesDetail = ({ settings, onBack }) => {
                         )}
                     </div>
                 </div>
-            ))}
+                );
+            })}
         </div>
     </div>
     );
@@ -10994,8 +11689,8 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
 
         // People & Teams detail pages
         if (id === 'users')       return <UsersDetail       settings={settings} onBack={onBack}/>;
-        if (id === 'teams')       return <TeamsDetail        settings={settings} onBack={onBack}/>;
-        if (id === 'territories') return <TerritoriesDetail settings={settings} onBack={onBack}/>;
+        if (id === 'teams')       return <TeamsDetail        settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'territories') return <TerritoriesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'roles')       return <RolesDetail       settings={settings} onBack={onBack}/>;
 
         // Sales process Group 2 detail pages

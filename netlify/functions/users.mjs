@@ -59,11 +59,13 @@ export const handler = async (event) => {
             notes:         data.notes         || null,
             vertical:      data.vertical      || null,
             teamId:        data.teamId        || null,
+            manager:       data.manager       || null,
             userType:      data.userType      || 'User',
             notificationPrefs: data.notificationPrefs || null,
             digestTime:    data.digestTime    || '08:00',
             smsNotifications: data.smsNotifications || null,
             timezone:         data.timezone         || null,
+            status:           data.status            || null,
             // Quota fields — stored in profile jsonb so they survive DB round-trips
             annualQuota:   data.annualQuota   ?? null,
             q1Quota:       data.q1Quota       ?? null,
@@ -123,14 +125,23 @@ export const handler = async (event) => {
                 }
 
                 // If we found a row via email/name but id doesn't match (pending_ or old placeholder),
-                // update the id to the real Clerk userId so future lookups hit path 1.
+                // update id AND pull real name/role/active from Clerk so the row is fully promoted.
                 if (row && row.id !== userId) {
+                    const realName = displayName || row.name;
+                    const realRole = clerkUser.publicMetadata?.role || row.role || 'User';
                     try {
                         await db.update(users)
-                            .set({ id: userId, updatedAt: new Date() })
+                            .set({
+                                id:        userId,
+                                name:      realName,
+                                role:      realRole,
+                                active:    true,
+                                profile:   { ...(row.profile || {}), status: 'Active', userType: realRole },
+                                updatedAt: new Date(),
+                            })
                             .where(eq(users.id, row.id));
-                        row = { ...row, id: userId };
-                        console.log(`users.mjs: reconciled row → ${userId} for ${clerkEmail}`);
+                        row = { ...row, id: userId, name: realName, role: realRole, active: true };
+                        console.log(`users.mjs: reconciled pending_ → ${userId} (${realName}) for ${clerkEmail}`);
                     } catch (reconcileErr) {
                         console.warn('users.mjs: reconcile update failed:', reconcileErr.message);
                     }
@@ -227,6 +238,74 @@ export const handler = async (event) => {
         // ── POST (create) ─────────────────────────────────────────────────────
         if (event.httpMethod === 'POST') {
             const data = JSON.parse(event.body || '{}');
+
+            // ── Invite flow ───────────────────────────────────────────────────
+            if (data.action === 'invite') {
+                const invites = Array.isArray(data.invites) ? data.invites : [];
+                if (invites.length === 0) {
+                    return { statusCode: 400, headers, body: JSON.stringify({ error: 'No invites provided' }) };
+                }
+
+                // Initialise Clerk backend client once for this batch
+                const { createClerkClient } = await import('@clerk/backend');
+                const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+
+                // Redirect URL — where Clerk sends the invitee after they accept.
+                // Falls back to the dev URL if the env var isn't set.
+                const appUrl = process.env.URL || process.env.DEPLOY_URL || 'https://accelerep.netlify.app';
+                const redirectUrl = `${appUrl}/sign-up`;
+
+                const results = [];
+                const errors  = [];
+
+                for (const invite of invites) {
+                    const email = (invite.email || '').trim().toLowerCase();
+                    if (!email) { errors.push({ email: '', error: 'Email required' }); continue; }
+
+                    try {
+                        // Send invitation via Clerk — this emails the invitee a magic link.
+                        // publicMetadata is available to the frontend after they sign up.
+                        await clerk.invitations.createInvitation({
+                            emailAddress: email,
+                            redirectUrl,
+                            publicMetadata: {
+                                orgId,
+                                role:      invite.role      || 'User',
+                                team:      invite.team      || null,
+                                territory: invite.territory || null,
+                            },
+                            notify: true, // Clerk sends the email
+                        });
+
+                        // Create a pending_ row so the invitee appears in the Users list immediately
+                        const pendingId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                        const row = await upsertUser(sanitize({
+                            id:        pendingId,
+                            email,
+                            name:      email.split('@')[0],
+                            userType:  invite.role      || 'User',
+                            team:      invite.team      || null,
+                            territory: invite.territory || null,
+                            active:    false,
+                            status:    'Invited',
+                        }));
+                        results.push(flatten(row));
+
+                    } catch (err) {
+                        // Clerk throws if email already has a pending invitation or is already a member
+                        const clerkMsg = err?.errors?.[0]?.message || err.message || 'Invite failed';
+                        errors.push({ email, error: clerkMsg });
+                    }
+                }
+
+                return {
+                    statusCode: errors.length === invites.length ? 400 : 201,
+                    headers,
+                    body: JSON.stringify({ invited: results, errors }),
+                };
+            }
+
+            // ── Single user create ────────────────────────────────────────────
             if (!data.id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
