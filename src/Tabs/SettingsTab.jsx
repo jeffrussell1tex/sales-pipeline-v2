@@ -7658,43 +7658,115 @@ const TeamModal = ({ team, settings, setSettings, onSave, onClose }) => {
 
 // ── Org Chart view ────────────────────────────────────────────
 const OrgChartView = ({ teams, allUsers }) => {
-    const nodeStyle = { background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:'10px 14px', textAlign:'center' };
+    const connector = (
+        <div style={{ width:2, height:20, background:T.border, margin:'0 auto' }}/>
+    );
+    const hLine = (count) => count <= 1 ? null : (
+        <div style={{ position:'relative', height:20, display:'flex', alignItems:'flex-start', justifyContent:'center' }}>
+            <div style={{ position:'absolute', top:0, left:'10%', right:'10%', height:2, background:T.border }}/>
+        </div>
+    );
+
     return (
         <div style={{ overflowX:'auto', paddingBottom:8 }}>
             {teams.length === 0
                 ? <div style={{ color:T.inkMuted, fontSize:13, padding:16 }}>No teams yet.</div>
                 : teams.map(team => {
-                    const manager  = allUsers.find(u => u.id === team.managerId);
-                    const teamReps = allUsers.filter(u => (team.repIds||[]).includes(u.id));
+                    const manager = allUsers.find(u => u.id === team.managerId && u.active !== false);
+                    // Reps = repIds excluding the manager (prevent double-display)
+                    const reps = allUsers.filter(u =>
+                        (team.repIds||[]).includes(u.id) &&
+                        u.id !== team.managerId &&
+                        u.active !== false
+                    );
+
                     return (
-                        <div key={team.id} style={{ display:'flex', flexDirection:'column', alignItems:'center', marginBottom:28 }}>
-                            <div style={{ ...nodeStyle, borderLeft:`4px solid ${team.color||T.inkMuted}`, minWidth:200, textAlign:'left', padding:'10px 16px' }}>
-                                <div style={{ fontSize:13, fontWeight:700, color:T.ink }}>{team.name}</div>
-                                <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>
-                                    {team.territory && `📍 ${team.territory}`}{team.territory && team.vertical && ' · '}{team.vertical && `🏭 ${team.vertical}`}
-                                </div>
+                        <div key={team.id} style={{ display:'flex', flexDirection:'column', alignItems:'center', marginBottom:40 }}>
+
+                            {/* Level 1 — Team node */}
+                            <div style={{
+                                background:T.surface, border:`1px solid ${T.border}`,
+                                borderLeft:`4px solid ${team.color||T.inkMuted}`,
+                                borderRadius:6, padding:'10px 20px', textAlign:'left', minWidth:220,
+                            }}>
+                                <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>{team.name}</div>
+                                {(team.territory || team.vertical) && (
+                                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>
+                                        {team.territory && `📍 ${team.territory}`}
+                                        {team.territory && team.vertical && ' · '}
+                                        {team.vertical && `🏭 ${team.vertical}`}
+                                    </div>
+                                )}
                                 <div style={{ fontSize:11.5, color:T.inkMid, marginTop:4 }}>
-                                    {teamReps.length} rep{teamReps.length !== 1 ? 's' : ''}
+                                    {reps.length} rep{reps.length !== 1 ? 's' : ''}
+                                    {manager ? ` · mgr: ${manager.name}` : ''}
                                 </div>
                             </div>
-                            {(manager || teamReps.length > 0) && <div style={{ width:2, height:14, background:T.border }}/>}
-                            {(manager || teamReps.length > 0) && (
-                                <div style={{ display:'flex', gap:10, flexWrap:'wrap', justifyContent:'center' }}>
-                                    {manager && (
-                                        <div style={{ ...nodeStyle, borderTop:`3px solid ${team.color||T.inkMuted}`, minWidth:120 }}>
-                                            <UserAvatar name={manager.name} size={26}/>
-                                            <div style={{ fontSize:11.5, fontWeight:700, color:T.ink, marginTop:4 }}>{manager.name}</div>
-                                            <div style={{ fontSize:10.5, color:T.inkMuted }}>Manager</div>
+
+                            {/* Connector: Team → Manager */}
+                            {manager && connector}
+
+                            {/* Level 2 — Manager node */}
+                            {manager && (
+                                <>
+                                    <div style={{
+                                        background:T.surface, border:`1px solid ${T.border}`,
+                                        borderTop:`3px solid ${team.color||T.inkMuted}`,
+                                        borderRadius:6, padding:'10px 16px', textAlign:'center', minWidth:140,
+                                    }}>
+                                        <UserAvatar name={manager.name} size={32}/>
+                                        <div style={{ fontSize:12.5, fontWeight:700, color:T.ink, marginTop:6 }}>{manager.name}</div>
+                                        <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2 }}>Manager</div>
+                                    </div>
+
+                                    {/* Connector: Manager → Reps */}
+                                    {reps.length > 0 && connector}
+
+                                    {/* Horizontal bar spanning reps */}
+                                    {reps.length > 1 && (
+                                        <div style={{ width: `${Math.min(reps.length * 130, 700)}px`, height:2, background:T.border }}/>
+                                    )}
+
+                                    {/* Level 3 — Rep nodes */}
+                                    {reps.length > 0 && (
+                                        <div style={{ display:'flex', gap:12, flexWrap:'wrap', justifyContent:'center', marginTop: reps.length > 1 ? 0 : 0 }}>
+                                            {reps.map(u => (
+                                                <div key={u.id} style={{
+                                                    background:T.surface2, border:`1px solid ${T.border}`,
+                                                    borderRadius:6, padding:'10px 14px', textAlign:'center', minWidth:110,
+                                                    display:'flex', flexDirection:'column', alignItems:'center',
+                                                }}>
+                                                    {reps.length > 1 && (
+                                                        <div style={{ width:2, height:12, background:T.border, marginBottom:6 }}/>
+                                                    )}
+                                                    <UserAvatar name={u.name} size={26}/>
+                                                    <div style={{ fontSize:11.5, fontWeight:600, color:T.ink, marginTop:5 }}>{u.name}</div>
+                                                    <div style={{ fontSize:10, color:T.inkMuted, marginTop:2 }}>{u.userType||'Rep'}</div>
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
-                                    {teamReps.map(u => (
-                                        <div key={u.id} style={{ ...nodeStyle, background:T.surface2, minWidth:100 }}>
-                                            <UserAvatar name={u.name} size={22}/>
-                                            <div style={{ fontSize:11, fontWeight:600, color:T.ink, marginTop:4 }}>{u.name}</div>
-                                            <div style={{ fontSize:10, color:T.inkMuted }}>{u.userType||'Rep'}</div>
-                                        </div>
-                                    ))}
-                                </div>
+                                </>
+                            )}
+
+                            {/* If no manager but has reps — show reps directly under team */}
+                            {!manager && reps.length > 0 && (
+                                <>
+                                    {connector}
+                                    <div style={{ display:'flex', gap:12, flexWrap:'wrap', justifyContent:'center' }}>
+                                        {reps.map(u => (
+                                            <div key={u.id} style={{
+                                                background:T.surface2, border:`1px solid ${T.border}`,
+                                                borderRadius:6, padding:'10px 14px', textAlign:'center', minWidth:110,
+                                                display:'flex', flexDirection:'column', alignItems:'center',
+                                            }}>
+                                                <UserAvatar name={u.name} size={26}/>
+                                                <div style={{ fontSize:11.5, fontWeight:600, color:T.ink, marginTop:5 }}>{u.name}</div>
+                                                <div style={{ fontSize:10, color:T.inkMuted, marginTop:2 }}>{u.userType||'Rep'}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </>
                             )}
                         </div>
                     );
