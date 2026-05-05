@@ -6895,8 +6895,42 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
         try {
             const resp = await dbFetch('/.netlify/functions/users', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form) });
             if (!resp.ok) { const d = await resp.json(); throw new Error(d.error || 'Save failed'); }
-            // Update settings.users locally
-            setSettings(prev => ({ ...prev, users: (prev.users||[]).map(u => u.id === form.id ? { ...u, ...form } : u) }));
+
+            // Sync team assignment into settings.teams repIds
+            let updatedTeams = settings.teams || [];
+            const oldTeamName = user.team;
+            const newTeamName = form.team;
+            if (oldTeamName !== newTeamName) {
+                updatedTeams = updatedTeams.map(t => {
+                    if (t.name === oldTeamName) return { ...t, repIds: (t.repIds||[]).filter(id => id !== user.id) };
+                    if (t.name === newTeamName) return { ...t, repIds: [...new Set([...(t.repIds||[]), user.id])] };
+                    return t;
+                });
+            }
+
+            // Sync manager into settings.teams managerId
+            const newManagerName = form.manager;
+            if (newManagerName && newTeamName) {
+                const mgr = (settings.users||[]).find(u => u.name === newManagerName);
+                if (mgr) {
+                    updatedTeams = updatedTeams.map(t =>
+                        t.name === newTeamName ? { ...t, managerId: mgr.id } : t
+                    );
+                }
+            }
+
+            // Persist updated teams if changed
+            if (JSON.stringify(updatedTeams) !== JSON.stringify(settings.teams || [])) {
+                dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ teams: updatedTeams }) })
+                    .catch(e => console.error('Failed to sync teams:', e));
+            }
+
+            // Update local settings state
+            setSettings(prev => ({
+                ...prev,
+                users: (prev.users||[]).map(u => u.id === form.id ? { ...u, ...form } : u),
+                teams: updatedTeams,
+            }));
             setSaved(true); setTimeout(() => setSaved(false), 2500);
         } catch(err) {
             setError(err.message || 'Failed to save. Please try again.');
@@ -7162,7 +7196,7 @@ const UsersDetail = ({ settings, onBack }) => {
         status: 'Invited',
         _raw: u,
     }));
-    const displayUsers = [...realUsers, ...pendingRows];
+    const displayUsers = [...(realUsers.length > 0 ? realUsers : PT_USERS), ...pendingRows];
 
     const filterTabs = [
         { key:'All',        label:`All · ${displayUsers.length}` },

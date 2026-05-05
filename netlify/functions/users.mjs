@@ -59,6 +59,7 @@ export const handler = async (event) => {
             notes:         data.notes         || null,
             vertical:      data.vertical      || null,
             teamId:        data.teamId        || null,
+            manager:       data.manager       || null,
             userType:      data.userType      || 'User',
             notificationPrefs: data.notificationPrefs || null,
             digestTime:    data.digestTime    || '08:00',
@@ -244,13 +245,40 @@ export const handler = async (event) => {
                 if (invites.length === 0) {
                     return { statusCode: 400, headers, body: JSON.stringify({ error: 'No invites provided' }) };
                 }
+
+                // Initialise Clerk backend client once for this batch
+                const { createClerkClient } = await import('@clerk/backend');
+                const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+
+                // Redirect URL — where Clerk sends the invitee after they accept.
+                // Falls back to the dev URL if the env var isn't set.
+                const appUrl = process.env.URL || process.env.DEPLOY_URL || 'https://accelerep.netlify.app';
+                const redirectUrl = `${appUrl}/sign-up`;
+
                 const results = [];
                 const errors  = [];
+
                 for (const invite of invites) {
                     const email = (invite.email || '').trim().toLowerCase();
                     if (!email) { errors.push({ email: '', error: 'Email required' }); continue; }
-                    const pendingId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
                     try {
+                        // Send invitation via Clerk — this emails the invitee a magic link.
+                        // publicMetadata is available to the frontend after they sign up.
+                        await clerk.invitations.createInvitation({
+                            emailAddress: email,
+                            redirectUrl,
+                            publicMetadata: {
+                                orgId,
+                                role:      invite.role      || 'User',
+                                team:      invite.team      || null,
+                                territory: invite.territory || null,
+                            },
+                            notify: true, // Clerk sends the email
+                        });
+
+                        // Create a pending_ row so the invitee appears in the Users list immediately
+                        const pendingId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
                         const row = await upsertUser(sanitize({
                             id:        pendingId,
                             email,
@@ -262,10 +290,14 @@ export const handler = async (event) => {
                             status:    'Invited',
                         }));
                         results.push(flatten(row));
+
                     } catch (err) {
-                        errors.push({ email, error: err.code === 'EMAIL_DUPLICATE' ? 'Already in workspace' : err.message });
+                        // Clerk throws if email already has a pending invitation or is already a member
+                        const clerkMsg = err?.errors?.[0]?.message || err.message || 'Invite failed';
+                        errors.push({ email, error: clerkMsg });
                     }
                 }
+
                 return {
                     statusCode: errors.length === invites.length ? 400 : 201,
                     headers,
