@@ -8455,7 +8455,6 @@ const PermCellPopover = ({ anchor, currentValue, roleName, onApply, onClose }) =
                 position:'absolute', top:-7,
                 left: isRightCol ? 'auto' : '50%',
                 right: isRightCol ? 24 : 'auto',
-                transform: isRightCol ? 'none' : 'translateX(-50%)',
                 transform: isRightCol ? 'rotate(45deg)' : 'translateX(-50%) rotate(45deg)',
                 width:12, height:12, background:T.surface,
                 borderTop:`1px solid ${T.border}`, borderLeft:`1px solid ${T.border}`,
