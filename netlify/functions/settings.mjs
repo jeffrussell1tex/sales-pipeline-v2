@@ -78,6 +78,8 @@ export const handler = async (event) => {
                 // Feature flags and AI settings
                 featureFlags:     row.extra?.featureFlags     || {},
                 aiSettings:       row.extra?.aiSettings       || {},
+                connectedApps:    row.extra?.connectedApps    || {},
+                slackConfig:      row.extra?.slackConfig      || {},
             }})};
         }
 
@@ -154,6 +156,8 @@ export const handler = async (event) => {
                 // Feature flags and AI settings
                 featureFlags:         'featureFlags'         in data ? (data.featureFlags         || {})   : existingExtra.featureFlags         || {},
                 aiSettings:           'aiSettings'           in data ? (data.aiSettings           || {})   : existingExtra.aiSettings           || {},
+                connectedApps:        'connectedApps'        in data ? (data.connectedApps        || {})   : existingExtra.connectedApps        || {},
+                slackConfig:          'slackConfig'          in data ? (data.slackConfig          || {})   : existingExtra.slackConfig          || {},
                 // Store encrypted ciphertext — never the plaintext key
                 anthropicApiKey:  encryptedApiKey,
             };
