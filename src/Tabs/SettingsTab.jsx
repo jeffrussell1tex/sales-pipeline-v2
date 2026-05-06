@@ -8441,6 +8441,8 @@ const PermCellPopover = ({ anchor, currentValue, roleName, onApply, onClose }) =
     const title = `${anchor.action.charAt(0).toUpperCase() + anchor.action.slice(1)} · ${anchor.objectName}`;
     const narrowed = condsOpen && conds.length > 0;
 
+    const isRightCol = ['delete','export','share','approve'].includes(anchor.action);
+
     return (
         <div style={{
             background:T.surface, border:`1px solid ${T.border}`, borderRadius:4,
@@ -8448,9 +8450,13 @@ const PermCellPopover = ({ anchor, currentValue, roleName, onApply, onClose }) =
             width:380, position:'relative', textAlign:'left',
             animation:'fadeInDown 120ms ease-out',
         }}>
-            {/* Caret */}
+            {/* Caret — tracks anchor side */}
             <span style={{
-                position:'absolute', top:-7, left:'50%', transform:'translateX(-50%) rotate(45deg)',
+                position:'absolute', top:-7,
+                left: isRightCol ? 'auto' : '50%',
+                right: isRightCol ? 24 : 'auto',
+                transform: isRightCol ? 'none' : 'translateX(-50%)',
+                transform: isRightCol ? 'rotate(45deg)' : 'translateX(-50%) rotate(45deg)',
                 width:12, height:12, background:T.surface,
                 borderTop:`1px solid ${T.border}`, borderLeft:`1px solid ${T.border}`,
             }}/>
@@ -8756,7 +8762,7 @@ const RolesDetail = ({ settings, onBack }) => {
                                                     <>
                                                         <span style={{ display:'inline-block', padding:'2px 6px', fontSize:9.5, fontWeight:700, letterSpacing:0.6, color:T.surface, background:T.ink, borderRadius:2, fontFamily:'ui-monospace,Menlo,monospace' }}>EDIT</span>
                                                         {/* Popover anchored below this cell */}
-                                                        <div data-popover="1" style={{ position:'absolute', top:'100%', left:'50%', transform:'translateX(-50%)', marginTop:6, zIndex:50, width:380 }}
+                                                        <div data-popover="1" style={{ position:'absolute', top:'100%', right: ['delete','export','share','approve'].includes(action) ? 0 : 'auto', left: ['delete','export','share','approve'].includes(action) ? 'auto' : '50%', transform: ['delete','export','share','approve'].includes(action) ? 'none' : 'translateX(-50%)', marginTop:6, zIndex:50, width:380 }}
                                                             onClick={e => e.stopPropagation()}>
                                                             <PermCellPopover
                                                                 anchor={{ objectId:obj.id, objectName:obj.name, action }}
@@ -11138,31 +11144,473 @@ const ResetAiModal = ({ onClose }) => {
 };
 
 // ── ① Import Detail ───────────────────────────────────────────
-const ImportDetail = ({ onBack }) => {
-    const [showModal, setShowModal] = useState(false);
-    const w = DATA_IMPORT.wizard;
-    const mapped = w.columns.filter(c => c.target !== '__skip__').length;
 
-    const th = { padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans, textAlign:'left' };
-    const td = (extra={}) => ({ padding:'8px 12px', fontFamily:T.sans, ...extra });
+// Importable fields per object — derived from schema.ts
+const IMPORT_FIELDS = {
+    Accounts: [
+        { value:'name',              label:'Name *'            },
+        { value:'website',           label:'Website'           },
+        { value:'phone',             label:'Phone'             },
+        { value:'industry',          label:'Industry'          },
+        { value:'verticalMarket',    label:'Vertical market'   },
+        { value:'annualRevenue',     label:'Annual revenue'    },
+        { value:'totalEmployees',    label:'Total employees'   },
+        { value:'address',           label:'Address'           },
+        { value:'city',              label:'City'              },
+        { value:'state',             label:'State'             },
+        { value:'zip',               label:'ZIP'               },
+        { value:'country',           label:'Country'           },
+        { value:'accountSegment',    label:'Segment'           },
+        { value:'accountOwner',      label:'Account owner'     },
+        { value:'assignedRep',       label:'Assigned rep'      },
+        { value:'assignedTerritory', label:'Territory'         },
+        { value:'description',       label:'Description'       },
+        { value:'notes',             label:'Notes'             },
+        { value:'linkedInUrl',       label:'LinkedIn URL'      },
+        { value:'foundedYear',       label:'Founded year'      },
+        { value:'externalId',        label:'External ID'       },
+    ],
+    Contacts: [
+        { value:'firstName',         label:'First name *'      },
+        { value:'lastName',          label:'Last name *'       },
+        { value:'email',             label:'Email *'           },
+        { value:'phone',             label:'Phone'             },
+        { value:'mobile',            label:'Mobile'            },
+        { value:'title',             label:'Title'             },
+        { value:'company',           label:'Company'           },
+        { value:'department',        label:'Department'        },
+        { value:'address',           label:'Address'           },
+        { value:'city',              label:'City'              },
+        { value:'state',             label:'State'             },
+        { value:'zip',               label:'ZIP'               },
+        { value:'country',           label:'Country'           },
+        { value:'assignedRep',       label:'Assigned rep'      },
+        { value:'assignedTerritory', label:'Territory'         },
+        { value:'notes',             label:'Notes'             },
+        { value:'externalId',        label:'External ID'       },
+    ],
+    Leads: [
+        { value:'firstName',         label:'First name *'      },
+        { value:'lastName',          label:'Last name *'       },
+        { value:'email',             label:'Email *'           },
+        { value:'phone',             label:'Phone'             },
+        { value:'company',           label:'Company'           },
+        { value:'title',             label:'Title'             },
+        { value:'source',            label:'Lead source'       },
+        { value:'status',            label:'Status'            },
+        { value:'notes',             label:'Notes'             },
+        { value:'assignedRep',       label:'Assigned rep'      },
+        { value:'externalId',        label:'External ID'       },
+    ],
+    Opportunities: [
+        { value:'opportunityName',   label:'Opportunity name *'},
+        { value:'account',           label:'Account'           },
+        { value:'stage',             label:'Stage *'           },
+        { value:'arr',               label:'ARR'               },
+        { value:'forecastedCloseDate',label:'Close date'       },
+        { value:'salesRep',          label:'Sales rep'         },
+        { value:'probability',       label:'Probability'       },
+        { value:'territory',         label:'Territory'         },
+        { value:'team',              label:'Team'              },
+        { value:'notes',             label:'Notes'             },
+        { value:'externalId',        label:'External ID'       },
+    ],
+};
+
+const REQUIRED_FIELDS = {
+    Accounts:      ['name'],
+    Contacts:      ['firstName','lastName','email'],
+    Leads:         ['firstName','lastName','email'],
+    Opportunities: ['opportunityName','stage'],
+};
+
+// Auto-map a CSV column name to a field value using similarity heuristics
+function autoMap(csvName, objectType) {
+    const fields = IMPORT_FIELDS[objectType] || [];
+    const n = csvName.toLowerCase().replace(/[^a-z0-9]/g,'');
+    const exact = fields.find(f => f.value.toLowerCase() === n || f.label.toLowerCase().replace(/[^a-z0-9]/g,'') === n);
+    if (exact) return { target: exact.value, confidence: 0.98 };
+    const partial = fields.find(f => n.includes(f.value.toLowerCase()) || f.value.toLowerCase().includes(n));
+    if (partial) return { target: partial.value, confidence: 0.80 };
+    // Common aliases
+    const aliases = {
+        accountname:'name', company:'name', companyname:'name', organization:'name',
+        domain:'website', url:'website', web:'website', homepage:'website',
+        revenue:'annualRevenue', annrev:'annualRevenue',
+        employees:'totalEmployees', headcount:'totalEmployees', emp:'totalEmployees',
+        firstname:'firstName', first:'firstName', givenname:'firstName',
+        lastname:'lastName', last:'lastName', surname:'lastName', familyname:'lastName',
+        dealname:'opportunityName', opportunity:'opportunityName', deal:'opportunityName',
+        closedate:'forecastedCloseDate', closingdate:'forecastedCloseDate',
+        amount:'arr', value:'arr', dealsize:'arr', dealvalue:'arr',
+        sfid:'externalId', salesforceid:'externalId', crmid:'externalId', hubspotid:'externalId',
+        owner:'accountOwner', rep:'salesRep',
+        segment:'accountSegment', tier:'accountSegment',
+        vertical:'verticalMarket', industry:'industry',
+        leadsource:'source', source:'source',
+    };
+    const mapped = aliases[n];
+    if (mapped && fields.find(f => f.value === mapped)) return { target: mapped, confidence: 0.88 };
+    return { target: '__skip__', confidence: 0.0 };
+}
+
+// Parse a CSV file in the browser — returns { headers, rows, sample }
+function parseCSVHeaders(text) {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (!lines.length) return { headers: [], sample: [] };
+    const parseRow = (line) => {
+        const out = []; let cur = ''; let inQ = false;
+        for (const ch of line) {
+            if (ch === '"') { inQ = !inQ; }
+            else if (ch === ',' && !inQ) { out.push(cur.trim()); cur = ''; }
+            else cur += ch;
+        }
+        out.push(cur.trim());
+        return out;
+    };
+    const headers = parseRow(lines[0]);
+    const sample  = lines.slice(1, 4).map(parseRow);
+    return { headers, rows: lines.length - 1, sample };
+}
+
+// Save mapping preset modal
+const SavePresetModal = ({ columns, object, onClose }) => {
+    const [name,   setName]   = useState('');
+    const [saving, setSaving] = useState(false);
+    const [saved,  setSaved]  = useState(false);
+
+    const handleSave = async () => {
+        if (!name.trim()) return;
+        setSaving(true);
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({
+                    importPresets: [{ name: name.trim(), object, columns: columns.map(c => ({ csv: c.csv, target: c.target })) }],
+                }),
+            });
+            setSaved(true); setTimeout(onClose, 800);
+        } catch(e) { /* silent */ } finally { setSaving(false); }
+    };
+
+    const inp = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, background:T.surface, fontFamily:T.sans, outline:'none', boxSizing:'border-box' };
+    return (
+        <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={onClose}>
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:420, boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }} onClick={e=>e.stopPropagation()}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>Save mapping as preset</div>
+                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer' }}>×</button>
+                </div>
+                <div style={{ padding:'20px' }}>
+                    <div style={{ fontSize:12, color:T.inkMid, marginBottom:12 }}>Save this column mapping so you can reuse it for future <b>{object}</b> imports.</div>
+                    <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>Preset name</label>
+                    <input value={name} onChange={e=>setName(e.target.value)} placeholder={`e.g. Salesforce → ${object}`} style={inp} autoFocus onKeyDown={e=>e.key==='Enter'&&handleSave()}/>
+                </div>
+                <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'14px 20px', borderTop:`1px solid ${T.border}` }}>
+                    <button onClick={onClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    <button onClick={handleSave} disabled={!name.trim()||saving||saved} style={{ padding:'7px 16px', background: saved ? T.ok : T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>
+                        {saved ? '✓ Saved' : saving ? 'Saving…' : 'Save preset'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Run import confirmation modal
+const RunImportModal = ({ wizard, object, onClose, onComplete }) => {
+    const [running, setRunning] = useState(false);
+    const [result,  setResult]  = useState(null);
+    const [err,     setErr]     = useState('');
+    const mapped = wizard.columns.filter(c => c.target !== '__skip__');
+
+    const handleRun = async () => {
+        setRunning(true); setErr('');
+        try {
+            const res  = await dbFetch('/.netlify/functions/import', {
+                method: 'POST',
+                body: JSON.stringify({
+                    object,
+                    dedupe:  wizard.dedupe,
+                    columns: mapped.map(c => ({ csv: c.csv, target: c.target })),
+                    preview: wizard.preview,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Import failed');
+            setResult(data);
+        } catch(e) {
+            setErr(e.message || 'Import failed. Please try again.');
+        } finally { setRunning(false); }
+    };
+
+    return (
+        <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={!result ? onClose : undefined}>
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:480, boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }} onClick={e=>e.stopPropagation()}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>{result ? 'Import complete' : 'Run import'}</div>
+                    <button onClick={result ? onComplete : onClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer' }}>×</button>
+                </div>
+                <div style={{ padding:'20px' }}>
+                    {result ? (
+                        <div>
+                            <div style={{ fontSize:13, color:T.ok, fontWeight:700, marginBottom:12 }}>✓ Import completed successfully</div>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                                {[
+                                    { label:'Created', value: result.created ?? wizard.preview.willCreate },
+                                    { label:'Updated', value: result.updated ?? wizard.preview.willUpdate },
+                                    { label:'Skipped', value: result.skipped ?? wizard.preview.willSkip  },
+                                    { label:'Errors',  value: result.errors  ?? 0, warn: true             },
+                                ].map((s,i) => (
+                                    <div key={i} style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, padding:'10px 14px' }}>
+                                        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:4 }}>{s.label}</div>
+                                        <div style={{ fontSize:22, fontWeight:700, color: s.warn && s.value > 0 ? T.warn : T.ink }}>{s.value}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div>
+                            <div style={{ padding:'10px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, marginBottom:14, fontSize:12.5, color:T.inkMid }}>
+                                This will import <b>{wizard.file.rows.toLocaleString()} rows</b> into <b>{object}</b> using your column mapping and dedupe rules. This action cannot be undone.
+                            </div>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+                                {[
+                                    { label:'Will create', value: wizard.preview.willCreate },
+                                    { label:'Will update', value: wizard.preview.willUpdate },
+                                    { label:'Will skip',   value: wizard.preview.willSkip   },
+                                    { label:'Errors',      value: wizard.preview.errors.length, warn: true },
+                                ].map((s,i) => (
+                                    <div key={i} style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, padding:'10px 14px' }}>
+                                        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:4 }}>{s.label}</div>
+                                        <div style={{ fontSize:22, fontWeight:700, color: s.warn && s.value > 0 ? T.warn : T.ink }}>{s.value}</div>
+                                    </div>
+                                ))}
+                            </div>
+                            {err && <div style={{ fontSize:12, color:T.danger, fontWeight:600, marginBottom:10 }}>{err}</div>}
+                        </div>
+                    )}
+                </div>
+                <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'14px 20px', borderTop:`1px solid ${T.border}` }}>
+                    {result ? (
+                        <button onClick={onComplete} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>Done</button>
+                    ) : (
+                        <>
+                            <button onClick={onClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                            <button onClick={handleRun} disabled={running} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans, opacity:running?0.7:1 }}>
+                                {running ? 'Running…' : 'Run import now'}
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ImportDetail = ({ onBack }) => {
+    const fileInputRef   = React.useRef(null);
+    const [showPreset,   setShowPreset]   = useState(false);
+    const [showRun,      setShowRun]      = useState(false);
+    const [showHistory,  setShowHistory]  = useState(false);
+    const [object,       setObject]       = useState('Accounts');
+    const [uploading,    setUploading]    = useState(false);
+    const [uploadErr,    setUploadErr]    = useState('');
+
+    // Wizard state — starts from mock data, becomes live after file upload
+    const initWizard = () => ({
+        step:    'map',
+        file:    DATA_IMPORT.wizard.file,
+        columns: DATA_IMPORT.wizard.columns.map(c => ({ ...c })),
+        dedupe:  { ...DATA_IMPORT.wizard.dedupe },
+        preview: { ...DATA_IMPORT.wizard.preview, errors: [...DATA_IMPORT.wizard.preview.errors] },
+    });
+    const [wizard, setWizard] = useState(initWizard);
+
+    const STEPS = ['upload','map','dedupe','preview','done'];
+    const stepIdx    = STEPS.indexOf(wizard.step);
+    const mapped     = wizard.columns.filter(c => c.target !== '__skip__').length;
+    const fields     = IMPORT_FIELDS[object] || [];
+    const reqFields  = REQUIRED_FIELDS[object] || [];
+    const reqMapped  = reqFields.every(f => wizard.columns.some(c => c.target === f));
+    const canContinue = reqMapped && wizard.step !== 'done';
+
+    // ── Helpers ───────────────────────────────────────────────────
+    const setColumnTarget = (csv, target) => {
+        setWizard(w => ({ ...w, columns: w.columns.map(c => c.csv === csv ? { ...c, target } : c) }));
+    };
+    const toggleSkip = (csv) => {
+        setWizard(w => ({
+            ...w,
+            columns: w.columns.map(c => {
+                if (c.csv !== csv) return c;
+                if (c.target === '__skip__') {
+                    const { target } = autoMap(csv, object);
+                    return { ...c, target: target || '__skip__' };
+                }
+                return { ...c, target: '__skip__' };
+            }),
+        }));
+    };
+    const autoMapAll = () => {
+        setWizard(w => ({
+            ...w,
+            columns: w.columns.map(c => {
+                if (c.confidence >= 0.85 && c.target !== '__skip__') return c;
+                const { target, confidence } = autoMap(c.csv, object);
+                return { ...c, target, confidence };
+            }),
+        }));
+    };
+    const setDedupe = (patch) => setWizard(w => ({ ...w, dedupe: { ...w.dedupe, ...patch } }));
+
+    const advance = () => {
+        const next = STEPS[stepIdx + 1];
+        if (next) setWizard(w => ({ ...w, step: next }));
+    };
+
+    const continueLabel = () => {
+        if (wizard.step === 'map')     return 'Continue → Dedupe';
+        if (wizard.step === 'dedupe')  return 'Continue → Preview';
+        if (wizard.step === 'preview') return 'Run import ▶';
+        return 'Continue';
+    };
+
+    // ── File upload ───────────────────────────────────────────────
+    const handleFile = async (file) => {
+        if (!file) return;
+        if (file.size > 100 * 1024 * 1024) { setUploadErr('File exceeds 100 MB limit.'); return; }
+        setUploading(true); setUploadErr('');
+        try {
+            const text    = await file.text();
+            const { headers, rows, sample } = parseCSVHeaders(text);
+            if (!headers.length) { setUploadErr('Could not read CSV headers.'); return; }
+            if (rows > 250000)   { setUploadErr('File exceeds 250,000 row limit. Use the API for larger imports.'); return; }
+
+            const columns = headers.map((csv, i) => {
+                const { target, confidence } = autoMap(csv, object);
+                const sampleVal = sample.map(row => row[i]).find(v => v) || '';
+                const type = /\d{4}-\d{2}-\d{2}/.test(sampleVal) ? 'datetime'
+                    : /^\$[\d,]+/.test(sampleVal) ? 'currency'
+                    : /^[\d,]+$/.test(sampleVal) ? 'number'
+                    : /^https?:\/\//.test(sampleVal) ? 'url'
+                    : /@/.test(sampleVal) ? 'email' : 'text';
+                const required = (REQUIRED_FIELDS[object]||[]).includes(target);
+                return { csv, target, type, sample: sampleVal, confidence, required };
+            });
+
+            const sizeKB = file.size / 1024;
+            const sizeLbl = sizeKB > 1024 ? `${(sizeKB/1024).toFixed(1)} MB` : `${sizeKB.toFixed(1)} KB`;
+
+            setWizard(w => ({
+                ...w,
+                step:    'map',
+                file:    { name: file.name, size: sizeLbl, rows, encoding: 'UTF-8' },
+                columns,
+                preview: { willCreate: 0, willUpdate: 0, willSkip: 0, errors: [] },
+            }));
+        } catch(e) {
+            setUploadErr('Failed to read file. Ensure it is a valid UTF-8 CSV.');
+        } finally { setUploading(false); }
+    };
+
+    const onFileInput = (e) => { const f = e.target.files?.[0]; if (f) handleFile(f); };
+    const onDrop = (e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f); };
+
+    const inp = { padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer', appearance:'none', width:'100%', boxSizing:'border-box' };
+    const lbl = { display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 };
+    const thSt = { padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans, textAlign:'left' };
+    const tdSt = (extra={}) => ({ padding:'8px 12px', fontFamily:T.sans, ...extra });
+
+    // ── History view ──────────────────────────────────────────────
+    if (showHistory) {
+        const totalRows   = DATA_IMPORT.history.reduce((a,b)=>a+b.rows, 0);
+        const totalErrors = DATA_IMPORT.history.reduce((a,b)=>a+b.errors, 0);
+        return (
+            <div style={{ fontFamily:T.sans }}>
+                <DataCrumb page="Import history" onBack={onBack}/>
+                <DataTitle title="Import history" sub="All CSV imports for this workspace"
+                    actions={[
+                        <DataBtn key="back" label="← Back to wizard" onClick={()=>setShowHistory(false)}/>,
+                        <DataBtn key="new" label="+ New import" primary onClick={()=>setShowHistory(false)}/>,
+                    ]}/>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:18 }}>
+                    {[
+                        { label:'Total runs',   value: DATA_IMPORT.history.length },
+                        { label:'Total rows',   value: totalRows.toLocaleString() },
+                        { label:'Total errors', value: totalErrors, warn: totalErrors > 0 },
+                        { label:'Success rate', value: `${(100 - (totalErrors/totalRows)*100).toFixed(1)}%` },
+                    ].map((s,i) => <DataStatCard key={i} label={s.label} value={s.value} warn={s.warn}/>)}
+                </div>
+                <DataCard title="Recent imports">
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
+                        <thead><tr style={{ background:T.surface2 }}>{['Run ID','When','Object','Rows','Errors','Status','Actor'].map((h,i)=><th key={i} style={thSt}>{h}</th>)}</tr></thead>
+                        <tbody>
+                            {DATA_IMPORT.history.map((h,i) => {
+                                const tone  = h.status==='success'?'ok':h.status==='partial'?'warn':'neutral';
+                                const label = h.status==='success'?'Success':h.status==='partial'?'Partial':'Cancelled';
+                                return (
+                                    <tr key={h.id} style={{ borderBottom:i<DATA_IMPORT.history.length-1?`1px solid ${T.border}`:'none', background:h.errors>0?`rgba(184,115,51,0.06)`:'transparent' }}>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{h.id}</td>
+                                        <td style={{ padding:'10px 12px', color:T.inkMid }}>{h.ts}</td>
+                                        <td style={{ padding:'10px 12px' }}>{h.object}</td>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{h.rows.toLocaleString()}</td>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:h.errors>0?T.warn:T.inkMid }}>{h.errors||'—'}</td>
+                                        <td style={{ padding:'10px 12px' }}><DPill tone={tone}>{label}</DPill></td>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{h.by}</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </DataCard>
+            </div>
+        );
+    }
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showModal && <NewImportModal onClose={()=>setShowModal(false)}/>}
+            {/* Hidden file input */}
+            <input ref={fileInputRef} type="file" accept=".csv,text/csv" style={{ display:'none' }} onChange={onFileInput}/>
+
+            {/* Modals */}
+            {showPreset && <SavePresetModal columns={wizard.columns} object={object} onClose={()=>setShowPreset(false)}/>}
+            {showRun && (
+                <RunImportModal
+                    wizard={wizard} object={object}
+                    onClose={()=>setShowRun(false)}
+                    onComplete={() => { setShowRun(false); setWizard(w => ({ ...w, step:'done' })); }}/>
+            )}
+
             <DataCrumb page="Import" onBack={onBack}/>
             <DataTitle
                 title="Import data"
                 sub="CSV import for accounts, contacts, leads, opportunities"
+                badge={`Last: ${DATA_IMPORT.lastRun.rows} rows · ${DATA_IMPORT.lastRun.errors} errors · ${DATA_IMPORT.lastRun.ts}`}
                 updatedBy={DATA_IMPORT.lastRun.by}
                 updatedAt={DATA_IMPORT.lastRun.ts}
                 actions={[
-                    <DataBtn key="h" label="View history" onClick={()=>setShowModal(true)}/>,
-                    <DataBtn key="m" label="Save mapping as preset"/>,
-                    <DataBtn key="c" label="Continue → Dedupe" primary/>,
+                    <DataBtn key="h" label="View history" onClick={()=>setShowHistory(true)}/>,
+                    <DataBtn key="m" label="Save mapping as preset" onClick={()=>setShowPreset(true)}/>,
+                    <DataBtn key="c"
+                        label={wizard.step === 'preview' ? 'Run import ▶' : continueLabel()}
+                        primary
+                        disabled={!canContinue}
+                        onClick={() => wizard.step === 'preview' ? setShowRun(true) : advance()}
+                    />,
                 ]}/>
 
-            {/* Warn callout when last run had errors */}
-            {DATA_IMPORT.lastRun.errors > 0 && (
+            {/* Error callout */}
+            {uploadErr && (
+                <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, display:'flex', alignItems:'center', gap:12 }}>
+                    <span style={{ color:T.danger, fontSize:15 }}>⚠</span>
+                    <div style={{ flex:1, fontSize:12.5, color:T.inkMid }}><b style={{ color:T.danger }}>Upload error.</b> {uploadErr}</div>
+                    <DataBtn label="Dismiss" onClick={()=>setUploadErr('')}/>
+                </div>
+            )}
+
+            {/* Last-run errors callout */}
+            {!uploadErr && DATA_IMPORT.lastRun.errors > 0 && wizard.step !== 'done' && (
                 <div style={{ padding:'11px 16px', background:'rgba(184,115,51,0.09)', borderLeft:`3px solid ${T.warn}`, borderRadius:4, marginBottom:16, display:'flex', alignItems:'center', gap:12 }}>
                     <span style={{ color:T.warn, fontSize:15 }}>⚠</span>
                     <div style={{ flex:1, fontSize:12.5, color:T.inkMid }}>
@@ -11173,58 +11621,93 @@ const ImportDetail = ({ onBack }) => {
                 </div>
             )}
 
-            <DataStepRail step={w.step}/>
+            {/* Step rail */}
+            <DataStepRail step={wizard.step}/>
 
-            {/* File section */}
-            <DataCard title="File" desc="Step 1 — uploaded.">
-                <div style={{ display:'flex', alignItems:'center', gap:14, padding:'4px 0' }}>
-                    <div style={{ width:44, height:56, borderRadius:3, background:T.surface2, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', flexShrink:0 }}>CSV</div>
-                    <div style={{ flex:1 }}>
-                        <div style={{ fontSize:13, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{w.file.name}</div>
-                        <div style={{ fontSize:11.5, color:T.inkMid, marginTop:2 }}>{w.file.size} · {w.file.rows.toLocaleString()} rows · {w.file.encoding}</div>
+            {/* ── Step 1: File ── */}
+            <DataCard title="File" desc={wizard.file.name ? 'Step 1 — uploaded.' : 'Step 1 — upload a CSV file.'}>
+                {wizard.file.name ? (
+                    // File uploaded — show info row
+                    <div style={{ display:'flex', alignItems:'center', gap:14, padding:'4px 0' }}>
+                        <div style={{ width:44, height:56, borderRadius:3, background:T.surface2, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', flexShrink:0 }}>CSV</div>
+                        <div style={{ flex:1 }}>
+                            <div style={{ fontSize:13, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{wizard.file.name}</div>
+                            <div style={{ fontSize:11.5, color:T.inkMid, marginTop:2 }}>{wizard.file.size} · {wizard.file.rows.toLocaleString()} rows · {wizard.file.encoding}</div>
+                        </div>
+                        <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                            <label style={{ ...lbl, marginBottom:2 }}>Object</label>
+                            <select value={object} onChange={e => { setObject(e.target.value); autoMapAll(); }} style={{ ...inp, width:160 }}>
+                                {['Accounts','Contacts','Leads','Opportunities'].map(o => <option key={o}>{o}</option>)}
+                            </select>
+                        </div>
+                        <DataBtn label={uploading ? 'Reading…' : 'Replace file'} disabled={uploading} onClick={()=>fileInputRef.current?.click()}/>
                     </div>
-                    <select style={{ padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer', appearance:'none' }}>
-                        <option>Accounts</option>
-                    </select>
-                    <DataBtn label="Replace file"/>
-                </div>
+                ) : (
+                    // No file — drop zone
+                    <div
+                        onDrop={onDrop}
+                        onDragOver={e=>e.preventDefault()}
+                        onClick={()=>fileInputRef.current?.click()}
+                        style={{ border:`2px dashed ${T.border}`, borderRadius:6, padding:'40px 24px', textAlign:'center', background:T.surface2, cursor:'pointer' }}>
+                        <div style={{ fontSize:28, color:T.inkMuted, marginBottom:8 }}>↑</div>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>Drop CSV here, or <span style={{ color:T.info, textDecoration:'underline' }}>browse</span></div>
+                        <div style={{ fontSize:11.5, color:T.inkMid, marginTop:6 }}>UTF-8 · max 100 MB · max 250,000 rows</div>
+                    </div>
+                )}
             </DataCard>
 
-            {/* Map columns */}
-            <DataCard title={`Map columns (${mapped} of ${w.columns.length} mapped)`} desc="Step 2 — confirm Accelerep field for each CSV column. Low-confidence rows highlighted."
-                headAction={<span style={{ fontSize:11.5, color:T.info, cursor:'pointer', fontWeight:600 }}>Auto-map all →</span>}>
+            {/* ── Step 2: Map columns ── */}
+            <DataCard
+                title={`Map columns (${mapped} of ${wizard.columns.length} mapped)`}
+                desc="Step 2 — confirm Accelerep field for each CSV column. Low-confidence rows are highlighted."
+                headAction={
+                    <span onClick={autoMapAll} style={{ fontSize:11.5, color:T.info, cursor:'pointer', fontWeight:600 }}>Auto-map all →</span>
+                }>
+                {wizard.columns.length === 0 ? (
+                    <div style={{ color:T.inkMuted, fontSize:13, textAlign:'center', padding:'24px 0' }}>Upload a CSV file to see column mapping.</div>
+                ) : (
                 <div style={{ overflowX:'auto' }}>
                     <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
-                        <thead><tr style={{ background:T.surface2 }}>{['CSV column','Sample value','Type','Accelerep field','Confidence',''].map((h,i) => <th key={i} style={{ ...th }}>{h}</th>)}</tr></thead>
+                        <thead><tr style={{ background:T.surface2 }}>
+                            {['CSV column','Sample value','Type','Accelerep field','Confidence',''].map((h,i)=><th key={i} style={thSt}>{h}</th>)}
+                        </tr></thead>
                         <tbody>
-                            {w.columns.map((c,i) => {
-                                const low = c.confidence < 0.85;
+                            {wizard.columns.map((c,i) => {
+                                const low  = c.confidence < 0.85;
                                 const skip = c.target === '__skip__';
                                 return (
-                                    <tr key={c.csv} style={{ borderBottom: i<w.columns.length-1?`1px solid ${T.border}`:'none', background: low && !skip ? 'rgba(184,115,51,0.08)' : 'transparent', opacity: skip ? 0.55 : 1 }}>
-                                        <td style={{ ...td(), fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, fontWeight:600 }}>
+                                    <tr key={c.csv} style={{ borderBottom: i<wizard.columns.length-1?`1px solid ${T.border}`:'none', background: low&&!skip?'rgba(184,115,51,0.06)':'transparent', opacity: skip?0.55:1 }}>
+                                        <td style={{ ...tdSt(), fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, fontWeight:600 }}>
                                             {c.csv}
                                             {c.required && !skip && <span style={{ marginLeft:6, padding:'1px 5px', borderRadius:10, background:'rgba(184,115,51,0.12)', color:T.warn, fontSize:10, fontWeight:700 }}>Required</span>}
                                         </td>
-                                        <td style={{ ...td(), fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMid, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.sample}</td>
-                                        <td style={{ ...td() }}>
+                                        <td style={{ ...tdSt(), fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMid, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.sample}</td>
+                                        <td style={tdSt()}>
                                             <span style={{ padding:'2px 7px', borderRadius:10, background:'rgba(138,131,120,0.12)', color:T.inkMid, fontSize:11, fontWeight:600 }}>{c.type}</span>
                                         </td>
-                                        <td style={{ ...td() }}>
-                                            <select defaultValue={skip ? 'Skip column' : c.target} style={{ padding:'5px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer', appearance:'none', minWidth:180 }}>
-                                                <option>{skip ? 'Skip column' : c.target}</option>
+                                        <td style={tdSt()}>
+                                            <select
+                                                value={skip ? '__skip__' : c.target}
+                                                onChange={e => setColumnTarget(c.csv, e.target.value)}
+                                                style={{ ...inp, width:200, fontSize:12 }}>
+                                                <option value="__skip__">— Skip column —</option>
+                                                <optgroup label={`${object} fields`}>
+                                                    {fields.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                                                </optgroup>
                                             </select>
                                         </td>
-                                        <td style={{ ...td() }}>
+                                        <td style={tdSt()}>
                                             <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                                                <div style={{ width:60, height:5, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:3, overflow:'hidden' }}>
-                                                    <div style={{ width:`${Math.round(c.confidence*100)}%`, height:'100%', background: c.confidence > 0.9 ? T.ok : c.confidence > 0.7 ? T.warn : T.danger }}/>
+                                                <div style={{ width:60, height:5, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:3, overflow:'hidden', flexShrink:0 }}>
+                                                    <div style={{ width:`${Math.round(c.confidence*100)}%`, height:'100%', background: c.confidence>0.9?T.ok:c.confidence>0.7?T.warn:T.danger }}/>
                                                 </div>
-                                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMid }}>{Math.round(c.confidence*100)}%</span>
+                                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMid, flexShrink:0 }}>{Math.round(c.confidence*100)}%</span>
                                             </div>
                                         </td>
-                                        <td style={{ ...td(), textAlign:'right' }}>
-                                            <span style={{ fontSize:11, color:T.inkMid, cursor:'pointer', fontWeight:600 }}>{skip ? 'Map →' : 'Skip'}</span>
+                                        <td style={{ ...tdSt(), textAlign:'right' }}>
+                                            <button onClick={() => toggleSkip(c.csv)} style={{ fontSize:11, color:T.inkMid, cursor:'pointer', fontWeight:600, background:'none', border:'none', fontFamily:T.sans }}>
+                                                {skip ? 'Map →' : 'Skip'}
+                                            </button>
                                         </td>
                                     </tr>
                                 );
@@ -11232,52 +11715,96 @@ const ImportDetail = ({ onBack }) => {
                         </tbody>
                     </table>
                 </div>
-            </DataCard>
-
-            {/* Dedupe rules */}
-            <DataCard title="Dedupe rules" desc="Step 3 — what to do when an incoming row matches an existing record.">
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16, marginBottom:14 }}>
-                    {[
-                        { label:'Match on',            value:'Domain (case-insensitive)' },
-                        { label:'On match',            value:'Update existing'            },
-                        { label:'Blank values in CSV', value:'Skip — keep existing'       },
-                    ].map((f,i) => (
-                        <div key={i}>
-                            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</label>
-                            <select defaultValue={f.value} style={{ width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' }}>
-                                <option>{f.value}</option>
-                            </select>
-                        </div>
-                    ))}
-                </div>
-                <div style={{ padding:'10px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid }}>
-                    <span style={{ fontWeight:700, color:T.info }}>Note.</span> Falls back to Salesforce ID when the chosen key is empty.
-                </div>
-            </DataCard>
-
-            {/* Preview */}
-            <DataCard title="Preview" desc="Step 4 — inspect what the import will do before committing.">
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12, marginBottom:16 }}>
-                    <DataStatCard label="Will create" value={w.preview.willCreate}/>
-                    <DataStatCard label="Will update" value={w.preview.willUpdate}/>
-                    <DataStatCard label="Will skip"   value={w.preview.willSkip} />
-                    <DataStatCard label="Errors"      value={w.preview.errors.length} warn/>
-                </div>
-                {w.preview.errors.length > 0 && (
-                    <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
-                        <div style={{ display:'grid', gridTemplateColumns:'60px 1fr 1fr', gap:8, padding:'7px 12px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                            {['Row','Field','Message'].map((h,i) => <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase' }}>{h}</div>)}
-                        </div>
-                        {w.preview.errors.map((e,i) => (
-                            <div key={i} style={{ display:'grid', gridTemplateColumns:'60px 1fr 1fr', gap:8, padding:'8px 12px', borderBottom:i<w.preview.errors.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
-                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMuted }}>{e.row}</span>
-                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{e.field}</span>
-                                <span style={{ fontSize:12.5, color:T.warn }}>{e.msg}</span>
-                            </div>
-                        ))}
+                )}
+                {!reqMapped && wizard.columns.length > 0 && (
+                    <div style={{ marginTop:10, padding:'8px 12px', background:'rgba(184,115,51,0.08)', borderLeft:`3px solid ${T.warn}`, borderRadius:4, fontSize:12, color:T.inkMid }}>
+                        <b style={{ color:T.warn }}>Required fields missing.</b> Please map: {reqFields.filter(f => !wizard.columns.some(c => c.target===f)).join(', ')} before continuing.
                     </div>
                 )}
             </DataCard>
+
+            {/* ── Step 3: Dedupe ── */}
+            <DataCard title="Dedupe rules" desc="Step 3 — what to do when an incoming row matches an existing record.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16, marginBottom:14 }}>
+                    <div>
+                        <label style={lbl}>Match on</label>
+                        <select value={wizard.dedupe.match} onChange={e=>setDedupe({match:e.target.value})} style={inp}>
+                            <option value="domain">Domain (case-insensitive)</option>
+                            <option value="email">Email address</option>
+                            <option value="externalId">External ID (Salesforce / HubSpot)</option>
+                            <option value="name">Name (fuzzy)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style={lbl}>On match</label>
+                        <select value={wizard.dedupe.onMatch} onChange={e=>setDedupe({onMatch:e.target.value})} style={inp}>
+                            <option value="update">Update existing record</option>
+                            <option value="create">Create duplicate</option>
+                            <option value="skip">Skip — keep existing</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style={lbl}>Blank values in CSV</label>
+                        <select value={wizard.dedupe.skipBlanks ? 'skip' : 'overwrite'} onChange={e=>setDedupe({skipBlanks:e.target.value==='skip'})} style={inp}>
+                            <option value="skip">Skip — keep existing</option>
+                            <option value="overwrite">Overwrite with blank</option>
+                        </select>
+                    </div>
+                </div>
+                <div style={{ padding:'10px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid }}>
+                    <span style={{ fontWeight:700, color:T.info }}>Note.</span> Falls back to External ID when the chosen key is blank on a row.
+                </div>
+            </DataCard>
+
+            {/* ── Step 4: Preview ── */}
+            <DataCard title="Preview" desc="Step 4 — inspect what the import will do before committing.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12, marginBottom:16 }}>
+                    <DataStatCard label="Will create" value={wizard.preview.willCreate}/>
+                    <DataStatCard label="Will update" value={wizard.preview.willUpdate}/>
+                    <DataStatCard label="Will skip"   value={wizard.preview.willSkip}/>
+                    <DataStatCard label="Errors"      value={wizard.preview.errors.length} warn={wizard.preview.errors.length > 0}/>
+                </div>
+                {wizard.step === 'preview' ? (
+                    wizard.preview.errors.length > 0 ? (
+                        <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                            <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans }}>
+                                <thead><tr style={{ background:T.surface2 }}>{['Row','Field','Message'].map((h,i)=><th key={i} style={thSt}>{h}</th>)}</tr></thead>
+                                <tbody>
+                                    {wizard.preview.errors.map((e,i) => (
+                                        <tr key={i} style={{ borderBottom:i<wizard.preview.errors.length-1?`1px solid ${T.border}`:'none' }}>
+                                            <td style={{ padding:'8px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMuted }}>{e.row}</td>
+                                            <td style={{ padding:'8px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{e.field}</td>
+                                            <td style={{ padding:'8px 12px', fontSize:12.5, color:T.warn }}>{e.msg}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div style={{ padding:'12px 16px', background:'rgba(77,107,61,0.08)', borderLeft:`3px solid ${T.ok}`, borderRadius:4, fontSize:12.5, color:T.inkMid }}>
+                            <b style={{ color:T.ok }}>✓ No errors detected.</b> Ready to import.
+                        </div>
+                    )
+                ) : (
+                    <div style={{ padding:'12px 16px', background:T.surface2, borderRadius:4, fontSize:12.5, color:T.inkMuted, textAlign:'center' }}>
+                        Preview computed from last run. Click <b>Continue → Preview</b> to generate a fresh dry-run.
+                    </div>
+                )}
+            </DataCard>
+
+            {/* ── Step 5: Done ── */}
+            {wizard.step === 'done' && (
+                <DataCard title="Import complete" desc="Your data has been imported successfully.">
+                    <div style={{ padding:'20px', textAlign:'center' }}>
+                        <div style={{ fontSize:32, marginBottom:8 }}>✓</div>
+                        <div style={{ fontSize:15, fontWeight:700, color:T.ok, marginBottom:6 }}>Import complete</div>
+                        <div style={{ fontSize:13, color:T.inkMid, marginBottom:16 }}>Records have been imported into <b>{object}</b>.</div>
+                        <button onClick={()=>setWizard(initWizard())} style={{ padding:'8px 20px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>
+                            Start new import
+                        </button>
+                    </div>
+                </DataCard>
+            )}
         </div>
     );
 };
