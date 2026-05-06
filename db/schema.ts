@@ -429,3 +429,66 @@ export const savedReports = pgTable('saved_reports', {
     createdAt:   timestamp('created_at').notNull().defaultNow(),
     updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ── EXPORT SCHEDULES ──────────────────────────────────────────────────────────
+// One row per recurring export definition.
+// scope: 'accounts' | 'contacts' | 'opportunities' | 'tasks' | 'activities' | 'leads'
+// format: 'CSV' | 'JSON' | 'XLSX'
+// cadence: human-readable e.g. 'Weekly · Mon 06:00 UTC'
+// destination: 'download' | 'email:<addr>' | 'webhook:<url>'
+// status: 'ok' | 'failing'
+export const exportSchedules = pgTable('export_schedules', {
+    id:          text('id').primaryKey(),
+    orgId:       text('org_id').notNull(),
+    name:        varchar('name', { length: 255 }).notNull(),
+    scope:       varchar('scope', { length: 100 }).notNull(),
+    cadence:     varchar('cadence', { length: 100 }).notNull(),
+    destination: text('destination').notNull().default('download'),
+    format:      varchar('format', { length: 20 }).notNull().default('CSV'),
+    enabled:     boolean('enabled').notNull().default(true),
+    status:      varchar('status', { length: 20 }).notNull().default('ok'),
+    lastError:   text('last_error'),
+    lastRunAt:   timestamp('last_run_at'),
+    lastSize:    varchar('last_size', { length: 50 }),
+    createdBy:   varchar('created_by', { length: 255 }),
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
+    updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── EXPORT RUNS ───────────────────────────────────────────────────────────────
+// One row per completed or failed export run (ad-hoc or scheduled).
+// scheduleId is null for ad-hoc runs.
+// status: 'ok' | 'failed'
+export const exportRuns = pgTable('export_runs', {
+    id:          text('id').primaryKey(),
+    orgId:       text('org_id').notNull(),
+    scheduleId:  text('schedule_id'),                               // null for ad-hoc
+    name:        varchar('name', { length: 255 }).notNull(),
+    scope:       varchar('scope', { length: 100 }).notNull(),
+    format:      varchar('format', { length: 20 }).notNull().default('CSV'),
+    triggeredBy: varchar('triggered_by', { length: 255 }),          // userId or 'system'
+    rowCount:    integer('row_count').default(0),
+    sizeBytes:   integer('size_bytes').default(0),
+    durationMs:  integer('duration_ms').default(0),
+    status:      varchar('status', { length: 20 }).notNull().default('ok'),
+    errorMsg:    text('error_msg'),
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
+});
+
+// ── DSR QUEUE ─────────────────────────────────────────────────────────────────
+// GDPR Data Subject Requests. SLA is 30 days from submission.
+// type: 'access' | 'erasure'
+// status: 'in-progress' | 'completed'
+export const dsrQueue = pgTable('dsr_queue', {
+    id:          text('id').primaryKey(),
+    orgId:       text('org_id').notNull(),
+    subject:     varchar('subject', { length: 255 }).notNull(),     // email or identifier
+    type:        varchar('type', { length: 20 }).notNull().default('access'),
+    status:      varchar('status', { length: 30 }).notNull().default('in-progress'),
+    notes:       text('notes'),
+    slaDeadline: timestamp('sla_deadline').notNull(),
+    completedAt: timestamp('completed_at'),
+    createdBy:   varchar('created_by', { length: 255 }),
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
+    updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
