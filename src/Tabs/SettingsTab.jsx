@@ -11830,7 +11830,7 @@ const ImportDetail = ({ onBack }) => {
 
 // ── ② Export Detail ───────────────────────────────────────────
 const ExportDetail = ({ onBack }) => {
-    const { dbFetch, waitForToken, currentUser } = useApp ? useApp() : {};
+    // dbFetch is imported at the top of this file from ../utils/storage
     const [schedules,  setSchedules]  = React.useState([]);
     const [runs,       setRuns]       = React.useState([]);
     const [dsrItems,   setDsrItems]   = React.useState([]);
@@ -11849,7 +11849,6 @@ const ExportDetail = ({ onBack }) => {
         let cancelled = false;
         const load = async () => {
             try {
-                if (waitForToken) await waitForToken();
                 const [schRes, runRes, dsrRes] = await Promise.all([
                     dbFetch('/.netlify/functions/export-schedules'),
                     dbFetch('/.netlify/functions/export-runs'),
