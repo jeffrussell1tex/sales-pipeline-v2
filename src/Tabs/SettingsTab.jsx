@@ -10718,44 +10718,31 @@ const DATA_IMPORT = {
 // DATA_EXPORT removed — ExportDetail fetches live data from /.netlify/functions/
 // DATA_BACKUP removed — BackupDetail loads live data from /.netlify/functions/backup
 
-const DATA_FEATURES = {
-    flags:[
-        { id:'deal-scoring',     name:'Deal scoring',           desc:'AI-driven probability and next-step suggestions on opportunities',      on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'writing-assist',   name:'Writing assist',         desc:'Inline AI writing help in notes, emails, and proposals',                on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'meeting-summaries',name:'Meeting summaries',      desc:'Auto-summarize Zoom/Teams calls and post to record',                    on:true,  scope:'workspace · 75% rollout', beta:true,  new:false },
-        { id:'sentiment',        name:'Email sentiment',        desc:'Score reply sentiment on incoming threads',                             on:false, scope:'off',                     beta:true,  new:true  },
-        { id:'forecast-roll',    name:'Forecast rollup',        desc:'Hierarchical forecast with manager adjustments',                        on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'territory-rules',  name:'Territory rules engine', desc:'Auto-assign accounts to territories on create/update',                  on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'lead-routing',     name:'Lead routing',           desc:'Round-robin + skill-based lead distribution',                           on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'duplicate-merge',  name:'Smart duplicate merge',  desc:'Suggest merges when accounts/contacts collide',                         on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'health-scores',    name:'Account health scores',  desc:'Health 0–100 per account based on usage and sentiment',                 on:false, scope:'off',                     beta:true,  new:false },
-        { id:'mobile-offline',   name:'Mobile offline mode',    desc:'Cache and sync recent records on iOS/Android',                          on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'mobile-voice',     name:'Mobile voice notes',     desc:'Dictate notes on the go with auto-transcription',                       on:true,  scope:'workspace · 100%',        beta:false, new:true  },
-        { id:'quote-redlines',   name:'Quote redlines',         desc:'Track legal redline rounds on quote PDFs',                              on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'esign-bulk',       name:'Bulk e-sign',            desc:'Send the same agreement to many counterparties at once',                on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'public-api-v2',    name:'Public API v2',          desc:'New REST + webhooks; v1 deprecation in 90 days',                        on:true,  scope:'workspace · 100%',        beta:true,  new:false },
-        { id:'graphql',          name:'GraphQL endpoint',       desc:'Read-only GraphQL on top of v2',                                        on:false, scope:'off',                     beta:true,  new:false },
-        { id:'audit-streaming',  name:'Audit log streaming',    desc:'Push audit events to Splunk / Datadog / S3',                            on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'workflows-loops',  name:'Workflow loops',         desc:'For-each automation steps over collections',                            on:false, scope:'off',                     beta:true,  new:false },
-        { id:'commit-categories',name:'Commit categories',      desc:'Pipeline / Best Case / Commit / Closed buckets',                        on:true,  scope:'workspace · 100%',        beta:false, new:false },
-    ],
-};
+// Feature flag master list — source of truth for the UI.
+// 'live' = wired to real functionality. 'coming-soon' = stored but UI-gated.
+// Default 'on' value is the initial state written to DB on first toggle.
+const FLAG_DEFS = [
+    { id:'deal-scoring',      name:'Deal scoring',           desc:'Health score (0–100) on every opportunity based on activity, stage age, and close date.',   beta:false, new:false, live:true  },
+    { id:'account-health-scores', name:'Account health scores', desc:'Aggregate health score per account rolled up from open opportunities.',                  beta:false, new:false, live:true  },
+    { id:'territory-rules',   name:'Territory rules engine', desc:'Auto-assign accounts and opportunities to territories on create/update.',                    beta:false, new:false, live:true  },
+    { id:'commit-categories', name:'Commit categories',      desc:'Pipeline / Best Case / Commit / Omit forecast buckets on every opportunity.',               beta:false, new:false, live:true  },
+    { id:'writing-assist',    name:'Writing assist',         desc:'AI-assisted text drafting in notes, emails, and descriptions.',                             beta:true,  new:false, live:false },
+    { id:'duplicate-merge',   name:'Smart duplicate merge',  desc:'Fuzzy match on account/contact create with merge UI to resolve conflicts.',                 beta:true,  new:false, live:false },
+    { id:'meeting-summaries', name:'Meeting summaries',      desc:'Auto-summarize Zoom/Teams calls and post to the related record.',                           beta:true,  new:false, live:false },
+    { id:'sentiment',         name:'Email sentiment',        desc:'Score reply sentiment on incoming email threads.',                                           beta:true,  new:true,  live:false },
+    { id:'forecast-roll',     name:'Forecast rollup',        desc:'Hierarchical forecast with manager overrides and commit/best-case roll-up.',                beta:false, new:false, live:false },
+    { id:'lead-routing',      name:'Lead routing',           desc:'Round-robin and skill-based lead distribution rules.',                                       beta:false, new:false, live:false },
+    { id:'mobile-offline',    name:'Mobile offline mode',    desc:'Cache and sync recent records on iOS/Android when offline.',                                beta:false, new:false, live:false },
+    { id:'mobile-voice',      name:'Mobile voice notes',     desc:'Dictate notes on the go with auto-transcription.',                                          beta:false, new:true,  live:false },
+    { id:'quote-redlines',    name:'Quote redlines',         desc:'Track legal redline rounds on quote PDFs.',                                                  beta:false, new:false, live:false },
+    { id:'esign-bulk',        name:'Bulk e-sign',            desc:'Send the same agreement to many counterparties at once.',                                   beta:false, new:false, live:false },
+    { id:'public-api-v2',     name:'Public API v2',          desc:'New REST + webhooks; v1 deprecation in 90 days.',                                           beta:true,  new:false, live:false },
+    { id:'graphql',           name:'GraphQL endpoint',       desc:'Read-only GraphQL on top of the v2 API.',                                                   beta:true,  new:false, live:false },
+    { id:'audit-streaming',   name:'Audit log streaming',    desc:'Push audit events to Splunk / Datadog / S3.',                                               beta:false, new:false, live:false },
+    { id:'workflows-loops',   name:'Workflow loops',         desc:'For-each automation steps over record collections.',                                         beta:true,  new:false, live:false },
+];
 
-const DATA_AI = {
-    enabled:true, model:'claude-sonnet-4-5', fallback:'claude-haiku-4-5',
-    region:'US · us-east-2', tokenBudget:25000000, tokensUsed:4280000,
-    trainingOptIn:false, zeroRetention:true, piiRedaction:true, byok:false, byokProvider:'—',
-    dpaSignedAt:'2025-11-04',
-    usage:{ tokens30d:4280000, requests30d:29680, avgLatency:'1.4s', piiBlocked:142,
-        byFeature:[
-            { feature:'Writing assist',    requests:18420, tokens:2104000, pctBudget:8.4, avgLatency:'1.1s' },
-            { feature:'Deal scoring',      requests:9420,  tokens:1408000, pctBudget:5.6, avgLatency:'0.9s' },
-            { feature:'Meeting summaries', requests:1840,  tokens:612000,  pctBudget:2.4, avgLatency:'4.2s' },
-            { feature:'Email sentiment',   requests:0,     tokens:0,       pctBudget:0,   avgLatency:'—'    },
-            { feature:'Account health',    requests:0,     tokens:0,       pctBudget:0,   avgLatency:'—'    },
-        ],
-    },
-};
+// DATA_AI removed — FeaturesDetail reads aiSettings from live settings
 
 // ── Shared primitives ─────────────────────────────────────────
 
@@ -12564,74 +12551,233 @@ const BackupDetail = ({ onBack }) => {
 
 // ── ④ Features & AI Detail ────────────────────────────────────
 const FeaturesDetail = ({ onBack }) => {
-    const [showReset, setShowReset] = useState(false);
-    const [aiRegion, setAiRegion]   = useState(DATA_AI.region);
-    const [dirty, setDirty]         = useState(false);
-    const f  = DATA_FEATURES;
-    const ai = DATA_AI;
-    const onCount = f.flags.filter(x=>x.on).length;
-    const betaOn  = f.flags.filter(x=>x.beta && x.on).length;
+    const [flags,      setFlags]      = React.useState({});      // { [flagId]: boolean }
+    const [aiSettings, setAiSettings] = React.useState({});
+    const [loading,    setLoading]    = React.useState(true);
+    const [saving,     setSaving]     = React.useState(false);
+    const [dirty,      setDirty]      = React.useState(false);
+    const [showReset,  setShowReset]  = React.useState(false);
+    const [error,      setError]      = React.useState(null);
+    const [filterCat,  setFilterCat]  = React.useState('All');
 
-    const selSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer',
-        backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
-        backgroundRepeat:'no-repeat', backgroundPosition:'right 10px center', paddingRight:28 };
+    // ── Load current flag + AI state from settings ────────────
+    React.useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/settings');
+                const data = await res.json();
+                if (cancelled) return;
+                if (!res.ok) throw new Error(data.error || 'Failed to load settings');
+                setFlags(data.settings?.featureFlags || {});
+                setAiSettings(data.settings?.aiSettings || {
+                    model: 'claude-sonnet-4-6',
+                    fallback: 'claude-haiku-4-5-20251001',
+                    region: 'US · us-east-2',
+                    tokenBudget: 25000000,
+                    trainingOptIn: false,
+                    zeroRetention: true,
+                    piiRedaction: true,
+                    byok: false,
+                    byokProvider: '',
+                    dpaSignedAt: '',
+                    auditLogging: 'All AI requests · 13mo retention',
+                    blockList: '',
+                    budgetExceed: 'Throttle to 1 req/s',
+                    availableTo: 'All roles',
+                });
+            } catch (e) {
+                if (!cancelled) setError(e.message);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, []);
+
+    // ── Toggle a flag — saves immediately ─────────────────────
+    const handleToggle = async (flagId, isLive) => {
+        if (!isLive) return; // coming-soon flags are not togglable
+        const next = { ...flags, [flagId]: !(flags[flagId] !== false) };
+        setFlags(next);
+        try {
+            const res = await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ featureFlags: next }),
+            });
+            if (!res.ok) {
+                const d = await res.json();
+                throw new Error(d.error);
+            }
+        } catch (e) {
+            // Revert on error
+            setFlags(flags);
+            setError('Failed to save flag: ' + e.message);
+        }
+    };
+
+    // ── Save AI settings ──────────────────────────────────────
+    const handleSaveAi = async () => {
+        setSaving(true);
+        try {
+            const res = await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ aiSettings }),
+            });
+            if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            setDirty(false);
+        } catch (e) {
+            setError('Failed to save AI settings: ' + e.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // ── Export config ─────────────────────────────────────────
+    const handleExportConfig = () => {
+        const payload = JSON.stringify({ featureFlags: flags, aiSettings }, null, 2);
+        const blob = new Blob([payload], { type: 'application/json' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url; a.download = 'accelerep-feature-config.json';
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+    };
+
+    const isOn = (flagId) => flags[flagId] !== false;
+    const onCount  = FLAG_DEFS.filter(f => isOn(f.id)).length;
+    const betaOn   = FLAG_DEFS.filter(f => f.beta && isOn(f.id)).length;
+    const aiRegion = aiSettings.region || 'US · us-east-2';
+
+    const selSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' };
     const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' };
-    const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
+    const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{label}</label>{children}</div>);
+
+    const CAT_FILTERS = ['All', 'Live', 'Coming soon', 'Beta'];
+    const visibleFlags = FLAG_DEFS.filter(f => {
+        if (filterCat === 'Live')        return f.live;
+        if (filterCat === 'Coming soon') return !f.live;
+        if (filterCat === 'Beta')        return f.beta;
+        return true;
+    });
+
+    if (loading) return (
+        <div style={{ fontFamily:T.sans }}>
+            <DataCrumb page="Features & AI" onBack={onBack}/>
+            <div style={{ padding:'60px 0', textAlign:'center', color:T.inkMuted, fontSize:13 }}>Loading…</div>
+        </div>
+    );
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showReset && <ResetAiModal onClose={()=>setShowReset(false)}/>}
+            {showReset && <ResetAiModal onClose={() => setShowReset(false)}/>}
+
             <DataCrumb page="Features & AI" onBack={onBack}/>
             <DataTitle
                 title="Features & AI"
                 sub="App-wide feature flags and AI controls (model, residency, training, redaction)"
-                badge={`${onCount} of ${f.flags.length} on · AI enabled · ${ai.region}`}
-                updatedBy="Morgan Reyes" updatedAt="1 month ago"
+                badge={`${onCount} of ${FLAG_DEFS.length} on · AI · ${aiRegion}`}
                 dirty={dirty}
                 actions={[
-                    <DataBtn key="exp" label="Export config"/>,
-                    <DataBtn key="sav" label="Save changes" primary onClick={()=>setDirty(false)}/>,
-                ]}/>
+                    <DataBtn key="exp" label="Export config" onClick={handleExportConfig}/>,
+                    <DataBtn key="sav" label={saving ? 'Saving…' : 'Save AI changes'} primary disabled={saving || !dirty} onClick={handleSaveAi}/>,
+                ]}
+            />
 
-            {/* Beta callout */}
+            {error && (
+                <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>{error}</div>
+            )}
+
             {betaOn > 0 && (
                 <div style={{ padding:'11px 16px', background:'rgba(58,90,122,0.08)', borderLeft:`3px solid ${T.info}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.inkMid }}>
                     <b style={{ color:T.info }}>Beta features active.</b> Workspace has {betaOn} beta flag{betaOn>1?'s':''} enabled. Behavior may change between releases.
                 </div>
             )}
 
-            {/* Feature flags */}
-            <DataCard title={`Feature flags (${onCount} / ${f.flags.length} on)`} desc="Workspace-wide toggles. Some flags affect billing or pricing.">
-                <div style={{ display:'flex', gap:6, marginBottom:10 }}>
-                    {['All','Sales','Quoting','Reports','AI','Beta'].map((p,i) => (
-                        <span key={p} style={{ padding:'4px 10px', borderRadius:3, background:i===0?T.ink:T.surface2, color:i===0?'#fbf8f3':T.inkMid, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>{p}</span>
+            {/* ── Feature flags ── */}
+            <DataCard title={`Feature flags (${onCount} / ${FLAG_DEFS.length} on)`} desc="Toggle workspace-wide features. Live flags take effect immediately. Coming soon flags are stored but not yet active.">
+                <div style={{ display:'flex', gap:6, marginBottom:12 }}>
+                    {CAT_FILTERS.map(cat => (
+                        <span key={cat} onClick={() => setFilterCat(cat)}
+                            style={{ padding:'4px 10px', borderRadius:3, background:filterCat===cat?T.ink:T.surface2, color:filterCat===cat?'#fbf8f3':T.inkMid, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                            {cat}
+                        </span>
                     ))}
                 </div>
-                {f.flags.map((flag,i) => <DataFlagRow key={flag.id} f={flag} last={i===f.flags.length-1}/>)}
+                {visibleFlags.map((flag, i) => {
+                    const on = isOn(flag.id);
+                    return (
+                        <div key={flag.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 0', borderBottom: i < visibleFlags.length-1 ? `1px solid ${T.border}` : 'none', opacity: flag.live ? 1 : 0.72 }}>
+                            {/* Toggle — disabled for coming-soon */}
+                            <div onClick={() => handleToggle(flag.id, flag.live)} title={flag.live ? (on ? 'Click to disable' : 'Click to enable') : 'Coming soon'}
+                                style={{ width:30, height:18, borderRadius:9, background: on ? (flag.live ? T.ok : T.border) : T.border, position:'relative', flexShrink:0, cursor: flag.live ? 'pointer' : 'not-allowed', transition:'background 120ms' }}>
+                                <span style={{ position:'absolute', top:2, left: on ? 14 : 2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+                            </div>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, display:'flex', alignItems:'center', gap:6 }}>
+                                    {flag.name}
+                                    {flag.live && <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(77,107,61,0.12)', color:T.ok, fontSize:10.5, fontWeight:700 }}>Live</span>}
+                                    {!flag.live && <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(138,131,120,0.12)', color:T.inkMuted, fontSize:10.5, fontWeight:700 }}>Coming soon</span>}
+                                    {flag.beta && <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(58,90,122,0.10)', color:T.info, fontSize:10.5, fontWeight:700 }}>Beta</span>}
+                                    {flag.new  && <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(184,115,51,0.10)', color:T.warn, fontSize:10.5, fontWeight:700 }}>New</span>}
+                                </div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>{flag.desc}</div>
+                            </div>
+                            <div style={{ fontSize:11, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', textAlign:'right', minWidth:80 }}>
+                                {flag.live ? (on ? 'Enabled' : 'Disabled') : '—'}
+                            </div>
+                        </div>
+                    );
+                })}
             </DataCard>
 
-            {/* AI model & access */}
+            {/* ── AI model & access ── */}
             <DataCard title="AI · Model & access" desc="Which model powers AI features and which roles can use them.">
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
-                    <FL label="Model"><select style={selSt}><option>{ai.model}</option></select></FL>
-                    <FL label="Fallback"><select style={selSt}><option>{ai.fallback}</option></select></FL>
-                    <FL label="Available to"><select style={selSt}><option>All roles except Finance</option></select></FL>
-                    <FL label="Daily token budget"><input defaultValue={ai.tokenBudget.toLocaleString()} style={inpSt}/></FL>
-                    <FL label="Used today"><input readOnly value={`${ai.tokensUsed.toLocaleString()} (${Math.round(ai.tokensUsed/ai.tokenBudget*100)}%)`} style={{ ...inpSt, cursor:'default' }}/></FL>
-                    <FL label="On budget exceed"><select style={selSt}><option>Throttle to 1 req/s</option></select></FL>
+                    <FL label="Model">
+                        <select style={selSt} value={aiSettings.model || 'claude-sonnet-4-6'} onChange={e => { setAiSettings(p => ({...p, model:e.target.value})); setDirty(true); }}>
+                            <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+                            <option value="claude-opus-4-6">claude-opus-4-6</option>
+                            <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+                        </select>
+                    </FL>
+                    <FL label="Fallback">
+                        <select style={selSt} value={aiSettings.fallback || 'claude-haiku-4-5-20251001'} onChange={e => { setAiSettings(p => ({...p, fallback:e.target.value})); setDirty(true); }}>
+                            <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+                            <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+                        </select>
+                    </FL>
+                    <FL label="Available to">
+                        <select style={selSt} value={aiSettings.availableTo || 'All roles'} onChange={e => { setAiSettings(p => ({...p, availableTo:e.target.value})); setDirty(true); }}>
+                            <option>All roles</option>
+                            <option>Admin + Manager only</option>
+                            <option>Admin only</option>
+                        </select>
+                    </FL>
+                    <FL label="Daily token budget">
+                        <input style={inpSt} value={(aiSettings.tokenBudget || 25000000).toLocaleString()} onChange={e => { setAiSettings(p => ({...p, tokenBudget: parseInt(e.target.value.replace(/,/g,''))||25000000})); setDirty(true); }}/>
+                    </FL>
+                    <FL label="On budget exceed">
+                        <select style={selSt} value={aiSettings.budgetExceed || 'Throttle to 1 req/s'} onChange={e => { setAiSettings(p => ({...p, budgetExceed:e.target.value})); setDirty(true); }}>
+                            <option>Throttle to 1 req/s</option>
+                            <option>Block all AI requests</option>
+                            <option>Allow with warning</option>
+                        </select>
+                    </FL>
                 </div>
             </DataCard>
 
-            {/* AI data residency & training */}
+            {/* ── AI data residency & training ── */}
             <DataCard title="AI · Data residency & training" desc="Where requests are processed and whether your data trains the model.">
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
                     {[
-                        { id:'us', region:'US · us-east-2', latency:'+0ms'           },
-                        { id:'eu', region:'EU · eu-west-1', latency:'+82ms (from US)' },
+                        { id:'us', region:'US · us-east-2', latency:'+0ms'            },
+                        { id:'eu', region:'EU · eu-west-1', latency:'+82ms (from US)'  },
                     ].map(r => {
                         const sel = aiRegion === r.region;
                         return (
-                            <div key={r.id} onClick={()=>{ setAiRegion(r.region); setDirty(true); }}
+                            <div key={r.id} onClick={() => { setAiSettings(p => ({...p, region:r.region})); setDirty(true); }}
                                 style={{ border:`1px solid ${sel?T.goldInk:T.border}`, background:sel?'rgba(200,185,154,0.10)':T.surface, borderRadius:6, padding:'12px 14px', cursor:'pointer', transition:'border-color 100ms' }}>
                                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                                     <span style={{ width:14, height:14, borderRadius:'50%', border:`1.5px solid ${sel?T.goldInk:T.inkMuted}`, position:'relative', flexShrink:0 }}>
@@ -12646,44 +12792,56 @@ const FeaturesDetail = ({ onBack }) => {
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                     {[
-                        { id:'training',  on:!ai.trainingOptIn, label:'Training opt-out',    desc:'Your prompts and outputs do not train the model.' },
-                        { id:'logging',   on:ai.zeroRetention,  label:'Zero data retention', desc:'AI provider stores no request data after response.' },
-                        { id:'redaction', on:ai.piiRedaction,   label:'PII redaction',        desc:'Personal email, phone, SSN replaced with placeholders pre-prompt.' },
-                        { id:'byok',      on:ai.byok,           label:'BYOK (bring your own key)', desc: ai.byok ? `Active · ${ai.byokProvider}` : 'Use your own model API key for AI requests.' },
-                    ].map(t => (
-                        <div key={t.id} style={{ border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', background: t.on ? 'rgba(77,107,61,0.07)' : T.surface, display:'flex', alignItems:'flex-start', gap:10 }}>
-                            <span style={{ width:18, height:18, borderRadius:3, border:`1.5px solid ${t.on?T.ok:T.border}`, background:t.on?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#fbf8f3', fontSize:11, fontWeight:700, flexShrink:0, marginTop:1 }}>
-                                {t.on ? '✓' : ''}
-                            </span>
-                            <div>
-                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{t.label}</div>
-                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>{t.desc}</div>
+                        { key:'trainingOptIn',  invert:true,  label:'Training opt-out',        desc:'Your prompts and outputs do not train the model.' },
+                        { key:'zeroRetention',  invert:false, label:'Zero data retention',     desc:'AI provider stores no request data after response.' },
+                        { key:'piiRedaction',   invert:false, label:'PII redaction',            desc:'Personal email, phone, SSN replaced with placeholders pre-prompt.' },
+                        { key:'byok',           invert:false, label:'BYOK (bring your own key)',desc: aiSettings.byok ? `Active · ${aiSettings.byokProvider||''}` : 'Use your own model API key for AI requests.' },
+                    ].map(t => {
+                        const rawVal = aiSettings[t.key] ?? (t.key === 'zeroRetention' || t.key === 'piiRedaction' ? true : false);
+                        const on = t.invert ? !rawVal : rawVal;
+                        return (
+                            <div key={t.key} onClick={() => { setAiSettings(p => ({...p, [t.key]: !p[t.key]})); setDirty(true); }}
+                                style={{ border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', background: on ? 'rgba(77,107,61,0.07)' : T.surface, display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer' }}>
+                                <span style={{ width:18, height:18, borderRadius:3, border:`1.5px solid ${on?T.ok:T.border}`, background:on?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#fbf8f3', fontSize:11, fontWeight:700, flexShrink:0, marginTop:1 }}>
+                                    {on ? '✓' : ''}
+                                </span>
+                                <div>
+                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{t.label}</div>
+                                    <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>{t.desc}</div>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </DataCard>
 
-            {/* AI governance */}
+            {/* ── AI governance ── */}
             <DataCard title="AI · Governance" desc="Compliance metadata and danger-zone actions.">
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16, marginBottom:16 }}>
-                    <FL label="DPA signed"><input readOnly value={ai.dpaSignedAt} style={{ ...inpSt, cursor:'default' }}/></FL>
-                    <FL label="Audit logging"><select style={selSt}><option>All AI requests · 13mo retention</option></select></FL>
-                    <FL label="Block list (regex, comma-separated)"><input placeholder="e.g. \\bSSN\\b, \\bpassword\\b" style={{ ...inpSt, fontFamily:'ui-monospace,Menlo,monospace' }}/></FL>
+                    <FL label="DPA signed">
+                        <input style={{ ...inpSt, cursor:'text' }} value={aiSettings.dpaSignedAt || ''} placeholder="YYYY-MM-DD" onChange={e => { setAiSettings(p => ({...p, dpaSignedAt:e.target.value})); setDirty(true); }}/>
+                    </FL>
+                    <FL label="Audit logging">
+                        <select style={selSt} value={aiSettings.auditLogging || 'All AI requests · 13mo retention'} onChange={e => { setAiSettings(p => ({...p, auditLogging:e.target.value})); setDirty(true); }}>
+                            <option>All AI requests · 13mo retention</option>
+                            <option>Errors only</option>
+                            <option>Disabled</option>
+                        </select>
+                    </FL>
+                    <FL label="Block list (regex, comma-separated)">
+                        <input style={inpSt} value={aiSettings.blockList || ''} placeholder="e.g. \bSSN\b, \bpassword\b" onChange={e => { setAiSettings(p => ({...p, blockList:e.target.value})); setDirty(true); }}/>
+                    </FL>
                 </div>
-                {/* Danger zone */}
                 <div style={{ padding:'14px 16px', background:'rgba(156,58,46,0.06)', borderLeft:`3px solid ${T.danger}`, borderRadius:4 }}>
                     <div style={{ fontSize:13, fontWeight:700, color:T.danger, marginBottom:4 }}>Reset training data</div>
                     <div style={{ fontSize:12.5, color:T.inkMid, marginBottom:10 }}>Removes any data your workspace has contributed to model training. Takes up to 30 days at the provider.</div>
-                    <DataBtn label="Request reset" danger onClick={()=>setShowReset(true)}/>
+                    <DataBtn label="Request reset" danger onClick={() => setShowReset(true)}/>
                 </div>
             </DataCard>
         </div>
     );
 };
 
-// ADMIN WORKSPACE VIEW
-// ─────────────────────────────────────────────────────────────
 const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter }) => {
     const [scope, setScope] = useState('workspace');
     const [tab,   setTab  ] = useState('All');

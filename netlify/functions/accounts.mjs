@@ -1,7 +1,36 @@
 import { db } from '../../db/index.js';
-import { accounts } from '../../db/schema.js';
+import { accounts, settings as settingsTable } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+
+// ── Territory auto-assign ─────────────────────────────────────────────────────
+// Reads assignmentRules from settings and returns territory/rep assignment if a rule matches.
+// Rule shape: { field: 'industry'|'verticalMarket'|'name', contains: string, territory: string, rep?: string }
+// First matching rule wins. Only runs if 'territory-rules' flag is enabled (default: true).
+async function resolveTerritory(orgId, account) {
+    if (account.assignedTerritory) return null; // already assigned, do not override
+    try {
+        const rows = await db.select().from(settingsTable).where(eq(settingsTable.orgId, orgId));
+        if (!rows.length) return null;
+        const rules = rows[0].extra?.assignmentRules;
+        if (!Array.isArray(rules) || rules.length === 0) return null;
+        const featureFlags = rows[0].extra?.featureFlags || {};
+        if (featureFlags['territory-rules'] === false) return null;
+        for (const rule of rules) {
+            if (!rule.territory || !rule.contains) continue;
+            const haystack = (account[rule.field] || '').toLowerCase();
+            if (haystack.includes(rule.contains.toLowerCase())) {
+                return {
+                    assignedTerritory: rule.territory,
+                    assignedRep:       rule.rep || account.assignedRep || null,
+                };
+            }
+        }
+    } catch (e) {
+        console.error('resolveTerritory error:', e.message);
+    }
+    return null;
+}
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -60,7 +89,8 @@ export const handler = async (event) => {
             }
             // Single insert
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
-            const [inserted] = await db.insert(accounts).values({ ...sanitize(data), orgId }).returning();
+            const territoryAssign = await resolveTerritory(orgId, sanitize(data));
+            const [inserted] = await db.insert(accounts).values({ ...sanitize(data), ...(territoryAssign || {}), orgId }).returning();
             return { statusCode: 201, headers, body: JSON.stringify({ account: inserted }) };
         }
         if (event.httpMethod === 'PUT') {
@@ -68,8 +98,11 @@ export const handler = async (event) => {
             if (!data.id) return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             const clean = sanitize(data);
             const { id, ...updateData } = clean;
-            const [upserted] = await db.insert(accounts).values({ ...clean, orgId })
-                .onConflictDoUpdate({ target: accounts.id, set: { ...updateData, updatedAt: new Date() } })
+            const territoryAssignPut = await resolveTerritory(orgId, clean);
+            const mergedPut = { ...clean, ...(territoryAssignPut || {}) };
+            const { id: _putId, ...updateDataMerged } = mergedPut;
+            const [upserted] = await db.insert(accounts).values({ ...mergedPut, orgId })
+                .onConflictDoUpdate({ target: accounts.id, set: { ...updateDataMerged, updatedAt: new Date() } })
                 .returning();
             return { statusCode: 200, headers, body: JSON.stringify({ account: upserted }) };
         }

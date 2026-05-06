@@ -75,6 +75,9 @@ export const handler = async (event) => {
                 // BYOK: send back the plaintext key so the UI can display it,
                 // but NEVER log or expose it in error responses
                 anthropicApiKey:  decryptedKey || null,
+                // Feature flags and AI settings
+                featureFlags:     row.extra?.featureFlags     || {},
+                aiSettings:       row.extra?.aiSettings       || {},
             }})};
         }
 
@@ -148,6 +151,9 @@ export const handler = async (event) => {
                 customerTypeTiers:    'customerTypeTiers'    in data ? (data.customerTypeTiers    || null) : existingExtra.customerTypeTiers    || null,
                 industries:           'industries'           in data ? (data.industries           || null) : existingExtra.industries           || null,
                 painPoints:           'painPoints'           in data ? (data.painPoints           || [])   : existingExtra.painPoints           || [],
+                // Feature flags and AI settings
+                featureFlags:         'featureFlags'         in data ? (data.featureFlags         || {})   : existingExtra.featureFlags         || {},
+                aiSettings:           'aiSettings'           in data ? (data.aiSettings           || {})   : existingExtra.aiSettings           || {},
                 // Store encrypted ciphertext — never the plaintext key
                 anthropicApiKey:  encryptedApiKey,
             };
