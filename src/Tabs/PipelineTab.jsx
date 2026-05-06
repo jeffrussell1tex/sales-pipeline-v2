@@ -243,7 +243,7 @@ export default function PipelineTab() {
         stages, exportToCSV, exportingCSV,
         showConfirm, softDelete, addAudit,
         getStageColor, getQuarter, getQuarterLabel,
-        calculateDealHealth, isFeatureEnabled, canViewField,
+        calculateDealHealth, canViewField,
         visibleOpportunities, getKpiColor,
         setUndoToast, activePipeline, allPipelines,
         handleDelete, handleSave, completeLostSave,
@@ -255,6 +255,9 @@ export default function PipelineTab() {
         setLostReasonModal, setCsvImportType, setShowCsvImportModal,
         setActivePipelineId, isMobile,
     } = useApp();
+    // Safe wrapper — defaults to true if AppContext hasn't been updated yet
+    const { isFeatureEnabled: _ife } = useApp();
+    const isFeatureEnabled = (id) => typeof _ife === 'function' ? _ife(id) : true;
 
     const isAdmin    = userRole === 'Admin';
     const isManager  = userRole === 'Manager';
