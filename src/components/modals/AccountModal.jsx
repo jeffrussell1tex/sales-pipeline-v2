@@ -66,7 +66,7 @@ export default function AccountModal({
         address: '', address2: '',
         city: '', state: '', zip: '', country: '',
         website: '', phone: '',
-        doNotContact: false, customerTypes: [], accountSegment: '', accountSegment: '',
+        doNotContact: false, customerTypes: [], accountSegment: '',
         // Account Details fields
         description: '', totalEmployees: '', annualRevenue: '',
         fiscalYearEnd: '', foundedYear: '', linkedInUrl: '',
@@ -144,7 +144,6 @@ export default function AccountModal({
             accountTier:       derivedTier,
             doNotContact:      formData.doNotContact === true,
             customerTypes:     formData.customerTypes || [],
-            accountSegment:    formData.accountSegment || '',
             accountSegment:    formData.accountSegment || '',
         };
 
