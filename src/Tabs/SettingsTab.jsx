@@ -12675,7 +12675,7 @@ const FeaturesDetail = ({ onBack }) => {
             <DataCrumb page="Features & AI" onBack={onBack}/>
             <DataTitle
                 title="Features & AI"
-                sub="App-wide feature flags and AI controls (model, residency, training, redaction)"
+                sub="App-wide feature flags and AI controls (model, Residency, Training, redaction)"
                 badge={`${onCount} of ${FLAG_DEFS.length} on · AI · ${aiRegion}`}
                 dirty={dirty}
                 actions={[
@@ -12767,8 +12767,8 @@ const FeaturesDetail = ({ onBack }) => {
                 </div>
             </DataCard>
 
-            {/* ── AI data residency & training ── */}
-            <DataCard title="AI · Data residency & training" desc="Where requests are processed and whether your data trains the model.">
+            {/* ── AI Data Residency & Training ── */}
+            <DataCard title="AI · Data Residency & Training" desc="Where requests are processed and whether your data trains the model.">
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
                     {[
                         { id:'us', region:'US · us-east-2', latency:'+0ms'            },
@@ -12812,6 +12812,29 @@ const FeaturesDetail = ({ onBack }) => {
                         );
                     })}
                 </div>
+                {/* BYOK key input — shown when BYOK is enabled */}
+                {aiSettings.byok && (
+                    <div style={{ marginTop:12, display:'flex', flexDirection:'column', gap:6 }}>
+                        <label style={{ fontSize:11.5, fontWeight:600, color:T.inkMid, fontFamily:T.sans }}>
+                            Your Anthropic API key
+                        </label>
+                        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                            <input
+                                type="password"
+                                value={aiSettings.byokProvider || ''}
+                                onChange={e => { setAiSettings(p => ({...p, byokProvider: e.target.value})); setDirty(true); }}
+                                placeholder="sk-ant-..."
+                                style={{ flex:1, padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' }}
+                            />
+                            {aiSettings.byokProvider && (
+                                <span style={{ fontSize:11, color:T.ok, fontWeight:600, fontFamily:T.sans, whiteSpace:'nowrap' }}>✓ Key set</span>
+                            )}
+                        </div>
+                        <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
+                            Your key is encrypted with AES-256-GCM before storage. It is never logged or transmitted in plaintext.
+                        </div>
+                    </div>
+                )}
             </DataCard>
 
             {/* ── AI governance ── */}
