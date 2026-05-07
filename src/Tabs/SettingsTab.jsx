@@ -10337,15 +10337,20 @@ const SsoDetail = ({ onBack }) => {
                 updatedAt={SEC_SSO.configured ? 'Last edited by Morgan' : 'Last edited never by —'}
                 actions={[
                     <SecBtn key="dl" label="Download metadata"/>,
-                    <SecBtn key="tl" label="Test login"/>,
-                    <SecBtn key="act" label={SEC_SSO.configured ? 'Save changes' : 'Activate SSO'} primary/>,
+                    <SecBtn key="tl" label="Test login" disabled/>,
+                    <div key="act" title="SSO is available on the Enterprise plan" style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 14px', background:'rgba(138,131,120,0.12)', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, color:T.inkMuted, fontFamily:T.sans, cursor:'default', userSelect:'none' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                        Enterprise plan
+                    </div>,
                 ]}/>
 
             {/* Not configured callout */}
             {!SEC_SSO.configured && (
                 <SecCallout tone="warn" text={
                     <><b>SSO is not configured.</b> Workspaces with 10+ users should set up SSO so deactivating an IdP user revokes Accelerep access.</>
-                } actions={[<SecBtn key="wiz" label="Configure with wizard" onClick={()=>setShowWizard(true)}/>]}/>
+                } actions={[
+                    <span key="ent" style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans, fontStyle:'italic' }}>Available on Enterprise plan · <a href="mailto:sales@accelerep.com" style={{ color:T.info, textDecoration:'none' }}>contact us</a></span>
+                ]}/>
             )}
 
             {/* Provider preset */}
@@ -10455,9 +10460,38 @@ const SsoDetail = ({ onBack }) => {
 
 // ── ② MFA Detail ──────────────────────────────────────────────
 const MfaDetail = ({ onBack }) => {
-    const [showEnforce, setShowEnforce] = useState(false);
-    const { enrolled, total, perRole, notEnrolled } = SEC_MFA;
+    const [showEnforce, setShowEnforce] = React.useState(false);
+    const [mfaData,     setMfaData]     = React.useState(null);
+    const [loading,     setLoading]     = React.useState(true);
+    const [error,       setError]       = React.useState(null);
+
+    // ── Load real MFA enrollment from Clerk via backend ───────────
+    React.useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/clerk-mfa-status');
+                const data = await res.json();
+                if (cancelled) return;
+                if (!res.ok) throw new Error(data.error || 'Failed to load MFA status');
+                setMfaData(data);
+            } catch (e) {
+                if (!cancelled) setError(e.message);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, []);
+
+    // Fall back to empty state while loading
+    const enrolled        = mfaData?.enrolled        ?? 0;
+    const total           = mfaData?.total           ?? 0;
+    const notEnrolled     = mfaData?.notEnrolled     ?? [];
+    const byRole          = mfaData?.byRole          ?? [];
     const notEnrolledCount = total - enrolled;
+    const enrollPct       = total > 0 ? Math.round(enrolled / total * 100) : 0;
 
     return (
         <div style={{ fontFamily:T.sans }}>
@@ -10465,308 +10499,123 @@ const MfaDetail = ({ onBack }) => {
             <SecCrumb page="Multi-factor auth" onBack={onBack}/>
             <SecTitle
                 title="Multi-factor auth"
-                sub="Enforce a second factor on sign-in"
-                badge={`Optional · ${enrolled}/${total} enrolled`}
-                updatedAt="Last edited 3 months ago by Jeff Hammond"
+                sub="Enforce a second factor on sign-in · managed via Clerk"
+                badge={loading ? 'Loading…' : `${enrolled}/${total} enrolled · ${enrollPct}%`}
+                updatedAt="MFA factors configured in Clerk Dashboard"
                 actions={[
-                    <SecBtn key="rem" label="Send reminders"/>,
-                    <SecBtn key="enf" label="Enforce for all" primary onClick={()=>setShowEnforce(true)}/>,
+                    <SecBtn key="rem" label="Send reminders" disabled={loading || notEnrolledCount === 0}/>,
+                    <div key="enf" title="MFA policy is set in Clerk Dashboard" style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 14px', background:'rgba(138,131,120,0.12)', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, color:T.inkMuted, fontFamily:T.sans, cursor:'default', userSelect:'none' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                        Managed in Clerk
+                    </div>,
                 ]}/>
 
-            {/* Optional warn callout */}
-            {SEC_MFA.policy === 'optional' && (
-                <SecCallout tone="warn"
-                    text={<>MFA is optional. <b>{notEnrolledCount} users haven't enrolled.</b> Move to Required to lock down sign-in.</>}
-                    actions={[
-                        <SecBtn key="r" label="Send reminders"/>,
-                        <SecBtn key="e" label="Enforce now" primary onClick={()=>setShowEnforce(true)}/>,
-                    ]}/>
+            {/* Clerk dashboard link callout */}
+            <SecCallout tone="info"
+                text={<>MFA policy (required / optional) and allowed factors are configured in your <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" style={{ color:T.info, fontWeight:600 }}>Clerk Dashboard</a> under User &amp; Authentication → Multi-factor. Enrollment data below is live from Clerk.</>}
+            />
+
+            {error && (
+                <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger, fontFamily:T.sans }}>
+                    {error}
+                </div>
             )}
 
-            {/* Policy */}
-            <SecCard title="Policy">
-                <SecFieldRow fields={[
-                    { label:'Enforcement',                  value:SEC_MFA.enforcement   },
-                    { label:'Grace period (days after invite)',value:SEC_MFA.gracePeriod },
-                    { label:'Remember device',              value:SEC_MFA.rememberDevice },
-                    { label:'On factor reset',              value:SEC_MFA.onFactorReset  },
-                ]}/>
-                <div style={{ fontSize:11.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>Allowed factors</div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
-                    <OnOffTile label="Authenticator (TOTP)" sub="Google, 1Password, Authy" on={SEC_MFA.factors.totp}/>
-                    <OnOffTile label="Security key / Passkey" sub="WebAuthn, biometrics" on={SEC_MFA.factors.passkey}/>
-                    <OnOffTile label="SMS code" sub="Discouraged — NIST advises against" on={SEC_MFA.factors.sms}/>
-                    <OnOffTile label="Email code" sub="Lowest assurance" on={SEC_MFA.factors.email}/>
-                </div>
-            </SecCard>
+            {/* Not-enrolled callout */}
+            {!loading && notEnrolledCount > 0 && (
+                <SecCallout tone="warn"
+                    text={<>MFA is not fully enrolled. <b>{notEnrolledCount} user{notEnrolledCount !== 1 ? 's' : ''} haven't set up a second factor.</b> Require MFA in Clerk Dashboard to lock down sign-in.</>}
+                    actions={[
+                        <a key="dash" href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer">
+                            <SecBtn label="Open Clerk Dashboard →"/>
+                        </a>,
+                    ]}
+                />
+            )}
 
-            {/* Enrollment by role */}
-            <SecCard title={`Enrollment by role (${enrolled}/${total} · ${Math.round(enrolled/total*100)}%)`}>
-                <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 100px 1fr 140px 80px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                        {['ROLE','REQUIRED','ENROLLMENT','STATUS',''].map((h,i) => (
-                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
-                        ))}
-                    </div>
-                    {perRole.map((r,i) => {
-                        const pct = r.total > 0 ? Math.round(r.enrolled/r.total*100) : 0;
-                        const full = pct === 100;
-                        const pending = r.total - r.enrolled;
-                        return (
-                            <div key={r.role} style={{ display:'grid', gridTemplateColumns:'1fr 100px 1fr 140px 80px', gap:8, padding:'10px 14px', borderBottom:i<perRole.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
-                                <span style={{ fontSize:13, fontWeight:600, color:T.ink }}>{r.role}</span>
-                                <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
-                                    background:r.required?'rgba(156,58,46,0.10)':'rgba(184,115,51,0.10)',
-                                    color:r.required?T.danger:T.warn }}>
-                                    {r.required?'Required':'Optional'}
-                                </span>
-                                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                    <div style={{ width:100, height:6, background:T.border, borderRadius:3, overflow:'hidden', flexShrink:0 }}>
-                                        <div style={{ width:`${pct}%`, height:'100%', background: full ? T.ok : T.warn, borderRadius:3 }}/>
+            {/* ── Enrollment by role ── */}
+            <SecCard title={loading ? 'Enrollment by role' : `Enrollment by role (${enrolled}/${total} · ${enrollPct}%)`}>
+                {loading ? (
+                    <div style={{ padding:'24px 0', textAlign:'center', fontSize:12.5, color:T.inkMuted, fontFamily:T.sans }}>Loading enrollment data…</div>
+                ) : byRole.length === 0 ? (
+                    <div style={{ padding:'24px 0', textAlign:'center', fontSize:12.5, color:T.inkMuted, fontFamily:T.sans }}>No users found in this organization.</div>
+                ) : (
+                    <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 80px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                            {['ROLE','ENROLLMENT',''].map((h,i) => (
+                                <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                            ))}
+                        </div>
+                        {byRole.map((r, i) => {
+                            const pct  = r.total > 0 ? Math.round(r.enrolled / r.total * 100) : 0;
+                            const full = pct === 100;
+                            const pending = r.total - r.enrolled;
+                            return (
+                                <div key={r.role} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 80px', gap:8, padding:'10px 14px', borderBottom:i<byRole.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                                    <span style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{r.role}</span>
+                                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                        <div style={{ width:100, height:6, background:T.border, borderRadius:3, overflow:'hidden', flexShrink:0 }}>
+                                            <div style={{ width:`${pct}%`, height:'100%', background: full ? T.ok : T.warn, borderRadius:3 }}/>
+                                        </div>
+                                        <span style={{ fontSize:11.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{r.enrolled}/{r.total}</span>
+                                        <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                            background: full ? 'rgba(77,107,61,0.12)' : 'rgba(184,115,51,0.12)',
+                                            color: full ? T.ok : T.warn }}>
+                                            {full ? 'Complete' : `${pending} pending`}
+                                        </span>
                                     </div>
-                                    <span style={{ fontSize:11.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{r.enrolled}/{r.total}</span>
+                                    <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:T.info, textDecoration:'none', fontFamily:T.sans }}>Manage →</a>
                                 </div>
-                                <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
-                                    background: full ? 'rgba(77,107,61,0.12)' : 'rgba(184,115,51,0.12)',
-                                    color: full ? T.ok : T.warn }}>
-                                    {full ? 'Complete' : `${pending} pending`}
-                                </span>
-                                <button style={{ fontSize:12, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Remind →</button>
-                            </div>
-                        );
-                    })}
-                </div>
-            </SecCard>
-
-            {/* Not yet enrolled */}
-            <SecCard title="Not yet enrolled" desc="Send reminder, force enrollment on next sign-in, or grant exception.">
-                <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 100px 80px 80px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                        {['USER','ROLE','INVITED','',''].map((h,i) => (
-                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
-                        ))}
-                    </div>
-                    {notEnrolled.map((u,i) => (
-                        <div key={u.email} style={{ display:'grid', gridTemplateColumns:'1fr 120px 100px 80px 80px', gap:8, padding:'9px 14px', borderBottom:i<notEnrolled.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
-                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.ink }}>{u.email}</span>
-                            <span style={{ fontSize:12.5, color:T.inkMid }}>{u.role}</span>
-                            <span style={{ fontSize:12.5, color:u.never?T.danger:T.inkMid }}>{u.invited}</span>
-                            <button style={{ fontSize:12, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Remind</button>
-                            <button style={{ fontSize:12, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Exception</button>
-                        </div>
-                    ))}
-                </div>
-            </SecCard>
-        </div>
-    );
-};
-
-// ── ③ Session & Password Detail ───────────────────────────────
-const SessionDetail = ({ onBack }) => {
-    const { ipAllowlist, passwordComplexity } = SEC_SESSION;
-    const [dirty, setDirty] = useState(false);
-
-    return (
-        <div style={{ fontFamily:T.sans }}>
-            <SecCrumb page="Session & password" onBack={onBack}/>
-            <SecTitle
-                title="Session & password policy"
-                sub="Idle timeout, password rules, IP allowlist"
-                badge="Strong policy · 8h idle · 90-day rotation"
-                updatedAt="Last edited last week by Jeff Hammond"
-                dirty={dirty}
-                actions={[
-                    <SecBtn key="rev" label="Revert" onClick={()=>setDirty(false)}/>,
-                    <SecBtn key="sav" label="Save policy" primary onClick={()=>setDirty(false)}/>,
-                ]}/>
-
-            {/* Session section */}
-            <SecCard title="Session" >
-                <SecFieldRow fields={[
-                    { label:'Idle timeout',                value:SEC_SESSION.idleTimeout        },
-                    { label:'Absolute session lifetime',   value:SEC_SESSION.sessionLifetime    },
-                    { label:'Concurrent sessions per user',value:SEC_SESSION.concurrentSessions },
-                    { label:'Re-auth for sensitive actions',value:SEC_SESSION.reauth            },
-                ]}/>
-            </SecCard>
-
-            {/* Password section */}
-            <SecCard title="Password">
-                <SecFieldRow fields={[
-                    { label:'Minimum length',            value:SEC_SESSION.minLength },
-                    { label:'Rotation',                  value:SEC_SESSION.rotation  },
-                    { label:'History',                   value:SEC_SESSION.history   },
-                    { label:'Lockout after failed attempts',value:SEC_SESSION.lockout },
-                ]}/>
-                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>Complexity</div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
-                    <OnOffTile label="Mixed case" on={passwordComplexity.mixedCase}/>
-                    <OnOffTile label="Number"     on={passwordComplexity.number}/>
-                    <OnOffTile label="Symbol"     on={passwordComplexity.symbol}/>
-                    <OnOffTile label="Block common" on={passwordComplexity.blockCommon}/>
-                </div>
-            </SecCard>
-
-            {/* IP allowlist */}
-            <SecCard title="IP allowlist" desc="Restrict sign-in to these CIDR ranges. Empty = no restriction."
-                headAction={<SecBtn label="+ Add range" onClick={()=>setDirty(true)}/>}>
-                <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'160px 1fr 100px 130px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                        {['CIDR','LABEL','STATUS',''].map((h,i) => (
-                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
-                        ))}
-                    </div>
-                    {ipAllowlist.map((row,i) => (
-                        <div key={row.cidr} style={{ display:'grid', gridTemplateColumns:'160px 1fr 100px 130px', gap:8, padding:'10px 14px', borderBottom:i<ipAllowlist.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
-                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.ink }}>{row.cidr}</span>
-                            <span style={{ fontSize:13, color:T.inkMid }}>{row.label}</span>
-                            <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
-                                background:row.status==='Enforced'?'rgba(77,107,61,0.12)':'rgba(184,115,51,0.10)',
-                                color:row.status==='Enforced'?T.ok:T.warn }}>
-                                {row.status}
-                            </span>
-                            <div style={{ display:'flex', gap:8 }}>
-                                <button style={{ fontSize:12, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Edit</button>
-                                <button style={{ fontSize:12, color:T.danger, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Remove</button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </SecCard>
-        </div>
-    );
-};
-
-// ── ④ Field-level security Detail ────────────────────────────
-// FLS matrix with click-to-cycle cells — defined at module level
-const FlsMatrixCell = ({ level, onCycle }) => {
-    const cycle = ['Edit','Read','Masked','Hidden'];
-    const s = flsCellStyle(level);
-    return (
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <button onClick={onCycle}
-                style={{ padding:'3px 11px', borderRadius:4, fontSize:11.5, fontWeight:700, background:s.bg, color:s.fg, border:'none', cursor:'pointer', fontFamily:T.sans, minWidth:56 }}>
-                {s.label}
-            </button>
-        </div>
-    );
-};
-
-const FlsDetail = ({ onBack }) => {
-    const [objFilter, setObjFilter] = useState('Account');
-    const [search, setSearch] = useState('');
-    const [matrix, setMatrix] = useState(FLS_MATRIX_INIT.map(row=>[...row]));
-    const [dirty, setDirty] = useState(false);
-    const levels = ['Edit','Read','Masked','Hidden'];
-
-    const cycleCell = (fi, ri) => {
-        setMatrix(prev => {
-            const m = prev.map(r=>[...r]);
-            const idx = levels.indexOf(m[fi][ri]);
-            m[fi][ri] = levels[(idx+1) % levels.length];
-            return m;
-        });
-        setDirty(true);
-    };
-
-    const visFields = FLS_FIELDS.filter(f => {
-        const obj = f.name.split('.')[0];
-        return obj === objFilter && (!search || f.name.toLowerCase().includes(search.toLowerCase()));
-    });
-
-    const fieldIndices = visFields.map(f => FLS_FIELDS.indexOf(f));
-
-    return (
-        <div style={{ fontFamily:T.sans }}>
-            <SecCrumb page="Field-level security" onBack={onBack}/>
-            <SecTitle
-                title="Field-level security"
-                sub="5 objects · 8 sensitive fields tracked"
-                badge="2 fields with masking · 1 hidden from non-finance"
-                updatedAt="Last edited last week by Morgan Reyes"
-                dirty={dirty}
-                actions={[
-                    <SecBtn key="exp" label="Export matrix"/>,
-                    <SecBtn key="sav" label="Save changes" primary onClick={()=>setDirty(false)}/>,
-                ]}/>
-
-            {/* Object filter */}
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:'14px 16px', marginBottom:16, display:'flex', alignItems:'center', gap:10 }}>
-                <span style={{ fontSize:13, fontWeight:700, color:T.ink, marginRight:4 }}>Object filter</span>
-                <div style={{ display:'flex', gap:6 }}>
-                    {FLS_OBJECTS.map(obj => (
-                        <button key={obj} onClick={()=>setObjFilter(obj)}
-                            style={{ padding:'5px 14px', fontSize:12.5, fontWeight:600, borderRadius:4, border:`1px solid ${objFilter===obj?T.ink:T.border}`, background:objFilter===obj?T.ink:'transparent', color:objFilter===obj?'#fbf8f3':T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
-                            {obj}
-                        </button>
-                    ))}
-                </div>
-                <div style={{ flex:1 }}/>
-                <input value={search} onChange={e=>setSearch(e.target.value)}
-                    placeholder="Search field…"
-                    style={{ padding:'6px 12px', fontSize:12.5, border:`1px solid ${T.border}`, borderRadius:16, outline:'none', width:180, fontFamily:T.sans, background:T.surface, color:T.ink }}/>
-            </div>
-
-            {/* FLS matrix */}
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
-                {/* Matrix header */}
-                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <div>
-                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{objFilter} · Field × Role matrix</div>
-                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any cell to change. Edit &gt; Read &gt; Masked &gt; Hidden.</div>
-                    </div>
-                    {/* Legend */}
-                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        {['Edit','Read','Masked','Hidden'].map(l => {
-                            const s = flsCellStyle(l);
-                            return <span key={l} style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11 }}>
-                                <span style={{ width:10, height:10, borderRadius:2, background:s.bg, border:`1px solid ${s.fg}22`, display:'inline-block' }}/>
-                                <span style={{ color:T.inkMuted }}>{l}</span>
-                            </span>;
+                            );
                         })}
                     </div>
+                )}
+            </SecCard>
+
+            {/* ── Not yet enrolled ── */}
+            <SecCard title={`Not yet enrolled (${notEnrolledCount})`} desc="Users who have not set up any MFA factor. Manage enrollment in Clerk Dashboard.">
+                {loading ? (
+                    <div style={{ padding:'24px 0', textAlign:'center', fontSize:12.5, color:T.inkMuted, fontFamily:T.sans }}>Loading…</div>
+                ) : notEnrolled.length === 0 ? (
+                    <div style={{ padding:'18px 0', textAlign:'center', fontSize:12.5, color:T.ok, fontFamily:T.sans }}>
+                        ✓ All users have MFA enrolled.
+                    </div>
+                ) : (
+                    <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 120px 80px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                            {['USER','ROLE','NAME',''].map((h,i) => (
+                                <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                            ))}
+                        </div>
+                        {notEnrolled.map((u, i) => (
+                            <div key={u.userId} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 120px 80px', gap:8, padding:'9px 14px', borderBottom:i<notEnrolled.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.email}</span>
+                                <span style={{ fontSize:12.5, color:T.inkMid, fontFamily:T.sans }}>{u.role}</span>
+                                <span style={{ fontSize:12.5, color:T.inkMid, fontFamily:T.sans }}>{u.name}</span>
+                                <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer"
+                                    style={{ fontSize:12, color:T.info, textDecoration:'none', fontFamily:T.sans }}>Manage →</a>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </SecCard>
+
+            {/* ── Allowed factors — informational note ── */}
+            <SecCard title="Allowed factors" desc="Factor configuration is managed in Clerk Dashboard → User & Authentication → Multi-factor.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+                    <OnOffTile label="Authenticator (TOTP)" sub="Google Authenticator, 1Password, Authy" on={true}/>
+                    <OnOffTile label="Security key / Passkey" sub="WebAuthn, biometrics" on={true}/>
+                    <OnOffTile label="SMS code" sub="Discouraged — NIST advises against" on={false}/>
+                    <OnOffTile label="Email code" sub="Lowest assurance factor" on={false}/>
                 </div>
-                {/* Scrollable matrix table */}
-                <div style={{ overflowX:'auto' }}>
-                    <table style={{ width:'100%', borderCollapse:'collapse', minWidth:600, fontFamily:T.sans }}>
-                        <thead>
-                            <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                                <th style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'left', minWidth:220, position:'sticky', left:0, background:T.surface2, zIndex:1 }}>FIELD</th>
-                                {FLS_ROLES.map(r => (
-                                    <th key={r} style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'center', minWidth:110 }}>{r}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {visFields.map((field, visIdx) => {
-                                const fi = fieldIndices[visIdx];
-                                return (
-                                    <tr key={field.name} style={{ borderBottom:`1px solid ${T.border}` }}
-                                        onMouseEnter={e=>Array.from(e.currentTarget.cells).forEach(c=>c.style.background=T.surface2)}
-                                        onMouseLeave={e=>Array.from(e.currentTarget.cells).forEach(c=>c.style.background='transparent')}>
-                                        <td style={{ padding:'10px 16px', position:'sticky', left:0, background:T.surface, zIndex:1 }}>
-                                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, fontWeight:600, color:T.ink }}>{field.name}</div>
-                                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>
-                                                {field.type} · {field.pii ? <span style={{ color:T.warn, fontWeight:600 }}>PII</span> : 'standard'}
-                                            </div>
-                                        </td>
-                                        {FLS_ROLES.map((role, ri) => (
-                                            <td key={role} style={{ padding:'8px 10px', textAlign:'center' }}>
-                                                <FlsMatrixCell level={matrix[fi]?.[ri] || 'Read'} onCycle={()=>cycleCell(fi,ri)}/>
-                                            </td>
-                                        ))}
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                <div style={{ marginTop:12, fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>
+                    To change which factors are allowed, visit your <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" style={{ color:T.info }}>Clerk Dashboard</a>.
                 </div>
-            </div>
+            </SecCard>
         </div>
     );
 };
 
-// ── ⑤ Audit Log Detail ────────────────────────────────────────
 const AuditDetail = ({ onBack }) => {
     const [catFilter, setCatFilter]   = useState('All categories');
     const [actorFilter, setActorFilter] = useState('All actors');
