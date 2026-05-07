@@ -80,7 +80,8 @@ export const handler = async (event) => {
                 aiSettings:       row.extra?.aiSettings       || {},
                 connectedApps:    row.extra?.connectedApps    || {},
                 slackConfig:      row.extra?.slackConfig      || {},
-                sessionPolicy:    row.extra?.sessionPolicy    || {},
+                sessionPolicy:         row.extra?.sessionPolicy         || {},
+                streamingDestinations: row.extra?.streamingDestinations  || [],
             }})};
         }
 
@@ -157,6 +158,7 @@ export const handler = async (event) => {
                 // Feature flags and AI settings
                 featureFlags:         'featureFlags'         in data ? (data.featureFlags         || {})   : existingExtra.featureFlags         || {},
                 aiSettings:           'aiSettings'           in data ? (data.aiSettings           || {})   : existingExtra.aiSettings           || {},
+                streamingDestinations: 'streamingDestinations' in data ? (data.streamingDestinations || [])   : existingExtra.streamingDestinations || [],
                 sessionPolicy:        'sessionPolicy'        in data ? (data.sessionPolicy        || {})   : existingExtra.sessionPolicy        || {},
                 connectedApps:        'connectedApps'        in data ? (data.connectedApps        || {})   : existingExtra.connectedApps        || {},
                 slackConfig:          'slackConfig'          in data ? (data.slackConfig          || {})   : existingExtra.slackConfig          || {},

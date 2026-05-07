@@ -11535,12 +11535,21 @@ const AuditDestRowMenu = ({ dest, onRemove, onClose }) => {
 // ── Generic anchored popover wrapper ─────────────────────────
 const AuditAnchoredMenu = ({ children, btnRef, onClose, alignRight=true }) => {
     const ref = React.useRef(null);
-    const [pos, setPos] = React.useState({ top:0, right:0, left:0 });
+    const [pos, setPos] = React.useState({ top:0, right:0, left:0, flipLeft:false });
 
     React.useEffect(() => {
         if (btnRef?.current) {
             const r = btnRef.current.getBoundingClientRect();
-            setPos({ top: r.bottom + 4, right: window.innerWidth - r.right, left: r.left });
+            // Flip left if the menu would overflow the right edge of the viewport
+            // Menus are typically 196-360px wide; use 360 as the safe max for detection
+            const wouldOverflowRight = alignRight && (window.innerWidth - r.right) < 0;
+            const flipLeft = alignRight && r.right - 360 < 0; // not enough room on left either
+            setPos({
+                top:      r.bottom + 4,
+                right:    window.innerWidth - r.right,
+                left:     Math.max(8, r.left - 320), // fallback left anchor
+                flipLeft: wouldOverflowRight && !flipLeft,
+            });
         }
         const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -11548,6 +11557,21 @@ const AuditAnchoredMenu = ({ children, btnRef, onClose, alignRight=true }) => {
         document.addEventListener('keydown', onKey);
         return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
     }, []);
+
+    // After the menu renders, check if it actually overflows and correct
+    React.useEffect(() => {
+        if (!ref.current) return;
+        const menuRect = ref.current.getBoundingClientRect();
+        if (menuRect.right > window.innerWidth - 8) {
+            // Overflow detected — shift left
+            ref.current.style.right = '8px';
+            ref.current.style.left  = 'auto';
+        }
+        if (menuRect.left < 8) {
+            ref.current.style.left  = '8px';
+            ref.current.style.right = 'auto';
+        }
+    });
 
     return (
         <div ref={ref} style={{ position:'fixed', zIndex:9999, top:pos.top, ...(alignRight ? { right:pos.right } : { left:pos.left }) }}>
@@ -11559,6 +11583,42 @@ const AuditAnchoredMenu = ({ children, btnRef, onClose, alignRight=true }) => {
 // ─────────────────────────────────────────────────────────────────
 // AuditDetail — live version
 // ─────────────────────────────────────────────────────────────────
+// ── Audit display helpers ─────────────────────────────────────────────────────
+const fmtEventAge = (iso) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMin = Math.round((now - d) / 60000);
+    if (diffMin < 1)    return 'just now';
+    if (diffMin < 60)   return diffMin + ' minutes ago';
+    if (diffMin < 120)  return '1 hour ago';
+    if (diffMin < 1440) return Math.round(diffMin/60) + ' hours ago';
+    if (diffMin < 2880) return 'yesterday';
+    if (diffMin < 10080) return Math.round(diffMin/1440) + ' days ago';
+    return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+};
+
+const mapEntityTypeToCat = (entityType) => {
+    const map = {
+        user:'admin', role:'admin', territory:'admin', team:'admin',
+        opportunity:'data', account:'data', contact:'data', lead:'data',
+        task:'data', activity:'data', pipeline:'data', stage:'data',
+        pricebook:'data', quote:'data',
+        apikey:'security', webhook:'security', setting:'security', export:'security',
+        login:'auth', mfa:'auth', sso:'auth', session:'auth',
+        billing:'billing', plan:'billing', seat:'billing',
+    };
+    const key = (entityType||'').toLowerCase();
+    return map[key] || 'admin';
+};
+
+const mapActionToSev = (action) => {
+    const warnActions = ['login.failed','sso.test_login_failed','mfa.disabled','role.permission_changed',
+        'apikey.created','webhook.created','user.deleted','export.bulk','setting.security_changed'];
+    const a = (action||'').toLowerCase();
+    return warnActions.some(w => a.includes(w.split('.')[0]) && a.includes(w.split('.')[1]||'')) ? 'warn' : 'info';
+};
+
 const AuditDetail = ({ onBack }) => {
     const [catFilter,   setCatFilter]   = React.useState('All categories');
     const [actorFilter, setActorFilter] = React.useState('All actors');
@@ -11573,19 +11633,61 @@ const AuditDetail = ({ onBack }) => {
     // Export split button state
     const [exportOpen,  setExportOpen]  = React.useState(false);
 
-    // Streams state
-    const [streams, setStreams]         = React.useState(SEC_AUDIT_STREAMS);
+    // Live audit events from DB
+    const [events,      setEvents]      = React.useState(SEC_AUDIT_EVENTS); // start with mock, replace on load
+    const [eventsLoading, setEventsLoading] = React.useState(true);
+
+    // Streaming destinations — live from settings
+    const [streams, setStreams] = React.useState(SEC_AUDIT_STREAMS);
 
     // Button refs for anchoring
     const rowMenuRefs  = React.useRef({});
     const exportBtnRef = React.useRef(null);
     const destMenuRefs = React.useRef({});
 
+    // Load real audit events and streaming destinations from DB on mount
+    React.useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const [auditRes, settingsRes] = await Promise.all([
+                    dbFetch('/.netlify/functions/audit-log'),
+                    dbFetch('/.netlify/functions/settings'),
+                ]);
+                if (cancelled) return;
+                const [auditData, settingsData] = await Promise.all([auditRes.json(), settingsRes.json()]);
+                if (auditRes.ok && auditData.events?.length > 0) {
+                    // Map DB shape → display shape
+                    const mapped = auditData.events.map(e => ({
+                        when:   fmtEventAge(e.timestamp),
+                        actor:  e.userName || e.userId || 'System',
+                        action: e.action,
+                        target: e.entityName || e.entityId || '—',
+                        cat:    mapEntityTypeToCat(e.entityType),
+                        sev:    mapActionToSev(e.action),
+                        ip:     '—', // IP not stored in current schema
+                    }));
+                    setEvents(mapped);
+                }
+                if (settingsRes.ok && settingsData.settings?.streamingDestinations?.length > 0) {
+                    setStreams(settingsData.settings.streamingDestinations);
+                }
+            } catch (e) {
+                console.error('AuditDetail load error:', e.message);
+                // Keep mock data as fallback
+            } finally {
+                if (!cancelled) setEventsLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, []);
+
     // Alert badge count (warn events)
-    const alertCount = SEC_AUDIT_EVENTS.filter(e => e.sev === 'warn').length;
+    const alertCount = events.filter(e => e.sev === 'warn').length;
 
     // Filter logic
-    const visible = SEC_AUDIT_EVENTS.filter(e => {
+    const visible = events.filter(e => {
         if (catFilter === 'warn') return e.sev === 'warn';
         if (catFilter !== 'All categories' && e.cat !== catFilter) return false;
         if (actorFilter !== 'All actors' && e.actor !== actorFilter) return false;
