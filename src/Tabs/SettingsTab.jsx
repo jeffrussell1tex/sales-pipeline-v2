@@ -10616,6 +10616,211 @@ const MfaDetail = ({ onBack }) => {
     );
 };
 
+const SessionDetail = ({ onBack }) => {
+    const { ipAllowlist, passwordComplexity } = SEC_SESSION;
+    const [dirty, setDirty] = useState(false);
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            <SecCrumb page="Session & password" onBack={onBack}/>
+            <SecTitle
+                title="Session & password policy"
+                sub="Idle timeout, password rules, IP allowlist"
+                badge="Strong policy · 8h idle · 90-day rotation"
+                updatedAt="Last edited last week by Jeff Hammond"
+                dirty={dirty}
+                actions={[
+                    <SecBtn key="rev" label="Revert" onClick={()=>setDirty(false)}/>,
+                    <SecBtn key="sav" label="Save policy" primary onClick={()=>setDirty(false)}/>,
+                ]}/>
+
+            {/* Session section */}
+            <SecCard title="Session" >
+                <SecFieldRow fields={[
+                    { label:'Idle timeout',                value:SEC_SESSION.idleTimeout        },
+                    { label:'Absolute session lifetime',   value:SEC_SESSION.sessionLifetime    },
+                    { label:'Concurrent sessions per user',value:SEC_SESSION.concurrentSessions },
+                    { label:'Re-auth for sensitive actions',value:SEC_SESSION.reauth            },
+                ]}/>
+            </SecCard>
+
+            {/* Password section */}
+            <SecCard title="Password">
+                <SecFieldRow fields={[
+                    { label:'Minimum length',            value:SEC_SESSION.minLength },
+                    { label:'Rotation',                  value:SEC_SESSION.rotation  },
+                    { label:'History',                   value:SEC_SESSION.history   },
+                    { label:'Lockout after failed attempts',value:SEC_SESSION.lockout },
+                ]}/>
+                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>Complexity</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
+                    <OnOffTile label="Mixed case" on={passwordComplexity.mixedCase}/>
+                    <OnOffTile label="Number"     on={passwordComplexity.number}/>
+                    <OnOffTile label="Symbol"     on={passwordComplexity.symbol}/>
+                    <OnOffTile label="Block common" on={passwordComplexity.blockCommon}/>
+                </div>
+            </SecCard>
+
+            {/* IP allowlist */}
+            <SecCard title="IP allowlist" desc="Restrict sign-in to these CIDR ranges. Empty = no restriction."
+                headAction={<SecBtn label="+ Add range" onClick={()=>setDirty(true)}/>}>
+                <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'160px 1fr 100px 130px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                        {['CIDR','LABEL','STATUS',''].map((h,i) => (
+                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                        ))}
+                    </div>
+                    {ipAllowlist.map((row,i) => (
+                        <div key={row.cidr} style={{ display:'grid', gridTemplateColumns:'160px 1fr 100px 130px', gap:8, padding:'10px 14px', borderBottom:i<ipAllowlist.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.ink }}>{row.cidr}</span>
+                            <span style={{ fontSize:13, color:T.inkMid }}>{row.label}</span>
+                            <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                background:row.status==='Enforced'?'rgba(77,107,61,0.12)':'rgba(184,115,51,0.10)',
+                                color:row.status==='Enforced'?T.ok:T.warn }}>
+                                {row.status}
+                            </span>
+                            <div style={{ display:'flex', gap:8 }}>
+                                <button style={{ fontSize:12, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Edit</button>
+                                <button style={{ fontSize:12, color:T.danger, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Remove</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </SecCard>
+        </div>
+    );
+};
+
+// ── ④ Field-level security Detail ────────────────────────────
+// FLS matrix with click-to-cycle cells — defined at module level
+const FlsMatrixCell = ({ level, onCycle }) => {
+    const cycle = ['Edit','Read','Masked','Hidden'];
+    const s = flsCellStyle(level);
+    return (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <button onClick={onCycle}
+                style={{ padding:'3px 11px', borderRadius:4, fontSize:11.5, fontWeight:700, background:s.bg, color:s.fg, border:'none', cursor:'pointer', fontFamily:T.sans, minWidth:56 }}>
+                {s.label}
+            </button>
+        </div>
+    );
+};
+
+const FlsDetail = ({ onBack }) => {
+    const [objFilter, setObjFilter] = useState('Account');
+    const [search, setSearch] = useState('');
+    const [matrix, setMatrix] = useState(FLS_MATRIX_INIT.map(row=>[...row]));
+    const [dirty, setDirty] = useState(false);
+    const levels = ['Edit','Read','Masked','Hidden'];
+
+    const cycleCell = (fi, ri) => {
+        setMatrix(prev => {
+            const m = prev.map(r=>[...r]);
+            const idx = levels.indexOf(m[fi][ri]);
+            m[fi][ri] = levels[(idx+1) % levels.length];
+            return m;
+        });
+        setDirty(true);
+    };
+
+    const visFields = FLS_FIELDS.filter(f => {
+        const obj = f.name.split('.')[0];
+        return obj === objFilter && (!search || f.name.toLowerCase().includes(search.toLowerCase()));
+    });
+
+    const fieldIndices = visFields.map(f => FLS_FIELDS.indexOf(f));
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            <SecCrumb page="Field-level security" onBack={onBack}/>
+            <SecTitle
+                title="Field-level security"
+                sub="5 objects · 8 sensitive fields tracked"
+                badge="2 fields with masking · 1 hidden from non-finance"
+                updatedAt="Last edited last week by Morgan Reyes"
+                dirty={dirty}
+                actions={[
+                    <SecBtn key="exp" label="Export matrix"/>,
+                    <SecBtn key="sav" label="Save changes" primary onClick={()=>setDirty(false)}/>,
+                ]}/>
+
+            {/* Object filter */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:'14px 16px', marginBottom:16, display:'flex', alignItems:'center', gap:10 }}>
+                <span style={{ fontSize:13, fontWeight:700, color:T.ink, marginRight:4 }}>Object filter</span>
+                <div style={{ display:'flex', gap:6 }}>
+                    {FLS_OBJECTS.map(obj => (
+                        <button key={obj} onClick={()=>setObjFilter(obj)}
+                            style={{ padding:'5px 14px', fontSize:12.5, fontWeight:600, borderRadius:4, border:`1px solid ${objFilter===obj?T.ink:T.border}`, background:objFilter===obj?T.ink:'transparent', color:objFilter===obj?'#fbf8f3':T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                            {obj}
+                        </button>
+                    ))}
+                </div>
+                <div style={{ flex:1 }}/>
+                <input value={search} onChange={e=>setSearch(e.target.value)}
+                    placeholder="Search field…"
+                    style={{ padding:'6px 12px', fontSize:12.5, border:`1px solid ${T.border}`, borderRadius:16, outline:'none', width:180, fontFamily:T.sans, background:T.surface, color:T.ink }}/>
+            </div>
+
+            {/* FLS matrix */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                {/* Matrix header */}
+                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div>
+                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{objFilter} · Field × Role matrix</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any cell to change. Edit &gt; Read &gt; Masked &gt; Hidden.</div>
+                    </div>
+                    {/* Legend */}
+                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                        {['Edit','Read','Masked','Hidden'].map(l => {
+                            const s = flsCellStyle(l);
+                            return <span key={l} style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11 }}>
+                                <span style={{ width:10, height:10, borderRadius:2, background:s.bg, border:`1px solid ${s.fg}22`, display:'inline-block' }}/>
+                                <span style={{ color:T.inkMuted }}>{l}</span>
+                            </span>;
+                        })}
+                    </div>
+                </div>
+                {/* Scrollable matrix table */}
+                <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', minWidth:600, fontFamily:T.sans }}>
+                        <thead>
+                            <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                                <th style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'left', minWidth:220, position:'sticky', left:0, background:T.surface2, zIndex:1 }}>FIELD</th>
+                                {FLS_ROLES.map(r => (
+                                    <th key={r} style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'center', minWidth:110 }}>{r}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {visFields.map((field, visIdx) => {
+                                const fi = fieldIndices[visIdx];
+                                return (
+                                    <tr key={field.name} style={{ borderBottom:`1px solid ${T.border}` }}
+                                        onMouseEnter={e=>Array.from(e.currentTarget.cells).forEach(c=>c.style.background=T.surface2)}
+                                        onMouseLeave={e=>Array.from(e.currentTarget.cells).forEach(c=>c.style.background='transparent')}>
+                                        <td style={{ padding:'10px 16px', position:'sticky', left:0, background:T.surface, zIndex:1 }}>
+                                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, fontWeight:600, color:T.ink }}>{field.name}</div>
+                                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>
+                                                {field.type} · {field.pii ? <span style={{ color:T.warn, fontWeight:600 }}>PII</span> : 'standard'}
+                                            </div>
+                                        </td>
+                                        {FLS_ROLES.map((role, ri) => (
+                                            <td key={role} style={{ padding:'8px 10px', textAlign:'center' }}>
+                                                <FlsMatrixCell level={matrix[fi]?.[ri] || 'Read'} onCycle={()=>cycleCell(fi,ri)}/>
+                                            </td>
+                                        ))}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── ⑤ Audit Log Detail ────────────────────────────────────────
 const AuditDetail = ({ onBack }) => {
     const [catFilter, setCatFilter]   = useState('All categories');
     const [actorFilter, setActorFilter] = useState('All actors');
