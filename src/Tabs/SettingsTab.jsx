@@ -10617,6 +10617,95 @@ const MfaDetail = ({ onBack }) => {
 };
 
 // ─────────────────────────────────────────────────────────────────
+// Add / Edit IP range modal
+// ─────────────────────────────────────────────────────────────────
+const IpRangeModal = ({ existing, onClose, onSave }) => {
+    const [cidr,    setCidr]    = React.useState(existing?.cidr    || '');
+    const [label,   setLabel]   = React.useState(existing?.label   || '');
+    const [status,  setStatus]  = React.useState(existing?.status  || 'Enforced');
+    const [cidrErr, setCidrErr] = React.useState('');
+
+    const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r,
+        fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none',
+        background:T.surface, boxSizing:'border-box' };
+
+    // Basic CIDR validation
+    const validateCidr = (v) => {
+        const cidrRe = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$|^([0-9a-fA-F:]+)\/\d{1,3}$/;
+        if (!v.trim()) return 'CIDR is required';
+        if (!cidrRe.test(v.trim())) return 'Enter a valid CIDR range e.g. 10.0.0.0/8';
+        return '';
+    };
+
+    const handleSave = () => {
+        const err = validateCidr(cidr);
+        if (err) { setCidrErr(err); return; }
+        onSave({ cidr: cidr.trim(), label: label.trim() || cidr.trim(), status, hits: existing?.hits || '0' });
+    };
+
+    const FL = ({ label: lbl, hint, children }) => (
+        <div style={{ marginBottom:14 }}>
+            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{lbl}</label>
+            {children}
+            {hint && <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>{hint}</div>}
+        </div>
+    );
+
+    return (
+        <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:800,
+            display:'flex', alignItems:'center', justifyContent:'center', fontFamily:T.sans }}>
+            <div onClick={e => e.stopPropagation()}
+                style={{ background:T.surface, borderRadius:8, width:480, display:'flex', flexDirection:'column',
+                    overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)' }}>
+                {/* Header */}
+                <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div>
+                        <div style={{ fontSize:16, fontWeight:700, color:T.ink }}>{existing ? 'Edit IP range' : 'Add IP range'}</div>
+                        <div style={{ fontSize:12, color:T.inkMuted, marginTop:2 }}>CIDR notation — e.g. 10.0.0.0/8 or 203.0.113.42/32</div>
+                    </div>
+                    <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', lineHeight:1 }}>×</button>
+                </div>
+                {/* Body */}
+                <div style={{ padding:'18px 20px' }}>
+                    <FL label="CIDR range" hint="IPv4 or IPv6 in CIDR notation">
+                        <input value={cidr} onChange={e => { setCidr(e.target.value); setCidrErr(''); }}
+                            placeholder="e.g. 10.0.0.0/8"
+                            style={{ ...inpSt, borderColor: cidrErr ? T.danger : T.border }}/>
+                        {cidrErr && <div style={{ fontSize:11.5, color:T.danger, marginTop:4, fontFamily:T.sans }}>{cidrErr}</div>}
+                    </FL>
+                    <FL label="Label" hint="Friendly name shown in the table">
+                        <input value={label} onChange={e => setLabel(e.target.value)}
+                            placeholder="e.g. HQ VPN, AWS prod NAT"
+                            style={{ ...inpSt, fontFamily:T.sans }}/>
+                    </FL>
+                    <FL label="Status">
+                        <div style={{ display:'flex', gap:10 }}>
+                            {['Enforced','Logged'].map(s => (
+                                <div key={s} onClick={() => setStatus(s)}
+                                    style={{ flex:1, padding:'10px 14px', border:`1.5px solid ${status===s ? T.goldInk : T.border}`,
+                                        borderRadius:6, background:status===s?'rgba(200,185,154,0.12)':T.surface, cursor:'pointer' }}>
+                                    <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{s}</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>
+                                        {s === 'Enforced' ? 'Block sign-ins from outside this range' : 'Record attempts but allow sign-in'}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </FL>
+                </div>
+                {/* Footer */}
+                <div style={{ padding:'12px 20px', borderTop:`1px solid ${T.border}`, background:T.surface2,
+                    display:'flex', gap:8, justifyContent:'flex-end' }}>
+                    <SecBtn label="Cancel" onClick={onClose}/>
+                    <SecBtn label={existing ? 'Save changes' : 'Add range'} primary onClick={handleSave}/>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// ─────────────────────────────────────────────────────────────────
 // Session & password — shared dropdown primitives
 // ─────────────────────────────────────────────────────────────────
 
@@ -10789,10 +10878,12 @@ const SessionDetail = ({ onBack }) => {
         passwordComplexity: SEC_SESSION.passwordComplexity,
         ipAllowlist:        SEC_SESSION.ipAllowlist || [],
     });
-    const [dirty,   setDirty]   = React.useState(false);
-    const [saving,  setSaving]  = React.useState(false);
-    const [loading, setLoading] = React.useState(true);
-    const [toast,   setToast]   = React.useState(null);
+    const [dirty,      setDirty]      = React.useState(false);
+    const [saving,     setSaving]     = React.useState(false);
+    const [loading,    setLoading]    = React.useState(true);
+    const [toast,      setToast]      = React.useState(null);
+    const [showAddIp,  setShowAddIp]  = React.useState(false);
+    const [editingIp,  setEditingIp]  = React.useState(null); // null = add, row = edit
 
     const showToast = (msg, err) => { setToast({ msg, err }); setTimeout(() => setToast(null), 3000); };
 
@@ -10858,8 +10949,32 @@ const SessionDetail = ({ onBack }) => {
         <div style={{ padding:'6px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>{children}</div>
     );
 
+    const handleSaveIp = (row) => {
+        if (editingIp) {
+            // Edit existing
+            set('ipAllowlist', policy.ipAllowlist.map(r => r.cidr === editingIp.cidr ? row : r));
+        } else {
+            // Add new — check for duplicate CIDR
+            if (policy.ipAllowlist.find(r => r.cidr === row.cidr)) {
+                showToast('That CIDR already exists in the allowlist.', true);
+                return;
+            }
+            set('ipAllowlist', [...policy.ipAllowlist, row]);
+        }
+        setShowAddIp(false);
+        setEditingIp(null);
+    };
+
     return (
         <div style={{ fontFamily:T.sans }}>
+            {/* Add / Edit IP range modal */}
+            {showAddIp && (
+                <IpRangeModal
+                    existing={editingIp}
+                    onClose={() => { setShowAddIp(false); setEditingIp(null); }}
+                    onSave={handleSaveIp}
+                />
+            )}
             {/* Toast */}
             {toast && (
                 <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, padding:'10px 18px',
@@ -11015,7 +11130,7 @@ const SessionDetail = ({ onBack }) => {
 
             {/* ── IP allowlist ── */}
             <SecCard title="IP allowlist" desc="Restrict sign-in to these CIDR ranges. Empty = no restriction."
-                headAction={<SecBtn label="+ Add range" onClick={() => {}}/>}>
+                headAction={<SecBtn label="+ Add range" onClick={() => { setEditingIp(null); setShowAddIp(true); }}/>}>
                 <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
                     <div style={{ display:'grid', gridTemplateColumns:'160px 1fr 100px 80px 36px', gap:8, padding:'7px 14px',
                         background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
@@ -11040,7 +11155,10 @@ const SessionDetail = ({ onBack }) => {
                                 {row.status}
                             </span>
                             <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMid, textAlign:'right' }}>{row.hits || '—'}</span>
-                            <IpRowMenu row={row} onRemove={handleRemoveIp} onToggleEnforced={handleToggleEnforced}/>
+                            <IpRowMenu row={row}
+                                onEdit={r => { setEditingIp(r); setShowAddIp(true); }}
+                                onRemove={handleRemoveIp}
+                                onToggleEnforced={handleToggleEnforced}/>
                         </div>
                     ))}
                 </div>
@@ -11180,56 +11298,398 @@ const FlsDetail = ({ onBack }) => {
 };
 
 // ── ⑤ Audit Log Detail ────────────────────────────────────────
-const AuditDetail = ({ onBack }) => {
-    const [catFilter, setCatFilter]   = useState('All categories');
-    const [actorFilter, setActorFilter] = useState('All actors');
-    const [timeFilter, setTimeFilter]   = useState('Last 7 days');
-    const [search, setSearch]           = useState('');
+// ─────────────────────────────────────────────────────────────────
+// Audit log — shared primitives
+// ─────────────────────────────────────────────────────────────────
 
+// Reuses DropdownPanel + DropdownOption from Session policy (already defined above)
+// Reuses IpRowMenu pattern for anchored popovers
+
+// ── Category dropdown ─────────────────────────────────────────
+const AuditCategoryDropdown = ({ value, onChange }) => (
+    <DropdownPanel width={260}>
+        <div style={{ padding:'4px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Category</div>
+        <DropdownOption label="All categories" sub="No filter applied" selected={value==='All categories'} onClick={() => onChange('All categories')}/>
+        <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+        {[
+            { v:'auth',     sub:'Login, MFA, SSO' },
+            { v:'security', sub:'API keys, webhooks, allowlist' },
+            { v:'admin',    sub:'Users, roles, territories' },
+            { v:'data',     sub:'Pricebook, pipeline, custom fields' },
+            { v:'billing',  sub:'Plan, seats, invoices' },
+        ].map(c => (
+            <DropdownOption key={c.v} label={c.v} sub={c.sub} selected={value===c.v} onClick={() => onChange(c.v)}/>
+        ))}
+        <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+        <DropdownOption label="Severity: warn only" sub="Across all categories" selected={value==='warn'} onClick={() => onChange('warn')}/>
+    </DropdownPanel>
+);
+
+// ── Actor dropdown ────────────────────────────────────────────
+const AuditActorDropdown = ({ value, onChange }) => {
+    const actors = ['All actors','jeff@accelerep.com','morgan@accelerep.com','priya@accelerep.com','theo@accelerep.com','System'];
+    const [q, setQ] = React.useState('');
+    const filtered = q ? actors.filter(a => a.toLowerCase().includes(q.toLowerCase())) : actors;
+    return (
+        <DropdownPanel width={300}>
+            <div style={{ padding:'6px 8px 8px' }}>
+                <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search actor…"
+                    style={{ width:'100%', padding:'6px 8px', background:T.surface2, border:`1px solid ${T.border}`,
+                        borderRadius:3, fontSize:11.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace',
+                        outline:'none', boxSizing:'border-box' }}/>
+            </div>
+            <div style={{ padding:'4px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Top actors · last 30d</div>
+            {filtered.map(a => (
+                <DropdownOption key={a} label={a} selected={value===a} onClick={() => onChange(a)}/>
+            ))}
+        </DropdownPanel>
+    );
+};
+
+// ── Time range dropdown ───────────────────────────────────────
+const AuditTimeDropdown = ({ value, onChange }) => {
+    const ranges = [
+        { v:'Last 1 hour',    sub:null },
+        { v:'Last 24 hours',  sub:null },
+        { v:'Last 7 days',    sub:'Current' },
+        { v:'Last 30 days',   sub:null },
+        { v:'Last 90 days',   sub:'Covered by retention', rec:true },
+        { v:'Last 13 months', sub:'Full retention window' },
+    ];
+    return (
+        <DropdownPanel width={280}>
+            <div style={{ padding:'4px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Time range</div>
+            {ranges.map(r => (
+                <DropdownOption key={r.v} label={r.v} sub={r.sub} recommended={r.rec} selected={value===r.v} onClick={() => onChange(r.v)}/>
+            ))}
+            <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+            <div style={{ padding:'4px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Custom</div>
+            <div style={{ padding:'4px 10px 10px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                <input type="date" style={{ padding:'6px 8px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:3, fontSize:11, fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMuted, outline:'none' }}/>
+                <input type="date" style={{ padding:'6px 8px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:3, fontSize:11, fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMuted, outline:'none' }}/>
+            </div>
+        </DropdownPanel>
+    );
+};
+
+// ── Export split dropdown ─────────────────────────────────────
+const AuditExportDropdown = ({ events, onClose }) => {
+    const download = (fmt) => {
+        let content, mime, ext;
+        if (fmt === 'JSON') {
+            content = JSON.stringify(events, null, 2);
+            mime = 'application/json'; ext = 'json';
+        } else if (fmt === 'NDJSON') {
+            content = events.map(e => JSON.stringify(e)).join(String.fromCharCode(10));
+            mime = 'application/x-ndjson'; ext = 'ndjson';
+        } else {
+            // CSV
+            const cols = ['when','actor','action','target','cat','sev','ip'];
+            const header = cols.join(',');
+            const esc = (v) => '"' + String(v||'').replace(/"/g, '""') + '"';
+            const rows = events.map(e => cols.map(c => esc(e[c])).join(','));
+            content = [header, ...rows].join(String.fromCharCode(13)+String.fromCharCode(10));
+            mime = 'text/csv'; ext = 'csv';
+        }
+        const blob = new Blob([content], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `accelerep-audit-${new Date().toISOString().split('T')[0]}.${ext}`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        onClose();
+    };
+    return (
+        <DropdownPanel width={280}>
+            <div style={{ padding:'4px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Download current view</div>
+            <DropdownOption label="CSV" selected sub={`${events.length} events · spreadsheet-friendly`} onClick={() => download('CSV')}/>
+            <DropdownOption label="JSON" sub="Full event payload" onClick={() => download('JSON')}/>
+            <DropdownOption label="NDJSON" sub="One event per line · for log tools" onClick={() => download('NDJSON')}/>
+            <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+            <div style={{ padding:'4px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Larger exports</div>
+            <DropdownOption label="Export all 12,847 events…" sub="Async — emailed when ready" onClick={onClose}/>
+            <DropdownOption label="Schedule recurring export…" sub="Daily / weekly to S3 or email" onClick={onClose}/>
+        </DropdownPanel>
+    );
+};
+
+// ── Event popover (Variation B) ───────────────────────────────
+const AuditEventPopover = ({ event, onClose, onAddFilter }) => {
+    const sevColor = event.sev === 'warn' ? T.warn : event.sev === 'error' ? T.danger : T.ok;
+    const facets = [
+        { lbl:'actor',  val: event.actor },
+        { lbl:'action', val: event.action },
+        { lbl:'cat',    val: event.cat },
+        { lbl:'ip',     val: event.ip !== '—' ? event.ip : null },
+    ].filter(f => f.val);
+
+    const related = SEC_AUDIT_EVENTS.filter(e =>
+        e.actor === event.actor && e !== event
+    ).slice(0, 3);
+
+    return (
+        <div style={{ width:360, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
+            boxShadow:'0 8px 24px rgba(42,38,34,0.12), 0 2px 4px rgba(42,38,34,0.06)', fontFamily:T.sans, overflow:'hidden' }}>
+            <div style={{ padding:'14px 16px 12px', borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                    <span style={{ width:8, height:8, background:sevColor, borderRadius:'50%', flexShrink:0 }}/>
+                    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13.5, fontWeight:700, color:sevColor, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{event.action}</span>
+                    <span style={{ fontSize:10.5, color:T.inkMuted, flexShrink:0 }}>{event.when}</span>
+                </div>
+                <div style={{ fontSize:12, color:T.ink, lineHeight:1.5 }}>
+                    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontWeight:600 }}>{event.actor}</span>
+                    {event.target && <><span style={{ color:T.inkMid }}> → </span><span style={{ fontWeight:600 }}>{event.target}</span></>}
+                </div>
+            </div>
+            {/* Facet chips */}
+            <div style={{ padding:'10px 12px 6px', display:'flex', gap:6, flexWrap:'wrap' }}>
+                {facets.map((c,i) => (
+                    <span key={i} onClick={() => { onAddFilter && onAddFilter(c.lbl, c.val); onClose(); }}
+                        style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:12, fontSize:11,
+                            background:T.surface2, border:`1px solid ${T.border}`, color:T.inkMid, cursor:'pointer' }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = T.borderStrong}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
+                        <span style={{ color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', fontSize:10 }}>{c.lbl}:</span>
+                        <span style={{ fontFamily:'ui-monospace,Menlo,monospace' }}>{c.val}</span>
+                        <span style={{ color:T.inkMuted, marginLeft:2, fontSize:10 }}>+</span>
+                    </span>
+                ))}
+            </div>
+            {/* Related events */}
+            {related.length > 0 && (
+                <div style={{ padding:'8px 16px 12px' }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:6, fontFamily:T.sans }}>Related · same actor</div>
+                    {related.map((r,i) => (
+                        <div key={i} style={{ display:'flex', gap:8, padding:'4px 0', fontSize:11.5, alignItems:'baseline' }}>
+                            <span style={{ width:76, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, flexShrink:0 }}>{r.when}</span>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontWeight:600, color:T.ink, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.action}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+            <div style={{ padding:'10px 16px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', gap:8 }}>
+                <button onClick={() => { navigator.clipboard?.writeText(event.action + ' · ' + event.when); onClose(); }}
+                    style={{ fontSize:11.5, fontWeight:600, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Copy event ID</button>
+                <span style={{ flex:1 }}/>
+                <SecBtn label="View full event" onClick={onClose}/>
+            </div>
+        </div>
+    );
+};
+
+// ── Event row ⋯ menu (Variation B) ───────────────────────────
+const AuditEventRowMenu = ({ event, onViewDetails, onFilterAction, onCreateAlert, onClose }) => {
+    const MenuRow = ({ icon, label, kbd, onClick }) => (
+        <div onClick={() => { onClick && onClick(); onClose(); }}
+            style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:3, cursor:'pointer' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+            <span style={{ width:16, textAlign:'center', fontSize:13, flexShrink:0 }}>{icon}</span>
+            <span style={{ flex:1, fontSize:12.5, fontWeight:500, color:T.ink }}>{label}</span>
+            {kbd && <span style={{ fontSize:10.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', flexShrink:0 }}>{kbd}</span>}
+        </div>
+    );
+    return (
+        <div style={{ width:208, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
+            boxShadow:'0 8px 24px rgba(42,38,34,0.12), 0 2px 4px rgba(42,38,34,0.06)', padding:4, fontFamily:T.sans }}>
+            <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
+                background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
+            <MenuRow icon="◫" label="View details" kbd="↵" onClick={onViewDetails}/>
+            <MenuRow icon="⌕" label="Investigate actor" onClick={() => onFilterAction && onFilterAction('actor', event.actor)}/>
+            <MenuRow icon="≡" label="Filter to this action" onClick={() => onFilterAction && onFilterAction('action', event.action)}/>
+            <MenuRow icon="⚠" label="Create alert from event" onClick={onCreateAlert}/>
+            <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+            <MenuRow icon="⎘" label="Copy event ID" kbd="⌘C" onClick={() => navigator.clipboard?.writeText(event.action)}/>
+        </div>
+    );
+};
+
+// ── Streaming destination ⋯ menu (Variation B) ───────────────
+const AuditDestRowMenu = ({ dest, onRemove, onClose }) => {
+    const MenuRow = ({ icon, label, danger:isDanger, onClick }) => (
+        <div onClick={() => { onClick && onClick(); onClose(); }}
+            style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:3, cursor:'pointer', color: isDanger ? T.danger : T.ink }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+            <span style={{ width:16, textAlign:'center', fontSize:13, flexShrink:0 }}>{icon}</span>
+            <span style={{ flex:1, fontSize:12.5, fontWeight:500 }}>{label}</span>
+        </div>
+    );
+    return (
+        <div style={{ width:196, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
+            boxShadow:'0 8px 24px rgba(42,38,34,0.12), 0 2px 4px rgba(42,38,34,0.06)', padding:4, fontFamily:T.sans, position:'relative' }}>
+            <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
+                background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
+            <MenuRow icon="✎" label="Edit" onClick={() => {}}/>
+            <MenuRow icon="↻" label="Send test event" onClick={() => {}}/>
+            <MenuRow icon="⏸" label="Pause" onClick={() => {}}/>
+            <MenuRow icon="⌕" label="Delivery log" onClick={() => {}}/>
+            <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+            <MenuRow icon="🗑" label="Remove" danger onClick={() => onRemove && onRemove(dest)}/>
+        </div>
+    );
+};
+
+// ── Generic anchored popover wrapper ─────────────────────────
+const AuditAnchoredMenu = ({ children, btnRef, onClose, alignRight=true }) => {
+    const ref = React.useRef(null);
+    const [pos, setPos] = React.useState({ top:0, right:0, left:0 });
+
+    React.useEffect(() => {
+        if (btnRef?.current) {
+            const r = btnRef.current.getBoundingClientRect();
+            setPos({ top: r.bottom + 4, right: window.innerWidth - r.right, left: r.left });
+        }
+        const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('mousedown', onDoc);
+        document.addEventListener('keydown', onKey);
+        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+    }, []);
+
+    return (
+        <div ref={ref} style={{ position:'fixed', zIndex:9999, top:pos.top, ...(alignRight ? { right:pos.right } : { left:pos.left }) }}>
+            {children}
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// AuditDetail — live version
+// ─────────────────────────────────────────────────────────────────
+const AuditDetail = ({ onBack }) => {
+    const [catFilter,   setCatFilter]   = React.useState('All categories');
+    const [actorFilter, setActorFilter] = React.useState('All actors');
+    const [timeFilter,  setTimeFilter]  = React.useState('Last 7 days');
+    const [search,      setSearch]      = React.useState('');
+
+    // Popover/menu state — which row is active and what's showing
+    const [activeRow,   setActiveRow]   = React.useState(null); // index
+    const [activeMode,  setActiveMode]  = React.useState(null); // 'popover' | 'menu'
+    const [activeDestRow, setActiveDestRow] = React.useState(null);
+
+    // Export split button state
+    const [exportOpen,  setExportOpen]  = React.useState(false);
+
+    // Streams state
+    const [streams, setStreams]         = React.useState(SEC_AUDIT_STREAMS);
+
+    // Button refs for anchoring
+    const rowMenuRefs  = React.useRef({});
+    const exportBtnRef = React.useRef(null);
+    const destMenuRefs = React.useRef({});
+
+    // Alert badge count (warn events)
+    const alertCount = SEC_AUDIT_EVENTS.filter(e => e.sev === 'warn').length;
+
+    // Filter logic
     const visible = SEC_AUDIT_EVENTS.filter(e => {
+        if (catFilter === 'warn') return e.sev === 'warn';
         if (catFilter !== 'All categories' && e.cat !== catFilter) return false;
-        if (actorFilter !== 'All actors'   && e.actor !== actorFilter) return false;
+        if (actorFilter !== 'All actors' && e.actor !== actorFilter) return false;
         const q = search.toLowerCase();
         return !q || e.action.includes(q) || e.actor.includes(q) || e.target.includes(q);
     });
 
-    const catSel = { padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', appearance:'none', cursor:'pointer', background:T.surface };
+    const handleAddFilter = (key, val) => {
+        if (key === 'actor')  setActorFilter(val);
+        if (key === 'cat')    setCatFilter(val);
+        if (key === 'action') setSearch(val);
+        setActiveRow(null); setActiveMode(null);
+    };
+
+    const handleRemoveDest = (dest) => {
+        setStreams(s => s.filter(d => d.dest !== dest.dest));
+        setActiveDestRow(null);
+    };
+
+    const auditCatStyle = (cat) => {
+        const map = { auth:'rgba(58,90,122,0.12)', security:'rgba(156,58,46,0.10)', admin:'rgba(77,107,61,0.10)', data:'rgba(200,185,154,0.20)', billing:'rgba(184,115,51,0.10)' };
+        const col = { auth:T.info, security:T.danger, admin:T.ok, data:T.goldInk, billing:T.warn };
+        return { bg: map[cat] || 'rgba(138,131,120,0.10)', fg: col[cat] || T.inkMid };
+    };
 
     return (
         <div style={{ fontFamily:T.sans }}>
             <SecCrumb page="Audit log" onBack={onBack}/>
             <SecTitle
                 title="Audit log"
-                sub="12 events · last 7 days · retention 13 months"
+                sub={`${visible.length} events · ${timeFilter} · retention 13 months`}
                 badge="Streaming to Splunk · 2 alerts triggered today"
-                updatedAt="Last edited real-time by —"
+                updatedAt="Real-time"
                 actions={[
-                    <SecBtn key="str" label="Configure streaming"/>,
-                    <SecBtn key="exp" label="Export CSV"/>,
-                    <SecBtn key="ale" label="Manage alerts" primary/>,
+                    <SecBtn key="str" label="Configure streaming" onClick={() => {}}/>,
+
+                    <div key="exp" style={{ display:'inline-flex', position:'relative' }}>
+                        <button onClick={() => {
+                            // Body click — download CSV directly
+                            const cols = ['when','actor','action','target','cat','sev','ip'];
+                            const header = cols.join(',');
+                            const esc2 = (v) => '"' + String(v||'').replace(/"/g, '""') + '"';
+                            const rows = visible.map(e => cols.map(c => esc2(e[c])).join(','));
+                            const blob = new Blob([[header,...rows].join(String.fromCharCode(10))], { type:'text/csv' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url; a.download = `accelerep-audit-${new Date().toISOString().split('T')[0]}.csv`;
+                            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        }} style={{ padding:'7px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRight:'none',
+                            borderRadius:`${T.r}px 0 0 ${T.r}px`, fontSize:12.5, fontWeight:600, color:T.ink, cursor:'pointer', fontFamily:T.sans }}>
+                            Export CSV
+                        </button>
+                        <button ref={exportBtnRef} onClick={() => setExportOpen(o => !o)}
+                            style={{ padding:'7px 8px', background: exportOpen ? T.surface2 : T.surface, border:`1px solid ${T.borderStrong}`,
+                                borderRadius:`0 ${T.r}px ${T.r}px 0`, fontSize:10, color:T.inkMid, cursor:'pointer',
+                                display:'inline-flex', alignItems:'center', fontFamily:T.sans }}>▾</button>
+                        {exportOpen && (
+                            <AuditAnchoredMenu btnRef={exportBtnRef} onClose={() => setExportOpen(false)} alignRight={true}>
+                                <AuditExportDropdown events={visible} onClose={() => setExportOpen(false)}/>
+                            </AuditAnchoredMenu>
+                        )}
+                    </div>,
+
+                    <button key="ale" style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'7px 14px',
+                        background:T.ink, color:'#fbf8f3', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer',
+                        border:'none', fontFamily:T.sans }}>
+                        Manage alerts
+                        {alertCount > 0 && (
+                            <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                minWidth:18, height:18, padding:'0 5px', background:T.warn, color:'#fbf8f3',
+                                borderRadius:9, fontSize:10.5, fontWeight:700, lineHeight:1 }}>{alertCount}</span>
+                        )}
+                    </button>,
                 ]}/>
 
-            {/* Filters */}
+            {/* ── Filters ── */}
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:'14px 16px', marginBottom:16 }}>
                 <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:12 }}>Filters</div>
-                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                    <input value={search} onChange={e=>setSearch(e.target.value)}
+                <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                    <input value={search} onChange={e => setSearch(e.target.value)}
                         placeholder="Search action, actor, target…"
-                        style={{ flex:1, padding:'7px 12px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface }}/>
-                    <select value={catFilter} onChange={e=>setCatFilter(e.target.value)} style={catSel}>
-                        {['All categories','auth','security','data','admin','billing'].map(c=><option key={c}>{c}</option>)}
-                    </select>
-                    <select value={actorFilter} onChange={e=>setActorFilter(e.target.value)} style={catSel}>
-                        {['All actors','System','jeff@accelerep.com','morgan@accelerep.com','priya@accelerep.com','theo@accelerep.com'].map(a=><option key={a}>{a}</option>)}
-                    </select>
-                    <select value={timeFilter} onChange={e=>setTimeFilter(e.target.value)} style={catSel}>
-                        {['Last 7 days','Last 30 days','Last 90 days','Custom'].map(t=><option key={t}>{t}</option>)}
-                    </select>
-                    <span style={{ fontSize:12.5, color:T.inkMuted, whiteSpace:'nowrap' }}>Showing {visible.length} of 12,847</span>
+                        style={{ flex:1, minWidth:180, padding:'7px 12px', border:`1px solid ${T.border}`, borderRadius:T.r,
+                            fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface }}/>
+                    <PolicySelect label="" value={catFilter} width={260}>
+                        <AuditCategoryDropdown value={catFilter} onChange={v => { setCatFilter(v); }}/>
+                    </PolicySelect>
+                    <PolicySelect label="" value={actorFilter} width={300}>
+                        <AuditActorDropdown value={actorFilter} onChange={v => { setActorFilter(v); }}/>
+                    </PolicySelect>
+                    <PolicySelect label="" value={timeFilter} width={280}>
+                        <AuditTimeDropdown value={timeFilter} onChange={v => { setTimeFilter(v); }}/>
+                    </PolicySelect>
+                    {(catFilter !== 'All categories' || actorFilter !== 'All actors' || search) && (
+                        <button onClick={() => { setCatFilter('All categories'); setActorFilter('All actors'); setSearch(''); }}
+                            style={{ fontSize:12, color:T.danger, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, fontWeight:600, whiteSpace:'nowrap' }}>
+                            Clear filters
+                        </button>
+                    )}
+                    <span style={{ fontSize:12.5, color:T.inkMuted, whiteSpace:'nowrap', marginLeft:'auto' }}>Showing {visible.length} of 12,847</span>
                 </div>
             </div>
 
-            {/* Event stream */}
+            {/* ── Event stream ── */}
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:16 }}>
                 <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
                     <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Event stream</div>
@@ -11237,56 +11697,135 @@ const AuditDetail = ({ onBack }) => {
                 <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans }}>
                     <thead>
                         <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                            {['WHEN','ACTOR','ACTION','TARGET','CATEGORY','IP'].map((h,i) => (
-                                <th key={i} style={{ padding:'8px 14px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'left' }}>{h}</th>
+                            {['WHEN','ACTOR','ACTION','TARGET','CATEGORY','IP',''].map((h,i) => (
+                                <th key={i} style={{ padding:'8px 14px', fontSize:10, fontWeight:700, color:T.inkMuted,
+                                    letterSpacing:0.6, textTransform:'uppercase', textAlign:'left',
+                                    width: i===6 ? 36 : 'auto' }}>{h}</th>
                             ))}
                         </tr>
                     </thead>
                     <tbody>
-                        {visible.map((ev,i) => {
+                        {visible.map((ev, i) => {
                             const cs = auditCatStyle(ev.cat);
                             const isWarn = ev.sev === 'warn';
+                            const isActiveRow = activeRow === i;
                             return (
-                                <tr key={i} style={{ borderBottom:`1px solid ${T.border}`, background: isWarn ? 'rgba(184,115,51,0.05)' : 'transparent' }}>
+                                <tr key={i} style={{ borderBottom:`1px solid ${T.border}`,
+                                    background: isActiveRow ? 'rgba(200,185,154,0.18)' : isWarn ? 'rgba(184,115,51,0.05)' : 'transparent',
+                                    cursor:'pointer', position:'relative' }}
+                                    onClick={() => { setActiveRow(i); setActiveMode('popover'); setActiveDestRow(null); }}>
                                     <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMuted, whiteSpace:'nowrap' }}>{ev.when}</td>
                                     <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.ink, whiteSpace:'nowrap' }}>{ev.actor}</td>
-                                    <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, fontWeight:600, color: isWarn ? T.warn : T.ink, whiteSpace:'nowrap' }}>{ev.action}</td>
+                                    <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, fontWeight:600, color:isWarn?T.warn:T.ink, whiteSpace:'nowrap' }}>{ev.action}</td>
                                     <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid, maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.target}</td>
                                     <td style={{ padding:'9px 14px' }}>
                                         <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:3, fontSize:11, fontWeight:700, background:cs.bg, color:cs.fg }}>{ev.cat}</span>
                                     </td>
                                     <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMuted }}>{ev.ip}</td>
+                                    <td style={{ padding:'9px 14px', textAlign:'right' }} onClick={e => { e.stopPropagation(); setActiveRow(i); setActiveMode('menu'); setActiveDestRow(null); }}>
+                                        <button ref={el => rowMenuRefs.current[i] = el}
+                                            style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                                width:22, height:22, borderRadius:3, fontSize:16, fontWeight:700, border:'none',
+                                                cursor:'pointer', lineHeight:1,
+                                                color: isActiveRow && activeMode==='menu' ? T.goldInk : T.inkMuted,
+                                                background: isActiveRow && activeMode==='menu' ? 'rgba(200,185,154,0.30)' : 'transparent' }}>⋯</button>
+                                    </td>
                                 </tr>
                             );
                         })}
                     </tbody>
                 </table>
+
+                {/* Event popover — anchored below-left of the row */}
+                {activeRow !== null && activeMode === 'popover' && visible[activeRow] && (
+                    <AuditAnchoredMenu
+                        btnRef={{ current: rowMenuRefs.current[activeRow] }}
+                        onClose={() => { setActiveRow(null); setActiveMode(null); }}
+                        alignRight={false}>
+                        <AuditEventPopover
+                            event={visible[activeRow]}
+                            onClose={() => { setActiveRow(null); setActiveMode(null); }}
+                            onAddFilter={handleAddFilter}/>
+                    </AuditAnchoredMenu>
+                )}
+
+                {/* Row ⋯ menu — anchored top-right of ⋯ button */}
+                {activeRow !== null && activeMode === 'menu' && visible[activeRow] && (
+                    <AuditAnchoredMenu
+                        btnRef={{ current: rowMenuRefs.current[activeRow] }}
+                        onClose={() => { setActiveRow(null); setActiveMode(null); }}
+                        alignRight={true}>
+                        <div style={{ position:'relative' }}>
+                            <AuditEventRowMenu
+                                event={visible[activeRow]}
+                                onViewDetails={() => { setActiveMode('popover'); }}
+                                onFilterAction={(key,val) => { handleAddFilter(key,val); }}
+                                onCreateAlert={() => { setActiveRow(null); setActiveMode(null); }}
+                                onClose={() => { setActiveRow(null); setActiveMode(null); }}/>
+                        </div>
+                    </AuditAnchoredMenu>
+                )}
             </div>
 
-            {/* Streaming destinations */}
+            {/* ── Streaming destinations ── */}
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
                 <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                     <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Streaming destinations</div>
-                    <button style={{ fontSize:12.5, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>+ Add destination</button>
+                    <SecBtn label="+ Add destination" onClick={() => {}}/>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'140px 1fr 100px 90px 120px', gap:8, padding:'7px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                    {['DESTINATION','ENDPOINT','FORMAT','STATUS','LAST DELIVERED'].map((h,i) => (
-                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
-                    ))}
-                </div>
-                {SEC_AUDIT_STREAMS.map((s,i) => (
-                    <div key={s.dest} style={{ display:'grid', gridTemplateColumns:'140px 1fr 100px 90px 120px', gap:8, padding:'10px 16px', borderBottom:i<SEC_AUDIT_STREAMS.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
-                        <span style={{ fontSize:13, fontWeight:600, color:T.ink }}>{s.dest}</span>
-                        <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMuted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.url}</span>
-                        <span style={{ display:'inline-block', padding:'2px 6px', borderRadius:3, fontSize:11, fontWeight:600, background:'rgba(138,131,120,0.12)', color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{s.fmt}</span>
-                        <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
-                            background:s.status==='Active'?'rgba(77,107,61,0.12)':'rgba(156,58,46,0.12)',
-                            color:s.status==='Active'?T.ok:T.danger }}>
-                            {s.status}
-                        </span>
-                        <span style={{ fontSize:12, color:s.status==='Failing'?T.danger:T.inkMid }}>{s.lastDelivered}</span>
-                    </div>
-                ))}
+                <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans }}>
+                    <thead>
+                        <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                            {['DESTINATION','ENDPOINT','FORMAT','STATUS','LAST DELIVERED',''].map((h,i) => (
+                                <th key={i} style={{ padding:'8px 14px', fontSize:10, fontWeight:700, color:T.inkMuted,
+                                    letterSpacing:0.6, textTransform:'uppercase', textAlign:'left', width:i===5?36:'auto' }}>{h}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {streams.map((s, i) => (
+                            <tr key={s.dest} style={{ borderBottom:i<streams.length-1?`1px solid ${T.border}`:'none',
+                                background: activeDestRow===i ? 'rgba(200,185,154,0.18)' : 'transparent' }}>
+                                <td style={{ padding:'10px 14px', fontWeight:600, color:T.ink, fontSize:13 }}>{s.dest}</td>
+                                <td style={{ padding:'10px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMuted, maxWidth:280, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.url}</td>
+                                <td style={{ padding:'10px 14px' }}>
+                                    <span style={{ display:'inline-block', padding:'2px 6px', borderRadius:3, fontSize:11, fontWeight:600,
+                                        background:'rgba(138,131,120,0.12)', color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{s.fmt}</span>
+                                </td>
+                                <td style={{ padding:'10px 14px' }}>
+                                    <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                        background:s.status==='Active'?'rgba(77,107,61,0.12)':s.status==='Failing'?'rgba(156,58,46,0.12)':'rgba(138,131,120,0.12)',
+                                        color:s.status==='Active'?T.ok:s.status==='Failing'?T.danger:T.inkMid }}>
+                                        {s.status}
+                                    </span>
+                                </td>
+                                <td style={{ padding:'10px 14px', fontSize:12, color:s.status==='Failing'?T.danger:T.inkMid }}>{s.lastDelivered}</td>
+                                <td style={{ padding:'10px 14px', textAlign:'right' }}>
+                                    <button ref={el => destMenuRefs.current[i] = el}
+                                        onClick={e => { e.stopPropagation(); setActiveDestRow(activeDestRow===i ? null : i); setActiveRow(null); }}
+                                        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                            width:22, height:22, borderRadius:3, fontSize:16, fontWeight:700, border:'none',
+                                            cursor:'pointer', lineHeight:1,
+                                            color: activeDestRow===i ? T.goldInk : T.inkMuted,
+                                            background: activeDestRow===i ? 'rgba(200,185,154,0.30)' : 'transparent' }}>⋯</button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+
+                {/* Destination ⋯ menu */}
+                {activeDestRow !== null && streams[activeDestRow] && (
+                    <AuditAnchoredMenu
+                        btnRef={{ current: destMenuRefs.current[activeDestRow] }}
+                        onClose={() => setActiveDestRow(null)}
+                        alignRight={true}>
+                        <AuditDestRowMenu
+                            dest={streams[activeDestRow]}
+                            onRemove={handleRemoveDest}
+                            onClose={() => setActiveDestRow(null)}/>
+                    </AuditAnchoredMenu>
+                )}
             </div>
         </div>
     );
