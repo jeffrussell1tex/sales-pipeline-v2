@@ -11534,36 +11534,52 @@ const AuditDestRowMenu = ({ dest, onRemove, onClose }) => {
 
 // ── Generic anchored popover wrapper ─────────────────────────
 const AuditAnchoredMenu = ({ children, btnRef, onClose, alignRight=true }) => {
-    const ref = React.useRef(null);
+    const ref    = React.useRef(null);
     const [style, setStyle] = React.useState({ position:'fixed', zIndex:9999, top:-9999, left:-9999, visibility:'hidden' });
 
-    React.useEffect(() => {
-        if (!btnRef?.current) return;
-        const r = btnRef.current.getBoundingClientRect();
-        const MENU_W = 360; // safe max width for overflow detection
-        const top    = r.bottom + 4;
-        // Prefer right-anchor; fall back to left-anchor if it would clip the left edge
+    // Two-pass positioning: first render hidden, then measure and position correctly
+    React.useLayoutEffect(() => {
+        if (!btnRef?.current || !ref.current) return;
+        const r       = btnRef.current.getBoundingClientRect();
+        const menuH   = ref.current.offsetHeight || 320;
+        const menuW   = ref.current.offsetWidth  || 260;
+        const vw      = window.innerWidth;
+        const vh      = window.innerHeight;
+        const GAP     = 4;
+        const EDGE    = 8;
+
+        // Vertical: prefer below button, flip above if it clips the bottom
+        const topBelow  = r.bottom + GAP;
+        const topAbove  = r.top - menuH - GAP;
+        const top = (topBelow + menuH > vh - EDGE) ? Math.max(EDGE, topAbove) : topBelow;
+
+        // Horizontal: prefer right-anchor (right edge of menu = right edge of button)
+        // Fall back to left-anchor if that would clip
         let computed;
         if (alignRight) {
-            const rightVal = window.innerWidth - r.right;
-            // If anchoring right would push the left edge off screen, anchor left instead
-            const wouldClipLeft = (r.right - MENU_W) < 8;
-            if (wouldClipLeft) {
-                computed = { position:'fixed', zIndex:9999, top, left: Math.max(8, r.left) };
+            const leftIfRightAnchored = r.right - menuW;
+            if (leftIfRightAnchored < EDGE) {
+                // Would clip left — anchor left side of menu to left side of button instead
+                computed = { left: Math.max(EDGE, r.left) };
             } else {
-                computed = { position:'fixed', zIndex:9999, top, right: Math.max(8, rightVal) };
+                computed = { right: Math.max(EDGE, vw - r.right) };
             }
         } else {
-            const leftVal = r.left;
-            // If anchoring left would push the right edge off screen, shift left
-            const wouldClipRight = (leftVal + MENU_W) > window.innerWidth - 8;
-            computed = { position:'fixed', zIndex:9999, top, left: wouldClipRight ? Math.max(8, window.innerWidth - MENU_W - 8) : leftVal };
+            const rightIfLeftAnchored = r.left + menuW;
+            if (rightIfLeftAnchored > vw - EDGE) {
+                computed = { right: EDGE };
+            } else {
+                computed = { left: Math.max(EDGE, r.left) };
+            }
         }
-        setStyle({ ...computed, visibility:'visible' });
 
+        setStyle({ position:'fixed', zIndex:9999, top, ...computed, visibility:'visible' });
+    });
+
+    React.useEffect(() => {
         const onDoc = (e) => {
             if (ref.current && !ref.current.contains(e.target) &&
-                btnRef.current && !btnRef.current.contains(e.target)) onClose();
+                btnRef?.current && !btnRef.current.contains(e.target)) onClose();
         };
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
         document.addEventListener('mousedown', onDoc);
