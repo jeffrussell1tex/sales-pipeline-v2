@@ -11535,46 +11535,44 @@ const AuditDestRowMenu = ({ dest, onRemove, onClose }) => {
 // ── Generic anchored popover wrapper ─────────────────────────
 const AuditAnchoredMenu = ({ children, btnRef, onClose, alignRight=true }) => {
     const ref = React.useRef(null);
-    const [pos, setPos] = React.useState({ top:0, right:0, left:0, flipLeft:false });
+    const [style, setStyle] = React.useState({ position:'fixed', zIndex:9999, top:-9999, left:-9999, visibility:'hidden' });
 
     React.useEffect(() => {
-        if (btnRef?.current) {
-            const r = btnRef.current.getBoundingClientRect();
-            // Flip left if the menu would overflow the right edge of the viewport
-            // Menus are typically 196-360px wide; use 360 as the safe max for detection
-            const wouldOverflowRight = alignRight && (window.innerWidth - r.right) < 0;
-            const flipLeft = alignRight && r.right - 360 < 0; // not enough room on left either
-            setPos({
-                top:      r.bottom + 4,
-                right:    window.innerWidth - r.right,
-                left:     Math.max(8, r.left - 320), // fallback left anchor
-                flipLeft: wouldOverflowRight && !flipLeft,
-            });
+        if (!btnRef?.current) return;
+        const r = btnRef.current.getBoundingClientRect();
+        const MENU_W = 360; // safe max width for overflow detection
+        const top    = r.bottom + 4;
+        // Prefer right-anchor; fall back to left-anchor if it would clip the left edge
+        let computed;
+        if (alignRight) {
+            const rightVal = window.innerWidth - r.right;
+            // If anchoring right would push the left edge off screen, anchor left instead
+            const wouldClipLeft = (r.right - MENU_W) < 8;
+            if (wouldClipLeft) {
+                computed = { position:'fixed', zIndex:9999, top, left: Math.max(8, r.left) };
+            } else {
+                computed = { position:'fixed', zIndex:9999, top, right: Math.max(8, rightVal) };
+            }
+        } else {
+            const leftVal = r.left;
+            // If anchoring left would push the right edge off screen, shift left
+            const wouldClipRight = (leftVal + MENU_W) > window.innerWidth - 8;
+            computed = { position:'fixed', zIndex:9999, top, left: wouldClipRight ? Math.max(8, window.innerWidth - MENU_W - 8) : leftVal };
         }
-        const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+        setStyle({ ...computed, visibility:'visible' });
+
+        const onDoc = (e) => {
+            if (ref.current && !ref.current.contains(e.target) &&
+                btnRef.current && !btnRef.current.contains(e.target)) onClose();
+        };
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
         document.addEventListener('mousedown', onDoc);
         document.addEventListener('keydown', onKey);
         return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
     }, []);
 
-    // After the menu renders, check if it actually overflows and correct
-    React.useEffect(() => {
-        if (!ref.current) return;
-        const menuRect = ref.current.getBoundingClientRect();
-        if (menuRect.right > window.innerWidth - 8) {
-            // Overflow detected — shift left
-            ref.current.style.right = '8px';
-            ref.current.style.left  = 'auto';
-        }
-        if (menuRect.left < 8) {
-            ref.current.style.left  = '8px';
-            ref.current.style.right = 'auto';
-        }
-    });
-
     return (
-        <div ref={ref} style={{ position:'fixed', zIndex:9999, top:pos.top, ...(alignRight ? { right:pos.right } : { left:pos.left }) }}>
+        <div ref={ref} style={style}>
             {children}
         </div>
     );
@@ -11583,6 +11581,143 @@ const AuditAnchoredMenu = ({ children, btnRef, onClose, alignRight=true }) => {
 // ─────────────────────────────────────────────────────────────────
 // AuditDetail — live version
 // ─────────────────────────────────────────────────────────────────
+// ── Manage Alerts modal ────────────────────────────────────────────────────────
+const ManageAlertsModal = ({ alertCount, onClose }) => {
+    const [alerts, setAlerts] = React.useState([
+        { id:1, name:'Failed login spike',      condition:'login.failed > 5 in 10 min',   channel:'Email + Slack', active:true  },
+        { id:2, name:'API key created',         condition:'action = apikey.created',       channel:'Email',         active:true  },
+        { id:3, name:'Role permission changed', condition:'action = role.permission_changed', channel:'Email',      active:true  },
+        { id:4, name:'MFA disabled',            condition:'action = mfa.disabled',         channel:'Email + Slack', active:false },
+    ]);
+    const toggleAlert = (id) => setAlerts(prev => prev.map(a => a.id === id ? {...a, active:!a.active} : a));
+    const rowSt = { display:'grid', gridTemplateColumns:'1fr 1fr 120px 60px', gap:12, padding:'10px 16px', alignItems:'center', borderBottom:`1px solid ${T.border}`, fontFamily:T.sans };
+    return (
+        <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width:700, display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)', maxHeight:'80vh' }}>
+                <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div>
+                        <div style={{ fontSize:16, fontWeight:700, color:T.ink }}>Manage alerts</div>
+                        <div style={{ fontSize:12, color:T.inkMuted, marginTop:2 }}>{alertCount} alert{alertCount!==1?'s':''} triggered today · rules fire on matching audit events</div>
+                    </div>
+                    <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', lineHeight:1 }}>×</button>
+                </div>
+                <div style={{ flex:1, overflowY:'auto' }}>
+                    <div style={{ ...rowSt, background:T.surface2, borderTop:'none' }}>
+                        {['RULE NAME','CONDITION','CHANNEL','ACTIVE'].map((h,i) => (
+                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase' }}>{h}</div>
+                        ))}
+                    </div>
+                    {alerts.map(a => (
+                        <div key={a.id} style={rowSt}>
+                            <span style={{ fontSize:13, fontWeight:600, color:T.ink }}>{a.name}</span>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMid }}>{a.condition}</span>
+                            <span style={{ fontSize:12, color:T.inkMid }}>{a.channel}</span>
+                            <div onClick={() => toggleAlert(a.id)}
+                                style={{ width:30, height:18, borderRadius:9, background:a.active?T.ok:T.border, position:'relative', cursor:'pointer', transition:'background 120ms' }}>
+                                <span style={{ position:'absolute', top:2, left:a.active?14:2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <div style={{ padding:'12px 20px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', gap:8, justifyContent:'space-between' }}>
+                    <SecBtn label="+ New alert rule" onClick={() => {}}/>
+                    <SecBtn label="Done" primary onClick={onClose}/>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── Add Destination modal ──────────────────────────────────────────────────────
+const AddDestinationModal = ({ onClose, onSave }) => {
+    const [dest,   setDest]   = React.useState('');
+    const [url,    setUrl]    = React.useState('');
+    const [fmt,    setFmt]    = React.useState('JSON');
+    const [saving, setSaving] = React.useState(false);
+    const [err,    setErr]    = React.useState('');
+
+    const PRESET_DESTS = [
+        { label:'Datadog Logs',   url:'https://http-intake.logs.datadoghq.com/api/v/logs',  fmt:'JSON' },
+        { label:'Splunk HEC',     url:'https://splunk.example.com:8088/services/collector', fmt:'JSON' },
+        { label:'S3 archive',     url:'s3://your-bucket/accelerep-audit/',                  fmt:'NDJSON.gz' },
+        { label:'SIEM webhook',   url:'https://siem.example.com/ingest',                    fmt:'JSON' },
+    ];
+
+    const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' };
+    const FL = ({ label:lbl, hint, children }) => (
+        <div style={{ marginBottom:14 }}>
+            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{lbl}</label>
+            {children}
+            {hint && <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>{hint}</div>}
+        </div>
+    );
+
+    const handleSave = async () => {
+        if (!dest.trim()) { setErr('Destination name is required'); return; }
+        if (!url.trim())  { setErr('Endpoint URL is required'); return; }
+        setSaving(true);
+        const newDest = { dest: dest.trim(), url: url.trim(), fmt, status:'Active', lastDelivered:'Never' };
+        await onSave(newDest);
+        setSaving(false);
+    };
+
+    return (
+        <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width:540, display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)' }}>
+                <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div>
+                        <div style={{ fontSize:16, fontWeight:700, color:T.ink }}>Add streaming destination</div>
+                        <div style={{ fontSize:12, color:T.inkMuted, marginTop:2 }}>Audit events will be forwarded in real-time</div>
+                    </div>
+                    <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', lineHeight:1 }}>×</button>
+                </div>
+                <div style={{ padding:'18px 20px' }}>
+                    {/* Presets */}
+                    <div style={{ fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:8, fontFamily:T.sans }}>Quick presets</div>
+                    <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:16 }}>
+                        {PRESET_DESTS.map(p => (
+                            <button key={p.label} onClick={() => { setDest(p.label); setUrl(p.url); setFmt(p.fmt); }}
+                                style={{ padding:'5px 10px', fontSize:12, fontWeight:500, background:dest===p.label?T.ink:T.surface2,
+                                    color:dest===p.label?'#fbf8f3':T.inkMid, border:`1px solid ${dest===p.label?T.ink:T.border}`,
+                                    borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                                {p.label}
+                            </button>
+                        ))}
+                    </div>
+                    <FL label="Destination name">
+                        <input value={dest} onChange={e => { setDest(e.target.value); setErr(''); }} placeholder="e.g. Datadog production" style={{ ...inpSt, fontFamily:T.sans }}/>
+                    </FL>
+                    <FL label="Endpoint URL" hint="HTTP/HTTPS URL or s3:// path">
+                        <input value={url} onChange={e => { setUrl(e.target.value); setErr(''); }} placeholder="https://..." style={inpSt}/>
+                    </FL>
+                    <FL label="Format">
+                        <div style={{ display:'flex', gap:8 }}>
+                            {['JSON','NDJSON','NDJSON.gz'].map(f => (
+                                <button key={f} onClick={() => setFmt(f)}
+                                    style={{ flex:1, padding:'8px 0', fontSize:12.5, fontWeight:600, textAlign:'center',
+                                        background:fmt===f?T.ink:T.surface2, color:fmt===f?'#fbf8f3':T.inkMid,
+                                        border:`1px solid ${fmt===f?T.ink:T.border}`, borderRadius:T.r, cursor:'pointer',
+                                        fontFamily:'ui-monospace,Menlo,monospace' }}>
+                                    {f}
+                                </button>
+                            ))}
+                        </div>
+                    </FL>
+                    {err && <div style={{ fontSize:12, color:T.danger, fontFamily:T.sans, marginBottom:8 }}>{err}</div>}
+                    <div style={{ padding:'10px 12px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid, fontFamily:T.sans }}>
+                        Events are forwarded with HMAC-SHA256 signatures. Verify the <code>X-Accelerep-Signature</code> header on your endpoint.
+                    </div>
+                </div>
+                <div style={{ padding:'12px 20px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', gap:8, justifyContent:'flex-end' }}>
+                    <SecBtn label="Cancel" onClick={onClose}/>
+                    <SecBtn label={saving?'Adding…':'Add destination'} primary onClick={handleSave} disabled={saving}/>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 // ── Audit display helpers ─────────────────────────────────────────────────────
 const fmtEventAge = (iso) => {
     if (!iso) return '—';
@@ -11631,7 +11766,9 @@ const AuditDetail = ({ onBack }) => {
     const [activeDestRow, setActiveDestRow] = React.useState(null);
 
     // Export split button state
-    const [exportOpen,  setExportOpen]  = React.useState(false);
+    const [exportOpen,   setExportOpen]   = React.useState(false);
+    const [showAlerts,   setShowAlerts]   = React.useState(false);
+    const [showAddDest,  setShowAddDest]  = React.useState(false);
 
     // Live audit events from DB
     const [events,      setEvents]      = React.useState(SEC_AUDIT_EVENTS); // start with mock, replace on load
@@ -11656,9 +11793,9 @@ const AuditDetail = ({ onBack }) => {
                 ]);
                 if (cancelled) return;
                 const [auditData, settingsData] = await Promise.all([auditRes.json(), settingsRes.json()]);
-                if (auditRes.ok && auditData.events?.length > 0) {
+                if (auditRes.ok && auditData.entries?.length > 0) {
                     // Map DB shape → display shape
-                    const mapped = auditData.events.map(e => ({
+                    const mapped = auditData.entries.map(e => ({
                         when:   fmtEventAge(e.timestamp),
                         actor:  e.userName || e.userId || 'System',
                         action: e.action,
@@ -11707,6 +11844,18 @@ const AuditDetail = ({ onBack }) => {
         setActiveDestRow(null);
     };
 
+    const handleSaveDest = async (newDest) => {
+        const next = [...streams, newDest];
+        setStreams(next);
+        setShowAddDest(false);
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ streamingDestinations: next }),
+            });
+        } catch (e) { console.error('saveDest error:', e.message); }
+    };
+
     const auditCatStyle = (cat) => {
         const map = { auth:'rgba(58,90,122,0.12)', security:'rgba(156,58,46,0.10)', admin:'rgba(77,107,61,0.10)', data:'rgba(200,185,154,0.20)', billing:'rgba(184,115,51,0.10)' };
         const col = { auth:T.info, security:T.danger, admin:T.ok, data:T.goldInk, billing:T.warn };
@@ -11715,6 +11864,8 @@ const AuditDetail = ({ onBack }) => {
 
     return (
         <div style={{ fontFamily:T.sans }}>
+            {showAlerts  && <ManageAlertsModal alertCount={alertCount} onClose={() => setShowAlerts(false)}/>}
+            {showAddDest && <AddDestinationModal onClose={() => setShowAddDest(false)} onSave={handleSaveDest}/>}
             <SecCrumb page="Audit log" onBack={onBack}/>
             <SecTitle
                 title="Audit log"
@@ -11752,7 +11903,7 @@ const AuditDetail = ({ onBack }) => {
                         )}
                     </div>,
 
-                    <button key="ale" style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'7px 14px',
+                    <button key="ale" onClick={() => setShowAlerts(true)} style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'7px 14px',
                         background:T.ink, color:'#fbf8f3', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer',
                         border:'none', fontFamily:T.sans }}>
                         Manage alerts
@@ -11873,7 +12024,7 @@ const AuditDetail = ({ onBack }) => {
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
                 <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                     <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Streaming destinations</div>
-                    <SecBtn label="+ Add destination" onClick={() => {}}/>
+                    <SecBtn label="+ Add destination" onClick={() => setShowAddDest(true)}/>
                 </div>
                 <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans }}>
                     <thead>
