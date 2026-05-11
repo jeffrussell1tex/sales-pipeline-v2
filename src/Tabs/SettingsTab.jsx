@@ -9719,6 +9719,241 @@ const ConnectedAppsDetail = ({ onBack }) => {
 
 // ── ② API Keys ────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────
+// API Keys · View Docs Popover — Variant B (working starter)
+// Anchored under the "View docs" button in the API Keys header.
+// ─────────────────────────────────────────────────────────────────
+const DOCS_RESOURCES = [
+    { label:'Accounts',      count:'14' },
+    { label:'Contacts',      count:'12' },
+    { label:'Opportunities', count:'18' },
+    { label:'Quotes',        count:'11' },
+    { label:'Reports',       count:'8'  },
+    { label:'Webhooks',      count:'6'  },
+];
+
+const SDK_LIST = [
+    { lang:'TypeScript', ver:'v3.2.0', cmd:'npm i @accelerep/sdk'            },
+    { lang:'Python',     ver:'v2.8.1', cmd:'pip install accelerep'            },
+    { lang:'Ruby',       ver:'v1.4.0', cmd:'gem install accelerep'            },
+    { lang:'Go',         ver:'v0.9.3', cmd:'go get github.com/accelerep/go'   },
+];
+
+const DocsPopoverB = ({ keys = [], onClose, btnRef }) => {
+    const ref    = React.useRef(null);
+    const posRef = React.useRef(false);
+    const [style, setStyle] = React.useState({ position:'fixed', zIndex:9999, top:-9999, left:-9999, visibility:'hidden' });
+    const [tab,     setTab]     = React.useState('cURL'); // cURL | JS | Python
+    const [copied,  setCopied]  = React.useState(false);
+    const [activeKey, setActiveKey] = React.useState(keys.find(k => !k.revokedAt) || null);
+
+    // Update active key when keys load
+    React.useEffect(() => {
+        if (!activeKey && keys.length > 0) setActiveKey(keys.find(k => !k.revokedAt) || null);
+    }, [keys]);
+
+    // Two-pass positioning
+    React.useLayoutEffect(() => {
+        if (!btnRef?.current || !ref.current || posRef.current) return;
+        posRef.current = true;
+        const r    = btnRef.current.getBoundingClientRect();
+        const menuW = ref.current.offsetWidth  || 440;
+        const menuH = ref.current.offsetHeight || 500;
+        const vw   = window.innerWidth;
+        const vh   = window.innerHeight;
+        const GAP  = 6;
+        const EDGE = 8;
+        const top  = (r.bottom + GAP + menuH > vh - EDGE)
+            ? Math.max(EDGE, r.top - menuH - GAP) : r.bottom + GAP;
+        // Right-anchor — align right edge of menu to right edge of button, clamp left
+        const right = Math.max(EDGE, vw - r.right);
+        setStyle({ position:'fixed', zIndex:9999, top, right, visibility:'visible' });
+    });
+
+    React.useEffect(() => {
+        const onDoc = (e) => {
+            if (ref.current && !ref.current.contains(e.target) &&
+                btnRef?.current && !btnRef.current.contains(e.target)) onClose();
+        };
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('mousedown', onDoc);
+        document.addEventListener('keydown',   onKey);
+        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+    }, []);
+
+    const keyPrefix = activeKey?.keyPrefix || 'spt_live_••••';
+
+    const snippets = {
+        cURL: `curl https://api.accelerep.com/v1/accounts \
+  -H "Authorization: Bearer ${keyPrefix}..." \
+  -H "Accept: application/json"`,
+        JS: `import { AccelerepClient } from '@accelerep/sdk';
+const client = new AccelerepClient('${keyPrefix}...');
+const accounts = await client.accounts.list();`,
+        Python: `import accelerep
+client = accelerep.Client('${keyPrefix}...')
+accounts = client.accounts.list()`,
+    };
+
+    const handleCopy = () => {
+        navigator.clipboard?.writeText(snippets[tab]);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const EB = ({ children }) => (
+        <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>
+            {children}
+        </div>
+    );
+
+    return (
+        <div ref={ref} style={style}>
+            {/* Caret */}
+            <div style={{ position:'absolute', top:-7, right:20, width:12, height:12,
+                background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)', zIndex:1 }}/>
+
+            <div style={{ width:440, background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRadius:8, boxShadow:'0 8px 28px rgba(42,38,34,0.14), 0 2px 4px rgba(42,38,34,0.06)',
+                fontFamily:T.sans, overflow:'hidden' }}>
+
+                {/* Header */}
+                <div style={{ padding:'13px 16px 10px', borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
+                        <span style={{ fontSize:14, fontWeight:700, color:T.ink }}>API quick reference</span>
+                        <span style={{ flex:1 }}/>
+                        <span style={{ fontSize:10.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>v1 · api.accelerep.com</span>
+                        <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', lineHeight:1, padding:0 }}>×</button>
+                    </div>
+                    <div style={{ fontSize:11, color:T.inkMid, lineHeight:1.5 }}>
+                        Copy a starter for any active key, browse SDKs, or jump to a resource.
+                    </div>
+                </div>
+
+                {/* Quick start code block */}
+                <div style={{ padding:'12px 16px 0' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+                        <EB>Quick start</EB>
+                        <span style={{ flex:1 }}/>
+                        {['cURL','JS','Python'].map(t => (
+                            <span key={t} onClick={() => { setTab(t); setCopied(false); }}
+                                style={{ padding:'3px 9px', borderRadius:10, fontSize:11, fontWeight:600, cursor:'pointer',
+                                    background: tab===t ? T.ink : 'transparent',
+                                    color: tab===t ? '#fbf8f3' : T.inkMid,
+                                    border: `1px solid ${tab===t ? T.ink : T.border}` }}>
+                                {t}
+                            </span>
+                        ))}
+                    </div>
+
+                    {/* Code panel */}
+                    <div style={{ background:T.ink, borderRadius:4, padding:'12px 14px', position:'relative', marginBottom:8 }}>
+                        <pre style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:'#a8f0c8',
+                            lineHeight:1.55, margin:0, whiteSpace:'pre-wrap', wordBreak:'break-all' }}>
+                            {snippets[tab]}
+                        </pre>
+                        <button onClick={handleCopy}
+                            style={{ position:'absolute', top:8, right:8, fontSize:10, padding:'3px 8px',
+                                background:copied?'rgba(77,107,61,0.5)':'rgba(243,237,224,0.10)',
+                                color:'#f3ede0', border:'none', borderRadius:2, cursor:'pointer',
+                                fontWeight:600, fontFamily:T.sans, transition:'background 150ms' }}>
+                            {copied ? '✓ Copied' : 'Copy'}
+                        </button>
+                    </div>
+
+                    {/* Active key pill */}
+                    <div style={{ padding:'6px 10px', background:T.surface2, border:`1px solid ${T.border}`,
+                        borderRadius:4, fontSize:10.5, color:T.inkMid, display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+                        <span>Use key</span>
+                        {activeKey ? (
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5,
+                                background:T.surface, padding:'1px 6px', borderRadius:2,
+                                border:`1px solid ${T.border}`, color:T.ink, fontWeight:600 }}>
+                                {activeKey.name}
+                            </span>
+                        ) : (
+                            <span style={{ color:T.inkMuted }}>No active keys</span>
+                        )}
+                        <span style={{ flex:1 }}/>
+                        {keys.filter(k => !k.revokedAt).length > 1 && (
+                            <select value={activeKey?.id || ''} onChange={e => setActiveKey(keys.find(k => k.id === e.target.value))}
+                                style={{ fontSize:10.5, color:T.inkMid, background:'none', border:'none', cursor:'pointer',
+                                    fontFamily:T.sans, outline:'none', padding:0 }}>
+                                {keys.filter(k => !k.revokedAt).map(k => (
+                                    <option key={k.id} value={k.id}>{k.name}</option>
+                                ))}
+                            </select>
+                        )}
+                        {keys.filter(k => !k.revokedAt).length <= 1 && (
+                            <span style={{ color:T.inkMuted, fontWeight:600, cursor:'default' }}>Change ▾</span>
+                        )}
+                    </div>
+                </div>
+
+                {/* SDKs */}
+                <div style={{ padding:'10px 16px 4px', borderTop:`1px solid ${T.border}`, marginTop:10 }}>
+                    <EB>Official SDKs</EB>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:6, marginTop:8 }}>
+                        {SDK_LIST.map(s => (
+                            <div key={s.lang} style={{ border:`1px solid ${T.border}`, borderRadius:4,
+                                padding:'8px 10px', background:T.surface, cursor:'pointer' }}
+                                onMouseEnter={e => e.currentTarget.style.borderColor = T.borderStrong}
+                                onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
+                                <div style={{ display:'flex', alignItems:'baseline', gap:6, marginBottom:3 }}>
+                                    <span style={{ fontSize:12, fontWeight:700, color:T.ink }}>{s.lang}</span>
+                                    <span style={{ fontSize:9.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{s.ver}</span>
+                                    <span style={{ flex:1 }}/>
+                                    <span style={{ fontSize:10, color:T.inkMuted }}>↗</span>
+                                </div>
+                                <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5,
+                                    color:T.inkMid, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.cmd}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Jump to */}
+                <div style={{ padding:'10px 16px 10px', borderTop:`1px solid ${T.border}`, marginTop:8 }}>
+                    <div style={{ display:'flex', alignItems:'center', marginBottom:8 }}>
+                        <EB>Jump to</EB>
+                        <span style={{ flex:1 }}/>
+                        <span style={{ fontSize:11, color:T.inkMid, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Search ⌘K</span>
+                    </div>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                        {DOCS_RESOURCES.map(r => (
+                            <a key={r.label} href={`https://docs.accelerep.com/api/${r.label.toLowerCase()}`}
+                                target="_blank" rel="noopener noreferrer" style={{ textDecoration:'none' }}>
+                                <span style={{ padding:'4px 9px', background:T.surface2, border:`1px solid ${T.border}`,
+                                    borderRadius:10, fontSize:11, color:T.ink, fontWeight:600, cursor:'pointer', display:'inline-block' }}
+                                    onMouseEnter={e => e.currentTarget.style.borderColor = T.borderStrong}
+                                    onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
+                                    {r.label} <span style={{ color:T.inkMuted, fontWeight:400 }}>{r.count}</span>
+                                </span>
+                            </a>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding:'10px 16px', borderTop:`1px solid ${T.border}`, background:T.surface2,
+                    display:'flex', alignItems:'center', gap:10 }}>
+                    <a href="https://docs.accelerep.com/openapi" target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize:11, color:T.inkMid, fontWeight:600, cursor:'pointer', textDecoration:'none' }}>OpenAPI ↗</a>
+                    <a href="https://docs.accelerep.com/postman" target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize:11, color:T.inkMid, fontWeight:600, cursor:'pointer', textDecoration:'none' }}>Postman ↗</a>
+                    <span style={{ fontSize:11, color:T.inkMuted, cursor:'pointer', fontFamily:T.sans }}>Changelog</span>
+                    <span style={{ flex:1 }}/>
+                    <a href="https://docs.accelerep.com/api" target="_blank" rel="noopener noreferrer" style={{ textDecoration:'none' }}>
+                        <IntBtn label="Open full docs ↗" primary/>
+                    </a>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// ─────────────────────────────────────────────────────────────────
 // API Keys — live version
 // ─────────────────────────────────────────────────────────────────
 
@@ -9767,6 +10002,8 @@ const RevokeKeyModal = ({ k, onConfirm, onClose }) => (
 );
 
 const ApiKeysDetail = ({ onBack }) => {
+    const [showDocs,    setShowDocs]    = React.useState(false);
+    const docsBtnRef = React.useRef(null);
     const [keys,        setKeys]        = React.useState([]);
     const [loading,     setLoading]     = React.useState(true);
     const [error,       setError]       = React.useState(null);
@@ -9843,6 +10080,13 @@ const ApiKeysDetail = ({ onBack }) => {
     return (
         <div style={{ fontFamily:T.sans }}>
             {/* Modals */}
+            {showDocs && (
+                <DocsPopoverB
+                    keys={keys}
+                    btnRef={docsBtnRef}
+                    onClose={() => setShowDocs(false)}
+                />
+            )}
             {showCreate && (
                 <NewApiKeyModal
                     onClose={() => setShowCreate(false)}
@@ -9862,10 +10106,14 @@ const ApiKeysDetail = ({ onBack }) => {
                 title="API keys"
                 sub={loading ? 'Loading…' : `${activeCount} active key${activeCount!==1?'s':''} · ${revokedCount} revoked`}
                 actions={[
-                    <a key="docs" href="https://docs.accelerep.com/api" target="_blank" rel="noopener noreferrer"
-                        style={{ textDecoration:'none' }}>
-                        <IntBtn label="View docs ↗"/>
-                    </a>,
+                    <button ref={docsBtnRef} key="docs" onClick={() => setShowDocs(o => !o)}
+                        style={{ padding:'6px 12px', background:showDocs?T.surface2:T.surface,
+                            border:`1px solid ${showDocs?T.goldInk:T.borderStrong}`,
+                            color:showDocs?T.goldInk:T.ink,
+                            borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer',
+                            fontFamily:T.sans, display:'inline-flex', alignItems:'center', gap:5 }}>
+                        View docs <span style={{ fontSize:10 }}>↗</span>
+                    </button>,
                     <IntBtn key="new" label="+ Create key" primary onClick={() => setShowCreate(true)}/>,
                 ]}/>
 
