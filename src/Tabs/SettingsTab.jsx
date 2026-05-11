@@ -15442,6 +15442,48 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
     const [search, setSearch] = useState('');
     const [activeItem, setActiveItem] = useState(null); // detail panel state
 
+    // ── Needs Attention snooze/dismiss ───────────────────────────────────────
+    const [naMenuOpen,   setNaMenuOpen]   = React.useState(null);
+    const [naHidden,     setNaHidden]     = React.useState({});
+    const [naShowHidden, setNaShowHidden] = React.useState(false);
+    const now = Date.now();
+
+    const isHidden = (id) => {
+        const h = naHidden[id];
+        if (!h) return false;
+        if (h.until === 'forever') return true;
+        return new Date(h.until).getTime() > now;
+    };
+
+    const handleNaSnooze = (item, days) => {
+        const until = new Date(now + days * 86400000);
+        const label = until.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+        setNaHidden(prev => ({ ...prev, [item.id]: { until: until.toISOString(), name: item.name, snoozedUntilLabel: label } }));
+        setNaMenuOpen(null);
+    };
+
+    const handleNaDismiss = (item) => {
+        setNaHidden(prev => ({ ...prev, [item.id]: { until: 'forever', name: item.name, snoozedUntilLabel: null } }));
+        setNaMenuOpen(null);
+    };
+
+    const handleNaRestore = (id) => {
+        setNaHidden(prev => { const n = {...prev}; delete n[id]; return n; });
+    };
+
+    React.useEffect(() => {
+        if (!naMenuOpen) return;
+        const onDoc = (e) => {
+            const menu = document.getElementById('na-menu-' + naMenuOpen);
+            const btn  = document.getElementById('na-btn-'  + naMenuOpen);
+            if (menu && !menu.contains(e.target) && btn && !btn.contains(e.target)) setNaMenuOpen(null);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setNaMenuOpen(null); };
+        document.addEventListener('mousedown', onDoc);
+        document.addEventListener('keydown',   onKey);
+        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+    }, [naMenuOpen]);
+
     // Detail panels that have real content — others just open the card (no-op for now)
     const DETAIL_PANELS = {
         'lead-conv-benchmarks': <LeadConvBenchmarks settings={settings} setSettings={setSettings}/>,
@@ -15582,8 +15624,15 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         { label:'Session policy set',      ok: true                        },
         { label:'Quote branding configured', ok: true                      },
     ];
-    const healthOk = healthChecks.filter(h => h.ok).length;
-    const healthPct = Math.round((healthOk / healthChecks.length) * 100);
+    // Exclude hidden attention items from health denominator
+    const activeHealthChecks = healthChecks.filter(h => {
+        if (h.label === 'SSO configured'       && isHidden('sso'))      return false;
+        if (h.label === 'MFA enforced'         && isHidden('mfa'))      return false;
+        if (h.label === 'Webhooks all healthy' && isHidden('webhooks')) return false;
+        return true;
+    });
+    const healthOk  = activeHealthChecks.filter(h => h.ok).length;
+    const healthPct = Math.round((healthOk / activeHealthChecks.length) * 100);
 
     // Recently changed feed (static + real user count)
     const recentFeed = [
@@ -15629,26 +15678,162 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
                         <Ring value={healthPct} size={72} stroke={7} color={T.ok} trackColor={T.border}/>
                         <div style={{ flex:1 }}>
                             <div style={{ ...eb(T.ok), marginBottom:4 }}>WORKSPACE HEALTH</div>
-                            <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:4, fontFamily:T.sans }}>{healthOk} of {healthChecks.length} checks passing</div>
+                            <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:4, fontFamily:T.sans }}>{healthOk} of {activeHealthChecks.length} checks passing</div>
                             <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans }}>Set up SSO and enforce MFA to reach 90%+ — standard for multi-rep workspaces.</div>
                         </div>
                     </div>
                     {/* Needs attention */}
                     <div style={{ background:'rgba(156,58,46,0.04)', border:'1px solid rgba(156,58,46,0.2)', borderRadius:6, padding:16 }}>
-                        <div style={{ ...eb('#9c3a2e'), marginBottom:10, display:'flex', alignItems:'center', gap:6 }}>
-                            <span>⚠</span> NEEDS ATTENTION
+                        {/* Header */}
+                        <div style={{ ...eb('#9c3a2e'), marginBottom:10, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                            <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                                <span>⚠</span> NEEDS ATTENTION
+                            </span>
+                            {hiddenCount > 0 && (
+                                <span style={{ fontSize:9.5, color:T.inkMuted, letterSpacing:0, textTransform:'none', fontWeight:400, fontFamily:T.sans }}>
+                                    {hiddenCount} hidden · <span onClick={() => setNaShowHidden(v => !v)}
+                                        style={{ color:T.info, fontWeight:600, cursor:'pointer' }}>
+                                        {naShowHidden ? 'Hide' : 'Show'}
+                                    </span>
+                                </span>
+                            )}
                         </div>
-                        {attentionItems.slice(0,3).map((it, i) => (
-                            <div key={it.id} style={{ padding:'8px 0', borderBottom: i < Math.min(attentionItems.length,3)-1 ? `1px dashed rgba(156,58,46,0.15)` : 'none', display:'flex', alignItems:'center', gap:10 }}>
-                                <div style={{ flex:1, minWidth:0 }}>
-                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{it.name}</div>
-                                    <div style={{ fontSize:11, color:T.inkMid, marginTop:1, fontFamily:T.sans }}>{it.statusDetail}</div>
+
+                        {/* Visible attention rows */}
+                        {visibleAttention.slice(0,3).map((it, i) => {
+                            const isOpen  = naMenuOpen === it.id;
+                            const fixable = it.id !== 'sso';
+                            return (
+                                <div key={it.id} style={{ padding:'8px 0',
+                                    borderBottom: i < Math.min(visibleAttention.length,3)-1 ? `1px dashed rgba(156,58,46,0.15)` : 'none',
+                                    display:'flex', alignItems:'center', gap:8, position:'relative',
+                                    background: isOpen ? 'rgba(200,185,154,0.07)' : 'transparent' }}>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{it.name}</div>
+                                        <div style={{ fontSize:11, color:T.inkMid, marginTop:1, fontFamily:T.sans }}>{it.statusDetail}</div>
+                                    </div>
+                                    {/* Fix button */}
+                                    <button onClick={() => fixable && setActiveItem(SETTINGS_ITEMS.find(s => s.id===it.id)||it)}
+                                        style={{ padding:'4px 10px', fontSize:11, fontWeight:600,
+                                            background: fixable ? T.danger : 'rgba(156,58,46,0.35)',
+                                            color:'#fbf8f3', border:'none', borderRadius:T.r,
+                                            cursor: fixable ? 'pointer' : 'not-allowed', fontFamily:T.sans,
+                                            display:'inline-flex', alignItems:'center', gap:4 }}>
+                                        Fix <span style={{ fontSize:10 }}>→</span>
+                                    </button>
+                                    {/* Kebab ⋯ */}
+                                    <button id={'na-btn-' + it.id}
+                                        onClick={() => setNaMenuOpen(isOpen ? null : it.id)}
+                                        style={{ width:24, height:24, display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                            borderRadius:3, cursor:'pointer', border:'none', padding:0,
+                                            color: isOpen ? T.goldInk : T.inkMuted,
+                                            background: isOpen ? 'rgba(200,185,154,0.30)' : 'transparent',
+                                            fontSize:15, fontWeight:700, lineHeight:1 }}>⋯</button>
+                                    {/* Kebab menu */}
+                                    {isOpen && (
+                                        <div id={'na-menu-' + it.id}
+                                            style={{ position:'absolute', top:'100%', right:0, zIndex:50, marginTop:4,
+                                                width:220, background:T.surface, border:`1px solid ${T.borderStrong}`,
+                                                borderRadius:4, padding:4, fontFamily:T.sans,
+                                                boxShadow:'0 8px 24px rgba(42,38,34,0.12), 0 2px 4px rgba(42,38,34,0.06)' }}>
+                                            <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
+                                                background:T.surface, border:`1px solid ${T.borderStrong}`,
+                                                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
+                                            <div style={{ padding:'6px 12px 4px', fontSize:9.5, fontWeight:800,
+                                                color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase' }}>
+                                                Remind me later
+                                            </div>
+                                            {[
+                                                { days:7,  label:'Snooze 7 days',  sub:'Until next Monday' },
+                                                { days:30, label:'Snooze 30 days', sub:'Recommended'       },
+                                                { days:90, label:'Snooze 90 days', sub:'Once a quarter'    },
+                                            ].map(o => (
+                                                <div key={o.days} onClick={() => handleNaSnooze(it, o.days)}
+                                                    style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', borderRadius:3, cursor:'pointer' }}
+                                                    onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.10)'}
+                                                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                    <span style={{ fontSize:12, color:T.inkMid, flexShrink:0 }}>◷</span>
+                                                    <div>
+                                                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{o.label}</div>
+                                                        <div style={{ fontSize:10.5, color:T.inkMuted }}>{o.sub}</div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+                                            <div onClick={() => handleNaDismiss(it)}
+                                                style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', borderRadius:3, cursor:'pointer' }}
+                                                onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.10)'}
+                                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                <span style={{ fontSize:12, color:T.danger, flexShrink:0 }}>🗑</span>
+                                                <div>
+                                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.danger }}>Dismiss permanently</div>
+                                                    <div style={{ fontSize:10.5, color:T.inkMuted }}>Won't show again on this workspace</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                                <button onClick={() => setActiveItem(SETTINGS_ITEMS.find(i=>i.id===it.id)||it)}
-                                    style={{ padding:'4px 10px', fontSize:11, fontWeight:600, background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Fix →</button>
+                            );
+                        })}
+
+                        {/* Hidden items — shown when "Show" toggled */}
+                        {naShowHidden && hiddenAttention.map(it => {
+                            const info = naHidden[it.id];
+                            return (
+                                <div key={it.id} style={{ padding:'8px 0',
+                                    borderTop:`1px dashed rgba(156,58,46,0.15)`,
+                                    display:'flex', alignItems:'center', gap:10, opacity:0.55 }}>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans,
+                                            textDecoration:'line-through', textDecorationColor:'rgba(42,38,34,0.35)' }}>
+                                            {it.name}
+                                        </div>
+                                        <div style={{ fontSize:11, color:T.inkMid, marginTop:1, fontFamily:T.sans }}>
+                                            <span style={{ padding:'1px 5px', borderRadius:2, fontSize:9.5, fontWeight:700,
+                                                background:'rgba(58,90,122,0.12)', color:T.info, marginRight:6,
+                                                textTransform:'uppercase', letterSpacing:0.5 }}>
+                                                {info?.until === 'forever' ? 'Dismissed' : 'Snoozed'}
+                                            </span>
+                                            {info?.until !== 'forever' && info?.snoozedUntilLabel
+                                                ? 'Until ' + info.snoozedUntilLabel
+                                                : 'Permanently hidden'}
+                                        </div>
+                                    </div>
+                                    <span onClick={() => handleNaRestore(it.id)}
+                                        style={{ fontSize:10.5, color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                                        Restore
+                                    </span>
+                                </div>
+                            );
+                        })}
+
+                        {/* All clear states */}
+                        {visibleAttention.length === 0 && hiddenCount === 0 && (
+                            <div style={{ fontSize:12, color:T.ok, fontFamily:T.sans }}>All checks passing ✓</div>
+                        )}
+                        {visibleAttention.length === 0 && hiddenCount > 0 && (
+                            <div style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans, fontStyle:'italic' }}>
+                                All visible checks passing — {hiddenCount} hidden.
                             </div>
-                        ))}
-                        {attentionItems.length === 0 && <div style={{ fontSize:12, color:T.ok, fontFamily:T.sans }}>All checks passing ✓</div>}
+                        )}
+
+                        {/* Info strip — most recently hidden item */}
+                        {lastHidden && lastHiddenInfo && !naShowHidden && (
+                            <div style={{ marginTop:10, padding:'8px 10px',
+                                background:'rgba(58,90,122,0.06)', borderRadius:3,
+                                fontSize:10.5, color:T.inkMid, display:'flex', alignItems:'center', gap:6, fontFamily:T.sans }}>
+                                <span style={{ fontSize:11, color:T.info }}>◷</span>
+                                <span>
+                                    <b style={{ color:T.ink }}>{lastHiddenInfo.name}</b>
+                                    {lastHiddenInfo.until === 'forever'
+                                        ? ' dismissed permanently.'
+                                        : ` snoozed until ${lastHiddenInfo.snoozedUntilLabel}.`}
+                                    {' '}
+                                    <span onClick={() => handleNaRestore(lastHidden.id)}
+                                        style={{ color:T.info, fontWeight:600, cursor:'pointer' }}>Restore</span>
+                                </span>
+                            </div>
+                        )}
                     </div>
                     {/* Recently changed */}
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:16 }}>
