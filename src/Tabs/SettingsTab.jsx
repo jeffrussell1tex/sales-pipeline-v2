@@ -9391,6 +9391,317 @@ const NewWebhookModal = ({ onClose, onCreated }) => {
 // ─────────────────────────────────────────────────────────────────
 // WebhooksDetail — fully live
 // ─────────────────────────────────────────────────────────────────
+const ConnectedAppsDetail = ({ onBack }) => {
+    const [connectModal,  setConnectModal]  = React.useState(null);
+    const [slackModal,    setSlackModal]    = React.useState(false);
+    const [catFilter,     setCatFilter]     = React.useState('All');
+    const [connectedApps, setConnectedApps] = React.useState({});  // { [appId]: boolean }
+    const [slackConfig,   setSlackConfig]   = React.useState({});  // { webhookUrl, channel, enabled }
+    const [loading,       setLoading]       = React.useState(true);
+    const [error,         setError]         = React.useState(null);
+    const [disconnecting, setDisconnecting] = React.useState(null);
+
+    // ── Load real connected state from settings ────────────────
+    React.useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/settings');
+                const data = await res.json();
+                if (cancelled) return;
+                if (!res.ok) throw new Error(data.error || 'Failed to load settings');
+                setConnectedApps(data.settings?.connectedApps || {});
+                setSlackConfig(data.settings?.slackConfig     || {});
+            } catch (e) {
+                if (!cancelled) setError(e.message);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, []);
+
+    // ── Persist connected state ────────────────────────────────
+    const saveConnectedApps = async (next) => {
+        setConnectedApps(next);
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ connectedApps: next }),
+            });
+        } catch (e) {
+            console.error('saveConnectedApps error:', e.message);
+        }
+    };
+
+    const handleDisconnect = async (appId) => {
+        setDisconnecting(appId);
+        const next = { ...connectedApps, [appId]: false };
+        await saveConnectedApps(next);
+        setDisconnecting(null);
+    };
+
+    const handleMarkConnected = async (appId) => {
+        const next = { ...connectedApps, [appId]: true };
+        await saveConnectedApps(next);
+    };
+
+    // ── Slack config save ──────────────────────────────────────
+    const handleSaveSlack = async (config) => {
+        setSlackConfig(config);
+        const nextApps = { ...connectedApps, slack: true };
+        setConnectedApps(nextApps);
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ slackConfig: config, connectedApps: nextApps }),
+            });
+        } catch (e) {
+            console.error('saveSlackConfig error:', e.message);
+        }
+        setSlackModal(false);
+    };
+
+    // Build display lists — merge INT_APPS with real connected state
+    const isConnected = (app) => {
+        // Google Calendar uses its own connection table — check settings flag
+        if (app.id === 'gcal') return connectedApps['gcal'] === true;
+        return connectedApps[app.id] === true;
+    };
+
+    const liveApps   = INT_APPS.map(a => ({ ...a, connected: isConnected(a) }));
+    const connected  = liveApps.filter(a => a.connected);
+    const popular    = liveApps.filter(a => !a.connected && (a.popular || ['gcal','snowflake','clearbit'].includes(a.id)));
+    const catalog    = liveApps.filter(a => !a.connected && !popular.find(p => p.id === a.id));
+    const cats       = ['All', ...new Set(catalog.map(a => a.category))];
+
+    const slackConnected = connectedApps['slack'] === true && slackConfig?.webhookUrl;
+
+    if (loading) return (
+        <div style={{ fontFamily:T.sans }}>
+            <IntCrumb page="Connected apps" onBack={onBack}/>
+            <div style={{ padding:'60px 0', textAlign:'center', color:T.inkMuted, fontSize:13 }}>Loading…</div>
+        </div>
+    );
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {connectModal && <ConnectAppModal app={connectModal} onClose={()=>setConnectModal(null)}/>}
+            {slackModal   && <SlackConfigModal existing={slackConfig} onClose={()=>setSlackModal(false)} onSave={handleSaveSlack}/>}
+
+            <IntCrumb page="Connected apps" onBack={onBack}/>
+            <IntTitle title="Connected apps"
+                sub={`${connected.length} connected · browse and manage your integration catalog`}
+                actions={[
+                    <IntBtn key="mkt" label="Browse marketplace"/>,
+                    <IntBtn key="req" label="+ Request integration" primary/>,
+                ]}/>
+
+            {error && <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>{error}</div>}
+
+            {/* ── Slack callout — prominent if not yet configured ── */}
+            {!slackConnected && (
+                <div style={{ padding:'14px 16px', background:'rgba(74,21,75,0.06)', borderLeft:`3px solid #4a154b`, borderRadius:4, marginBottom:20, display:'flex', alignItems:'center', gap:14 }}>
+                    <AppTile name="Slack" color="#4a154b" emoji="💬" size={32}/>
+                    <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>Connect Slack to get pipeline alerts in your channel</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Stale deal alerts, stuck stage warnings, close date nudges, and weekly digests — all posted to Slack alongside email.</div>
+                    </div>
+                    <IntBtn label="Configure Slack" primary onClick={() => setSlackModal(true)}/>
+                </div>
+            )}
+
+            {/* ── Section 1: Connected ── */}
+            {connected.length > 0 && (
+                <div style={{ marginBottom:24 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:12 }}>Connected ({connected.length})</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:14 }}>
+                        {connected.map(app => (
+                            <div key={app.id} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16, display:'flex', flexDirection:'column', gap:10 }}>
+                                <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
+                                    <AppTile name={app.name} color={app.color} emoji={app.emoji} size={36}/>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{app.name}</div>
+                                        <div style={{ fontSize:11, color:T.inkMuted }}>{app.category}</div>
+                                    </div>
+                                    <span style={{ padding:'2px 7px', borderRadius:10, background:'rgba(77,107,61,0.12)', color:T.ok, fontSize:10.5, fontWeight:700 }}>Live</span>
+                                </div>
+                                <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.4 }}>{app.desc}</div>
+                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingTop:8, borderTop:`1px solid ${T.border}` }}>
+                                    <StatusDot tone="ok" label="Connected"/>
+                                    <div style={{ display:'flex', gap:8 }}>
+                                        {app.id === 'slack' && (
+                                            <button onClick={() => setSlackModal(true)}
+                                                style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Configure</button>
+                                        )}
+                                        <button onClick={() => handleDisconnect(app.id)} disabled={disconnecting === app.id}
+                                            style={{ fontSize:12, fontWeight:600, color:T.danger, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, opacity: disconnecting === app.id ? 0.5 : 1 }}>
+                                            {disconnecting === app.id ? 'Disconnecting…' : 'Disconnect'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Section 2: Popular / not connected ── */}
+            <div style={{ marginBottom:24 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:10 }}>Popular</div>
+                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+                    {/* Slack row — special because it has its own config flow */}
+                    {!slackConnected && (
+                        <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', borderBottom:`1px solid ${T.border}` }}>
+                            <AppTile name="Slack" color="#4a154b" emoji="💬" size={32}/>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>Slack</div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted }}>Post deal updates, alerts, and digest to channels.</div>
+                            </div>
+                            <span style={{ fontSize:11.5, color:T.inkMuted, marginRight:8 }}>Messaging</span>
+                            <IntBtn label="Configure →" primary onClick={() => setSlackModal(true)}/>
+                        </div>
+                    )}
+                    {popular.map((app, i) => (
+                        <div key={app.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', borderBottom: i < popular.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                            <AppTile name={app.name} color={app.color} emoji={app.emoji} size={32}/>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{app.name}</div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted }}>{app.desc}</div>
+                            </div>
+                            <span style={{ fontSize:11.5, color:T.inkMuted, marginRight:8 }}>{app.category}</span>
+                            <button onClick={() => setConnectModal(app)}
+                                style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Connect</button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* ── Section 3: All apps catalog ── */}
+            <div>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>All apps</div>
+                    <div style={{ display:'flex', gap:4 }}>
+                        {cats.map(c => (
+                            <button key={c} onClick={() => setCatFilter(c)}
+                                style={{ padding:'3px 10px', fontSize:11.5, fontWeight:600, borderRadius:10, border:`1px solid ${catFilter===c?T.ink:T.border}`, background:catFilter===c?T.ink:'transparent', color:catFilter===c?'#fbf8f3':T.inkMid, cursor:'pointer', fontFamily:T.sans }}>{c}</button>
+                        ))}
+                    </div>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
+                    {catalog.filter(a => catFilter==='All' || a.category===catFilter).map(app => (
+                        <div key={app.id}
+                            onClick={() => app.id === 'slack' ? setSlackModal(true) : setConnectModal(app)}
+                            style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:'12px 14px', display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}
+                            onMouseEnter={e => e.currentTarget.style.borderColor = T.borderStrong}
+                            onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
+                            <AppTile name={app.name} color={app.color} emoji={app.emoji} size={28}/>
+                            <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{app.name}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted }}>{app.category}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── ② API Keys ────────────────────────────────────────────────
+const ApiKeysDetail = ({ onBack }) => {
+    const [filter, setFilter] = useState('All');
+    const [showModal, setShowModal] = useState(false);
+    const visible = INT_API_KEYS.filter(k => filter==='All' || k.status===filter);
+
+    return (
+        <div style={{ fontFamily:T.sans }}>
+            {showModal && <NewApiKeyModal onClose={()=>setShowModal(false)}/>}
+            <IntCrumb page="API keys" onBack={onBack}/>
+            <IntTitle title="API keys" sub="Workspace REST API credentials · 3 active keys · last edited 2 months ago by Admin"
+                actions={[
+                    <IntBtn key="docs" label="View docs ↗"/>,
+                    <IntBtn key="new" label="+ Create key" primary onClick={()=>setShowModal(true)}/>,
+                ]}/>
+
+            {/* Filter + table */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:18 }}>
+                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Keys</div>
+                    <div style={{ display:'flex', gap:0, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:2 }}>
+                        {['All','Live','Test','Stale'].map(f => (
+                            <button key={f} onClick={()=>setFilter(f)}
+                                style={{ padding:'4px 10px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans, background:filter===f?T.ink:'transparent', color:filter===f?'#fbf8f3':T.inkMid }}>{f}</button>
+                        ))}
+                    </div>
+                </div>
+                {/* Header */}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 200px 160px 100px 120px 120px 90px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                    {['NAME','KEY','SCOPES','RATE LIMIT','LAST USED','7D TRAFFIC','STATUS',''].map((h,i) => (
+                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                    ))}
+                </div>
+                {visible.map((k,i) => {
+                    const stale = k.status==='Stale';
+                    return (
+                        <div key={k.id} style={{ display:'grid', gridTemplateColumns:'1fr 200px 160px 100px 120px 120px 90px 32px', gap:8, padding:'11px 16px', borderBottom:i<visible.length-1?`1px solid ${T.border}`:'none', alignItems:'center', opacity: stale ? 0.72 : 1 }}>
+                            {/* Name */}
+                            <div>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{k.name}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted }}>by {k.by} · {k.created}</div>
+                            </div>
+                            {/* Key */}
+                            <KeyMono prefix={k.prefix} tail={k.tail}/>
+                            {/* Scopes */}
+                            <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
+                                {k.scopes.slice(0,2).map(s => (
+                                    <span key={s} style={{ padding:'1px 5px', borderRadius:3, background:'rgba(58,90,122,0.10)', color:T.info, fontSize:10, fontFamily:'ui-monospace,Menlo,monospace' }}>{s}</span>
+                                ))}
+                                {k.scopes.length > 2 && <span style={{ fontSize:10, color:T.inkMuted }}>+{k.scopes.length-2}</span>}
+                            </div>
+                            {/* Rate limit */}
+                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>{k.rateLimit}</div>
+                            {/* Last used */}
+                            <div style={{ fontSize:12, color: stale ? T.danger : T.inkMid }}>{k.lastUsed}</div>
+                            {/* Sparkline + calls */}
+                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                <MiniSpark data={k.traffic} color={stale?T.border:T.ok}/>
+                            </div>
+                            {/* Status */}
+                            <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                background: k.status==='Live'?'rgba(77,107,61,0.12)':k.status==='Test'?'rgba(58,90,122,0.10)':'rgba(184,115,51,0.12)',
+                                color: k.status==='Live'?T.ok:k.status==='Test'?T.info:T.warn }}>
+                                {k.status}
+                            </span>
+                            <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Workspace defaults */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:18 }}>
+                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:14 }}>Workspace defaults</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:18 }}>
+                    {[
+                        { label:'Default rate limit', value:'1,000 req/min' },
+                        { label:'Default expiration', value:'365 days' },
+                        { label:'Default IP allowlist', value:'0.0.0.0/0 (any)' },
+                    ].map((f,i) => (
+                        <div key={i}>
+                            <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</div>
+                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, color:T.ink }}>{f.value}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ── ③ Webhooks ────────────────────────────────────────────────
+
 const WebhooksDetail = ({ onBack }) => {
     const [webhooks,  setWebhooks]  = React.useState([]);
     const [loading,   setLoading]   = React.useState(true);
