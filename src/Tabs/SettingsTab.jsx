@@ -9740,44 +9740,33 @@ const SDK_LIST = [
 
 const DocsPopoverB = ({ keys = [], onClose, btnRef }) => {
     const ref    = React.useRef(null);
-    const posRef = React.useRef(false);
-    const [style, setStyle] = React.useState({ position:'fixed', zIndex:9999, top:-9999, left:-9999, visibility:'hidden' });
-    const [tab,     setTab]     = React.useState('cURL'); // cURL | JS | Python
+    const [pos, setPos] = React.useState(null); // { top, right } — null until measured
+    const [tab,     setTab]     = React.useState('cURL');
     const [copied,  setCopied]  = React.useState(false);
     const [activeKey, setActiveKey] = React.useState(keys.find(k => !k.revokedAt) || null);
 
-    // Update active key when keys load
     React.useEffect(() => {
         if (!activeKey && keys.length > 0) setActiveKey(keys.find(k => !k.revokedAt) || null);
     }, [keys]);
 
-    // Two-pass positioning
+    // Measure position once after mount
     React.useLayoutEffect(() => {
-        if (!btnRef?.current || !ref.current || posRef.current) return;
-        posRef.current = true;
-        const r    = btnRef.current.getBoundingClientRect();
-        const menuW = ref.current.offsetWidth  || 440;
-        const menuH = ref.current.offsetHeight || 500;
-        const vw   = window.innerWidth;
-        const vh   = window.innerHeight;
-        const GAP  = 6;
-        const EDGE = 8;
-        const top  = (r.bottom + GAP + menuH > vh - EDGE)
-            ? Math.max(EDGE, r.top - menuH - GAP) : r.bottom + GAP;
-        // Right-anchor — align right edge of menu to right edge of button, clamp left
+        if (!btnRef?.current || !ref.current) return;
+        const r   = btnRef.current.getBoundingClientRect();
+        const vw  = window.innerWidth;
+        const vh  = window.innerHeight;
+        const mH  = ref.current.offsetHeight || 500;
+        const GAP = 6; const EDGE = 8;
+        const top = (r.bottom + GAP + mH > vh - EDGE)
+            ? Math.max(EDGE, r.top - mH - GAP) : r.bottom + GAP;
         const right = Math.max(EDGE, vw - r.right);
-        setStyle({ position:'fixed', zIndex:9999, top, right, visibility:'visible' });
-    });
+        setPos({ top, right });
+    }, []); // run once on mount only
 
     React.useEffect(() => {
-        const onDoc = (e) => {
-            if (ref.current && !ref.current.contains(e.target) &&
-                btnRef?.current && !btnRef.current.contains(e.target)) onClose();
-        };
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-        document.addEventListener('mousedown', onDoc);
-        document.addEventListener('keydown',   onKey);
-        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
     }, []);
 
     const keyPrefix = activeKey?.keyPrefix || 'spt_live_••••';
@@ -9806,8 +9795,18 @@ accounts = client.accounts.list()`,
         </div>
     );
 
+    // Don't render until position is measured (avoids invisible overlay blocking clicks)
+    if (!pos) return (
+        <div ref={ref} style={{ position:'fixed', top:-9999, left:-9999, visibility:'hidden', pointerEvents:'none' }}>
+            <div style={{ width:440 }}/>
+        </div>
+    );
+
     return (
-        <div ref={ref} style={style}>
+        <>
+            {/* Transparent backdrop — catches outside clicks without blocking nav */}
+            <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:399, background:'transparent' }}/>
+            <div ref={ref} style={{ position:'fixed', zIndex:400, top:pos.top, right:pos.right }}>
             {/* Caret */}
             <div style={{ position:'absolute', top:-7, right:20, width:12, height:12,
                 background:T.surface, border:`1px solid ${T.borderStrong}`,
@@ -9948,7 +9947,8 @@ accounts = client.accounts.list()`,
                     </a>
                 </div>
             </div>
-        </div>
+            </div>
+        </>
     );
 };
 
@@ -15613,7 +15613,13 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
     const pipelines = settings?.pipelines || [];
     const funnelStages = settings?.funnelStages || [];
     const calConnected = settings?.googleCalendarConnected || false;
-    const attentionItems = SETTINGS_ITEMS.filter(i => i.attention);
+    const allAttentionItems = SETTINGS_ITEMS.filter(i => i.attention);
+    const visibleAttention  = allAttentionItems.filter(it => !isHidden(it.id));
+    const hiddenAttention   = allAttentionItems.filter(it =>  isHidden(it.id));
+    const attentionItems    = visibleAttention; // alias for any remaining references
+    const hiddenCount       = hiddenAttention.length;
+    const lastHidden        = hiddenAttention.length > 0 ? hiddenAttention[hiddenAttention.length - 1] : null;
+    const lastHiddenInfo    = lastHidden ? naHidden[lastHidden.id] : null;
     const healthChecks = [
         { label:'SSO configured',          ok: false                       },
         { label:'MFA enforced',            ok: false                       },
