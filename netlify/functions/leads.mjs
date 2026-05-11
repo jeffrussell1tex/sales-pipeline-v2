@@ -3,6 +3,7 @@ import { leads, users } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth, canSeeAll } from './auth.mjs';
 import { dispatchWebhook } from './webhooks.mjs';
+import { dispatchAutomations } from './dispatch-automations.mjs';
 
 export const handler = async (event) => {
     const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
@@ -63,6 +64,10 @@ export const handler = async (event) => {
                 estimated_arr: inserted.estimatedARR ? Number(inserted.estimatedARR) : null,
                 assigned_to:   inserted.assignedTo,
             });
+            dispatchAutomations(orgId, 'lead.created', {
+                id: inserted.id, first_name: inserted.firstName, last_name: inserted.lastName,
+                company: inserted.company, email: inserted.email, assigned_to: inserted.assignedTo,
+            }).catch(e => console.warn('auto error:', e.message));
 
             return { statusCode: 201, headers, body: JSON.stringify({ lead: inserted }) };
         }
@@ -110,6 +115,10 @@ export const handler = async (event) => {
                     assigned_to:   upserted.assignedTo,
                     converted_at:  upserted.convertedAt,
                 });
+                dispatchAutomations(orgId, 'lead.converted', {
+                    id: upserted.id, first_name: upserted.firstName, last_name: upserted.lastName,
+                    company: upserted.company, email: upserted.email, assigned_to: upserted.assignedTo,
+                }).catch(e => console.warn('auto error:', e.message));
             }
 
             return { statusCode: 200, headers, body: JSON.stringify({ lead: upserted }) };

@@ -174,10 +174,21 @@ export default function ContactsTab() {
     }, [openRowMenu]);
 
     const handleDeleteOne = (contact) => {
-        showConfirm(`Delete ${contact.firstName || ''} ${contact.lastName || ''}? This cannot be undone.`, async () => {
-            setContacts(prev => prev.filter(c => c.id !== contact.id));
-            await dbFetch(`/.netlify/functions/contacts?id=${contact.id}`, { method: 'DELETE' }).catch(console.error);
-        });
+        const snapshot = [...(contacts || [])];
+        setContacts(prev => prev.filter(c => c.id !== contact.id));
+        dbFetch(`/.netlify/functions/contacts?id=${contact.id}`, { method: 'DELETE' }).catch(console.error);
+        const label = [contact.firstName, contact.lastName].filter(Boolean).join(' ') || 'Contact';
+        softDelete(
+            label,
+            () => {},
+            () => {
+                setContacts(snapshot);
+                dbFetch('/.netlify/functions/contacts', {
+                    method: 'POST',
+                    body: JSON.stringify(contact),
+                }).catch(console.error);
+            }
+        );
     };
 
     const handleDeleteSelected = () => {
