@@ -375,10 +375,10 @@ export default function PipelineTab() {
     const nextQL2    = getQuarterLabel(nextQ2, nextMonth2.toISOString().split('T')[0]);
 
     const timeFilterOpts = [
-        { key: 'thisQuarter', label: 'This quarter', match: o => o.closeQuarter === currentQL2 },
-        { key: 'nextQuarter', label: 'Next quarter', match: o => o.closeQuarter === nextQL2 },
-        { key: 'thisAndNext', label: 'This + next',  match: o => o.closeQuarter === currentQL2 || o.closeQuarter === nextQL2 },
-        { key: 'annual',      label: 'This year',    match: o => { const fy = currentQL2.split(' ')[0]; return o.closeQuarter && o.closeQuarter.startsWith(fy); }},
+        { key: 'thisQuarter', label: 'This quarter', match: o => o.forecastedCloseDate && getQuarterLabel(getQuarter(o.forecastedCloseDate), o.forecastedCloseDate) === currentQL2 },
+        { key: 'nextQuarter', label: 'Next quarter', match: o => o.forecastedCloseDate && getQuarterLabel(getQuarter(o.forecastedCloseDate), o.forecastedCloseDate) === nextQL2 },
+        { key: 'thisAndNext', label: 'This + next',  match: o => { if (!o.forecastedCloseDate) return false; const cq = getQuarterLabel(getQuarter(o.forecastedCloseDate), o.forecastedCloseDate); return cq === currentQL2 || cq === nextQL2; } },
+        { key: 'annual',      label: 'This year',    match: o => { if (!o.forecastedCloseDate) return false; const fy = currentQL2.split(' ')[0]; const cq = getQuarterLabel(getQuarter(o.forecastedCloseDate), o.forecastedCloseDate); return cq && cq.startsWith(fy); }},
         { key: 'allTime',     label: 'All time',     match: () => true },
     ];
     window.__pipelineFilterOptions = timeFilterOpts;

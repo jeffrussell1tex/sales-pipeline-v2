@@ -37,37 +37,60 @@ const T = {
 const stageColor = (s) => T.stages[s] || T.inkMuted;
 const eyebrow = { fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans };
 
-// ── Quarter helpers ───────────────────────────────────────────
-// Uses forecastedCloseDate (production field name) not closeDate (mock field name)
+// ── Quarter helpers (fiscal-year-aware) ──────────────────────
+// All functions accept fiscalStart (1–12). fiscalStart=1 = January = calendar year.
+// fiscalStart=10 = October: Q1=Oct-Dec, Q2=Jan-Mar, Q3=Apr-Jun, Q4=Jul-Sep.
+// "Fiscal year" is named by the calendar year in which the FY ENDS.
+// e.g. Oct 2025 → FY2026, Jan 2026 → FY2026.
 
-function quarterOf(isoDate) {
+function quarterOf(isoDate, fiscalStart) {
     if (!isoDate) return null;
     const d = new Date(isoDate + 'T12:00:00');
     if (isNaN(d)) return null;
-    const q = Math.floor(d.getMonth() / 3) + 1;
-    const y = d.getFullYear();
-    return { key: `${y}-Q${q}`, longLabel: `Q${q} ${y}`, year: y, q };
+    const month = d.getMonth() + 1; // 1-12
+    const calYear = d.getFullYear();
+    const monthsIn = (month - fiscalStart + 12) % 12;
+    const q = Math.floor(monthsIn / 3) + 1; // 1-4
+    let fiscalYear;
+    if (fiscalStart === 1) {
+        fiscalYear = calYear;
+    } else if (month >= fiscalStart) {
+        fiscalYear = calYear + 1; // e.g. Oct 2025 → FY2026
+    } else {
+        fiscalYear = calYear;     // e.g. Jan 2026 → FY2026
+    }
+    const key = `${fiscalYear}-Q${q}`;
+    const longLabel = `Q${q} ${fiscalYear}`;
+    return { key, longLabel, fiscalYear, q, calYear, month };
 }
 
-function quarterRange(year, q) {
-    const start = new Date(year, (q - 1) * 3, 1);
-    const end   = new Date(year, q * 3, 0);
+function quarterRange(fiscalYear, q, fiscalStart) {
+    // Start month of this fiscal quarter (1-based)
+    const startMonth = ((fiscalStart - 1 + (q - 1) * 3) % 12) + 1;
+    let startYear;
+    if (fiscalStart === 1) {
+        startYear = fiscalYear;
+    } else if (startMonth >= fiscalStart) {
+        startYear = fiscalYear - 1; // Q starts before FY end cal year
+    } else {
+        startYear = fiscalYear;
+    }
+    const start = new Date(startYear, startMonth - 1, 1);
+    const end   = new Date(startYear, startMonth - 1 + 3, 0); // 0th day of month 4 after start = last day of month 3
     const fmt   = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     return `${fmt(start)} – ${fmt(end)}`;
 }
 
-function groupByQuarter(opps) {
+function groupByQuarter(opps, fiscalStart) {
     const map = new Map();
     for (const o of opps) {
-        const qk = quarterOf(o.forecastedCloseDate);
-        if (!qk) continue; // skip opps with no close date
+        const qk = quarterOf(o.forecastedCloseDate, fiscalStart);
+        if (!qk) continue;
         if (!map.has(qk.key)) map.set(qk.key, { ...qk, opps: [] });
         map.get(qk.key).opps.push(o);
     }
-    // Sort chronologically
-    return [...map.values()].sort((a, b) => a.year - b.year || a.q - b.q);
+    return [...map.values()].sort((a, b) => a.fiscalYear - b.fiscalYear || a.q - b.q);
 }
-
 function qSummary(opps) {
     const commitStages = ['Negotiation', 'Negotiation/Review', 'Contracts', 'Closing'];
     const total    = opps.reduce((s, o) => s + (parseFloat(o.arr) || 0), 0);
@@ -248,7 +271,7 @@ function TableRow({ opp, canSeeAll, calculateDealHealth, onEdit }) {
 }
 
 // ── Quarter rail ──────────────────────────────────────────────
-function QuarterRail({ groups, activeKey, onSelect, totalAll, currentKey }) {
+function QuarterRail({ groups, activeKey, onSelect, totalAll, currentKey, fiscalStart }) {
     return (
         <div style={{
             width: 220,
@@ -305,7 +328,7 @@ function QuarterRail({ groups, activeKey, onSelect, totalAll, currentKey }) {
 
                         {/* Date range */}
                         <div style={{ fontSize: 10, color: T.inkMuted }}>
-                            {quarterRange(g.year, g.q)}
+                            {quarterRange(g.fiscalYear, g.q, fiscalStart)}
                         </div>
 
                         {/* Total + count */}
@@ -328,13 +351,13 @@ function QuarterRail({ groups, activeKey, onSelect, totalAll, currentKey }) {
 }
 
 // ── Stat strip ────────────────────────────────────────────────
-function StatStrip({ sum, activeGroup }) {
+function StatStrip({ sum, activeGroup, fiscalStart }) {
     const cells = [
         { label: 'Pipeline',  value: fmtMoney(sum.total),    sub: `${sum.count} deals`,         accent: T.borderStrong },
         { label: 'Weighted',  value: fmtMoney(sum.weighted), sub: 'probability-adjusted',        accent: T.borderStrong },
         { label: 'Commit',    value: fmtMoney(sum.commit),   sub: 'Negotiation + Closing',       accent: T.ok           },
         { label: 'Quarter',   value: activeGroup ? activeGroup.longLabel : '—',
-                                                              sub: activeGroup ? quarterRange(activeGroup.year, activeGroup.q) : '',
+                                                              sub: activeGroup ? quarterRange(activeGroup.fiscalYear, activeGroup.q, fiscalStart) : '',
                                                                                                   accent: T.gold         },
     ];
 
@@ -371,7 +394,8 @@ function StatStrip({ sum, activeGroup }) {
 // ── ListView — exported component ─────────────────────────────
 // Props passed from PipelineTab, same pattern as KanbanView/FunnelView.
 export default function ListView({ pipelineFilteredOpps, handleEdit }) {
-    const { canSeeAll, calculateDealHealth } = useApp();
+    const { canSeeAll, calculateDealHealth, settings } = useApp();
+    const fiscalStart = parseInt(settings?.fiscalYearStart) || 1;
 
     // Exclude closed deals (same as other views)
     const openOpps = pipelineFilteredOpps.filter(
@@ -379,11 +403,11 @@ export default function ListView({ pipelineFilteredOpps, handleEdit }) {
     );
 
     // Group by close quarter using forecastedCloseDate
-    const groups = groupByQuarter(openOpps);
+    const groups = groupByQuarter(openOpps, fiscalStart);
 
     // Determine current calendar quarter key
     const todayIso  = new Date().toISOString().split('T')[0];
-    const currentQk = quarterOf(todayIso);
+    const currentQk = quarterOf(todayIso, fiscalStart);
     const currentKey = currentQk ? currentQk.key : null;
 
     // Default active quarter: current quarter if it has deals, else first group
@@ -422,7 +446,7 @@ export default function ListView({ pipelineFilteredOpps, handleEdit }) {
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden', minWidth: 0 }}>
 
                 {/* Stat strip */}
-                <StatStrip sum={sum} activeGroup={activeGroup}/>
+                <StatStrip sum={sum} activeGroup={activeGroup} fiscalStart={fiscalStart}/>
 
                 {/* Table */}
                 <div style={{
