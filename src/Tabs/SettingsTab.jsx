@@ -9921,7 +9921,7 @@ accounts = client.accounts.list()`,
                     </div>
                     <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                         {DOCS_RESOURCES.map(r => (
-                            <a key={r.label} href={`https://docs.accelerep.com/api/${r.label.toLowerCase()}`}
+                            <a key={r.label} href={`https://salespipelinetracker.com/api-docs.html#${r.label.toLowerCase()}`}
                                 target="_blank" rel="noopener noreferrer" style={{ textDecoration:'none' }}>
                                 <span style={{ padding:'4px 9px', background:T.surface2, border:`1px solid ${T.border}`,
                                     borderRadius:10, fontSize:11, color:T.ink, fontWeight:600, cursor:'pointer', display:'inline-block' }}
@@ -9937,13 +9937,13 @@ accounts = client.accounts.list()`,
                 {/* Footer */}
                 <div style={{ padding:'10px 16px', borderTop:`1px solid ${T.border}`, background:T.surface2,
                     display:'flex', alignItems:'center', gap:10 }}>
-                    <a href="https://docs.accelerep.com/openapi" target="_blank" rel="noopener noreferrer"
+                    <a href="https://salespipelinetracker.com/api-docs.html" target="_blank" rel="noopener noreferrer"
                         style={{ fontSize:11, color:T.inkMid, fontWeight:600, cursor:'pointer', textDecoration:'none' }}>OpenAPI ↗</a>
-                    <a href="https://docs.accelerep.com/postman" target="_blank" rel="noopener noreferrer"
+                    <a href="https://salespipelinetracker.com/api-docs.html" target="_blank" rel="noopener noreferrer"
                         style={{ fontSize:11, color:T.inkMid, fontWeight:600, cursor:'pointer', textDecoration:'none' }}>Postman ↗</a>
                     <span style={{ fontSize:11, color:T.inkMuted, cursor:'pointer', fontFamily:T.sans }}>Changelog</span>
                     <span style={{ flex:1 }}/>
-                    <a href="https://docs.accelerep.com/api" target="_blank" rel="noopener noreferrer" style={{ textDecoration:'none' }}>
+                    <a href="https://salespipelinetracker.com/api-docs.html" target="_blank" rel="noopener noreferrer" style={{ textDecoration:'none' }}>
                         <IntBtn label="Open full docs ↗" primary/>
                     </a>
                 </div>
