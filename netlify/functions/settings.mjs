@@ -176,7 +176,7 @@ export const handler = async (event) => {
                 taskTypes:       data.taskTypes       || ['Call', 'Meeting', 'Email'],
                 painPoints:      data.painPoints      || [],
                 verticalMarkets: data.verticalMarkets || [],
-                fieldVisibility: data.fieldVisibility || {},
+                fieldVisibility: 'fieldVisibility' in data ? (data.fieldVisibility || {}) : (existing[0]?.fieldVisibility || {}),
                 extra,
                 updatedAt:       new Date(),
             };
