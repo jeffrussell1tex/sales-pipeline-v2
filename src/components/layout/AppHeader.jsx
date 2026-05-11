@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { OrganizationSwitcher, useOrganizationList } from '@clerk/clerk-react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
