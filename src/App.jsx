@@ -270,13 +270,22 @@ function App() {
     };
 
     const addAudit = (action, entity, entityId, label, detail = '') => {
-        const entry = {
-            id: 'audit_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
-            action, entity, entityId, label, detail,
-            timestamp: new Date().toISOString(),
-            author: currentUser || 'Unknown',
-        };
-        setSettings(prev => ({ ...prev, auditLog: [...(prev.auditLog || []), entry] }));
+        // Fire-and-forget POST to Neon — never blocks the UI
+        const id = 'audit_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+        dbFetch('/.netlify/functions/audit-log', {
+            method: 'POST',
+            body: JSON.stringify({
+                id,
+                action,
+                entityType: entity,
+                entityId:   String(entityId || ''),
+                entityName: label  || null,
+                detail:     detail || null,
+                userId:     currentUser || null,
+                userName:   currentUser || null,
+                timestamp:  new Date().toISOString(),
+            }),
+        }).catch(err => console.warn('addAudit write failed:', err.message));
     };
 
     const softDelete = (label, deleteFunc, restoreFunc) => {
@@ -502,36 +511,12 @@ dbFetch('/.netlify/functions/users?me=true')
     };
 
     // Field-level visibility helper
-    // ── Field-level security ─────────────────────────────────────────────────────
-    // getFieldLevel returns 'Edit'|'Read'|'Masked'|'Hidden' for the current user's role.
-    // Default is 'Edit' (fully accessible) if no rule is configured.
-    // Levels stored as: fieldVisibility[fieldKey][role] = 'Edit'|'Read'|'Masked'|'Hidden'
-    // Backward-compat: if stored value is boolean (old format), coerce to level.
-    const getFieldLevel = (fieldKey) => {
+    const canViewField = (fieldKey) => {
         const fv = settings.fieldVisibility || {};
         const fieldRules = fv[fieldKey];
-        if (!fieldRules) return 'Edit'; // not configured = full access
+        if (!fieldRules) return true; // not configured = visible
         const role = userRole || 'User';
-        const val  = fieldRules[role];
-        if (val === undefined || val === null) return 'Edit';
-        // Coerce legacy boolean values
-        if (val === false) return 'Hidden';
-        if (val === true)  return 'Edit';
-        // Return level string directly
-        if (['Edit','Read','Masked','Hidden'].includes(val)) return val;
-        return 'Edit';
-    };
-
-    // canViewField — backward-compatible wrapper. Returns true for Edit/Read/Masked, false for Hidden.
-    const canViewField = (fieldKey) => getFieldLevel(fieldKey) !== 'Hidden';
-
-    // maskFieldValue — applies Masked rendering (replaces value with •••••).
-    // Consuming components: check getFieldLevel and call maskFieldValue when 'Masked'.
-    const maskFieldValue = (value) => {
-        if (!value) return '—';
-        const s = String(value);
-        if (s.length <= 4) return '•'.repeat(s.length);
-        return s.slice(0, 2) + '•'.repeat(Math.min(s.length - 2, 6));
+        return fieldRules[role] !== false;
     };
 
     // Filtered data based on role
@@ -1299,8 +1284,6 @@ dbFetch('/.netlify/functions/users?me=true')
         softDelete,
         addAudit,
         canViewField,
-        getFieldLevel,
-        maskFieldValue,
         isRepVisible,
         // Derived
         stages,

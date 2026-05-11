@@ -492,3 +492,38 @@ export const dsrQueue = pgTable('dsr_queue', {
     createdAt:   timestamp('created_at').notNull().defaultNow(),
     updatedAt:   timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ── AUTOMATIONS ───────────────────────────────────────────────────────────────
+// Trigger-based rules: each rule has a triggerEvent, optional conditions, and actions.
+// conditions shape: [{ field, operator, value }]  (AND-ed together)
+// actions shape:    [{ type, params }]
+//   type: 'create_task' | 'send_email' | 'webhook' | 'update_field'
+export const automations = pgTable('automations', {
+    id:           text('id').primaryKey(),
+    orgId:        text('org_id').notNull(),
+    name:         varchar('name', { length: 255 }).notNull(),
+    triggerEvent: varchar('trigger_event', { length: 100 }).notNull(),
+    conditions:   jsonb('conditions').notNull().default('[]'),
+    actions:      jsonb('actions').notNull().default('[]'),
+    active:       boolean('active').notNull().default(true),
+    createdBy:    varchar('created_by', { length: 255 }),
+    runCount:     integer('run_count').notNull().default(0),
+    lastRunAt:    timestamp('last_run_at'),
+    createdAt:    timestamp('created_at').notNull().defaultNow(),
+    updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── AUTOMATION RUNS ───────────────────────────────────────────────────────────
+// One row per execution — for run history and debugging.
+export const automationRuns = pgTable('automation_runs', {
+    id:               text('id').primaryKey(),
+    orgId:            text('org_id').notNull(),
+    automationId:     text('automation_id').notNull(),
+    automationName:   varchar('automation_name', { length: 255 }),
+    triggerEvent:     varchar('trigger_event', { length: 100 }),
+    triggeredBy:      text('triggered_by'),
+    status:           varchar('status', { length: 20 }).notNull().default('success'),
+    actionsExecuted:  integer('actions_executed').notNull().default(0),
+    error:            text('error'),
+    createdAt:        timestamp('created_at').notNull().defaultNow(),
+});

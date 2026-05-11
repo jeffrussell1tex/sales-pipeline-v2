@@ -168,9 +168,13 @@ export function useSettings() {
 
     // Save settings to DB whenever they change (after initial load).
     // Users are managed separately via the /users endpoint — never written here.
+    // fiscalYearStart is intentionally excluded: it is a top-level DB column saved
+    // only via handleUpdateFiscalYearStart (explicit user action in Settings).
+    // Including it here causes DEFAULT_SETTINGS value (1) to race against and
+    // overwrite the real DB value on every settings load cycle.
     useEffect(() => {
         if (!settingsReady.current) return;
-        const { users: _stripUsers, ...settingsToSave } = settings;
+        const { users: _stripUsers, fiscalYearStart: _stripFiscal, ...settingsToSave } = settings;
         try {
             // Scope by orgId so switching orgs never reads another org's cached settings
             safeStorage.setItem(getStorageKey(), JSON.stringify(settingsToSave));

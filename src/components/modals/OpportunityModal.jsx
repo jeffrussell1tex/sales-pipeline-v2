@@ -1034,14 +1034,15 @@ export default function OpportunityModal({
     // ── Fiscal quarter helper ────────────────────────────────
     const calculateCloseQuarter = (dateString) => {
         if (!dateString) return '';
-        const date = new Date(dateString);
+        // Normalize to date-only + noon to avoid timezone rollback on full ISO strings
+        const date = new Date(dateString.slice(0, 10) + 'T12:00:00');
+        if (isNaN(date)) return '';
         const month = date.getMonth() + 1;
         const year = date.getFullYear();
-        const fiscalStart = settings?.fiscalYearStart || 10;
-        let monthsFromFiscalStart = month - fiscalStart;
-        if (monthsFromFiscalStart < 0) monthsFromFiscalStart += 12;
-        const quarter = Math.floor(monthsFromFiscalStart / 3) + 1;
-        const fiscalYear = month >= fiscalStart ? year + 1 : year;
+        const fiscalStart = parseInt(settings?.fiscalYearStart) || 1; // January default
+        const monthsIn = (month - fiscalStart + 12) % 12;
+        const quarter = Math.floor(monthsIn / 3) + 1;
+        const fiscalYear = fiscalStart === 1 ? year : (month >= fiscalStart ? year + 1 : year);
         return `FY${fiscalYear} Q${quarter}`;
     };
     const closeQuarter = calculateCloseQuarter(formData.forecastedCloseDate);
