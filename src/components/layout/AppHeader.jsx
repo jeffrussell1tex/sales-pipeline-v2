@@ -233,31 +233,25 @@ export default function AppHeader({
             {/* RIGHT: search + bell + avatar */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
 
-                {/* Search — collapsed ⌘K icon button */}
+                {/* Search — plain icon button */}
                 <button
                     onClick={() => setShowSearchResults(true)}
                     title="Search (⌘K)"
                     aria-label="Search"
                     style={{
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        height: 32, padding: '0 10px',
-                        background: 'rgba(255,255,255,0.08)',
-                        border: '1px solid rgba(255,255,255,0.14)',
-                        borderRadius: 6, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        width: 32, height: 32,
+                        background: 'transparent',
+                        border: 'none',
+                        borderRadius: '50%', cursor: 'pointer',
                         color: 'rgba(230,221,208,0.75)',
-                        fontFamily: T.sans, flexShrink: 0,
-                        transition: 'background 120ms',
+                        flexShrink: 0, transition: 'background 120ms',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}>
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.10)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
                         <circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13" strokeLinecap="round"/>
                     </svg>
-                    <span style={{
-                        fontSize: 10, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
-                        border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.06)',
-                        lineHeight: 1.4, fontFamily: 'monospace',
-                    }}>⌘K</span>
                 </button>
 
                 {/* Search palette — centered overlay */}
@@ -423,7 +417,6 @@ export default function AppHeader({
                             <div style={{ display: 'flex', gap: 0, padding: '0.5rem 1rem 0', borderBottom: `1px solid ${T.border}`, background: T.surface }}>
                                 {panelTabBtn('profile','👤 Profile')}
                                 {panelTabBtn('notifications','🔔 Notifications')}
-                                {panelTabBtn('importexport','⇅ Import / Export')}
                             </div>
 
                             <div style={{ padding: '1.25rem 1.5rem', maxHeight: 560, overflowY: 'auto', background: T.surface }}>
@@ -538,26 +531,7 @@ export default function AppHeader({
                                     </div>
                                 )}
 
-                                {/* Import / Export Tab */}
-                                {profilePanelTab === 'importexport' && (() => {
-                                    const IB = (type) => <button onClick={() => { setCsvImportType(type); setShowCsvImportModal(true); setShowProfilePanel(false); }} style={{ padding: '0.35rem 0.875rem', border: 'none', borderRadius: T.r, background: T.ink, color: T.surfaceInkFg, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>📥 Import</button>;
-                                    const EB = (key, file, headers, rows) => <button disabled={exportingCSV === key} onClick={() => exportToCSV(file, headers, rows, key)} style={{ padding: '0.35rem 0.875rem', border: 'none', borderRadius: T.r, background: exportingCSV === key ? T.inkMuted : T.ink, color: T.surfaceInkFg, fontSize: 12, fontWeight: 600, cursor: exportingCSV === key ? 'default' : 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>{exportingCSV === key ? '⏳…' : '📤 Export'}</button>;
-                                    return (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                                            {[
-                                                { icon: '🏢', title: 'Accounts',      type: 'accounts',      key: 'accounts',      file: `accounts-${new Date().toISOString().slice(0,10)}.csv`,      headers: ['Account Name','Vertical Market','Account Owner','Phone','Website','Address','City','State','ZIP','Country'],                                              rows: accounts.map(a => [a.name,a.verticalMarket,a.accountOwner,a.phone,a.website,a.address,a.city,a.state,a.zip,a.country]) },
-                                                { icon: '👤', title: 'Contacts',      type: 'contacts',      key: 'contacts',      file: `contacts-${new Date().toISOString().slice(0,10)}.csv`,      headers: ['First Name','Last Name','Email','Phone','Mobile','Title','Company','Address','City','State','ZIP','Country'],                                           rows: contacts.map(c => [c.firstName,c.lastName,c.email,c.phone,c.mobile,c.title,c.company,c.address,c.city,c.state,c.zip,c.country]) },
-                                                { icon: '💼', title: 'Opportunities', type: 'opportunities', key: 'opportunities', file: `opportunities-${new Date().toISOString().slice(0,10)}.csv`, headers: ['Opportunity Name','Account','Sales Rep','Stage','ARR','Impl. Cost','Close Date','Products','Notes','Territory','Vertical'],                            rows: opportunities.map(o => [o.opportunityName,o.account,o.salesRep,o.stage,o.arr,o.implementationCost,o.forecastedCloseDate,o.products,o.notes,o.territory,o.vertical]) },
-                                                { icon: '✅', title: 'Tasks',         type: 'tasks',         key: 'tasks',         file: `tasks-${new Date().toISOString().slice(0,10)}.csv`,         headers: ['Title','Type','Status','Due Date','Priority','Assigned To','Account','Notes'],                                                                       rows: tasks.map(t => [t.title||'',t.type||'',t.status||'',t.dueDate||'',t.priority||'',t.assignedTo||'',t.account||'',t.notes||'']) },
-                                            ].map(({ icon, title, type, key, file, headers, rows }) => (
-                                                <div key={type} style={{ padding: '0.75rem 1rem', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                    <div style={{ fontWeight: 700, fontSize: '0.875rem', color: T.ink, fontFamily: T.sans }}>{icon} {title}</div>
-                                                    <div style={{ display: 'flex', gap: 6 }}>{IB(type)}{EB(key, file, headers, rows)}</div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    );
-                                })()}
+
 
                             </div>
                             {profileSaving && <div style={{ padding: '0.5rem 1.5rem', background: T.bg, borderTop: `1px solid ${T.border}`, fontSize: 12, color: T.inkMid, fontWeight: 600, fontFamily: T.sans }}>✓ Saving preferences…</div>}

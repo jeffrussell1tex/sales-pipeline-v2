@@ -157,6 +157,21 @@ export default function ContactsTab() {
     // ── Handlers ─────────────────────────────────────────────
     const handleAddContact  = () => { setEditingContact(null); setShowContactModal(true); };
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
+    const [openRowMenu, setOpenRowMenu] = React.useState(null);
+
+    React.useEffect(() => {
+        if (!openRowMenu) return;
+        const close = (e) => { setOpenRowMenu(null); };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, [openRowMenu]);
+
+    const handleDeleteOne = (contact) => {
+        showConfirm(`Delete ${contact.firstName || ''} ${contact.lastName || ''}? This cannot be undone.`, async () => {
+            setContacts(prev => prev.filter(c => c.id !== contact.id));
+            await dbFetch(`/.netlify/functions/contacts?id=${contact.id}`, { method: 'DELETE' }).catch(console.error);
+        });
+    };
 
     const handleDeleteSelected = () => {
         if (!selectedIds.length) return;
@@ -382,9 +397,40 @@ export default function ContactsTab() {
                 </div>
 
                 {/* Actions ⋯ */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    onClick={e => { e.stopPropagation(); handleEditContact(contact); }}>
-                    <Icon name="dots" size={14} color={hov ? T.inkMid : T.border} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+                    onClick={e => e.stopPropagation()}>
+                    <button
+                        onClick={e => { e.stopPropagation(); setOpenRowMenu(openRowMenu === contact.id ? null : contact.id); }}
+                        style={{ background: openRowMenu === contact.id ? 'rgba(200,185,154,0.25)' : 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 3 }}>
+                        <Icon name="dots" size={14} color={openRowMenu === contact.id ? T.goldInk : hov ? T.inkMid : T.border} />
+                    </button>
+                    {openRowMenu === contact.id && (
+                        <div onClick={e => e.stopPropagation()}
+                            style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 200,
+                                width: 180, background: T.surface, border: `1px solid ${T.borderStrong}`,
+                                borderRadius: 4, padding: 4, boxShadow: '0 8px 24px rgba(42,38,34,0.12)', fontFamily: T.sans }}>
+                            <div style={{ position: 'absolute', top: -6, right: 10, width: 12, height: 12,
+                                background: T.surface, border: `1px solid ${T.borderStrong}`,
+                                borderRight: 'none', borderBottom: 'none', transform: 'rotate(45deg)' }}/>
+                            {[
+                                { icon: '✎', label: 'Edit contact', fn: () => { handleEditContact(contact); setOpenRowMenu(null); } },
+                                { icon: '👁', label: 'View profile',  fn: () => { setViewingContact(contact); setOpenRowMenu(null); } },
+                                null,
+                                { icon: '🗑', label: 'Delete',        fn: () => { handleDeleteOne(contact); setOpenRowMenu(null); }, danger: true },
+                            ].map((item, idx) => item === null ? (
+                                <div key={idx} style={{ height: 1, background: T.border, margin: '2px 6px' }}/>
+                            ) : (
+                                <div key={idx} onClick={item.fn}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                                        borderRadius: 3, cursor: 'pointer', color: item.danger ? T.danger : T.ink }}
+                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                    <span style={{ fontSize: 12, width: 14, textAlign: 'center' }}>{item.icon}</span>
+                                    <span style={{ fontSize: 12.5, fontWeight: 500 }}>{item.label}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
         );

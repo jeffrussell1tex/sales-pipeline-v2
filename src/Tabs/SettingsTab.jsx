@@ -9232,1000 +9232,329 @@ const NewApiKeyModal = ({ onClose, onCreated }) => {
 };
 
 // 3. New webhook modal
-const NewWebhookModal = ({ onClose }) => {
-    const [name, setName] = useState('');
-    const [url,  setUrl]  = useState('');
-    const [checked, setChecked] = useState(new Set(['opp.stage_changed','opp.won','quote.approved']));
-    const eventGroups = [
-        { group:'Pipeline',  events:['opp.stage_changed','opp.won','opp.lost','opp.created','opp.updated'] },
-        { group:'Quoting',   events:['quote.approved','quote.sent','quote.viewed','quote.signed'] },
-        { group:'Accounts',  events:['account.updated','account.created','contact.created','lead.created','lead.qualified'] },
-    ];
-    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
-    const toggle = (ev) => setChecked(p=>{ const n=new Set(p); n.has(ev)?n.delete(ev):n.add(ev); return n; });
-    return (
-        <IntModal width={620} onClose={onClose}>
-            <IntModalHeader onClose={onClose} title="New webhook endpoint" sub="We'll POST a signed JSON payload to your URL on each event."/>
-            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
-                    <div>
-                        <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Name</label>
-                        <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Pipeline → Zapier" style={inp}/>
-                    </div>
-                    <div>
-                        <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Signing secret</label>
-                        <select style={{ ...inp, appearance:'none', cursor:'pointer' }}>
-                            <option>HMAC-SHA256 (recommended)</option>
-                            <option>None</option>
-                        </select>
-                    </div>
-                </div>
-                <div style={{ marginBottom:14 }}>
-                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Endpoint URL</label>
-                    <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://hooks.example.com/accelerep" style={{ ...inp, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}/>
-                </div>
-                <div style={{ marginBottom:14 }}>
-                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Retry policy</label>
-                    <select style={{ ...inp, appearance:'none', cursor:'pointer', width:'50%' }}>
-                        <option>Exponential backoff (3 attempts)</option>
-                        <option>Fixed 5-minute intervals</option>
-                        <option>No retry</option>
-                    </select>
-                </div>
-                {/* Event picker */}
-                <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:8 }}>
-                    Events <span style={{ color:T.inkMuted, fontWeight:400 }}>({checked.size} selected)</span>
-                </div>
-                {eventGroups.map(({ group, events }) => (
-                    <div key={group} style={{ marginBottom:12 }}>
-                        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', padding:'5px 0', borderBottom:`1px solid ${T.border}`, marginBottom:4, fontFamily:T.sans }}>{group}</div>
-                        {events.map(ev => (
-                            <div key={ev} onClick={()=>toggle(ev)}
-                                style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 4px', cursor:'pointer', borderBottom:`1px solid ${T.border}` }}
-                                onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
-                                onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                <span style={{ width:14, height:14, border:`1.5px solid ${checked.has(ev)?T.ok:T.border}`, borderRadius:2, background:checked.has(ev)?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                                    {checked.has(ev) && <span style={{ color:'#fff', fontSize:9 }}>✓</span>}
-                                </span>
-                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.ink }}>{ev}</span>
-                            </div>
-                        ))}
-                    </div>
-                ))}
-            </div>
-            <IntModalFooter left="A signing secret will be revealed once on creation.">
-                <IntBtn label="Cancel" onClick={onClose}/>
-                <IntBtn label="Create endpoint" primary onClick={onClose}/>
-            </IntModalFooter>
-        </IntModal>
-    );
-};
-
-// 4. New automation modal — 4-step stepper
-const NewAutomationModal = ({ onClose }) => {
-    const [step, setStep] = useState(1);
-    const [autoName, setAutoName] = useState('');
-    const [selectedTrigger, setSelectedTrigger] = useState('opp.stage_changed');
-    const triggers = [
-        { key:'opp.stage_changed', label:'Deal stage changed', type:'record', icon:'⚡' },
-        { key:'opp.won',           label:'Deal won',           type:'record', icon:'⚡' },
-        { key:'lead.created',      label:'Lead created',       type:'record', icon:'⚡' },
-        { key:'quote.approved',    label:'Quote approved',     type:'record', icon:'⚡' },
-        { key:'schedule.daily',    label:'Daily schedule',     type:'schedule',icon:'⏱' },
-        { key:'schedule.weekly',   label:'Weekly schedule',    type:'schedule',icon:'⏱' },
-    ];
-    const steps = ['Trigger','Condition','Actions','Review'];
-    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
-    return (
-        <IntModal width={720} onClose={onClose}>
-            <IntModalHeader onClose={onClose} title="New automation" sub="Define a trigger, conditions, and the actions to take."/>
-            {/* Stepper */}
-            <div style={{ display:'flex', borderBottom:`1px solid ${T.border}`, padding:'0 22px', flexShrink:0 }}>
-                {steps.map((s,i) => {
-                    const n = i+1;
-                    const active = step===n, done = step>n;
-                    return (
-                        <div key={s} style={{ display:'flex', alignItems:'center', gap:7, padding:'10px 16px 10px 0', fontSize:12.5, fontWeight:600, cursor: done ? 'pointer' : 'default', color: active ? T.ink : done ? T.ok : T.inkMuted, borderBottom: active ? `2px solid ${T.goldInk}` : '2px solid transparent' }}
-                            onClick={()=>{ if(done) setStep(n); }}>
-                            <span style={{ width:20, height:20, borderRadius:'50%', border:`1.5px solid ${active?T.goldInk:done?T.ok:T.border}`, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:11, background: done ? T.ok : 'transparent', color: done ? '#fff' : active ? T.goldInk : T.inkMuted }}>
-                                {done ? '✓' : n}
-                            </span>
-                            {s}
-                        </div>
-                    );
-                })}
-            </div>
-            {/* Step body */}
-            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
-                {step===1 && (
-                    <>
-                        <div style={{ marginBottom:14 }}>
-                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Automation name</label>
-                            <input value={autoName} onChange={e=>setAutoName(e.target.value)} placeholder="e.g. New lead → assign + notify" style={inp}/>
-                        </div>
-                        <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:8 }}>Trigger event</div>
-                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                            {triggers.map(tr => {
-                                const sel = selectedTrigger===tr.key;
-                                return (
-                                    <div key={tr.key} onClick={()=>setSelectedTrigger(tr.key)}
-                                        style={{ padding:'10px 14px', border:`1.5px solid ${sel?T.goldInk:T.border}`, borderRadius:6, cursor:'pointer', display:'flex', alignItems:'center', gap:10, background: sel?'rgba(200,185,154,0.10)':T.surface }}>
-                                        <span style={{ fontSize:16 }}>{tr.icon}</span>
-                                        <div>
-                                            <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{tr.label}</div>
-                                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMuted }}>{tr.key}</div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </>
-                )}
-                {step===2 && (
-                    <div>
-                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, marginBottom:12 }}>When condition</div>
-                        <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 1fr', gap:10 }}>
-                            <select style={{ ...inp, appearance:'none', cursor:'pointer' }}>
-                                <option>opp.stage</option><option>opp.value</option><option>opp.owner</option>
-                            </select>
-                            <select style={{ ...inp, appearance:'none', cursor:'pointer' }}>
-                                <option>changed to</option><option>equals</option><option>is greater than</option>
-                            </select>
-                            <input placeholder="Closed Won" style={{ ...inp, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}/>
-                        </div>
-                    </div>
-                )}
-                {step===3 && (
-                    <div>
-                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, marginBottom:12 }}>Then do</div>
-                        {/* Action row */}
-                        <div style={{ padding:'12px 14px', border:`1px solid ${T.border}`, borderRadius:6, display:'flex', alignItems:'center', gap:10, marginBottom:8, background:T.surface }}>
-                            <AppTile name="SL" color="#4a154b" emoji="💬" size={24}/>
-                            <div style={{ flex:1 }}>
-                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>Post to Slack channel</div>
-                                <div style={{ fontSize:11.5, color:T.inkMuted }}>#sales-alerts · include deal value, owner, stage</div>
-                            </div>
-                            <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer' }}>×</button>
-                        </div>
-                        {/* Add action slot */}
-                        <div style={{ padding:'12px 14px', border:`1.5px dashed ${T.border}`, borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center', gap:8, cursor:'pointer', color:T.inkMuted, fontSize:12.5 }}
-                            onMouseEnter={e=>e.currentTarget.style.borderColor=T.goldInk}
-                            onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                            <span>+</span> Add action
-                        </div>
-                    </div>
-                )}
-                {step===4 && (
-                    <div>
-                        <div style={{ fontSize:13, fontWeight:600, color:T.ink, marginBottom:12 }}>Review & activate</div>
-                        {[
-                            { label:'Name',      value: autoName || 'Untitled automation' },
-                            { label:'Trigger',   value: triggers.find(t=>t.key===selectedTrigger)?.label },
-                            { label:'Condition', value: 'opp.stage changed to Closed Won' },
-                            { label:'Actions',   value: 'Post to Slack #sales-alerts' },
-                        ].map((r,i) => (
-                            <div key={i} style={{ display:'grid', gridTemplateColumns:'130px 1fr', gap:10, padding:'9px 0', borderBottom:`1px solid ${T.border}` }}>
-                                <div style={{ fontSize:12, fontWeight:600, color:T.inkMid }}>{r.label}</div>
-                                <div style={{ fontSize:13, color:T.ink }}>{r.value}</div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-            <IntModalFooter left={step===4 ? 'Automation activates immediately on save.' : `Step ${step} of 4`}>
-                <IntBtn label="Save as draft" onClick={onClose}/>
-                {step < 4
-                    ? <IntBtn label="Next →" primary onClick={()=>setStep(s=>s+1)}/>
-                    : <IntBtn label="Activate automation" primary onClick={onClose}/>}
-            </IntModalFooter>
-        </IntModal>
-    );
-};
-
-// ── ① Connected Apps ──────────────────────────────────────────
-// ── Slack config modal ───────────────────────────────────────────────────────
-const SlackConfigModal = ({ existing, onClose, onSave }) => {
-    const [webhookUrl, setWebhookUrl] = React.useState(existing?.webhookUrl || '');
-    const [channel,   setChannel]    = React.useState(existing?.channel     || '#sales-alerts');
-    const [testing,   setTesting]    = React.useState(false);
-    const [testMsg,   setTestMsg]    = React.useState(null);
-    const [saving,    setSaving]     = React.useState(false);
-
-    const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' };
-    const FL = ({ label, hint, children }) => (
-        <div style={{ marginBottom:14 }}>
-            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{label}</label>
-            {children}
-            {hint && <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>{hint}</div>}
-        </div>
-    );
-
-    const handleTest = async () => {
-        if (!webhookUrl.trim()) return;
-        setTesting(true); setTestMsg(null);
-        try {
-            const res  = await dbFetch('/.netlify/functions/send-slack', {
-                method: 'POST',
-                body: JSON.stringify({ webhookUrl: webhookUrl.trim() }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Test failed');
-            setTestMsg({ ok: true, text: 'Message sent! Check your Slack channel.' });
-        } catch (e) {
-            setTestMsg({ ok: false, text: e.message });
-        } finally { setTesting(false); }
-    };
-
-    const handleSave = async () => {
-        if (!webhookUrl.trim()) return;
-        setSaving(true);
-        await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true });
-        setSaving(false);
-    };
-
-    return (
-        <IntModal width={560} onClose={onClose}>
-            <IntModalHeader onClose={onClose}
-                left={<AppTile name="Slack" color="#4a154b" emoji="💬" size={36}/>}
-                title="Configure Slack"
-                sub="Incoming Webhook · pipeline alerts and digests"/>
-            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
-                <FL label="Incoming Webhook URL"
-                    hint="Create one at api.slack.com/apps → your app → Incoming Webhooks → Add New Webhook">
-                    <input value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)}
-                        placeholder="https://hooks.slack.com/services/T.../B.../..."
-                        style={inpSt}/>
-                </FL>
-                <FL label="Default channel" hint="The channel the webhook posts to (set when you create the webhook — shown here for reference)">
-                    <input value={channel} onChange={e => setChannel(e.target.value)}
-                        placeholder="#sales-alerts"
-                        style={{ ...inpSt, fontFamily: T.sans }}/>
-                </FL>
-                <div style={{ padding:'12px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid, fontFamily:T.sans, marginBottom:14 }}>
-                    <b style={{ color:T.info }}>What will post to Slack:</b> Deal silent alerts · Stuck stage alerts · Lapsed close date alerts · High-velocity deal alerts · AI score drops · Weekly manager digest
-                </div>
-                {testMsg && (
-                    <div style={{ padding:'10px 14px', background: testMsg.ok ? 'rgba(77,107,61,0.08)' : 'rgba(156,58,46,0.08)', borderLeft:`3px solid ${testMsg.ok ? T.ok : T.danger}`, borderRadius:4, fontSize:12, color: testMsg.ok ? T.ok : T.danger, fontFamily:T.sans, marginBottom:14 }}>
-                        {testMsg.text}
-                    </div>
-                )}
-            </div>
-            <IntModalFooter left={<IntBtn label={testing ? 'Sending…' : 'Send test message'} onClick={handleTest} disabled={!webhookUrl.trim() || testing}/>}>
-                <IntBtn label="Cancel" onClick={onClose}/>
-                <IntBtn label={saving ? 'Saving…' : 'Save configuration'} primary onClick={handleSave} disabled={!webhookUrl.trim() || saving}/>
-            </IntModalFooter>
-        </IntModal>
-    );
-};
-
-// ── Connected Apps — live version ─────────────────────────────────────────────
-const ConnectedAppsDetail = ({ onBack }) => {
-    const [connectModal,  setConnectModal]  = React.useState(null);
-    const [slackModal,    setSlackModal]    = React.useState(false);
-    const [catFilter,     setCatFilter]     = React.useState('All');
-    const [connectedApps, setConnectedApps] = React.useState({});  // { [appId]: boolean }
-    const [slackConfig,   setSlackConfig]   = React.useState({});  // { webhookUrl, channel, enabled }
-    const [loading,       setLoading]       = React.useState(true);
-    const [error,         setError]         = React.useState(null);
-    const [disconnecting, setDisconnecting] = React.useState(null);
-
-    // ── Load real connected state from settings ────────────────
-    React.useEffect(() => {
-        let cancelled = false;
-        const load = async () => {
-            try {
-                const res  = await dbFetch('/.netlify/functions/settings');
-                const data = await res.json();
-                if (cancelled) return;
-                if (!res.ok) throw new Error(data.error || 'Failed to load settings');
-                setConnectedApps(data.settings?.connectedApps || {});
-                setSlackConfig(data.settings?.slackConfig     || {});
-            } catch (e) {
-                if (!cancelled) setError(e.message);
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        };
-        load();
-        return () => { cancelled = true; };
-    }, []);
-
-    // ── Persist connected state ────────────────────────────────
-    const saveConnectedApps = async (next) => {
-        setConnectedApps(next);
-        try {
-            await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify({ connectedApps: next }),
-            });
-        } catch (e) {
-            console.error('saveConnectedApps error:', e.message);
-        }
-    };
-
-    const handleDisconnect = async (appId) => {
-        setDisconnecting(appId);
-        const next = { ...connectedApps, [appId]: false };
-        await saveConnectedApps(next);
-        setDisconnecting(null);
-    };
-
-    const handleMarkConnected = async (appId) => {
-        const next = { ...connectedApps, [appId]: true };
-        await saveConnectedApps(next);
-    };
-
-    // ── Slack config save ──────────────────────────────────────
-    const handleSaveSlack = async (config) => {
-        setSlackConfig(config);
-        const nextApps = { ...connectedApps, slack: true };
-        setConnectedApps(nextApps);
-        try {
-            await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify({ slackConfig: config, connectedApps: nextApps }),
-            });
-        } catch (e) {
-            console.error('saveSlackConfig error:', e.message);
-        }
-        setSlackModal(false);
-    };
-
-    // Build display lists — merge INT_APPS with real connected state
-    const isConnected = (app) => {
-        // Google Calendar uses its own connection table — check settings flag
-        if (app.id === 'gcal') return connectedApps['gcal'] === true;
-        return connectedApps[app.id] === true;
-    };
-
-    const liveApps   = INT_APPS.map(a => ({ ...a, connected: isConnected(a) }));
-    const connected  = liveApps.filter(a => a.connected);
-    const popular    = liveApps.filter(a => !a.connected && (a.popular || ['gcal','snowflake','clearbit'].includes(a.id)));
-    const catalog    = liveApps.filter(a => !a.connected && !popular.find(p => p.id === a.id));
-    const cats       = ['All', ...new Set(catalog.map(a => a.category))];
-
-    const slackConnected = connectedApps['slack'] === true && slackConfig?.webhookUrl;
-
-    if (loading) return (
-        <div style={{ fontFamily:T.sans }}>
-            <IntCrumb page="Connected apps" onBack={onBack}/>
-            <div style={{ padding:'60px 0', textAlign:'center', color:T.inkMuted, fontSize:13 }}>Loading…</div>
-        </div>
-    );
-
-    return (
-        <div style={{ fontFamily:T.sans }}>
-            {connectModal && <ConnectAppModal app={connectModal} onClose={()=>setConnectModal(null)}/>}
-            {slackModal   && <SlackConfigModal existing={slackConfig} onClose={()=>setSlackModal(false)} onSave={handleSaveSlack}/>}
-
-            <IntCrumb page="Connected apps" onBack={onBack}/>
-            <IntTitle title="Connected apps"
-                sub={`${connected.length} connected · browse and manage your integration catalog`}
-                actions={[
-                    <IntBtn key="mkt" label="Browse marketplace"/>,
-                    <IntBtn key="req" label="+ Request integration" primary/>,
-                ]}/>
-
-            {error && <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>{error}</div>}
-
-            {/* ── Slack callout — prominent if not yet configured ── */}
-            {!slackConnected && (
-                <div style={{ padding:'14px 16px', background:'rgba(74,21,75,0.06)', borderLeft:`3px solid #4a154b`, borderRadius:4, marginBottom:20, display:'flex', alignItems:'center', gap:14 }}>
-                    <AppTile name="Slack" color="#4a154b" emoji="💬" size={32}/>
-                    <div style={{ flex:1 }}>
-                        <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>Connect Slack to get pipeline alerts in your channel</div>
-                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Stale deal alerts, stuck stage warnings, close date nudges, and weekly digests — all posted to Slack alongside email.</div>
-                    </div>
-                    <IntBtn label="Configure Slack" primary onClick={() => setSlackModal(true)}/>
-                </div>
-            )}
-
-            {/* ── Section 1: Connected ── */}
-            {connected.length > 0 && (
-                <div style={{ marginBottom:24 }}>
-                    <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:12 }}>Connected ({connected.length})</div>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:14 }}>
-                        {connected.map(app => (
-                            <div key={app.id} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16, display:'flex', flexDirection:'column', gap:10 }}>
-                                <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
-                                    <AppTile name={app.name} color={app.color} emoji={app.emoji} size={36}/>
-                                    <div style={{ flex:1, minWidth:0 }}>
-                                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{app.name}</div>
-                                        <div style={{ fontSize:11, color:T.inkMuted }}>{app.category}</div>
-                                    </div>
-                                    <span style={{ padding:'2px 7px', borderRadius:10, background:'rgba(77,107,61,0.12)', color:T.ok, fontSize:10.5, fontWeight:700 }}>Live</span>
-                                </div>
-                                <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.4 }}>{app.desc}</div>
-                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingTop:8, borderTop:`1px solid ${T.border}` }}>
-                                    <StatusDot tone="ok" label="Connected"/>
-                                    <div style={{ display:'flex', gap:8 }}>
-                                        {app.id === 'slack' && (
-                                            <button onClick={() => setSlackModal(true)}
-                                                style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Configure</button>
-                                        )}
-                                        <button onClick={() => handleDisconnect(app.id)} disabled={disconnecting === app.id}
-                                            style={{ fontSize:12, fontWeight:600, color:T.danger, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, opacity: disconnecting === app.id ? 0.5 : 1 }}>
-                                            {disconnecting === app.id ? 'Disconnecting…' : 'Disconnect'}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* ── Section 2: Popular / not connected ── */}
-            <div style={{ marginBottom:24 }}>
-                <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:10 }}>Popular</div>
-                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
-                    {/* Slack row — special because it has its own config flow */}
-                    {!slackConnected && (
-                        <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', borderBottom:`1px solid ${T.border}` }}>
-                            <AppTile name="Slack" color="#4a154b" emoji="💬" size={32}/>
-                            <div style={{ flex:1 }}>
-                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>Slack</div>
-                                <div style={{ fontSize:11.5, color:T.inkMuted }}>Post deal updates, alerts, and digest to channels.</div>
-                            </div>
-                            <span style={{ fontSize:11.5, color:T.inkMuted, marginRight:8 }}>Messaging</span>
-                            <IntBtn label="Configure →" primary onClick={() => setSlackModal(true)}/>
-                        </div>
-                    )}
-                    {popular.map((app, i) => (
-                        <div key={app.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', borderBottom: i < popular.length-1 ? `1px solid ${T.border}` : 'none' }}>
-                            <AppTile name={app.name} color={app.color} emoji={app.emoji} size={32}/>
-                            <div style={{ flex:1 }}>
-                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{app.name}</div>
-                                <div style={{ fontSize:11.5, color:T.inkMuted }}>{app.desc}</div>
-                            </div>
-                            <span style={{ fontSize:11.5, color:T.inkMuted, marginRight:8 }}>{app.category}</span>
-                            <button onClick={() => setConnectModal(app)}
-                                style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Connect</button>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* ── Section 3: All apps catalog ── */}
-            <div>
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-                    <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>All apps</div>
-                    <div style={{ display:'flex', gap:4 }}>
-                        {cats.map(c => (
-                            <button key={c} onClick={() => setCatFilter(c)}
-                                style={{ padding:'3px 10px', fontSize:11.5, fontWeight:600, borderRadius:10, border:`1px solid ${catFilter===c?T.ink:T.border}`, background:catFilter===c?T.ink:'transparent', color:catFilter===c?'#fbf8f3':T.inkMid, cursor:'pointer', fontFamily:T.sans }}>{c}</button>
-                        ))}
-                    </div>
-                </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
-                    {catalog.filter(a => catFilter==='All' || a.category===catFilter).map(app => (
-                        <div key={app.id}
-                            onClick={() => app.id === 'slack' ? setSlackModal(true) : setConnectModal(app)}
-                            style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:'12px 14px', display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}
-                            onMouseEnter={e => e.currentTarget.style.borderColor = T.borderStrong}
-                            onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
-                            <AppTile name={app.name} color={app.color} emoji={app.emoji} size={28}/>
-                            <div style={{ flex:1, minWidth:0 }}>
-                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{app.name}</div>
-                                <div style={{ fontSize:11, color:T.inkMuted }}>{app.category}</div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// ── ② API Keys ────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────
-// API Keys · View Docs Popover — Variant B (working starter)
-// Anchored under the "View docs" button in the API Keys header.
+// Webhooks — row ⋯ menu
 // ─────────────────────────────────────────────────────────────────
-const DOCS_RESOURCES = [
-    { label:'Accounts',      count:'14' },
-    { label:'Contacts',      count:'12' },
-    { label:'Opportunities', count:'18' },
-    { label:'Quotes',        count:'11' },
-    { label:'Reports',       count:'8'  },
-    { label:'Webhooks',      count:'6'  },
-];
-
-const SDK_LIST = [
-    { lang:'TypeScript', ver:'v3.2.0', cmd:'npm i @accelerep/sdk'            },
-    { lang:'Python',     ver:'v2.8.1', cmd:'pip install accelerep'            },
-    { lang:'Ruby',       ver:'v1.4.0', cmd:'gem install accelerep'            },
-    { lang:'Go',         ver:'v0.9.3', cmd:'go get github.com/accelerep/go'   },
-];
-
-const DocsPopoverB = ({ keys = [], onClose, btnRef }) => {
-    const ref    = React.useRef(null);
-    const [pos, setPos] = React.useState(null); // { top, right } — null until measured
-    const [tab,     setTab]     = React.useState('cURL');
-    const [copied,  setCopied]  = React.useState(false);
-    const [activeKey, setActiveKey] = React.useState(keys.find(k => !k.revokedAt) || null);
-
-    React.useEffect(() => {
-        if (!activeKey && keys.length > 0) setActiveKey(keys.find(k => !k.revokedAt) || null);
-    }, [keys]);
-
-    // Measure position once after mount
-    React.useLayoutEffect(() => {
-        if (!btnRef?.current || !ref.current) return;
-        const r   = btnRef.current.getBoundingClientRect();
-        const vw  = window.innerWidth;
-        const vh  = window.innerHeight;
-        const mH  = ref.current.offsetHeight || 500;
-        const GAP = 6; const EDGE = 8;
-        const top = (r.bottom + GAP + mH > vh - EDGE)
-            ? Math.max(EDGE, r.top - mH - GAP) : r.bottom + GAP;
-        const right = Math.max(EDGE, vw - r.right);
-        setPos({ top, right });
-    }, []); // run once on mount only
-
-    React.useEffect(() => {
-        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
-        document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-    }, []);
-
-    const keyPrefix = activeKey?.keyPrefix || 'spt_live_••••';
-
-    const snippets = {
-        cURL: `curl https://api.accelerep.com/v1/accounts \
-  -H "Authorization: Bearer ${keyPrefix}..." \
-  -H "Accept: application/json"`,
-        JS: `import { AccelerepClient } from '@accelerep/sdk';
-const client = new AccelerepClient('${keyPrefix}...');
-const accounts = await client.accounts.list();`,
-        Python: `import accelerep
-client = accelerep.Client('${keyPrefix}...')
-accounts = client.accounts.list()`,
-    };
-
-    const handleCopy = () => {
-        navigator.clipboard?.writeText(snippets[tab]);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    };
-
-    const EB = ({ children }) => (
-        <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>
-            {children}
-        </div>
-    );
-
-    // Don't render until position is measured (avoids invisible overlay blocking clicks)
-    if (!pos) return (
-        <div ref={ref} style={{ position:'fixed', top:-9999, left:-9999, visibility:'hidden', pointerEvents:'none' }}>
-            <div style={{ width:440 }}/>
-        </div>
-    );
-
-    return (
-        <>
-            {/* Transparent backdrop — catches outside clicks without blocking nav */}
-            <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:399, background:'transparent' }}/>
-            <div ref={ref} style={{ position:'fixed', zIndex:400, top:pos.top, right:pos.right }}>
-            {/* Caret */}
-            <div style={{ position:'absolute', top:-7, right:20, width:12, height:12,
-                background:T.surface, border:`1px solid ${T.borderStrong}`,
-                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)', zIndex:1 }}/>
-
-            <div style={{ width:440, background:T.surface, border:`1px solid ${T.borderStrong}`,
-                borderRadius:8, boxShadow:'0 8px 28px rgba(42,38,34,0.14), 0 2px 4px rgba(42,38,34,0.06)',
-                fontFamily:T.sans, overflow:'hidden' }}>
-
-                {/* Header */}
-                <div style={{ padding:'13px 16px 10px', borderBottom:`1px solid ${T.border}` }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
-                        <span style={{ fontSize:14, fontWeight:700, color:T.ink }}>API quick reference</span>
-                        <span style={{ flex:1 }}/>
-                        <span style={{ fontSize:10.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>v1 · api.accelerep.com</span>
-                        <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', lineHeight:1, padding:0 }}>×</button>
-                    </div>
-                    <div style={{ fontSize:11, color:T.inkMid, lineHeight:1.5 }}>
-                        Copy a starter for any active key, browse SDKs, or jump to a resource.
-                    </div>
-                </div>
-
-                {/* Quick start code block */}
-                <div style={{ padding:'12px 16px 0' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
-                        <EB>Quick start</EB>
-                        <span style={{ flex:1 }}/>
-                        {['cURL','JS','Python'].map(t => (
-                            <span key={t} onClick={() => { setTab(t); setCopied(false); }}
-                                style={{ padding:'3px 9px', borderRadius:10, fontSize:11, fontWeight:600, cursor:'pointer',
-                                    background: tab===t ? T.ink : 'transparent',
-                                    color: tab===t ? '#fbf8f3' : T.inkMid,
-                                    border: `1px solid ${tab===t ? T.ink : T.border}` }}>
-                                {t}
-                            </span>
-                        ))}
-                    </div>
-
-                    {/* Code panel */}
-                    <div style={{ background:T.ink, borderRadius:4, padding:'12px 14px', position:'relative', marginBottom:8 }}>
-                        <pre style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:'#a8f0c8',
-                            lineHeight:1.55, margin:0, whiteSpace:'pre-wrap', wordBreak:'break-all' }}>
-                            {snippets[tab]}
-                        </pre>
-                        <button onClick={handleCopy}
-                            style={{ position:'absolute', top:8, right:8, fontSize:10, padding:'3px 8px',
-                                background:copied?'rgba(77,107,61,0.5)':'rgba(243,237,224,0.10)',
-                                color:'#f3ede0', border:'none', borderRadius:2, cursor:'pointer',
-                                fontWeight:600, fontFamily:T.sans, transition:'background 150ms' }}>
-                            {copied ? '✓ Copied' : 'Copy'}
-                        </button>
-                    </div>
-
-                    {/* Active key pill */}
-                    <div style={{ padding:'6px 10px', background:T.surface2, border:`1px solid ${T.border}`,
-                        borderRadius:4, fontSize:10.5, color:T.inkMid, display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
-                        <span>Use key</span>
-                        {activeKey ? (
-                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5,
-                                background:T.surface, padding:'1px 6px', borderRadius:2,
-                                border:`1px solid ${T.border}`, color:T.ink, fontWeight:600 }}>
-                                {activeKey.name}
-                            </span>
-                        ) : (
-                            <span style={{ color:T.inkMuted }}>No active keys</span>
-                        )}
-                        <span style={{ flex:1 }}/>
-                        {keys.filter(k => !k.revokedAt).length > 1 && (
-                            <select value={activeKey?.id || ''} onChange={e => setActiveKey(keys.find(k => k.id === e.target.value))}
-                                style={{ fontSize:10.5, color:T.inkMid, background:'none', border:'none', cursor:'pointer',
-                                    fontFamily:T.sans, outline:'none', padding:0 }}>
-                                {keys.filter(k => !k.revokedAt).map(k => (
-                                    <option key={k.id} value={k.id}>{k.name}</option>
-                                ))}
-                            </select>
-                        )}
-                        {keys.filter(k => !k.revokedAt).length <= 1 && (
-                            <span style={{ color:T.inkMuted, fontWeight:600, cursor:'default' }}>Change ▾</span>
-                        )}
-                    </div>
-                </div>
-
-                {/* SDKs */}
-                <div style={{ padding:'10px 16px 4px', borderTop:`1px solid ${T.border}`, marginTop:10 }}>
-                    <EB>Official SDKs</EB>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:6, marginTop:8 }}>
-                        {SDK_LIST.map(s => (
-                            <div key={s.lang} style={{ border:`1px solid ${T.border}`, borderRadius:4,
-                                padding:'8px 10px', background:T.surface, cursor:'pointer' }}
-                                onMouseEnter={e => e.currentTarget.style.borderColor = T.borderStrong}
-                                onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
-                                <div style={{ display:'flex', alignItems:'baseline', gap:6, marginBottom:3 }}>
-                                    <span style={{ fontSize:12, fontWeight:700, color:T.ink }}>{s.lang}</span>
-                                    <span style={{ fontSize:9.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{s.ver}</span>
-                                    <span style={{ flex:1 }}/>
-                                    <span style={{ fontSize:10, color:T.inkMuted }}>↗</span>
-                                </div>
-                                <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5,
-                                    color:T.inkMid, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.cmd}</div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Jump to */}
-                <div style={{ padding:'10px 16px 10px', borderTop:`1px solid ${T.border}`, marginTop:8 }}>
-                    <div style={{ display:'flex', alignItems:'center', marginBottom:8 }}>
-                        <EB>Jump to</EB>
-                        <span style={{ flex:1 }}/>
-                        <span style={{ fontSize:11, color:T.inkMid, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Search ⌘K</span>
-                    </div>
-                    <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
-                        {DOCS_RESOURCES.map(r => (
-                            <a key={r.label} href={`/api-docs.html#${r.label.toLowerCase()}`}
-                                target="_blank" rel="noopener noreferrer" style={{ textDecoration:'none' }}>
-                                <span style={{ padding:'4px 9px', background:T.surface2, border:`1px solid ${T.border}`,
-                                    borderRadius:10, fontSize:11, color:T.ink, fontWeight:600, cursor:'pointer', display:'inline-block' }}
-                                    onMouseEnter={e => e.currentTarget.style.borderColor = T.borderStrong}
-                                    onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
-                                    {r.label} <span style={{ color:T.inkMuted, fontWeight:400 }}>{r.count}</span>
-                                </span>
-                            </a>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Footer */}
-                <div style={{ padding:'10px 16px', borderTop:`1px solid ${T.border}`, background:T.surface2,
-                    display:'flex', alignItems:'center', gap:10 }}>
-                    <a href="/api-docs.html" target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize:11, color:T.inkMid, fontWeight:600, cursor:'pointer', textDecoration:'none' }}>OpenAPI ↗</a>
-                    <a href="/api-docs.html" target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize:11, color:T.inkMid, fontWeight:600, cursor:'pointer', textDecoration:'none' }}>Postman ↗</a>
-                    <span style={{ fontSize:11, color:T.inkMuted, cursor:'pointer', fontFamily:T.sans }}>Changelog</span>
-                    <span style={{ flex:1 }}/>
-                    <a href="/api-docs.html" target="_blank" rel="noopener noreferrer"
-                        style={{ textDecoration:'none', display:'inline-block', padding:'7px 14px',
-                            background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r,
-                            fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans, whiteSpace:'nowrap' }}>
-                        Open full docs ↗
-                    </a>
-                </div>
-            </div>
-            </div>
-        </>
-    );
-};
-
-
-// ─────────────────────────────────────────────────────────────────
-// API Keys — live version
-// ─────────────────────────────────────────────────────────────────
-
-// Row ⋯ menu for API key rows
-const ApiKeyRowMenu = ({ k, onRevoke, onCopyPrefix, onClose }) => {
-    const MenuRow = ({ icon, label, danger:isDanger, onClick }) => (
+const WebhookRowMenu = ({ wh, onToggle, onDelete, onClose }) => {
+    const MR = ({ icon, label, danger:isDanger, onClick }) => (
         <div onClick={() => { onClick(); onClose(); }}
-            style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderRadius:3, cursor:'pointer',
-                color: isDanger ? T.danger : T.ink, fontFamily:T.sans }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+            style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderRadius:3,
+                cursor:'pointer', color:isDanger?T.danger:T.ink, fontFamily:T.sans }}
+            onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.10)'}
+            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
             <span style={{ width:14, textAlign:'center', fontSize:13 }}>{icon}</span>
             <span style={{ fontSize:12.5, fontWeight:500 }}>{label}</span>
         </div>
     );
     return (
         <div style={{ width:192, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
-            boxShadow:'0 8px 24px rgba(42,38,34,0.12)', padding:4, fontFamily:T.sans, position:'relative' }}>
+            boxShadow:'0 8px 24px rgba(42,38,34,0.12)', padding:4, position:'relative' }}>
             <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
                 background:T.surface, border:`1px solid ${T.borderStrong}`,
                 borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
-            <MenuRow icon="⎘" label="Copy key prefix" onClick={onCopyPrefix}/>
+            <MR icon={wh.active?'⏸':'▶'} label={wh.active?'Pause':'Resume'} onClick={onToggle}/>
+            <MR icon="🔁" label="Send test event" onClick={() => {}}/>
             <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
-            <MenuRow icon="⊘" label="Revoke key" danger onClick={onRevoke}/>
+            <MR icon="🗑" label="Delete endpoint" danger onClick={onDelete}/>
         </div>
     );
 };
 
-// Revoke confirm modal
-const RevokeKeyModal = ({ k, onConfirm, onClose }) => (
-    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
-        <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width:440, padding:24, boxShadow:'0 20px 56px rgba(20,16,12,0.28)', fontFamily:T.sans }}>
-            <div style={{ fontSize:16, fontWeight:700, color:T.ink, marginBottom:8 }}>Revoke API key?</div>
-            <div style={{ fontSize:13, color:T.inkMid, lineHeight:1.6, marginBottom:6 }}>
-                <b style={{ color:T.ink }}>{k.name}</b> will stop working immediately.
-            </div>
-            <div style={{ padding:'10px 14px', background:'rgba(156,58,46,0.07)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.inkMid, marginBottom:20 }}>
-                Any application using this key will lose access. This cannot be undone — you'll need to create a new key.
-            </div>
-            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
-                <button onClick={onClose} style={{ padding:'7px 16px', background:'none', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, cursor:'pointer', color:T.inkMid, fontFamily:T.sans }}>Cancel</button>
-                <button onClick={onConfirm} style={{ padding:'7px 16px', background:T.danger, border:'none', borderRadius:T.r, fontSize:13, fontWeight:700, cursor:'pointer', color:'#fbf8f3', fontFamily:T.sans }}>Revoke key</button>
-            </div>
-        </div>
-    </div>
-);
+// ─────────────────────────────────────────────────────────────────
+// New Webhook Modal — wired to POST /webhooks
+// ─────────────────────────────────────────────────────────────────
+const NewWebhookModal = ({ onClose, onCreated }) => {
+    const [step,    setStep]    = React.useState('form'); // form | created
+    const [name,    setName]    = React.useState('');
+    const [url,     setUrl]     = React.useState('');
+    const [checked, setChecked] = React.useState(new Set(['opportunity.stage_changed','opportunity.won']));
+    const [saving,  setSaving]  = React.useState(false);
+    const [error,   setError]   = React.useState('');
+    const [secret,  setSecret]  = React.useState('');
+    const [copiedSec, setCopiedSec] = React.useState(false);
 
-const ApiKeysDetail = ({ onBack }) => {
-    const [showDocs,    setShowDocs]    = React.useState(false);
-    const docsBtnRef = React.useRef(null);
-    const [keys,        setKeys]        = React.useState([]);
-    const [loading,     setLoading]     = React.useState(true);
-    const [error,       setError]       = React.useState(null);
-    const [filter,      setFilter]      = React.useState('Active');
-    const [showCreate,  setShowCreate]  = React.useState(false);
-    const [revokeKey,   setRevokeKey]   = React.useState(null); // key to confirm revoke
-    const [activeMenu,  setActiveMenu]  = React.useState(null); // key id with open menu
-    const [revoking,    setRevoking]    = React.useState(null);
+    // Event types must match WEBHOOK_EVENTS from webhooks.mjs exactly
+    const eventGroups = [
+        { group:'Pipeline',  events:['opportunity.created','opportunity.stage_changed','opportunity.won','opportunity.lost'] },
+        { group:'Leads',     events:['lead.created','lead.converted'] },
+        { group:'Tasks',     events:['task.overdue','task.completed'] },
+        { group:'Other',     events:['spiff.claimed'] },
+    ];
+    const toggle = (ev) => setChecked(p => { const n=new Set(p); n.has(ev)?n.delete(ev):n.add(ev); return n; });
+    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
+
+    const handleCreate = async () => {
+        if (!name.trim()) { setError('Name is required'); return; }
+        if (!url.trim())  { setError('Endpoint URL is required'); return; }
+        if (checked.size === 0) { setError('Select at least one event'); return; }
+        setSaving(true); setError('');
+        try {
+            const res  = await dbFetch('/.netlify/functions/webhooks', {
+                method: 'POST',
+                body: JSON.stringify({ name: name.trim(), targetUrl: url.trim(), eventTypes: [...checked] }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to create');
+            setSecret(data.secret || '');
+            if (onCreated) onCreated(data.subscription);
+            setStep('created');
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <IntModal width={620} onClose={onClose}>
+            <IntModalHeader onClose={onClose}
+                title={step==='form' ? 'New webhook endpoint' : 'Endpoint created — save your secret'}
+                sub={step==='form' ? "Accelerep will POST a signed JSON payload to your URL on each event." : undefined}/>
+            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
+                {step === 'form' ? (
+                    <>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
+                            <div>
+                                <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Name</label>
+                                <input value={name} onChange={e=>{setName(e.target.value);setError('');}} placeholder="e.g. Pipeline → Zapier" style={inp} autoFocus/>
+                            </div>
+                            <div>
+                                <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Signing</label>
+                                <div style={{ ...inp, background:T.surface2, color:T.inkMid, cursor:'default' }}>HMAC-SHA256 (always on)</div>
+                            </div>
+                        </div>
+                        <div style={{ marginBottom:14 }}>
+                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Endpoint URL</label>
+                            <input value={url} onChange={e=>{setUrl(e.target.value);setError('');}} placeholder="https://hooks.example.com/accelerep" style={{ ...inp, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}/>
+                        </div>
+                        <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:8 }}>
+                            Events <span style={{ color:T.inkMuted, fontWeight:400 }}>({checked.size} selected)</span>
+                        </div>
+                        {eventGroups.map(({ group, events }) => (
+                            <div key={group} style={{ marginBottom:12 }}>
+                                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', padding:'5px 0', borderBottom:`1px solid ${T.border}`, marginBottom:4, fontFamily:T.sans }}>{group}</div>
+                                {events.map(ev => (
+                                    <div key={ev} onClick={()=>toggle(ev)}
+                                        style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 4px', cursor:'pointer', borderBottom:`1px solid ${T.border}` }}
+                                        onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                                        onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                        <span style={{ width:14, height:14, border:`1.5px solid ${checked.has(ev)?T.ok:T.border}`, borderRadius:2, background:checked.has(ev)?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                            {checked.has(ev) && <span style={{ color:'#fff', fontSize:9 }}>✓</span>}
+                                        </span>
+                                        <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.ink }}>{ev}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        ))}
+                        {error && <div style={{ fontSize:12, color:T.danger, marginTop:8, fontFamily:T.sans }}>{error}</div>}
+                    </>
+                ) : (
+                    <>
+                        <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', background:'rgba(77,107,61,0.08)', border:`1px solid rgba(77,107,61,0.2)`, borderRadius:6, marginBottom:16 }}>
+                            <span style={{ fontSize:22, color:T.ok }}>✓</span>
+                            <div>
+                                <div style={{ fontSize:13.5, fontWeight:700, color:T.ok }}>Endpoint created</div>
+                                <div style={{ fontSize:12, color:T.inkMid, marginTop:1 }}>Save your signing secret now — it won't be shown again.</div>
+                            </div>
+                        </div>
+                        <div style={{ background:T.ink, borderRadius:6, padding:'14px 16px', marginBottom:14 }}>
+                            <div style={{ fontSize:10, fontWeight:700, color:'rgba(200,185,154,0.7)', letterSpacing:0.6, textTransform:'uppercase', marginBottom:8 }}>Signing secret</div>
+                            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                                <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:'#a8f0c8', wordBreak:'break-all', flex:1 }}>{secret || 'whsec_••••••••••••••••'}</code>
+                                <button onClick={() => { navigator.clipboard?.writeText(secret); setCopiedSec(true); setTimeout(()=>setCopiedSec(false),2000); }}
+                                    style={{ padding:'5px 12px', background:copiedSec?'rgba(77,107,61,0.5)':'rgba(255,255,255,0.12)', color:'#fbf8f3', border:'1px solid rgba(255,255,255,0.18)', borderRadius:4, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, flexShrink:0 }}>
+                                    {copiedSec ? '✓ Copied' : 'Copy'}
+                                </button>
+                            </div>
+                        </div>
+                        <div style={{ padding:'10px 14px', background:'rgba(184,115,51,0.09)', borderLeft:`3px solid ${T.warn}`, borderRadius:4, fontSize:12, color:T.inkMid, lineHeight:1.5 }}>
+                            Verify the <code style={{ fontFamily:'ui-monospace,Menlo,monospace' }}>X-SPT-Signature</code> header on every incoming request.
+                            Use HMAC-SHA256(secret, rawBody) and compare with <code>sha256=...</code>.
+                        </div>
+                    </>
+                )}
+            </div>
+            <IntModalFooter>
+                {step === 'form' ? (
+                    <>
+                        <IntBtn label="Cancel" onClick={onClose}/>
+                        <IntBtn label={saving?'Creating…':'Create endpoint'} primary onClick={handleCreate} disabled={saving||!name.trim()||!url.trim()}/>
+                    </>
+                ) : (
+                    <IntBtn label="I've saved it — close" primary onClick={onClose}/>
+                )}
+            </IntModalFooter>
+        </IntModal>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// WebhooksDetail — fully live
+// ─────────────────────────────────────────────────────────────────
+const WebhooksDetail = ({ onBack }) => {
+    const [webhooks,  setWebhooks]  = React.useState([]);
+    const [loading,   setLoading]   = React.useState(true);
+    const [error,     setError]     = React.useState(null);
+    const [showModal, setShowModal] = React.useState(false);
+    const [activeMenu, setActiveMenu] = React.useState(null);
+    const [deleting,  setDeleting]  = React.useState(null);
     const menuRefs = React.useRef({});
 
-    // ── Load keys from DB ────────────────────────────────────────
-    const loadKeys = async () => {
+    // Load from DB
+    const load = React.useCallback(async () => {
         try {
-            const res  = await dbFetch('/.netlify/functions/api-keys');
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to load keys');
-            setKeys(data.keys || []);
-        } catch (e) {
-            setError(e.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    React.useEffect(() => { loadKeys(); }, []);
-
-    // ── Revoke ───────────────────────────────────────────────────
-    const handleRevoke = async (k) => {
-        setRevoking(k.id);
-        try {
-            const res  = await dbFetch(`/.netlify/functions/api-keys?id=${k.id}`, { method:'DELETE' });
+            const res  = await dbFetch('/.netlify/functions/webhooks');
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
-            // Update local state immediately
-            setKeys(prev => prev.map(key => key.id === k.id ? { ...key, revokedAt: new Date().toISOString() } : key));
-            setRevokeKey(null);
-        } catch (e) {
-            setError(e.message);
-        } finally {
-            setRevoking(null);
-        }
+            setWebhooks(data.subscriptions || []);
+        } catch (e) { setError(e.message); }
+        finally { setLoading(false); }
+    }, []);
+
+    React.useEffect(() => { load(); }, []);
+
+    // Outside click closes menu
+    React.useEffect(() => {
+        if (!activeMenu) return;
+        const onDoc = (e) => {
+            const btn = document.getElementById('wh-btn-' + activeMenu);
+            const menu = document.getElementById('wh-menu-' + activeMenu);
+            if (btn && !btn.contains(e.target) && menu && !menu.contains(e.target)) setActiveMenu(null);
+        };
+        document.addEventListener('mousedown', onDoc);
+        return () => document.removeEventListener('mousedown', onDoc);
+    }, [activeMenu]);
+
+    const handleToggle = async (wh) => {
+        try {
+            const res  = await dbFetch('/.netlify/functions/webhooks', {
+                method: 'PUT',
+                body: JSON.stringify({ id: wh.id, active: !wh.active }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            setWebhooks(prev => prev.map(w => w.id === wh.id ? data.subscription : w));
+        } catch (e) { setError(e.message); }
+        setActiveMenu(null);
     };
 
-    // ── Helpers ──────────────────────────────────────────────────
+    const handleDelete = async (wh) => {
+        setDeleting(wh.id);
+        try {
+            const res = await dbFetch(`/.netlify/functions/webhooks?id=${wh.id}`, { method: 'DELETE' });
+            if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            setWebhooks(prev => prev.filter(w => w.id !== wh.id));
+        } catch (e) { setError(e.message); }
+        finally { setDeleting(null); setActiveMenu(null); }
+    };
+
     const fmtDate = (iso) => {
         if (!iso) return '—';
-        const d   = new Date(iso);
-        const now = new Date();
-        const diffMs  = now - d;
-        const diffMin = Math.round(diffMs / 60000);
+        const d = new Date(iso);
+        const diffMin = Math.round((Date.now() - d) / 60000);
         if (diffMin < 1)    return 'just now';
         if (diffMin < 60)   return diffMin + 'm ago';
         if (diffMin < 1440) return Math.round(diffMin/60) + 'h ago';
-        if (diffMin < 2880) return 'yesterday';
-        return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+        return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
     };
 
-    const keyStatus = (k) => {
-        if (k.revokedAt) return 'Revoked';
-        return 'Active';
-    };
-
-    // Filter logic
-    const visible = keys.filter(k => {
-        const s = keyStatus(k);
-        if (filter === 'Active')  return s === 'Active';
-        if (filter === 'Revoked') return s === 'Revoked';
-        return true;
-    });
-
-    const activeCount  = keys.filter(k => !k.revokedAt).length;
-    const revokedCount = keys.filter(k =>  k.revokedAt).length;
+    const activeCount  = webhooks.filter(w => w.active).length;
+    const failingCount = webhooks.filter(w => w.active && w.lastStatus && w.lastStatus >= 400).length;
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {/* Modals */}
-            {showDocs && (
-                <DocsPopoverB
-                    keys={keys}
-                    btnRef={docsBtnRef}
-                    onClose={() => setShowDocs(false)}
-                />
-            )}
-            {showCreate && (
-                <NewApiKeyModal
-                    onClose={() => setShowCreate(false)}
-                    onCreated={(newKey) => { setKeys(prev => [newKey, ...prev]); }}
-                />
-            )}
-            {revokeKey && (
-                <RevokeKeyModal
-                    k={revokeKey}
-                    onClose={() => setRevokeKey(null)}
-                    onConfirm={() => handleRevoke(revokeKey)}
-                />
-            )}
-
-            <IntCrumb page="API keys" onBack={onBack}/>
+            {showModal && <NewWebhookModal onClose={() => setShowModal(false)} onCreated={sub => { setWebhooks(prev => [sub, ...prev]); }}/>}
+            <IntCrumb page="Webhooks" onBack={onBack}/>
             <IntTitle
-                title="API keys"
-                sub={loading ? 'Loading…' : `${activeCount} active key${activeCount!==1?'s':''} · ${revokedCount} revoked`}
+                title="Webhooks"
+                sub={loading ? 'Loading…' : `${webhooks.length} endpoint${webhooks.length!==1?'s':''} · ${activeCount} active · receive real-time CRM events`}
                 actions={[
-                    <button ref={docsBtnRef} key="docs" onClick={() => setShowDocs(o => !o)}
-                        style={{ padding:'6px 12px', background:showDocs?T.surface2:T.surface,
-                            border:`1px solid ${showDocs?T.goldInk:T.borderStrong}`,
-                            color:showDocs?T.goldInk:T.ink,
-                            borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer',
-                            fontFamily:T.sans, display:'inline-flex', alignItems:'center', gap:5 }}>
-                        View docs <span style={{ fontSize:10 }}>↗</span>
-                    </button>,
-                    <IntBtn key="new" label="+ Create key" primary onClick={() => setShowCreate(true)}/>,
+                    <a key="ref" href="/api-docs.html#webhooks" target="_blank" rel="noopener noreferrer" style={{ textDecoration:'none' }}><IntBtn label="Event reference ↗"/></a>,
+                    <IntBtn key="new" label="+ New endpoint" primary onClick={() => setShowModal(true)}/>,
                 ]}/>
 
-            {error && (
-                <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger, fontFamily:T.sans }}>{error}</div>
-            )}
+            {error && <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>{error}</div>}
 
-            {/* Keys table */}
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:18 }}>
-                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Keys</div>
-                    <div style={{ display:'flex', gap:0, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:2 }}>
-                        {['All','Active','Revoked'].map(f => (
-                            <button key={f} onClick={() => setFilter(f)}
-                                style={{ padding:'4px 12px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer',
-                                    fontFamily:T.sans, background:filter===f?T.ink:'transparent', color:filter===f?'#fbf8f3':T.inkMid }}>
-                                {f}
-                            </button>
-                        ))}
+            {/* Failing callout */}
+            {failingCount > 0 && (
+                <div style={{ padding:'12px 16px', background:'rgba(156,58,46,0.07)', borderLeft:`3px solid ${T.danger}`, borderRadius:6, marginBottom:18, display:'flex', alignItems:'center', gap:14 }}>
+                    <span style={{ fontSize:18, color:T.danger }}>⚠</span>
+                    <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:T.danger }}>{failingCount} endpoint{failingCount!==1?'s':''} failing</div>
+                        <div style={{ fontSize:12, color:T.inkMid, marginTop:2 }}>Check your endpoint URL and verify signatures are being accepted.</div>
                     </div>
                 </div>
+            )}
 
+            {/* Endpoints table */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:18 }}>
+                <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Endpoints</div>
+                </div>
                 {/* Column headers */}
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 180px 180px 120px 100px 36px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                    {['NAME','PREFIX','SCOPES','LAST USED','STATUS',''].map((h,i) => (
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 200px 120px 120px 90px 36px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                    {['ENDPOINT','EVENTS','LAST FIRED','HTTP STATUS','ACTIVE',''].map((h,i) => (
                         <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
                     ))}
                 </div>
 
                 {loading ? (
-                    <div style={{ padding:'40px', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>Loading keys…</div>
-                ) : visible.length === 0 ? (
-                    <div style={{ padding:'40px', textAlign:'center', fontFamily:T.sans }}>
-                        <div style={{ fontSize:24, marginBottom:8, opacity:0.3 }}>🔑</div>
-                        <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, marginBottom:4 }}>
-                            {filter === 'All' ? 'No API keys yet' : `No ${filter.toLowerCase()} keys`}
-                        </div>
-                        <div style={{ fontSize:12.5, color:T.inkMuted, marginBottom:16 }}>
-                            {filter === 'All' ? 'Create a key to give programmatic access to Accelerep data.' : ''}
-                        </div>
-                        {filter === 'All' && (
-                            <button onClick={() => setShowCreate(true)}
-                                style={{ padding:'8px 20px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
-                                + Create first key
-                            </button>
-                        )}
+                    <div style={{ padding:'40px', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>Loading endpoints…</div>
+                ) : webhooks.length === 0 ? (
+                    <div style={{ padding:'48px', textAlign:'center', fontFamily:T.sans }}>
+                        <div style={{ fontSize:24, marginBottom:8, opacity:0.3 }}>⚡</div>
+                        <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, marginBottom:4 }}>No webhook endpoints yet</div>
+                        <div style={{ fontSize:12.5, color:T.inkMuted, marginBottom:16 }}>Create an endpoint to start receiving real-time CRM events.</div>
+                        <button onClick={() => setShowModal(true)}
+                            style={{ padding:'8px 20px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                            + Create first endpoint
+                        </button>
                     </div>
                 ) : (
-                    visible.map((k, i) => {
-                        const revoked = !!k.revokedAt;
-                        const status  = keyStatus(k);
-                        const isMenuOpen = activeMenu === k.id;
+                    webhooks.map((wh, i) => {
+                        const isFailing = wh.active && wh.lastStatus && wh.lastStatus >= 400;
+                        const isMenuOpen = activeMenu === wh.id;
                         return (
-                            <div key={k.id} style={{ display:'grid', gridTemplateColumns:'1fr 180px 180px 120px 100px 36px', gap:8,
-                                padding:'11px 16px', borderBottom:i<visible.length-1?`1px solid ${T.border}`:'none',
-                                alignItems:'center', opacity:revoked?0.65:1, position:'relative' }}>
-
-                                {/* Name + created by */}
+                            <div key={wh.id} style={{ display:'grid', gridTemplateColumns:'1fr 200px 120px 120px 90px 36px', gap:8,
+                                padding:'11px 16px', borderBottom:i<webhooks.length-1?`1px solid ${T.border}`:'none',
+                                alignItems:'center', background:isFailing?'rgba(156,58,46,0.03)':'transparent',
+                                opacity:deleting===wh.id?0.5:1, position:'relative' }}>
+                                {/* Name + URL */}
                                 <div>
-                                    <div style={{ fontSize:13, fontWeight:600, color:T.ink, textDecoration:revoked?'line-through':'' }}>{k.name}</div>
-                                    <div style={{ fontSize:11, color:T.inkMuted }}>by {k.createdBy || '—'} · {fmtDate(k.createdAt)}</div>
+                                    <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{wh.name}</div>
+                                    <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMuted, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{wh.targetUrl}</div>
                                 </div>
-
-                                {/* Key prefix */}
-                                <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>
-                                    {k.keyPrefix}<span style={{ color:T.border }}>••••••••</span>
-                                </div>
-
-                                {/* Scopes */}
+                                {/* Event types */}
                                 <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
-                                    {(k.scopes || []).slice(0,3).map(s => (
-                                        <span key={s} style={{ padding:'1px 5px', borderRadius:3, background:'rgba(58,90,122,0.10)',
-                                            color:T.info, fontSize:10, fontFamily:'ui-monospace,Menlo,monospace' }}>{s}</span>
+                                    {(wh.eventTypes||[]).slice(0,2).map(ev => (
+                                        <span key={ev} style={{ padding:'1px 5px', borderRadius:3, background:'rgba(58,90,122,0.09)', color:T.info, fontSize:10, fontFamily:'ui-monospace,Menlo,monospace' }}>{ev}</span>
                                     ))}
-                                    {(k.scopes || []).length > 3 && (
-                                        <span style={{ fontSize:10, color:T.inkMuted }}>+{k.scopes.length-3}</span>
-                                    )}
+                                    {(wh.eventTypes||[]).length > 2 && <span style={{ fontSize:10, color:T.inkMuted }}>+{wh.eventTypes.length-2}</span>}
                                 </div>
-
-                                {/* Last used */}
-                                <div style={{ fontSize:12, color:T.inkMid }}>{fmtDate(k.lastUsedAt) || 'Never'}</div>
-
-                                {/* Status */}
-                                <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:10, fontSize:11, fontWeight:700,
-                                    background: revoked ? 'rgba(156,58,46,0.10)' : 'rgba(77,107,61,0.12)',
-                                    color: revoked ? T.danger : T.ok }}>
-                                    {status}
-                                </span>
-
+                                {/* Last fired */}
+                                <div style={{ fontSize:12, color:T.inkMid }}>{fmtDate(wh.lastFiredAt)}</div>
+                                {/* Last HTTP status */}
+                                <div>
+                                    {wh.lastStatus ? (
+                                        <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, fontWeight:700,
+                                            color: wh.lastStatus < 300 ? T.ok : wh.lastStatus < 500 ? T.warn : T.danger }}>
+                                            {wh.lastStatus}
+                                        </span>
+                                    ) : <span style={{ color:T.inkMuted, fontSize:12 }}>—</span>}
+                                </div>
+                                {/* Active toggle */}
+                                <div onClick={() => handleToggle(wh)}
+                                    style={{ width:30, height:18, borderRadius:9, background:wh.active?T.ok:T.border, position:'relative', cursor:'pointer', transition:'background 120ms', flexShrink:0 }}>
+                                    <span style={{ position:'absolute', top:2, left:wh.active?14:2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+                                </div>
                                 {/* ⋯ menu */}
                                 <div style={{ position:'relative' }}>
-                                    <button ref={el => menuRefs.current[k.id] = el}
-                                        onClick={e => { e.stopPropagation(); setActiveMenu(isMenuOpen ? null : k.id); }}
-                                        disabled={revoked}
-                                        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
-                                            width:24, height:24, borderRadius:3, fontSize:16, fontWeight:700,
-                                            border:'none', cursor:revoked?'default':'pointer', lineHeight:1,
-                                            color:isMenuOpen?T.goldInk:T.inkMuted,
-                                            background:isMenuOpen?'rgba(200,185,154,0.30)':'transparent',
-                                            opacity:revoked?0.3:1 }}>⋯</button>
-
+                                    <button id={'wh-btn-' + wh.id}
+                                        onClick={() => setActiveMenu(isMenuOpen ? null : wh.id)}
+                                        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:24, height:24, borderRadius:3, fontSize:16, fontWeight:700, border:'none', cursor:'pointer', lineHeight:1, color:isMenuOpen?T.goldInk:T.inkMuted, background:isMenuOpen?'rgba(200,185,154,0.30)':'transparent' }}>⋯</button>
                                     {isMenuOpen && (
-                                        <div style={{ position:'absolute', top:'100%', right:0, marginTop:4, zIndex:100 }}>
-                                            <ApiKeyRowMenu
-                                                k={k}
-                                                onClose={() => setActiveMenu(null)}
-                                                onCopyPrefix={() => navigator.clipboard?.writeText(k.keyPrefix + '••••••••')}
-                                                onRevoke={() => { setActiveMenu(null); setRevokeKey(k); }}
-                                            />
+                                        <div id={'wh-menu-' + wh.id} style={{ position:'absolute', top:'100%', right:0, marginTop:4, zIndex:100 }}>
+                                            <WebhookRowMenu wh={wh} onClose={() => setActiveMenu(null)} onToggle={() => handleToggle(wh)} onDelete={() => handleDelete(wh)}/>
                                         </div>
                                     )}
                                 </div>
@@ -10236,237 +9565,65 @@ const ApiKeysDetail = ({ onBack }) => {
             </div>
 
             {/* Security note */}
-            <div style={{ padding:'12px 16px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`,
-                borderRadius:4, marginBottom:18, fontSize:12.5, color:T.inkMid, fontFamily:T.sans, lineHeight:1.6 }}>
-                <b style={{ color:T.info }}>Security:</b> Keys are hashed with SHA-256 before storage — Accelerep never stores the plaintext.
-                Each key is shown in full <b>once</b> at creation time. Store it in your secrets manager immediately.
-                API access is scoped per key and restricted to Admin-created credentials only.
-            </div>
-
-            {/* Workspace defaults — informational */}
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:18 }}>
-                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:14 }}>API reference</div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:18, marginBottom:16 }}>
-                    {[
-                        { label:'Base URL',          value:'https://api.accelerep.com/v1' },
-                        { label:'Authentication',    value:'Bearer <key>' },
-                        { label:'Key format',        value:'spt_live_<64 hex chars>' },
-                    ].map((f,i) => (
-                        <div key={i}>
-                            <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{f.label}</div>
-                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.ink }}>{f.value}</div>
-                        </div>
-                    ))}
-                </div>
-                <div style={{ background:T.ink, borderRadius:6, padding:'12px 16px' }}>
-                    <div style={{ fontSize:10, fontWeight:700, color:'rgba(200,185,154,0.7)', letterSpacing:0.6, textTransform:'uppercase', marginBottom:8 }}>Example request</div>
-                    <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:'#a8f0c8', display:'block', lineHeight:1.8 }}>
-                        {`curl -H "Authorization: Bearer spt_live_..." \
-  https://api.accelerep.com/v1/opportunities`}
-                    </code>
-                </div>
+            <div style={{ padding:'12px 16px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12.5, color:T.inkMid, lineHeight:1.6 }}>
+                <b style={{ color:T.info }}>Signature verification:</b> Every request includes <code style={{ fontFamily:'ui-monospace,Menlo,monospace' }}>X-SPT-Signature: sha256=...</code> and <code style={{ fontFamily:'ui-monospace,Menlo,monospace' }}>X-SPT-Event</code> headers.
+                Compute HMAC-SHA256(secret, rawBody) and compare to verify authenticity. <a href="/api-docs.html#wh-verify" target="_blank" style={{ color:T.info }}>See verification guide →</a>
             </div>
         </div>
     );
 };
 
-
-// ── ③ Webhooks ────────────────────────────────────────────────
-const WebhooksDetail = ({ onBack, focusFailing=false }) => {
-    const [showModal, setShowModal] = useState(false);
-    const failing = INT_WEBHOOKS.filter(w=>w.status==='Failing');
-
-    return (
-        <div style={{ fontFamily:T.sans }}>
-            {showModal && <NewWebhookModal onClose={()=>setShowModal(false)}/>}
-            <IntCrumb page="Webhooks" onBack={onBack}/>
-            <IntTitle title="Webhooks" sub="4 endpoints · 1 failing · subscribe to CRM events and push to your services"
-                actions={[
-                    <IntBtn key="del" label="View deliveries"/>,
-                    <IntBtn key="ref" label="Event reference ↗"/>,
-                    <IntBtn key="new" label="+ New endpoint" primary onClick={()=>setShowModal(true)}/>,
-                ]}/>
-
-            {/* Failing callout */}
-            {failing.length > 0 && (
-                <div style={{ padding:'12px 16px', background:'rgba(156,58,46,0.07)', borderLeft:`3px solid ${T.danger}`, borderRadius:6, marginBottom:18, display:'flex', alignItems:'center', gap:14 }}>
-                    <span style={{ fontSize:18, color:T.danger }}>⚠</span>
-                    <div style={{ flex:1 }}>
-                        <div style={{ fontSize:13, fontWeight:700, color:T.danger }}>1 endpoint failing</div>
-                        <div style={{ fontSize:12, color:T.inkMid, marginTop:2 }}><b>{failing[0].name}</b> — last attempt 9h ago · 38% success rate · 4 retries exhausted</div>
-                    </div>
-                    <button style={{ padding:'6px 14px', background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Investigate</button>
-                </div>
-            )}
-
-            {/* Endpoints table */}
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:18 }}>
-                <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
-                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Endpoints</div>
-                </div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 180px 130px 130px 90px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                    {['ENDPOINT','EVENTS','SUCCESS 30D','LAST DELIVERY','STATUS',''].map((h,i) => (
-                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
-                    ))}
-                </div>
-                {INT_WEBHOOKS.map((wh,i) => (
-                    <div key={wh.id} style={{ display:'grid', gridTemplateColumns:'1fr 180px 130px 130px 90px 32px', gap:8, padding:'11px 16px', borderBottom:i<INT_WEBHOOKS.length-1?`1px solid ${T.border}`:'none', alignItems:'center',
-                        background: wh.status==='Failing' ? 'rgba(156,58,46,0.03)' : 'transparent' }}>
-                        {/* Endpoint */}
-                        <div>
-                            <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{wh.name}</div>
-                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMuted, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{wh.url}</div>
-                        </div>
-                        {/* Events */}
-                        <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
-                            {wh.events.slice(0,1).map(ev => (
-                                <span key={ev} style={{ padding:'1px 5px', borderRadius:3, background:'rgba(58,90,122,0.09)', color:T.info, fontSize:10, fontFamily:'ui-monospace,Menlo,monospace' }}>{ev}</span>
-                            ))}
-                            {wh.events.length>1 && <span style={{ fontSize:10, color:T.inkMuted }}>+{wh.events.length-1}</span>}
-                        </div>
-                        {/* Health bar */}
-                        <HealthBar pct={wh.successPct} attempts={wh.attempts}/>
-                        {/* Last delivery */}
-                        <div style={{ fontSize:12, color: wh.status==='Failing' ? T.danger : T.inkMid }}>{wh.lastDelivery}</div>
-                        {/* Status */}
-                        <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
-                            background: wh.status==='Healthy'?'rgba(77,107,61,0.12)':'rgba(156,58,46,0.12)',
-                            color: wh.status==='Healthy'?T.ok:T.danger }}>
-                            {wh.status}
-                        </span>
-                        <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
-                    </div>
-                ))}
-            </div>
-
-            {/* Recent deliveries */}
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
-                <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Recent deliveries</div>
-                    <button style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>View all →</button>
-                </div>
-                <div style={{ display:'grid', gridTemplateColumns:'90px 1fr 160px 80px 80px 1fr', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                    {['TIME','ENDPOINT','EVENT','STATUS','LATENCY',''].map((h,i) => (
-                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
-                    ))}
-                </div>
-                {INT_WEBHOOK_DELIVERIES.map((d,i) => (
-                    <div key={d.id} style={{ display:'grid', gridTemplateColumns:'90px 1fr 160px 80px 80px 1fr', gap:8, padding:'9px 16px', borderBottom:i<INT_WEBHOOK_DELIVERIES.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
-                        <div style={{ fontSize:11.5, color:T.inkMuted }}>{d.time}</div>
-                        <div style={{ fontSize:12.5, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.endpoint}</div>
-                        <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.info }}>{d.event}</span>
-                        <StatusCode code={d.code}/>
-                        <div style={{ fontSize:12, color: d.latencyMs > 5000 ? T.warn : T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{d.latencyMs > 1000 ? `${(d.latencyMs/1000).toFixed(1)}s` : `${d.latencyMs}ms`}</div>
-                        <div style={{ fontSize:11, color:T.inkMuted }}>{d.attempt > 1 ? `#${d.attempt} retry` : '#1'}</div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-// ── ④ Automations ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// AutomationsDetail — honest coming-soon state
+// (No backend exists — automations require a rules engine not yet built)
+// ─────────────────────────────────────────────────────────────────
 const AutomationsDetail = ({ onBack }) => {
-    const [filter, setFilter] = useState('All');
-    const [showModal, setShowModal] = useState(false);
-
-    const active  = INT_AUTOMATIONS.filter(a=>a.active);
-    const paused  = INT_AUTOMATIONS.filter(a=>!a.active);
-    const failing = INT_AUTOMATIONS.filter(a=>a.active && a.issue);
-    const totalRuns = INT_AUTOMATIONS.reduce((s,a)=>s+a.runs,0);
-    const avgSuccess = Math.round(active.filter(a=>a.successPct!=null).reduce((s,a)=>s+(a.successPct||0),0) / active.filter(a=>a.successPct!=null).length);
-
-    const visible = INT_AUTOMATIONS.filter(a => {
-        if (filter==='Active')  return a.active;
-        if (filter==='Paused')  return !a.active;
-        if (filter==='Failing') return a.issue;
-        return true;
-    });
+    const PLANNED = [
+        { icon:'⚡', name:'Trigger-based rules',   desc:'Fire actions when CRM events occur — deal won, lead created, stage changed.' },
+        { icon:'⏱', name:'Scheduled jobs',         desc:'Run automations on a daily or weekly schedule — digest emails, sweep tasks.' },
+        { icon:'🔀', name:'Conditions & filters',   desc:'Apply if/then logic — only run when deal value > $10k or stage = Proposal.' },
+        { icon:'📣', name:'Multi-channel actions',  desc:'Assign reps, send Slack alerts, trigger webhooks, create tasks.' },
+        { icon:'📊', name:'Run history & analytics',desc:'See every execution, success rate, and failure reason in one place.' },
+    ];
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showModal && <NewAutomationModal onClose={()=>setShowModal(false)}/>}
             <IntCrumb page="Automations" onBack={onBack}/>
-            <IntTitle title="Automations" sub={`${active.length} active · ${paused.length} paused · rules, triggers, and scheduled jobs`}
-                actions={[
-                    <IntBtn key="tpl" label="Browse templates"/>,
-                    <IntBtn key="his" label="View run history"/>,
-                    <IntBtn key="new" label="+ New automation" primary onClick={()=>setShowModal(true)}/>,
-                ]}/>
+            <IntTitle
+                title="Automations"
+                sub="Trigger-based rules and scheduled jobs — coming soon"
+                actions={[]}/>
 
-            {/* Stats strip */}
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:14, marginBottom:20 }}>
-                {[
-                    { label:'Rules',          value:INT_AUTOMATIONS.length, color:T.ink },
-                    { label:'Runs / 30d',     value:totalRuns,              color:T.ink },
-                    { label:'Success rate',   value:`${avgSuccess}%`,       color:avgSuccess>=98?T.ok:T.warn },
-                    { label:'Failed (24h)',   value:failing.length,         color:failing.length>0?T.danger:T.ok },
-                ].map((s,i) => (
-                    <div key={i} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:'16px 18px' }}>
-                        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:8, fontFamily:T.sans }}>{s.label}</div>
-                        <div style={{ fontSize:28, fontWeight:700, color:s.color, fontFamily:T.serif, fontStyle:'italic', letterSpacing:-0.5 }}>{s.value}</div>
+            {/* Coming soon card */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:'40px 48px', textAlign:'center', marginBottom:20 }}>
+                <div style={{ fontSize:40, marginBottom:16 }}>⚡</div>
+                <div style={{ fontFamily:T.serif, fontSize:24, fontWeight:300, fontStyle:'italic', color:T.ink, marginBottom:8 }}>Automations are coming.</div>
+                <div style={{ fontSize:14, color:T.inkMid, maxWidth:480, margin:'0 auto 28px', lineHeight:1.7 }}>
+                    Build trigger-based rules and scheduled jobs that fire actions automatically across your CRM — no code required.
+                </div>
+                <div style={{ display:'inline-block', padding:'8px 20px', background:'rgba(200,185,154,0.18)', border:`1px solid ${T.gold}`, borderRadius:20, fontSize:12, fontWeight:700, color:T.goldInk, letterSpacing:0.4, textTransform:'uppercase' }}>
+                    In development
+                </div>
+            </div>
+
+            {/* Planned features grid */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:14 }}>
+                {PLANNED.map((f, i) => (
+                    <div key={i} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:'18px 20px' }}>
+                        <div style={{ fontSize:22, marginBottom:10 }}>{f.icon}</div>
+                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:6 }}>{f.name}</div>
+                        <div style={{ fontSize:12.5, color:T.inkMid, lineHeight:1.6 }}>{f.desc}</div>
                     </div>
                 ))}
             </div>
 
-            {/* Rules table */}
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
-                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Rules</div>
-                    <div style={{ display:'flex', gap:0, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:2 }}>
-                        {['All','Active','Paused','Failing'].map(f => (
-                            <button key={f} onClick={()=>setFilter(f)}
-                                style={{ padding:'4px 10px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans, background:filter===f?T.ink:'transparent', color:filter===f?'#fbf8f3':T.inkMid }}>{f}</button>
-                        ))}
-                    </div>
-                </div>
-                {/* Header */}
-                <div style={{ display:'grid', gridTemplateColumns:'60px 1fr 160px 120px 1fr 80px 80px 100px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                    {['ON','NAME','TRIGGER','WHEN','THEN','RUNS','SUCCESS','LAST RUN',''].map((h,i) => (
-                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
-                    ))}
-                </div>
-                {visible.map((rule, i) => (
-                    <div key={rule.id}
-                        style={{ display:'grid', gridTemplateColumns:'60px 1fr 160px 120px 1fr 80px 80px 100px 32px', gap:8, padding:'10px 16px', borderBottom:i<visible.length-1?`1px solid ${T.border}`:'none', alignItems:'center', opacity:rule.active?1:0.62 }}>
-                        {/* On/off toggle pill */}
-                        <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:10, fontSize:11, fontWeight:700,
-                            background: rule.active?'rgba(77,107,61,0.12)':'rgba(138,131,120,0.14)',
-                            color: rule.active?T.ok:T.inkMuted, cursor:'pointer' }}>
-                            <span style={{ width:7, height:7, borderRadius:'50%', background:rule.active?T.ok:T.inkMuted }}/>
-                            {rule.active?'On':'Off'}
-                        </span>
-                        {/* Name */}
-                        <div>
-                            <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{rule.name}</div>
-                            <div style={{ fontSize:11, color:T.inkMuted }}>{rule.owner}</div>
-                            {rule.issue && <div style={{ fontSize:11, color:T.danger, marginTop:2 }}>⚠ {rule.issue}</div>}
-                        </div>
-                        {/* Trigger chip */}
-                        <TriggerChip type={rule.triggerType} label={rule.trigger}/>
-                        {/* When */}
-                        <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMid, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{rule.when}</div>
-                        {/* Then */}
-                        <div style={{ fontSize:12, color:T.inkMid, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{rule.then}</div>
-                        {/* Runs sparkline */}
-                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                            <MiniSpark data={rule.spark} color={rule.active?T.ok:T.border}/>
-                            <span style={{ fontSize:11, color:T.inkMuted }}>{rule.runs}</span>
-                        </div>
-                        {/* Success % */}
-                        <div style={{ fontSize:12, fontWeight:600, color: rule.successPct == null ? T.inkMuted : rule.successPct < 95 ? T.warn : T.ok }}>
-                            {rule.successPct != null ? `${rule.successPct}%` : '—'}
-                        </div>
-                        {/* Last run */}
-                        <div style={{ fontSize:11.5, color:T.inkMuted }}>{rule.lastRun}</div>
-                        {/* Kebab */}
-                        <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
-                    </div>
-                ))}
+            <div style={{ marginTop:20, padding:'14px 18px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12.5, color:T.inkMid }}>
+                <b style={{ color:T.info }}>In the meantime:</b> Use <a href="/api-docs.html#webhooks" target="_blank" style={{ color:T.info }}>Webhooks</a> to receive real-time CRM events and trigger actions in Zapier, Make, or your own backend.
             </div>
         </div>
     );
 };
+
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -15447,7 +14604,22 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
 
     // ── Needs Attention snooze/dismiss ───────────────────────────────────────
     const [naMenuOpen,   setNaMenuOpen]   = React.useState(null);
-    const [naHidden,     setNaHidden]     = React.useState({});
+    // naHidden persisted to localStorage so dismissals survive refresh/relogin
+    const NA_STORAGE_KEY = 'accelerep_na_hidden';
+    const [naHidden, setNaHiddenRaw] = React.useState(() => {
+        try {
+            const stored = localStorage.getItem(NA_STORAGE_KEY);
+            if (stored) return JSON.parse(stored);
+        } catch (e) {}
+        return {};
+    });
+    const setNaHidden = (updater) => {
+        setNaHiddenRaw(prev => {
+            const next = typeof updater === 'function' ? updater(prev) : updater;
+            try { localStorage.setItem(NA_STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
+            return next;
+        });
+    };
     const [naShowHidden, setNaShowHidden] = React.useState(false);
     const now = Date.now();
 
@@ -15643,13 +14815,36 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
     const healthOk  = activeHealthChecks.filter(h => h.ok).length;
     const healthPct = Math.round((healthOk / activeHealthChecks.length) * 100);
 
-    // Recently changed feed (static + real user count)
-    const recentFeed = [
-        { who: currentUser || 'Admin', what:'Invited new users', when:'recently' },
-        { who: currentUser || 'Admin', what:'Updated pipeline stages', when:'this week' },
-        { who: currentUser || 'Admin', what:'Edited price book', when:'last week' },
-        { who: 'System',               what:'Ran automated backup', when:'4 hours ago' },
-    ];
+    // Recently changed feed — loaded from audit log
+    const [recentFeed, setRecentFeed] = React.useState([]);
+    React.useEffect(() => {
+        let cancelled = false;
+        dbFetch('/.netlify/functions/audit-log')
+            .then(r => r.json())
+            .then(data => {
+                if (cancelled) return;
+                const entries = data.entries || [];
+                const fmtAge = (iso) => {
+                    if (!iso) return '—';
+                    const d = new Date(iso);
+                    const diffMin = Math.round((Date.now() - d) / 60000);
+                    if (diffMin < 1)    return 'just now';
+                    if (diffMin < 60)   return diffMin + 'm ago';
+                    if (diffMin < 1440) return Math.round(diffMin/60) + 'h ago';
+                    if (diffMin < 2880) return 'yesterday';
+                    if (diffMin < 10080) return Math.round(diffMin/1440) + 'd ago';
+                    return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+                };
+                const mapped = entries.slice(0, 4).map(e => ({
+                    who:  e.userName || e.userId || 'System',
+                    what: (e.action || '').replace(/[._]/g, ' '),
+                    when: fmtAge(e.timestamp),
+                }));
+                if (mapped.length > 0) setRecentFeed(mapped);
+            })
+            .catch(() => {}); // keep empty on error
+        return () => { cancelled = true; };
+    }, []);
 
     // Group items by category
     const grouped = {};

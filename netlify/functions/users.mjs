@@ -2,8 +2,26 @@ import { db } from '../../db/index.js';
 import { users } from '../../db/schema.js';
 import { eq, asc, and } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
+import { auditLog } from '../../db/schema.js';
 
 const ADMIN_ROLES = ['Admin', 'Manager'];
+
+const writeAudit = async (orgId, action, entityId, entityName, actorId, actorName) => {
+    try {
+        await db.insert(auditLog).values({
+            id:         'audit_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+            orgId,
+            action,
+            entityType: 'user',
+            entityId:   String(entityId || ''),
+            entityName: entityName || null,
+            userId:     actorId    || null,
+            userName:   actorName  || null,
+            timestamp:  new Date(),
+        });
+    } catch (e) { console.warn('writeAudit error:', e.message); }
+};
+
 
 export const handler = async (event) => {
     const headers = {
@@ -314,6 +332,7 @@ export const handler = async (event) => {
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Insert returned no row' }) };
                 }
+                await writeAudit(orgId, 'user.created', result.id, result.name, userId, result.name);
                 return { statusCode: 201, headers, body: JSON.stringify({ user: flatten(result) }) };
             } catch (err) {
                 if (err.code === 'EMAIL_DUPLICATE') {
@@ -334,6 +353,7 @@ export const handler = async (event) => {
                 if (!result) {
                     return { statusCode: 500, headers, body: JSON.stringify({ error: 'Update returned no row' }) };
                 }
+                await writeAudit(orgId, 'user.updated', result.id, result.name, userId, result.name);
                 return { statusCode: 200, headers, body: JSON.stringify({ user: flatten(result) }) };
             } catch (err) {
                 if (err.code === 'EMAIL_DUPLICATE') {
@@ -354,7 +374,9 @@ export const handler = async (event) => {
             if (!id) {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'id is required' }) };
             }
+            const [deletedRow] = await db.select().from(users).where(and(eq(users.id, id), eq(users.orgId, orgId)));
             await db.delete(users).where(and(eq(users.id, id), eq(users.orgId, orgId)));
+            await writeAudit(orgId, 'user.deleted', id, deletedRow?.name || id, userId, deletedRow?.name || id);
             return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
         }
 
