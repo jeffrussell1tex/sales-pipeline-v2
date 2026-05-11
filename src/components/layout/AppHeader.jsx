@@ -72,6 +72,18 @@ export default function AppHeader({
     const isManager  = userRole === 'Manager';
     const isReadOnly = userRole === 'ReadOnly';
 
+    // ⌘K / Ctrl-K opens search palette from anywhere
+    useEffect(() => {
+        const onKey = (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                setShowSearchResults(true);
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
+
     const { userMemberships } = useOrganizationList({ userMemberships: { infinite: true } });
     const [profilePanelTab, setProfilePanelTab] = useState('profile');
     const [profileSaving, setProfileSaving]     = useState(false);
@@ -180,18 +192,18 @@ export default function AppHeader({
             </div>
 
             {/* CENTER: nav tabs — overflow:hidden + minWidth:0 prevents tabs from pushing the RIGHT group off screen */}
-            <div style={{ display: 'flex', alignItems: 'stretch', flex: 1, height: 48, overflowX: 'auto', overflowY: 'hidden', minWidth: 0, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'stretch', flex: 1, height: 48, overflow: 'hidden', minWidth: 0 }}>
                 {tabs.map(tab => {
                     const active = activeTab === tab.id;
                     return (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                             style={{
-                                position: 'relative', padding: '0 14px', height: 48,
+                                position: 'relative', padding: '0 10px', height: 48,
                                 border: 'none',
                                 borderBottom: active ? `2px solid ${T.gold}` : '2px solid transparent',
                                 background: 'transparent',
                                 color: active ? '#fbf8f3' : 'rgba(230,221,208,0.55)',
-                                fontSize: 13, fontWeight: active ? 600 : 400,
+                                fontSize: 12, fontWeight: active ? 600 : 400,
                                 cursor: 'pointer', fontFamily: T.sans,
                                 transition: 'color 120ms, border-color 120ms',
                                 whiteSpace: 'nowrap', flexShrink: 0,
@@ -221,48 +233,75 @@ export default function AppHeader({
             {/* RIGHT: search + bell + avatar */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
 
-                {/* Search */}
-                <div style={{ position: 'relative', zIndex: 200 }}>
-                    <div style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        background: 'rgba(255,255,255,0.06)',
-                        padding: '5px 12px', borderRadius: T.r,
-                        width: isMobile ? 160 : 'clamp(160px, 20vw, 280px)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        transition: 'border-color 150ms, background 150ms',
+                {/* Search — collapsed ⌘K icon button */}
+                <button
+                    onClick={() => setShowSearchResults(true)}
+                    title="Search (⌘K)"
+                    aria-label="Search"
+                    style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        height: 32, padding: '0 10px',
+                        background: 'rgba(255,255,255,0.08)',
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        borderRadius: 6, cursor: 'pointer',
+                        color: 'rgba(230,221,208,0.75)',
+                        fontFamily: T.sans, flexShrink: 0,
+                        transition: 'background 120ms',
                     }}
-                        onFocusCapture={e => { e.currentTarget.style.borderColor = T.gold; e.currentTarget.style.background = 'rgba(255,255,255,0.09)'; }}
-                        onBlurCapture={e =>  { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}>
-                        <Icon name="search" size={14} color="rgba(230,221,208,0.5)"/>
-                        <input
-                            className="global-search-input"
-                            type="text"
-                            placeholder="Search accounts, deals, contacts"
-                            value={globalSearch}
-                            onChange={e => { setGlobalSearch(e.target.value); setShowSearchResults(e.target.value.length > 0); }}
-                            onFocus={() => { if (globalSearch.length > 0) setShowSearchResults(true); }}
-                            style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: 12, color: 'rgba(230,221,208,0.9)', flex: 1, padding: 0, fontFamily: T.sans }}
-                        />
-                        {globalSearch ? (
-                            <button onClick={() => { setGlobalSearch(''); setShowSearchResults(false); }}
-                                style={{ background: 'none', border: 'none', color: 'rgba(230,221,208,0.5)', cursor: 'pointer', padding: 0, lineHeight: 1, flexShrink: 0, display: 'flex' }}>
-                                <Icon name="x" size={12} color="rgba(230,221,208,0.5)"/>
-                            </button>
-                        ) : (
-                            <span style={{ fontSize: 10, color: 'rgba(230,221,208,0.4)', fontFamily: 'monospace', flexShrink: 0 }}>⌘K</span>
-                        )}
-                    </div>
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13" strokeLinecap="round"/>
+                    </svg>
+                    <span style={{
+                        fontSize: 10, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
+                        border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.06)',
+                        lineHeight: 1.4, fontFamily: 'monospace',
+                    }}>⌘K</span>
+                </button>
 
-                    {/* Search results */}
-                    {showSearchResults && globalSearch.length > 0 && (
-                        <>
-                        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} onClick={() => setShowSearchResults(false)}/>
-                        <div className="spt-search-results" style={{
-                            position: 'absolute', top: '100%', right: 0, marginTop: 6,
-                            width: isMobile ? '100vw' : 420, maxHeight: 420, overflowY: 'auto',
+                {/* Search palette — centered overlay */}
+                {showSearchResults && (
+                    <>
+                    <div onClick={() => { setShowSearchResults(false); setGlobalSearch(''); }}
+                        style={{ position: 'fixed', inset: 0, zIndex: 1199, background: 'rgba(28,25,23,0.45)', backdropFilter: 'blur(2px)' }}/>
+                    <div onClick={e => e.stopPropagation()}
+                        style={{
+                            position: 'fixed', top: '15vh', left: '50%', transform: 'translateX(-50%)',
+                            width: 'min(620px, 92vw)', maxHeight: '70vh', overflow: 'hidden',
                             background: T.surface, border: `1px solid ${T.border}`,
-                            borderRadius: 6, boxShadow: '0 8px 24px rgba(42,38,34,0.15)', zIndex: 9999,
-                        }} onClick={e => e.stopPropagation()}>
+                            borderRadius: 12, boxShadow: '0 24px 64px rgba(0,0,0,0.22)',
+                            zIndex: 1200, display: 'flex', flexDirection: 'column',
+                        }}>
+                        {/* Input row */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: `1px solid ${T.border}` }}>
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={T.inkMuted} strokeWidth="1.5">
+                                <circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13" strokeLinecap="round"/>
+                            </svg>
+                            <input
+                                autoFocus
+                                className="global-search-input"
+                                type="text"
+                                placeholder="Search accounts, contacts, deals…"
+                                value={globalSearch}
+                                onChange={e => setGlobalSearch(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Escape') { setShowSearchResults(false); setGlobalSearch(''); } }}
+                                style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: 15, color: T.ink, padding: 0, fontFamily: T.sans }}
+                            />
+                            {globalSearch && (
+                                <button onClick={() => setGlobalSearch('')}
+                                    style={{ background: 'none', border: 'none', color: T.inkMuted, cursor: 'pointer', fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
+                            )}
+                            <span style={{ fontSize: 11, color: T.inkMuted, padding: '2px 6px', borderRadius: 4, border: `1px solid ${T.border}`, background: T.surface2, fontFamily: 'monospace', flexShrink: 0 }}>Esc</span>
+                        </div>
+                        {/* Results */}
+                        <div style={{ overflowY: 'auto', flex: 1 }}>
+                        {globalSearch.length === 0 ? (
+                            <div style={{ padding: 32, textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
+                                Start typing to search accounts, contacts, and deals…
+                            </div>
+                        ) : (
+                        <div className="spt-search-results">
                             {(() => {
                                 const q = globalSearch.toLowerCase();
                                 const mA = accounts.filter(a => (a.name||'').toLowerCase().includes(q) || (a.accountOwner||'').toLowerCase().includes(q)).slice(0,5);
@@ -289,9 +328,11 @@ export default function AppHeader({
                                 );
                             })()}
                         </div>
-                        </>
-                    )}
-                </div>
+                        )}
+                        </div>
+                    </div>
+                    </>
+                )}
 
                 {/* Bell */}
                 <div style={{ position: 'relative' }}>
