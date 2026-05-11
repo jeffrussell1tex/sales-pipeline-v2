@@ -9942,8 +9942,11 @@ accounts = client.accounts.list()`,
                         style={{ fontSize:11, color:T.inkMid, fontWeight:600, cursor:'pointer', textDecoration:'none' }}>Postman ↗</a>
                     <span style={{ fontSize:11, color:T.inkMuted, cursor:'pointer', fontFamily:T.sans }}>Changelog</span>
                     <span style={{ flex:1 }}/>
-                    <a href="https://salespipelinetracker.com/api-docs.html" target="_blank" rel="noopener noreferrer" style={{ textDecoration:'none' }}>
-                        <IntBtn label="Open full docs ↗" primary/>
+                    <a href="https://salespipelinetracker.com/api-docs.html" target="_blank" rel="noopener noreferrer"
+                        style={{ textDecoration:'none', display:'inline-block', padding:'7px 14px',
+                            background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r,
+                            fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans, whiteSpace:'nowrap' }}>
+                        Open full docs ↗
                     </a>
                 </div>
             </div>
