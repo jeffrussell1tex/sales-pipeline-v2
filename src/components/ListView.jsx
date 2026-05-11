@@ -440,6 +440,7 @@ export default function ListView({ pipelineFilteredOpps, handleEdit }) {
                 onSelect={setActiveKey}
                 totalAll={totalAll}
                 currentKey={currentKey}
+                fiscalStart={fiscalStart}
             />
 
             {/* Detail panel */}

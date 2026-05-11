@@ -128,7 +128,7 @@ const SETTINGS_ITEMS = [
     { id:'my-api',           scope:'personal', category:'Profile & Account', name:'My API tokens',              desc:'Personal access tokens for API calls',                         status:'none',      statusDetail:'No tokens', updatedBy:'—', updatedAt:'—',                     isNew:false },
     // Company
     { id:'company-profile',  scope:'workspace', category:'Company', name:'Company profile',        desc:'Logo, address, phone, and default quote header',              status:'ok',      statusDetail:'Complete',                    updatedBy:'Admin', updatedAt:'2 months ago' },
-    { id:'fiscal-year',      scope:'workspace', category:'Company', name:'Fiscal year',            desc:'Quarter starts and fiscal year alignment',                    status:'ok',      statusDetail:'Q1 starts Feb 1',             updatedBy:'Admin', updatedAt:'11 months ago' },
+    { id:'fiscal-year',      scope:'workspace', category:'Company', name:'Fiscal year',            desc:'Quarter starts and fiscal year alignment',                    status:'ok',      statusDetail:'Q1 starts Jan 1',             updatedBy:'Admin', updatedAt:'11 months ago' },
     { id:'company-calendar', scope:'workspace', category:'Company', name:'Company calendar',       desc:'Shared org-wide holidays and events',                         status:'ok',      statusDetail:'12 holidays · 2026',          updatedBy:'Admin', updatedAt:'2 months ago' },
     // Sales process
     { id:'pipelines',        scope:'workspace', category:'Sales process', name:'Pipelines',       desc:'Manage multiple pipelines and their stages',                  status:'ok',      statusDetail:'3 pipelines · 28 stages',     updatedBy:'Admin', updatedAt:'3 weeks ago' },
@@ -514,6 +514,19 @@ const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
     if (item.id === 'custom-fields' && settings?.customFields) {
         const count = (settings.customFields||[]).length;
         statusDetail = count > 0 ? `${count} custom field${count!==1?'s':''}` : null;
+    }
+
+    // ── Company — fiscal year live label ───────────────────────────────────────
+    if (item.id === 'fiscal-year') {
+        const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const fyStart = parseInt(settings?.fiscalYearStart);
+        if (fyStart >= 1 && fyStart <= 12) {
+            const monthName = MONTH_NAMES[fyStart - 1];
+            const day = fyStart === 1 ? 'Jan 1' : monthName.slice(0, 3) + ' 1';
+            statusDetail = `Q1 starts ${day}`;
+        } else {
+            statusDetail = null;
+        }
     }
 
     // ── Quoting ───────────────────────────────────────────────────────────────
