@@ -11837,16 +11837,32 @@ const AuditAnchoredMenu = ({ children, btnRef, onClose, alignRight=true }) => {
 // ── Manage Alerts modal ────────────────────────────────────────────────────────
 const ManageAlertsModal = ({ alertCount, onClose }) => {
     const [alerts, setAlerts] = React.useState([
-        { id:1, name:'Failed login spike',      condition:'login.failed > 5 in 10 min',   channel:'Email + Slack', active:true  },
-        { id:2, name:'API key created',         condition:'action = apikey.created',       channel:'Email',         active:true  },
-        { id:3, name:'Role permission changed', condition:'action = role.permission_changed', channel:'Email',      active:true  },
-        { id:4, name:'MFA disabled',            condition:'action = mfa.disabled',         channel:'Email + Slack', active:false },
+        { id:1, name:'Failed login spike',      condition:'login.failed > 5 in 10 min',      channel:'Email + Slack', active:true  },
+        { id:2, name:'API key created',         condition:'action = apikey.created',          channel:'Email',         active:true  },
+        { id:3, name:'Role permission changed', condition:'action = role.permission_changed',  channel:'Email',         active:true  },
+        { id:4, name:'MFA disabled',            condition:'action = mfa.disabled',            channel:'Email + Slack', active:false },
     ]);
-    const toggleAlert = (id) => setAlerts(prev => prev.map(a => a.id === id ? {...a, active:!a.active} : a));
-    const rowSt = { display:'grid', gridTemplateColumns:'1fr 1fr 120px 60px', gap:12, padding:'10px 16px', alignItems:'center', borderBottom:`1px solid ${T.border}`, fontFamily:T.sans };
+    const [showNew,    setShowNew]    = React.useState(false);
+    const [newName,    setNewName]    = React.useState('');
+    const [newCond,    setNewCond]    = React.useState('');
+    const [newChannel, setNewChannel] = React.useState('Email');
+    const [confirmDel, setConfirmDel] = React.useState(null); // id to confirm delete
+
+    const toggleAlert  = (id) => setAlerts(prev => prev.map(a => a.id === id ? {...a, active:!a.active} : a));
+    const deleteAlert  = (id) => { setAlerts(prev => prev.filter(a => a.id !== id)); setConfirmDel(null); };
+    const addAlert     = () => {
+        if (!newName.trim() || !newCond.trim()) return;
+        setAlerts(prev => [...prev, { id: Date.now(), name:newName.trim(), condition:newCond.trim(), channel:newChannel, active:true }]);
+        setNewName(''); setNewCond(''); setShowNew(false);
+    };
+
+    const inpSt = { padding:'6px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, width:'100%', boxSizing:'border-box' };
+    const rowSt = { display:'grid', gridTemplateColumns:'1fr 1fr 110px 52px 36px', gap:10, padding:'10px 16px', alignItems:'center', borderBottom:`1px solid ${T.border}`, fontFamily:T.sans };
+
     return (
         <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width:700, display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)', maxHeight:'80vh' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width:740, display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)', maxHeight:'85vh' }}>
+                {/* Header */}
                 <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                     <div>
                         <div style={{ fontSize:16, fontWeight:700, color:T.ink }}>Manage alerts</div>
@@ -11854,26 +11870,81 @@ const ManageAlertsModal = ({ alertCount, onClose }) => {
                     </div>
                     <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', lineHeight:1 }}>×</button>
                 </div>
+
+                {/* Table */}
                 <div style={{ flex:1, overflowY:'auto' }}>
-                    <div style={{ ...rowSt, background:T.surface2, borderTop:'none' }}>
-                        {['RULE NAME','CONDITION','CHANNEL','ACTIVE'].map((h,i) => (
+                    {/* Header row */}
+                    <div style={{ ...rowSt, background:T.surface2, borderTop:'none', padding:'8px 16px' }}>
+                        {['RULE NAME','CONDITION','CHANNEL','ON',''].map((h,i) => (
                             <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase' }}>{h}</div>
                         ))}
                     </div>
+
                     {alerts.map(a => (
                         <div key={a.id} style={rowSt}>
                             <span style={{ fontSize:13, fontWeight:600, color:T.ink }}>{a.name}</span>
-                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMid }}>{a.condition}</span>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMid, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.condition}</span>
                             <span style={{ fontSize:12, color:T.inkMid }}>{a.channel}</span>
+                            {/* Toggle */}
                             <div onClick={() => toggleAlert(a.id)}
-                                style={{ width:30, height:18, borderRadius:9, background:a.active?T.ok:T.border, position:'relative', cursor:'pointer', transition:'background 120ms' }}>
+                                style={{ width:30, height:18, borderRadius:9, background:a.active?T.ok:T.border, position:'relative', cursor:'pointer', transition:'background 120ms', flexShrink:0 }}>
                                 <span style={{ position:'absolute', top:2, left:a.active?14:2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
                             </div>
+                            {/* Delete */}
+                            {confirmDel === a.id ? (
+                                <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+                                    <button onClick={() => deleteAlert(a.id)}
+                                        style={{ fontSize:10, fontWeight:700, color:'#fbf8f3', background:T.danger, border:'none', borderRadius:3, padding:'2px 6px', cursor:'pointer', fontFamily:T.sans }}>Del</button>
+                                    <button onClick={() => setConfirmDel(null)}
+                                        style={{ fontSize:10, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>✕</button>
+                                </div>
+                            ) : (
+                                <button onClick={() => setConfirmDel(a.id)}
+                                    title="Delete rule"
+                                    style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:24, height:24, borderRadius:4, border:`1px solid ${T.border}`, background:'none', color:T.inkMuted, cursor:'pointer', fontSize:13, fontFamily:T.sans, flexShrink:0 }}>
+                                    🗑
+                                </button>
+                            )}
                         </div>
                     ))}
+
+                    {/* New rule inline form */}
+                    {showNew && (
+                        <div style={{ ...rowSt, background:'rgba(200,185,154,0.08)', borderTop:`1px solid ${T.border}` }}>
+                            <input value={newName} onChange={e => setNewName(e.target.value)}
+                                placeholder="Rule name…" style={inpSt} autoFocus/>
+                            <input value={newCond} onChange={e => setNewCond(e.target.value)}
+                                placeholder="e.g. action = login.failed" style={{ ...inpSt, fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}
+                                onKeyDown={e => { if (e.key === 'Enter') addAlert(); if (e.key === 'Escape') setShowNew(false); }}/>
+                            <select value={newChannel} onChange={e => setNewChannel(e.target.value)}
+                                style={{ ...inpSt, appearance:'none', cursor:'pointer' }}>
+                                <option>Email</option>
+                                <option>Slack</option>
+                                <option>Email + Slack</option>
+                            </select>
+                            <div style={{ display:'flex', gap:6 }}>
+                                <button onClick={addAlert} disabled={!newName.trim() || !newCond.trim()}
+                                    style={{ fontSize:11, fontWeight:700, color:'#fbf8f3', background:T.ok, border:'none', borderRadius:3, padding:'4px 8px', cursor:'pointer', fontFamily:T.sans, opacity:(!newName.trim()||!newCond.trim())?0.5:1 }}>Add</button>
+                                <button onClick={() => setShowNew(false)}
+                                    style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>✕</button>
+                            </div>
+                            <div/>
+                        </div>
+                    )}
+
+                    {alerts.length === 0 && !showNew && (
+                        <div style={{ padding:'32px', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>No alert rules. Add one below.</div>
+                    )}
                 </div>
-                <div style={{ padding:'12px 20px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', gap:8, justifyContent:'space-between' }}>
-                    <SecBtn label="+ New alert rule" onClick={() => {}}/>
+
+                {/* Footer */}
+                <div style={{ padding:'12px 20px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', gap:8, justifyContent:'space-between', alignItems:'center' }}>
+                    <button onClick={() => { setShowNew(true); setConfirmDel(null); }}
+                        style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 12px', background:'none',
+                            border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600,
+                            color:T.ink, cursor:'pointer', fontFamily:T.sans }}>
+                        + New alert rule
+                    </button>
                     <SecBtn label="Done" primary onClick={onClose}/>
                 </div>
             </div>
@@ -11971,6 +12042,217 @@ const AddDestinationModal = ({ onClose, onSave }) => {
 };
 
 
+// ─────────────────────────────────────────────────────────────────
+// Configure Streaming Popover — Variant B (Destinations overview)
+// Matches design spec: destinations list + collapsible stream-wide settings
+// ─────────────────────────────────────────────────────────────────
+const ConfigureStreamingPopover = ({ streams, onClose, onAddDest, onTogglePause, onRemoveDest, onSaveGlobals, btnRef }) => {
+    const ref = React.useRef(null);
+    const posRef = React.useRef(false);
+    const [style, setStyle] = React.useState({ position:'fixed', zIndex:9999, top:-9999, left:-9999, visibility:'hidden' });
+    const [globalsOpen, setGlobalsOpen] = React.useState(false);
+    const [globals, setGlobals] = React.useState({
+        retention:  '13 months',
+        redactPII:  true,
+        signing:    'hmac-sha256',
+        onFailure:  'Buffer & retry',
+    });
+
+    // Two-pass positioning — same pattern as AuditAnchoredMenu
+    React.useLayoutEffect(() => {
+        if (!btnRef?.current || !ref.current || posRef.current) return;
+        posRef.current = true;
+        const r    = btnRef.current.getBoundingClientRect();
+        const menuW = ref.current.offsetWidth  || 480;
+        const menuH = ref.current.offsetHeight || 400;
+        const vw   = window.innerWidth;
+        const vh   = window.innerHeight;
+        const GAP  = 6;
+        const EDGE = 8;
+        const top  = (r.bottom + GAP + menuH > vh - EDGE)
+            ? Math.max(EDGE, r.top - menuH - GAP)
+            : r.bottom + GAP;
+        // Left-anchor (aligns to button left edge), clamp if it would overflow right
+        const left = Math.min(r.left, vw - menuW - EDGE);
+        setStyle({ position:'fixed', zIndex:9999, top, left: Math.max(EDGE, left), visibility:'visible' });
+    });
+
+    React.useEffect(() => {
+        const onDoc = (e) => {
+            if (ref.current && !ref.current.contains(e.target) &&
+                btnRef?.current && !btnRef.current.contains(e.target)) onClose();
+        };
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('mousedown', onDoc);
+        document.addEventListener('keydown',   onKey);
+        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+    }, []);
+
+    const activeCount  = streams.filter(s => s.status === 'Active'  && !s.paused).length;
+    const failingCount = streams.filter(s => s.status === 'Failing').length;
+
+    const SRow = ({ label, sub, control, divider=true }) => (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:16, alignItems:'center',
+            padding:'10px 16px', borderBottom:divider?`1px solid ${T.border}`:'none' }}>
+            <div>
+                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{label}</div>
+                {sub && <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, lineHeight:1.4, fontFamily:T.sans }}>{sub}</div>}
+            </div>
+            {control}
+        </div>
+    );
+
+    const SToggle = ({ on, onChange }) => (
+        <div onClick={onChange}
+            style={{ width:32, height:18, borderRadius:9, background:on?T.ok:T.borderStrong,
+                position:'relative', cursor:'pointer', transition:'background 120ms', flexShrink:0 }}>
+            <span style={{ position:'absolute', top:2, left:on?16:2, width:14, height:14, borderRadius:'50%',
+                background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+        </div>
+    );
+
+    const SSelect = ({ value, options, onChange, width=130 }) => (
+        <select value={value} onChange={e => onChange(e.target.value)}
+            style={{ padding:'4px 8px', background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRadius:T.r, fontSize:11.5, color:T.ink, outline:'none', cursor:'pointer',
+                fontFamily:T.sans, minWidth:width, appearance:'none' }}>
+            {options.map(o => <option key={o}>{o}</option>)}
+        </select>
+    );
+
+    return (
+        <div ref={ref} style={style}>
+            {/* Pointer caret */}
+            <div style={{ position:'absolute', top:-7, left:32, width:12, height:12,
+                background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)', zIndex:1 }}/>
+
+            <div style={{ width:480, background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRadius:8, boxShadow:'0 8px 28px rgba(42,38,34,0.14), 0 2px 4px rgba(42,38,34,0.06)',
+                fontFamily:T.sans, overflow:'hidden' }}>
+
+                {/* Header */}
+                <div style={{ padding:'13px 16px 11px', borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
+                        <span style={{ fontSize:14, fontWeight:700, color:T.ink }}>Streaming destinations</span>
+                        <span style={{ flex:1 }}/>
+                        <span style={{ fontSize:10.5, color:T.inkMuted }}>
+                            {activeCount} active{failingCount > 0 ? ` · ${failingCount} failing` : ''}
+                        </span>
+                        <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:18, cursor:'pointer', lineHeight:1, padding:0 }}>×</button>
+                    </div>
+                    <div style={{ fontSize:11, color:T.inkMid, lineHeight:1.5 }}>
+                        Toggle a row to pause its stream. Events buffer for 24h while paused.
+                    </div>
+                </div>
+
+                {/* Destination rows */}
+                <div>
+                    {streams.length === 0 ? (
+                        <div style={{ padding:'24px 16px', textAlign:'center', color:T.inkMuted, fontSize:13 }}>
+                            No destinations configured. Add one below.
+                        </div>
+                    ) : streams.map((s, i) => {
+                        const isActive  = s.status === 'Active'  && !s.paused;
+                        const isFailing = s.status === 'Failing';
+                        const dotColor  = s.paused ? T.inkMuted : isFailing ? T.warn : T.ok;
+                        return (
+                            <div key={s.dest || i} style={{ display:'grid', gridTemplateColumns:'14px 1fr auto auto',
+                                gap:10, alignItems:'center', padding:'10px 16px',
+                                borderBottom:`1px solid ${T.border}` }}>
+                                {/* Status dot */}
+                                <span style={{ width:8, height:8, borderRadius:'50%', background:dotColor,
+                                    boxShadow:isFailing && !s.paused ? `0 0 0 3px ${T.warn}33` : 'none',
+                                    flexShrink:0 }}/>
+                                <div style={{ minWidth:0 }}>
+                                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+                                        <span style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{s.dest}</span>
+                                        <span style={{ padding:'1px 5px', borderRadius:3, fontSize:10, fontWeight:700,
+                                            background:'rgba(138,131,120,0.12)', color:T.inkMid,
+                                            fontFamily:'ui-monospace,Menlo,monospace' }}>{s.fmt}</span>
+                                        {s.paused && <span style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5 }}>paused</span>}
+                                    </div>
+                                    <div style={{ fontSize:10.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace',
+                                        overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.url}</div>
+                                    <div style={{ fontSize:10, color:isFailing && !s.paused ? T.warn : T.inkMuted, marginTop:2 }}>
+                                        {s.paused ? 'Buffering · resume to flush'
+                                            : isFailing ? `⚠ Last delivery ${s.lastDelivered}`
+                                            : `Last delivered ${s.lastDelivered || 'never'}`}
+                                    </div>
+                                </div>
+                                {/* Pause/resume toggle */}
+                                <SToggle on={isActive} onChange={() => onTogglePause && onTogglePause(s)}/>
+                                {/* ⋯ remove button */}
+                                <button onClick={() => onRemoveDest && onRemoveDest(s)}
+                                    title="Remove destination"
+                                    style={{ background:'none', border:'none', color:T.inkMuted, fontSize:13,
+                                        cursor:'pointer', padding:'2px 4px', fontFamily:T.sans, lineHeight:1 }}>🗑</button>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Add destination row */}
+                <div onClick={() => { onClose(); onAddDest && onAddDest(); }}
+                    style={{ padding:'10px 16px', borderBottom:`1px solid ${T.border}`,
+                        display:'flex', alignItems:'center', gap:8, cursor:'pointer',
+                        background:T.surface }}
+                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                    onMouseLeave={e => e.currentTarget.style.background = T.surface}>
+                    <span style={{ width:18, height:18, borderRadius:3, border:`1px dashed ${T.borderStrong}`,
+                        display:'inline-flex', alignItems:'center', justifyContent:'center',
+                        fontSize:12, color:T.inkMuted, flexShrink:0 }}>+</span>
+                    <span style={{ fontSize:12, fontWeight:600, color:T.ink }}>Add destination</span>
+                    <span style={{ fontSize:10.5, color:T.inkMuted }}>· Splunk, Datadog, S3, generic webhook…</span>
+                </div>
+
+                {/* Stream-wide settings — collapsible drawer */}
+                <div style={{ background:T.surface2 }}>
+                    <div onClick={() => setGlobalsOpen(o => !o)}
+                        style={{ padding:'10px 16px', display:'flex', alignItems:'center', gap:8, cursor:'pointer',
+                            borderBottom: globalsOpen ? `1px solid ${T.border}` : 'none' }}>
+                        <span style={{ fontSize:10, color:T.inkMuted, display:'inline-block',
+                            transform:globalsOpen?'rotate(90deg)':'rotate(0)', transition:'transform 150ms' }}>▶</span>
+                        <span style={{ fontSize:11.5, fontWeight:700, color:T.ink, letterSpacing:0.3 }}>Stream-wide settings</span>
+                        <span style={{ fontSize:10.5, color:T.inkMuted }}>
+                            Retention {globals.retention} · {globals.redactPII ? 'PII redacted' : 'PII not redacted'} · {globals.signing}
+                        </span>
+                    </div>
+                    {globalsOpen && (
+                        <div>
+                            <SRow label="Retention"
+                                sub="How long Accelerep keeps events queryable in this UI."
+                                control={<SSelect value={globals.retention} options={['13 months','6 months','3 months','1 month']} onChange={v => setGlobals(g=>({...g,retention:v}))} width={120}/>}/>
+                            <SRow label="Redact PII before streaming"
+                                sub="Mask matching fields in event payloads before sending."
+                                control={<SToggle on={globals.redactPII} onChange={() => setGlobals(g=>({...g,redactPII:!g.redactPII}))}/>}/>
+                            <SRow label="Payload signing"
+                                sub="Sign each request with HMAC key. Receivers verify on intake."
+                                control={<SSelect value={globals.signing} options={['hmac-sha256','none']} onChange={v => setGlobals(g=>({...g,signing:v}))} width={130}/>}/>
+                            <SRow label="On delivery failure"
+                                control={<SSelect value={globals.onFailure} options={['Buffer & retry','Drop events','Alert only']} onChange={v => setGlobals(g=>({...g,onFailure:v}))} width={140}/>}
+                                divider={false}/>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding:'10px 16px', borderTop:`1px solid ${T.border}`, background:T.surface,
+                    display:'flex', gap:8, alignItems:'center' }}>
+                    <span style={{ fontSize:11, color:T.inkMid, cursor:'pointer', fontWeight:600,
+                        fontFamily:T.sans, textDecoration:'none' }}>View delivery logs</span>
+                    <span style={{ flex:1 }}/>
+                    {globalsOpen && (
+                        <SecBtn label="Save settings" primary onClick={() => { onSaveGlobals && onSaveGlobals(globals); setGlobalsOpen(false); }}/>
+                    )}
+                    <SecBtn label="Done" primary={!globalsOpen} onClick={onClose}/>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 // ── Audit display helpers ─────────────────────────────────────────────────────
 const fmtEventAge = (iso) => {
     if (!iso) return '—';
@@ -12025,8 +12307,10 @@ const AuditDetail = ({ onBack }) => {
 
     // Export split button state
     const [exportOpen,   setExportOpen]   = React.useState(false);
-    const [showAlerts,   setShowAlerts]   = React.useState(false);
-    const [showAddDest,  setShowAddDest]  = React.useState(false);
+    const [showAlerts,     setShowAlerts]     = React.useState(false);
+    const [showAddDest,   setShowAddDest]   = React.useState(false);
+    const [showStreaming,  setShowStreaming]  = React.useState(false);
+    const streamingBtnRef = React.useRef(null);
 
     // Live audit events from DB — start empty, never fall back to mock
     const [events,      setEvents]      = React.useState([]);
@@ -12118,6 +12402,17 @@ const AuditDetail = ({ onBack }) => {
         setActiveRow(null); setActiveMode(null);
     };
 
+    const handleTogglePause = async (dest) => {
+        const next = streams.map(s => s.dest === dest.dest ? {...s, paused: !s.paused} : s);
+        setStreams(next);
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ streamingDestinations: next }),
+            });
+        } catch (e) { console.error('togglePause error:', e.message); }
+    };
+
     const handleRemoveDest = async (dest) => {
         const next = streams.filter(d => d.dest !== dest.dest);
         setStreams(next);
@@ -12128,6 +12423,15 @@ const AuditDetail = ({ onBack }) => {
                 body: JSON.stringify({ streamingDestinations: next }),
             });
         } catch (e) { console.error('removeDest error:', e.message); }
+    };
+
+    const handleSaveGlobals = async (globals) => {
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ streamingGlobals: globals }),
+            });
+        } catch (e) { console.error('saveGlobals error:', e.message); }
     };
 
     const handleSaveDest = async (newDest) => {
@@ -12152,6 +12456,17 @@ const AuditDetail = ({ onBack }) => {
         <div style={{ fontFamily:T.sans }}>
             {showAlerts  && <ManageAlertsModal alertCount={alertCount} onClose={() => setShowAlerts(false)}/>}
             {showAddDest && <AddDestinationModal onClose={() => setShowAddDest(false)} onSave={handleSaveDest}/>}
+            {showStreaming && (
+                <ConfigureStreamingPopover
+                    streams={streams}
+                    btnRef={streamingBtnRef}
+                    onClose={() => setShowStreaming(false)}
+                    onAddDest={() => { setShowStreaming(false); setShowAddDest(true); }}
+                    onTogglePause={handleTogglePause}
+                    onRemoveDest={handleRemoveDest}
+                    onSaveGlobals={handleSaveGlobals}
+                />
+            )}
             <SecCrumb page="Audit log" onBack={onBack}/>
             <SecTitle
                 title="Audit log"
@@ -12159,7 +12474,10 @@ const AuditDetail = ({ onBack }) => {
                 badge="Streaming to Splunk · 2 alerts triggered today"
                 updatedAt="Real-time"
                 actions={[
-                    <SecBtn key="str" label="Configure streaming" onClick={() => destSectionRef.current?.scrollIntoView({ behavior:'smooth', block:'start' })}/>,
+                    <button ref={streamingBtnRef} key="str" onClick={() => setShowStreaming(o => !o)}
+                        style={{ padding:'6px 12px', background:showStreaming?T.surface2:T.surface, border:`1px solid ${showStreaming?T.goldInk:T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, color:T.ink, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', gap:5 }}>
+                        Configure streaming <span style={{ fontSize:9, color:T.inkMuted }}>▾</span>
+                    </button>,,
 
                     <div key="exp" style={{ display:'inline-flex', position:'relative' }}>
                         <button onClick={() => {
