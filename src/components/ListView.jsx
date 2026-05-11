@@ -45,7 +45,7 @@ const eyebrow = { fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacin
 
 function quarterOf(isoDate, fiscalStart) {
     if (!isoDate) return null;
-    const d = new Date(isoDate + 'T12:00:00');
+    const d = new Date(isoDate.slice(0, 10) + 'T12:00:00'); // normalize to date-only before appending time
     if (isNaN(d)) return null;
     const month = d.getMonth() + 1; // 1-12
     const calYear = d.getFullYear();
