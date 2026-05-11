@@ -161,7 +161,14 @@ export default function ContactsTab() {
 
     React.useEffect(() => {
         if (!openRowMenu) return;
-        const close = (e) => { setOpenRowMenu(null); };
+        const close = (e) => {
+            // Only close if click is outside the menu container
+            const menu = document.getElementById('contact-row-menu-' + openRowMenu);
+            const btn  = document.getElementById('contact-row-btn-'  + openRowMenu);
+            if (menu && menu.contains(e.target)) return;
+            if (btn  && btn.contains(e.target))  return;
+            setOpenRowMenu(null);
+        };
         document.addEventListener('mousedown', close);
         return () => document.removeEventListener('mousedown', close);
     }, [openRowMenu]);
@@ -400,12 +407,13 @@ export default function ContactsTab() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
                     onClick={e => e.stopPropagation()}>
                     <button
+                        id={'contact-row-btn-' + contact.id}
                         onClick={e => { e.stopPropagation(); setOpenRowMenu(openRowMenu === contact.id ? null : contact.id); }}
                         style={{ background: openRowMenu === contact.id ? 'rgba(200,185,154,0.25)' : 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 3 }}>
                         <Icon name="dots" size={14} color={openRowMenu === contact.id ? T.goldInk : hov ? T.inkMid : T.border} />
                     </button>
                     {openRowMenu === contact.id && (
-                        <div onClick={e => e.stopPropagation()}
+                        <div id={'contact-row-menu-' + contact.id} onClick={e => e.stopPropagation()}
                             style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 200,
                                 width: 180, background: T.surface, border: `1px solid ${T.borderStrong}`,
                                 borderRadius: 4, padding: 4, boxShadow: '0 8px 24px rgba(42,38,34,0.12)', fontFamily: T.sans }}>

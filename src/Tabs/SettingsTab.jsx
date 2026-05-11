@@ -14701,7 +14701,38 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         'industries':           'industries',
     };
 
-    if (activeItem) {
+    // Recently changed feed — loaded from audit log (must be before early return)
+    const [recentFeed, setRecentFeed] = React.useState([]);
+    React.useEffect(() => {
+        let cancelled = false;
+        dbFetch('/.netlify/functions/audit-log')
+            .then(r => r.json())
+            .then(data => {
+                if (cancelled) return;
+                const entries = data.entries || [];
+                const fmtAge = (iso) => {
+                    if (!iso) return '—';
+                    const d = new Date(iso);
+                    const diffMin = Math.round((Date.now() - d) / 60000);
+                    if (diffMin < 1)    return 'just now';
+                    if (diffMin < 60)   return diffMin + 'm ago';
+                    if (diffMin < 1440) return Math.round(diffMin/60) + 'h ago';
+                    if (diffMin < 2880) return 'yesterday';
+                    if (diffMin < 10080) return Math.round(diffMin/1440) + 'd ago';
+                    return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+                };
+                const mapped = entries.slice(0, 4).map(e => ({
+                    who:  e.userName || e.userId || 'System',
+                    what: (e.action || '').replace(/[._]/g, ' '),
+                    when: fmtAge(e.timestamp),
+                }));
+                if (mapped.length > 0) setRecentFeed(mapped);
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
+
+        if (activeItem) {
         const id = activeItem.id;
         const onBack = () => setActiveItem(null);
 
@@ -14815,36 +14846,6 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
     const healthOk  = activeHealthChecks.filter(h => h.ok).length;
     const healthPct = Math.round((healthOk / activeHealthChecks.length) * 100);
 
-    // Recently changed feed — loaded from audit log
-    const [recentFeed, setRecentFeed] = React.useState([]);
-    React.useEffect(() => {
-        let cancelled = false;
-        dbFetch('/.netlify/functions/audit-log')
-            .then(r => r.json())
-            .then(data => {
-                if (cancelled) return;
-                const entries = data.entries || [];
-                const fmtAge = (iso) => {
-                    if (!iso) return '—';
-                    const d = new Date(iso);
-                    const diffMin = Math.round((Date.now() - d) / 60000);
-                    if (diffMin < 1)    return 'just now';
-                    if (diffMin < 60)   return diffMin + 'm ago';
-                    if (diffMin < 1440) return Math.round(diffMin/60) + 'h ago';
-                    if (diffMin < 2880) return 'yesterday';
-                    if (diffMin < 10080) return Math.round(diffMin/1440) + 'd ago';
-                    return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
-                };
-                const mapped = entries.slice(0, 4).map(e => ({
-                    who:  e.userName || e.userId || 'System',
-                    what: (e.action || '').replace(/[._]/g, ' '),
-                    when: fmtAge(e.timestamp),
-                }));
-                if (mapped.length > 0) setRecentFeed(mapped);
-            })
-            .catch(() => {}); // keep empty on error
-        return () => { cancelled = true; };
-    }, []);
 
     // Group items by category
     const grouped = {};
