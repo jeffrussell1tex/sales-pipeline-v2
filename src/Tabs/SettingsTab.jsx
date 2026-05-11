@@ -8365,20 +8365,266 @@ const TerritoriesDetail = ({ settings, setSettings, onBack }) => {
 };
 
 // ── ROLES & PERMISSIONS detail page ──────────────────────────
+// ── Permission cell popover (Variation 5) ────────────────────
+const SCOPE_OPTIONS = [
+    { id:'all',  label:'All records',  desc:'Across the entire workspace',  swatch:T.ok,      rec: false },
+    { id:'team', label:'Team records', desc:'Records owned by their team',  swatch:T.info,    rec: false },
+    { id:'own',  label:'Own records',  desc:'Only records they own',        swatch:T.goldInk, rec: true  },
+    { id:'none', label:'None',         desc:'Cannot perform this action',   swatch:T.inkMuted,rec: false },
+];
+
+const ACTION_DESC = {
+    view:    (obj) => `Controls which ${obj} records this role can see in lists and search.`,
+    create:  (obj) => `Allows this role to create new ${obj} records.`,
+    edit:    (obj) => `Allows this role to modify existing ${obj} records within their scope.`,
+    delete:  (obj) => `Allows this role to permanently delete ${obj} records.`,
+    export:  (obj) => `Allows this role to export ${obj} data to CSV or other formats.`,
+    share:   (obj) => `Controls which ${obj} records this role can share with other users.`,
+    approve: (obj) => `Approving a ${obj} record triggers downstream automations and status changes.`,
+};
+
+const ScopeVisual = ({ scope, narrowed }) => {
+    const fill = (level) => {
+        if (scope === 'all')              return T.ok;
+        if (scope === 'team' && level <= 1) return T.info;
+        if (scope === 'own'  && level === 0) return T.goldInk;
+        return T.border;
+    };
+    const base = scope === 'all' ? 1240 : scope === 'team' ? 340 : scope === 'own' ? 45 : 0;
+    const count = narrowed && base > 0 ? `~${Math.max(1,Math.round(base*0.27))} of ${base}` : scope === 'all' ? '1,240' : scope === 'team' ? '~340' : scope === 'own' ? '~45' : '0';
+    return (
+        <div style={{ display:'flex', alignItems:'center', gap:4, height:18 }}>
+            <span style={{ width:8,  height:8,  borderRadius:'50%', background:fill(0), flexShrink:0 }}/>
+            <span style={{ width:12, height:12, borderRadius:'50%', background:fill(1), opacity: scope==='all'||scope==='team'?1:0.35, flexShrink:0 }}/>
+            <span style={{ width:16, height:16, borderRadius:'50%', background:fill(2), opacity: scope==='all'?1:0.25, flexShrink:0 }}/>
+            <span style={{ flex:1 }}/>
+            <span style={{ fontSize:9.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', letterSpacing:0.4 }}>{count} records</span>
+        </div>
+    );
+};
+
+const PermCellPopover = ({ anchor, currentValue, roleName, onApply, onClose }) => {
+    // anchor = { objectId, objectName, action }
+    // currentValue = scope string or bool
+    const initScope = () => {
+        if (currentValue === true)  return 'all';
+        if (currentValue === false || currentValue === undefined || currentValue === null) return 'none';
+        if (['all','team','own','none'].includes(currentValue)) return currentValue;
+        return currentValue === '—' ? 'none' : (currentValue || 'none').toLowerCase();
+    };
+
+    const [scope,      setScope]      = useState(initScope);
+    const [condsOpen,  setCondsOpen]  = useState(false);
+    const [conds,      setConds]      = useState([]);
+    const [saving,     setSaving]     = useState(false);
+    const [err,        setErr]        = useState('');
+
+    // Close on Escape
+    React.useEffect(() => {
+        const h = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', h);
+        return () => document.removeEventListener('keydown', h);
+    }, []);
+
+    const handleApply = () => {
+        setSaving(true);
+        // Simulate async persist — no backend endpoint yet
+        setTimeout(() => {
+            setSaving(false);
+            const isScope = anchor.action === 'view' || anchor.action === 'share';
+            onApply(anchor.objectId, anchor.action, isScope ? scope : scope !== 'none');
+            onClose();
+        }, 300);
+    };
+
+    const desc = ACTION_DESC[anchor.action]?.(anchor.objectName) || '';
+    const title = `${anchor.action.charAt(0).toUpperCase() + anchor.action.slice(1)} · ${anchor.objectName}`;
+    const narrowed = condsOpen && conds.length > 0;
+
+    const isRightCol = ['delete','export','share','approve'].includes(anchor.action);
+
+    return (
+        <div style={{
+            background:T.surface, border:`1px solid ${T.border}`, borderRadius:4,
+            boxShadow:'0 12px 32px rgba(42,38,34,0.18), 0 2px 6px rgba(42,38,34,0.08)',
+            width:380, position:'relative', textAlign:'left',
+            animation:'fadeInDown 120ms ease-out',
+        }}>
+            {/* Caret — tracks anchor side */}
+            <span style={{
+                position:'absolute', top:-7,
+                left: isRightCol ? 'auto' : '50%',
+                right: isRightCol ? 24 : 'auto',
+                transform: isRightCol ? 'rotate(45deg)' : 'translateX(-50%) rotate(45deg)',
+                width:12, height:12, background:T.surface,
+                borderTop:`1px solid ${T.border}`, borderLeft:`1px solid ${T.border}`,
+            }}/>
+
+            {/* Header */}
+            <div style={{ padding:'12px 14px 8px', borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ display:'flex', alignItems:'baseline', gap:8 }}>
+                    <span style={{ fontSize:13, fontWeight:700, color:T.ink }}>{title}</span>
+                    <span style={{ flex:1 }}/>
+                    <span style={{ fontSize:10.5, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.25)', padding:'1px 7px', borderRadius:2, letterSpacing:0.4 }}>{roleName}</span>
+                </div>
+                <div style={{ fontSize:11, color:T.inkMid, marginTop:4, lineHeight:1.4 }}>{desc}</div>
+            </div>
+
+            {/* Scope cards grid */}
+            <div style={{ padding:10, display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                {SCOPE_OPTIONS.map(o => {
+                    const sel = scope === o.id;
+                    return (
+                        <div key={o.id} onClick={() => setScope(o.id)} style={{
+                            position:'relative', cursor:'pointer',
+                            background: sel ? 'rgba(42,38,34,0.04)' : T.surface,
+                            border: `1px solid ${sel ? T.ink : T.border}`,
+                            borderRadius:3, padding:10,
+                            boxShadow: sel ? `inset 0 0 0 1px ${T.ink}` : 'none',
+                            transition:'border 80ms, box-shadow 80ms',
+                        }}>
+                            {o.rec && (
+                                <span style={{
+                                    position:'absolute', top:-7, right:8,
+                                    fontSize:9, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase',
+                                    background:'#c8b99a', color:'#7a6a48', padding:'1px 6px', borderRadius:2,
+                                }}>Recommended</span>
+                            )}
+                            <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+                                <span style={{ width:10, height:10, borderRadius:'50%', background:o.swatch, flexShrink:0 }}/>
+                                <span style={{ fontSize:12, fontWeight:700, color:T.ink }}>{o.label}</span>
+                            </div>
+                            <div style={{ fontSize:10.5, color:T.inkMuted, lineHeight:1.35, marginBottom:8 }}>{o.desc}</div>
+                            <ScopeVisual scope={o.id} narrowed={narrowed}/>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Conditions — collapsible */}
+            <div style={{ borderTop:`1px solid ${T.border}` }}>
+                <div onClick={() => setCondsOpen(o=>!o)} style={{
+                    display:'flex', alignItems:'center', gap:8, padding:'8px 14px',
+                    cursor:'pointer', userSelect:'none',
+                }}>
+                    <span style={{ fontSize:10.5, color:T.inkMuted, fontWeight:600, letterSpacing:0.6, textTransform:'uppercase' }}>
+                        Narrow by conditions
+                    </span>
+                    {conds.length > 0 && (
+                        <span style={{ fontSize:9.5, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.35)', padding:'1px 5px', borderRadius:2, fontFamily:'ui-monospace,Menlo,monospace' }}>
+                            {conds.length}
+                        </span>
+                    )}
+                    <span style={{ fontSize:10.5, color:T.inkMuted, fontWeight:500 }}>optional</span>
+                    <span style={{ flex:1 }}/>
+                    <span style={{ fontSize:11, color:T.inkMid, transition:'transform 120ms', display:'inline-block', transform: condsOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▾</span>
+                </div>
+                {condsOpen && (
+                    <div style={{ padding:'0 14px 12px' }}>
+                        <div style={{ fontSize:10.5, color:T.inkMuted, lineHeight:1.4, marginBottom:8 }}>
+                            Only records matching <b style={{ color:T.inkMid }}>all</b> conditions can be affected within the chosen scope.
+                        </div>
+                        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                            {conds.map((c,i) => (
+                                <div key={i} style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 8px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:3, fontSize:11.5 }}>
+                                    <span style={{ color:T.inkMid, fontWeight:600 }}>{c.field}</span>
+                                    <span style={{ color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{c.op}</span>
+                                    <span style={{ fontWeight:600, color:T.ink }}>{c.val}</span>
+                                    <span style={{ flex:1 }}/>
+                                    <span onClick={() => setConds(cs=>cs.filter((_,j)=>j!==i))} style={{ color:T.inkMuted, cursor:'pointer', padding:'0 2px', fontSize:14, lineHeight:1 }}>×</span>
+                                </div>
+                            ))}
+                            <div style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 8px', border:`1px dashed ${T.border}`, borderRadius:3, fontSize:11.5, color:T.inkMid, cursor:'pointer' }}>
+                                <span style={{ fontWeight:700 }}>+</span>
+                                <span>Add condition</span>
+                                <span style={{ flex:1 }}/>
+                                <span style={{ fontSize:10, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>field · op · value</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* What changes footer */}
+            <div style={{ padding:'8px 14px', borderTop:`1px solid ${T.border}`, background:T.surface2 }}>
+                <div style={{ fontSize:10.5, color:T.inkMuted, fontWeight:600, letterSpacing:0.6, textTransform:'uppercase', marginBottom:4 }}>What changes</div>
+                <div style={{ fontSize:11.5, color:T.ink, lineHeight:1.45 }}>
+                    {scope === 'none'
+                        ? <><b>{roleName}</b> cannot perform this action on any {anchor.objectName.toLowerCase()} records.</>
+                        : scope === 'all'
+                        ? <><b>{roleName}</b> can {anchor.action} <b>all records</b>{narrowed && conds.length > 0 ? <> matching <b>{conds.length} condition{conds.length===1?'':'s'}</b></> : <>. This applies across the entire workspace</>}.</>
+                        : scope === 'team'
+                        ? <><b>{roleName}</b> can {anchor.action} <b>their team's records</b>{narrowed && conds.length > 0 ? <> matching <b>{conds.length} condition{conds.length===1?'':'s'}</b></> : <> — records owned by anyone in their team</>}.</>
+                        : <><b>{roleName}</b> can {anchor.action} <b>their own records</b>{narrowed && conds.length > 0 ? <> matching <b>{conds.length} condition{conds.length===1?'':'s'}</b> — ~{Math.round(45*0.27)} of ~45 qualify today</> : <>. Only records they created or own</>}.</>
+                    }
+                </div>
+            </div>
+
+            {/* Action footer */}
+            <div style={{ padding:'10px 14px', borderTop:`1px solid ${T.border}`, display:'flex', gap:8, alignItems:'center' }}>
+                <span onClick={onClose} style={{ fontSize:11, color:T.inkMuted, cursor:'pointer' }}>← Back to matrix</span>
+                <span style={{ flex:1 }}/>
+                {err && <span style={{ fontSize:11, color:T.danger }}>{err}</span>}
+                <button onClick={onClose} style={{ fontSize:11.5, color:T.inkMid, background:'none', border:'none', cursor:'pointer', padding:'4px 8px', fontFamily:T.sans }}>Cancel</button>
+                <button onClick={handleApply} disabled={saving} style={{ fontSize:11.5, color:T.surface, background: saving ? T.inkMuted : T.ink, border:'none', padding:'5px 12px', borderRadius:2, cursor: saving?'default':'pointer', fontWeight:600, fontFamily:T.sans }}>
+                    {saving ? 'Saving…' : `Apply to ${roleName}`}
+                </button>
+            </div>
+        </div>
+    );
+};
+
 const RolesDetail = ({ settings, onBack }) => {
     const [activeRole, setActiveRole] = useState('r3'); // default: Sales Rep
-    const [openRoleKebab, setOpenRoleKebab] = useState(null); // role id
+    const [openRoleKebab, setOpenRoleKebab] = useState(null);
     const { showConfirm } = useApp();
 
+    // Local perms state — starts from PT_PERMS, updated on Apply
+    const [localPerms, setLocalPerms] = useState(() => JSON.parse(JSON.stringify(PT_PERMS)));
+
+    // Popover state
+    const [popover, setPopover] = useState(null); // { objectId, objectName, action, currentValue } | null
+
+    // Close kebab on outside click
     React.useEffect(() => {
         if (openRoleKebab === null) return;
-        const handler = () => setOpenRoleKebab(null);
-        document.addEventListener('click', handler);
-        return () => document.removeEventListener('click', handler);
+        const h = () => setOpenRoleKebab(null);
+        document.addEventListener('click', h);
+        return () => document.removeEventListener('click', h);
     }, [openRoleKebab]);
 
-    const role   = PT_ROLES.find(r=>r.id===activeRole);
-    const perms  = PT_PERMS[activeRole] || {};
+    // Close popover on outside click
+    React.useEffect(() => {
+        if (!popover) return;
+        const h = (e) => {
+            if (!e.target.closest('[data-popover]') && !e.target.closest('[data-perm-cell]')) {
+                setPopover(null);
+            }
+        };
+        document.addEventListener('mousedown', h);
+        return () => document.removeEventListener('mousedown', h);
+    }, [popover]);
+
+    const role  = PT_ROLES.find(r => r.id === activeRole);
+    const perms = localPerms[activeRole] || {};
+
+    const handleApply = (objectId, action, value) => {
+        setLocalPerms(prev => ({
+            ...prev,
+            [activeRole]: {
+                ...(prev[activeRole] || {}),
+                [objectId]: {
+                    ...(prev[activeRole]?.[objectId] || {}),
+                    [action]: value,
+                },
+            },
+        }));
+    };
+
+    const handleCellClick = (obj, action) => {
+        const currentValue = (localPerms[activeRole]?.[obj.id] || {})[action];
+        setPopover({ objectId: obj.id, objectName: obj.name, action, currentValue });
+    };
 
     return (
         <div style={{ fontFamily:T.sans }}>
@@ -8396,12 +8642,10 @@ const RolesDetail = ({ settings, onBack }) => {
                 <div style={{ borderLeft:`3px solid ${T.goldInk}`, paddingLeft:10 }}>
                     <div style={{ fontSize:22, fontWeight:700, color:T.ink, letterSpacing:-0.3 }}>Roles & permissions</div>
                     <div style={{ fontSize:13, color:T.inkMid, marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                        <span>5 roles · 9 objects · 7 actions</span>
+                        <span>{PT_ROLES.length} roles · {PT_PERM_OBJECTS.length} objects · {PT_PERM_ACTIONS.length} actions</span>
                         <span style={{ color:T.inkMuted }}>•</span>
                         <span style={{ color:T.ok, fontWeight:600 }}>✓</span>
                         <span>Editing — <b style={{ color:T.ink }}>{role?.name}</b></span>
-                        <span style={{ color:T.inkMuted }}>•</span>
-                        <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited last week by <b style={{ color:T.inkMid, fontWeight:500 }}>Morgan</b></span>
                     </div>
                 </div>
                 <div style={{ display:'flex', gap:8 }}>
@@ -8419,37 +8663,29 @@ const RolesDetail = ({ settings, onBack }) => {
                     const active = r.id === activeRole;
                     return (
                         <div key={r.id} style={{ position:'relative', display:'flex', alignItems:'center' }}>
-                            <button onClick={() => setActiveRole(r.id)}
-                                style={{
-                                    padding:'10px 16px 10px 20px', fontSize:13, fontWeight:600, border:'none', background:'transparent',
-                                    cursor:'pointer', fontFamily:T.sans,
-                                    color: active ? T.ink : T.inkMid,
-                                    borderBottom: active ? `2px solid ${T.goldInk}` : '2px solid transparent',
-                                    display:'flex', alignItems:'center', gap:6,
-                                }}>
+                            <button onClick={() => { setActiveRole(r.id); setPopover(null); }}
+                                style={{ padding:'10px 16px 10px 20px', fontSize:13, fontWeight:600, border:'none', background:'transparent', cursor:'pointer', fontFamily:T.sans, color: active?T.ink:T.inkMid, borderBottom: active?`2px solid ${T.goldInk}`:'2px solid transparent', display:'flex', alignItems:'center', gap:6 }}>
                                 <span>{r.name}</span>
                                 <span style={{ fontSize:11, color:T.inkMuted }}>{r.userCount}</span>
                                 {r.sys && <span style={{ padding:'1px 4px', fontSize:9, fontWeight:800, background:'rgba(42,38,34,0.07)', color:T.inkMuted, borderRadius:2, letterSpacing:0.4 }}>SYS</span>}
                             </button>
-                            {/* Per-role kebab */}
                             <div style={{ position:'relative', marginRight:6 }}>
                                 <button onClick={e => { e.stopPropagation(); setOpenRoleKebab(openRoleKebab === r.id ? null : r.id); }}
-                                    style={{ background:'none', border:'none', color: active ? T.inkMid : T.border, fontSize:14, cursor:'pointer', padding:'2px 4px', lineHeight:1, borderRadius:T.r }}
-                                    onMouseEnter={e => { e.currentTarget.style.color = T.inkMid; e.currentTarget.style.background = T.surface2; }}
-                                    onMouseLeave={e => { e.currentTarget.style.color = active ? T.inkMid : T.border; e.currentTarget.style.background = 'none'; }}>⋯</button>
+                                    style={{ background:'none', border:'none', color: active?T.inkMid:T.border, fontSize:14, cursor:'pointer', padding:'2px 4px', lineHeight:1, borderRadius:T.r }}
+                                    onMouseEnter={e => { e.currentTarget.style.color=T.inkMid; e.currentTarget.style.background=T.surface2; }}
+                                    onMouseLeave={e => { e.currentTarget.style.color=active?T.inkMid:T.border; e.currentTarget.style.background='none'; }}>⋯</button>
                                 {openRoleKebab === r.id && (
-                                    <div onClick={e => e.stopPropagation()}
-                                        style={{ position:'absolute', left:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:190 }}>
+                                    <div onClick={e=>e.stopPropagation()} style={{ position:'absolute', left:0, bottom:'100%', marginBottom:4, zIndex:400, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:190 }}>
                                         {[
-                                            { label:'Duplicate role',   action: () => setOpenRoleKebab(null) },
-                                            { label:'Rename',           action: () => setOpenRoleKebab(null) },
+                                            { label:'Duplicate role',         action: () => setOpenRoleKebab(null) },
+                                            { label:'Rename',                 action: () => setOpenRoleKebab(null) },
                                             { label:`View ${r.userCount} users`, action: () => setOpenRoleKebab(null) },
-                                            ...(!r.sys ? [{ label:'Delete role', action: () => { setOpenRoleKebab(null); showConfirm(`Delete role "${r.name}"? Users with this role will need to be reassigned.`, () => {}); }, danger: true }] : []),
+                                            ...(!r.sys ? [{ label:'Delete role', action: () => { setOpenRoleKebab(null); showConfirm(`Delete role "${r.name}"? Users will need reassignment.`, ()=>{}); }, danger: true }] : []),
                                         ].map((item, mi) => (
                                             <button key={mi} onClick={item.action}
-                                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0 ? `1px solid ${T.border}` : 'none', textAlign:'left', fontSize:13, color: item.danger ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans }}
-                                                onMouseEnter={e => e.currentTarget.style.background = item.danger ? 'rgba(156,58,46,0.06)' : T.surface2}
-                                                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop: mi>0?`1px solid ${T.border}`:'none', textAlign:'left', fontSize:13, color: item.danger?T.danger:T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                                onMouseEnter={e=>e.currentTarget.style.background=item.danger?'rgba(156,58,46,0.06)':T.surface2}
+                                                onMouseLeave={e=>e.currentTarget.style.background='none'}>
                                                 {item.label}
                                             </button>
                                         ))}
@@ -8462,57 +8698,87 @@ const RolesDetail = ({ settings, onBack }) => {
             </div>
 
             {/* Permission matrix */}
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8 }}>
-                {/* Matrix header */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'visible' }}>
                 <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                     <div>
                         <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Permission matrix</div>
                         <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>
-                            Own pipelines, build quotes, send for approval. Toggle scope per object × action. Changes apply to {role?.userCount} users immediately.
+                            Click any cell to set scope and optional conditions. Changes apply to {role?.userCount} users.
                         </div>
                     </div>
-                    {/* Legend */}
                     <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:T.inkMuted }}>
                         <span>Legend:</span>
-                        {['ALL','TEAM','OWN','—'].map(s => <ScopeBadge key={s} scope={s}/>)}
+                        {['all','team','own','—'].map(s => <ScopeBadge key={s} scope={s}/>)}
                     </div>
                 </div>
 
-                {/* Table — use native table for proper column alignment */}
-                <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans, overflow:'visible' }}>
                     <thead>
                         <tr style={{ background:T.surface2 }}>
                             <th style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'left', borderBottom:`1px solid ${T.border}`, width:200 }}>OBJECT</th>
                             {PT_PERM_ACTIONS.map(a => (
-                                <th key={a} style={{ padding:'8px 12px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'center', borderBottom:`1px solid ${T.border}` }}>{a}</th>
+                                <th key={a} style={{
+                                    padding:'8px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', textAlign:'center', borderBottom:`1px solid ${T.border}`,
+                                    color: popover?.action === a ? T.ink : T.inkMuted,
+                                    background: popover?.action === a ? 'rgba(200,185,154,0.12)' : 'transparent',
+                                    transition:'background 80ms, color 80ms',
+                                }}>{a}</th>
                             ))}
                         </tr>
                     </thead>
                     <tbody>
                         {PT_PERM_OBJECTS.map((obj, oi) => {
                             const p = perms[obj.id] || {};
+                            const isActiveRow = popover?.objectId === obj.id;
                             return (
-                                <tr key={obj.id} style={{ borderBottom: oi < PT_PERM_OBJECTS.length-1 ? `1px solid ${T.border}` : 'none' }}
-                                    onMouseEnter={e=>{ Array.from(e.currentTarget.cells).forEach(c=>c.style.background=T.surface2); }}
-                                    onMouseLeave={e=>{ Array.from(e.currentTarget.cells).forEach(c=>c.style.background='transparent'); }}>
+                                <tr key={obj.id} style={{
+                                    borderBottom: oi < PT_PERM_OBJECTS.length-1 ? `1px solid ${T.border}` : 'none',
+                                    background: isActiveRow ? 'rgba(200,185,154,0.06)' : 'transparent',
+                                    transition:'background 80ms',
+                                }}>
                                     <td style={{ padding:'11px 16px' }}>
                                         <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{obj.name}</div>
                                         <div style={{ fontSize:11, color:T.inkMuted }}>{obj.sub}</div>
                                     </td>
-                                    {/* VIEW */}
-                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><ScopeBadge scope={p.view || '—'}/></td>
-                                    {/* CREATE */}
-                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.create}/></td>
-                                    {/* EDIT */}
-                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.edit}/></td>
-                                    {/* DELETE */}
-                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.delete}/></td>
-                                    {/* EXPORT */}
-                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.export}/></td>
-                                    {/* SHARE */}
-                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><ScopeBadge scope={p.share || '—'}/></td>
-                                    {/* APPROVE */}
-                                    <td style={{ padding:'11px 12px', textAlign:'center' }}><PermDot on={p.approve}/></td>
+                                    {PT_PERM_ACTIONS.map(action => {
+                                        const v = p[action];
+                                        const isScope  = action === 'view' || action === 'share';
+                                        const isActive = popover?.objectId === obj.id && popover?.action === action;
+                                        return (
+                                            <td key={action}
+                                                data-perm-cell="1"
+                                                onClick={() => handleCellClick(obj, action)}
+                                                style={{
+                                                    padding:'11px 12px', textAlign:'center', position:'relative',
+                                                    cursor:'pointer',
+                                                    boxShadow: isActive ? `inset 0 0 0 2px ${T.ink}` : 'none',
+                                                    background: isActive ? T.surface : 'transparent',
+                                                    transition:'box-shadow 80ms',
+                                                }}
+                                                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = T.surface2; }}
+                                                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
+                                                {isActive ? (
+                                                    <>
+                                                        <span style={{ display:'inline-block', padding:'2px 6px', fontSize:9.5, fontWeight:700, letterSpacing:0.6, color:T.surface, background:T.ink, borderRadius:2, fontFamily:'ui-monospace,Menlo,monospace' }}>EDIT</span>
+                                                        {/* Popover anchored below this cell */}
+                                                        <div data-popover="1" style={{ position:'absolute', top:'100%', right: ['delete','export','share','approve'].includes(action) ? 0 : 'auto', left: ['delete','export','share','approve'].includes(action) ? 'auto' : '50%', transform: ['delete','export','share','approve'].includes(action) ? 'none' : 'translateX(-50%)', marginTop:6, zIndex:50, width:380 }}
+                                                            onClick={e => e.stopPropagation()}>
+                                                            <PermCellPopover
+                                                                anchor={{ objectId:obj.id, objectName:obj.name, action }}
+                                                                currentValue={v}
+                                                                roleName={role?.name || 'Role'}
+                                                                onApply={handleApply}
+                                                                onClose={() => setPopover(null)}/>
+                                                        </div>
+                                                    </>
+                                                ) : isScope ? (
+                                                    <ScopeBadge scope={v || '—'}/>
+                                                ) : (
+                                                    <PermDot on={v === true}/>
+                                                )}
+                                            </td>
+                                        );
+                                    })}
                                 </tr>
                             );
                         })}
@@ -8794,87 +9060,172 @@ const ConnectAppModal = ({ app, onClose }) => {
 };
 
 // 2. New API key modal — post-creation reveal state
-const NewApiKeyModal = ({ onClose }) => {
-    const [step, setStep] = useState('form'); // form | reveal
-    const [name, setName] = useState('');
-    const [env,  setEnv]  = useState('live');
-    const mockKey = 'acc_live_sk_9fKpQ2mXr7wZ3nDk8vLj1hYtBcEs4uGo';
-    const copied = React.useRef(false);
+const NewApiKeyModal = ({ onClose, onCreated }) => {
+    const [step,    setStep]    = React.useState('form'); // form | creating | reveal
+    const [name,    setName]    = React.useState('');
+    const [env,     setEnv]     = React.useState('live');
+    const [scopes,  setScopes]  = React.useState(new Set(['read']));
+    const [error,   setError]   = React.useState('');
+    const [result,  setResult]  = React.useState(null); // { key, plaintextKey }
+    const [copied,  setCopied]  = React.useState(false);
 
-    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
+    const ALL_SCOPES = ['read','leads:write','contacts:write','opportunities:write','quotes:write','webhooks:write'];
+
+    const toggleScope = (s) => setScopes(prev => {
+        const n = new Set(prev);
+        if (s === 'read') return n; // read is always included
+        n.has(s) ? n.delete(s) : n.add(s);
+        return n;
+    });
+
+    const handleCreate = async () => {
+        if (!name.trim()) { setError('Key name is required'); return; }
+        setStep('creating');
+        setError('');
+        try {
+            const res  = await dbFetch('/.netlify/functions/api-keys', {
+                method: 'POST',
+                body: JSON.stringify({ name: name.trim(), scopes: [...scopes] }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to create key');
+            setResult(data);
+            if (onCreated) onCreated(data.key);
+            setStep('reveal');
+        } catch (e) {
+            setError(e.message);
+            setStep('form');
+        }
+    };
+
+    const handleCopy = () => {
+        if (!result?.plaintextKey) return;
+        navigator.clipboard?.writeText(result.plaintextKey);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13,
+        color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
 
     return (
         <IntModal width={580} onClose={onClose}>
-            <IntModalHeader onClose={onClose} title={step==='form' ? 'Create API key' : 'Key created — copy it now'} sub={step==='form' ? 'Keys give programmatic access to Accelerep data.' : undefined}/>
+            <IntModalHeader onClose={onClose}
+                title={step === 'reveal' ? 'Key created — copy it now' : 'Create API key'}
+                sub={step !== 'reveal' ? 'Keys give programmatic access to Accelerep data. Stored as SHA-256 hash.' : undefined}/>
             <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
-                {step === 'form' ? (
+                {step === 'form' && (
                     <>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 120px', gap:12, marginBottom:14 }}>
                             <div>
                                 <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Key name</label>
-                                <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Production pipeline sync" style={inp}/>
+                                <input value={name} onChange={e => { setName(e.target.value); setError(''); }}
+                                    placeholder="e.g. Production pipeline sync"
+                                    onKeyDown={e => e.key === 'Enter' && handleCreate()}
+                                    autoFocus style={inp}/>
                             </div>
                             <div>
                                 <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Environment</label>
-                                <select value={env} onChange={e=>setEnv(e.target.value)} style={{ ...inp, appearance:'none', cursor:'pointer' }}>
+                                <select value={env} onChange={e => setEnv(e.target.value)}
+                                    style={{ ...inp, appearance:'none', cursor:'pointer' }}>
                                     <option value="live">Live</option>
                                     <option value="test">Test</option>
                                 </select>
                             </div>
                         </div>
                         <div style={{ marginBottom:14 }}>
-                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:6 }}>Scopes</label>
+                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:6 }}>
+                                Scopes <span style={{ color:T.inkMuted, fontWeight:400 }}>(read is always included)</span>
+                            </label>
                             <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-                                {['leads:read','leads:write','contacts:read','opps:read','opps:write','quotes:read','webhooks:read'].map(s => (
-                                    <span key={s} style={{ padding:'3px 8px', borderRadius:3, background:'rgba(58,90,122,0.10)', color:T.info, fontSize:11.5, fontFamily:'ui-monospace,Menlo,monospace' }}>{s}</span>
-                                ))}
+                                {ALL_SCOPES.map(s => {
+                                    const on = scopes.has(s);
+                                    const locked = s === 'read';
+                                    return (
+                                        <span key={s} onClick={() => !locked && toggleScope(s)}
+                                            style={{ display:'inline-flex', alignItems:'center', gap:5,
+                                                padding:'4px 10px', borderRadius:4, fontSize:11.5,
+                                                fontFamily:'ui-monospace,Menlo,monospace',
+                                                border:`1px solid ${on ? T.info : T.border}`,
+                                                background: on ? 'rgba(58,90,122,0.10)' : 'transparent',
+                                                color: on ? T.info : T.inkMuted,
+                                                cursor: locked ? 'default' : 'pointer' }}>
+                                            {on && <span style={{ fontSize:9 }}>✓</span>}
+                                            {s}
+                                        </span>
+                                    );
+                                })}
                             </div>
                         </div>
+                        {error && <div style={{ fontSize:12, color:T.danger, marginBottom:10, fontFamily:T.sans }}>{error}</div>}
                     </>
-                ) : (
+                )}
+
+                {step === 'creating' && (
+                    <div style={{ padding:'40px 0', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>
+                        Generating key…
+                    </div>
+                )}
+
+                {step === 'reveal' && result && (
                     <>
-                        {/* Success tile */}
-                        <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', background:'rgba(77,107,61,0.08)', border:`1px solid rgba(77,107,61,0.2)`, borderRadius:6, marginBottom:16 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px',
+                            background:'rgba(77,107,61,0.08)', border:`1px solid rgba(77,107,61,0.2)`,
+                            borderRadius:6, marginBottom:16 }}>
                             <span style={{ fontSize:22, color:T.ok }}>✓</span>
                             <div>
-                                <div style={{ fontSize:13.5, fontWeight:700, color:T.ok }}>Key created successfully</div>
-                                <div style={{ fontSize:12, color:T.inkMid, marginTop:1 }}>Copy it now — you won't be able to see it again.</div>
+                                <div style={{ fontSize:13.5, fontWeight:700, color:T.ok }}>Key created — <b>{result.key?.name}</b></div>
+                                <div style={{ fontSize:12, color:T.inkMid, marginTop:1 }}>Copy it now. You won't be able to see it again.</div>
                             </div>
                         </div>
-                        {/* Dark key panel */}
+
+                        {/* Full key in dark panel */}
                         <div style={{ background:T.ink, borderRadius:6, padding:'14px 16px', marginBottom:14 }}>
                             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-                                <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:'#a8f0c8', wordBreak:'break-all', flex:1 }}>{mockKey}</code>
-                                <button onClick={()=>{ navigator.clipboard?.writeText(mockKey); }}
-                                    style={{ padding:'5px 12px', background:'rgba(255,255,255,0.12)', color:'#fbf8f3', border:'1px solid rgba(255,255,255,0.18)', borderRadius:4, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, flexShrink:0 }}>
-                                    Copy
+                                <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:'#a8f0c8',
+                                    wordBreak:'break-all', flex:1, lineHeight:1.6 }}>
+                                    {result.plaintextKey}
+                                </code>
+                                <button onClick={handleCopy}
+                                    style={{ padding:'6px 14px', background: copied ? 'rgba(77,107,61,0.5)' : 'rgba(255,255,255,0.12)',
+                                        color:'#fbf8f3', border:'1px solid rgba(255,255,255,0.18)', borderRadius:4,
+                                        fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, flexShrink:0,
+                                        transition:'background 150ms' }}>
+                                    {copied ? '✓ Copied' : 'Copy'}
                                 </button>
                             </div>
                         </div>
-                        {/* Warn callout */}
-                        <div style={{ padding:'10px 14px', background:'rgba(184,115,51,0.09)', borderLeft:`3px solid ${T.warn}`, borderRadius:4, marginBottom:14 }}>
+
+                        {/* Warning */}
+                        <div style={{ padding:'10px 14px', background:'rgba(184,115,51,0.09)',
+                            borderLeft:`3px solid ${T.warn}`, borderRadius:4, marginBottom:14 }}>
                             <div style={{ fontSize:12, color:T.warn, fontWeight:600, marginBottom:2 }}>Store this key securely</div>
-                            <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.5 }}>Never commit it to source control. Use environment variables or a secrets manager (Vault, 1Password, AWS SSM).</div>
+                            <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.5 }}>
+                                Never commit to source control. Use environment variables or a secrets manager (Vault, 1Password, AWS SSM).
+                                This key is stored as a SHA-256 hash — Accelerep cannot recover it.
+                            </div>
                         </div>
-                        {/* curl snippet */}
+
+                        {/* Curl snippet */}
                         <div style={{ background:'rgba(42,38,34,0.04)', border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px' }}>
                             <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:6 }}>Test with curl</div>
-                            <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMid, lineHeight:1.6, display:'block' }}>
-                                {`curl -H "Authorization: Bearer ${mockKey.slice(0,22)}..." \\\n  https://api.accelerep.com/v1/leads`}
+                            <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMid, lineHeight:1.6, display:'block', whiteSpace:'pre-wrap' }}>
+                                {`curl -H "Authorization: Bearer ${(result.plaintextKey||'').slice(0,18)}..." \
+  https://api.accelerep.com/v1/opportunities`}
                             </code>
                         </div>
                     </>
                 )}
             </div>
-            <IntModalFooter left={step==='reveal' ? 'Download as .env' : ''}>
-                {step === 'form' ? (
+            <IntModalFooter>
+                {step === 'form' && (
                     <>
                         <IntBtn label="Cancel" onClick={onClose}/>
-                        <IntBtn label="Create key" primary onClick={()=>setStep('reveal')}/>
+                        <IntBtn label="Create key" primary onClick={handleCreate} disabled={!name.trim()}/>
                     </>
-                ) : (
-                    <IntBtn label="I've stored it — close" primary onClick={onClose}/>
                 )}
+                {step === 'creating' && <IntBtn label="Creating…" primary disabled/>}
+                {step === 'reveal'   && <IntBtn label="I've stored it — close" primary onClick={onClose}/>}
             </IntModalFooter>
         </IntModal>
     );
@@ -9072,82 +9423,287 @@ const NewAutomationModal = ({ onClose }) => {
 };
 
 // ── ① Connected Apps ──────────────────────────────────────────
+// ── Slack config modal ───────────────────────────────────────────────────────
+const SlackConfigModal = ({ existing, onClose, onSave }) => {
+    const [webhookUrl, setWebhookUrl] = React.useState(existing?.webhookUrl || '');
+    const [channel,   setChannel]    = React.useState(existing?.channel     || '#sales-alerts');
+    const [testing,   setTesting]    = React.useState(false);
+    const [testMsg,   setTestMsg]    = React.useState(null);
+    const [saving,    setSaving]     = React.useState(false);
+
+    const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' };
+    const FL = ({ label, hint, children }) => (
+        <div style={{ marginBottom:14 }}>
+            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{label}</label>
+            {children}
+            {hint && <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>{hint}</div>}
+        </div>
+    );
+
+    const handleTest = async () => {
+        if (!webhookUrl.trim()) return;
+        setTesting(true); setTestMsg(null);
+        try {
+            const res  = await dbFetch('/.netlify/functions/send-slack', {
+                method: 'POST',
+                body: JSON.stringify({ webhookUrl: webhookUrl.trim() }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Test failed');
+            setTestMsg({ ok: true, text: 'Message sent! Check your Slack channel.' });
+        } catch (e) {
+            setTestMsg({ ok: false, text: e.message });
+        } finally { setTesting(false); }
+    };
+
+    const handleSave = async () => {
+        if (!webhookUrl.trim()) return;
+        setSaving(true);
+        await onSave({ webhookUrl: webhookUrl.trim(), channel: channel.trim(), enabled: true });
+        setSaving(false);
+    };
+
+    return (
+        <IntModal width={560} onClose={onClose}>
+            <IntModalHeader onClose={onClose}
+                left={<AppTile name="Slack" color="#4a154b" emoji="💬" size={36}/>}
+                title="Configure Slack"
+                sub="Incoming Webhook · pipeline alerts and digests"/>
+            <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
+                <FL label="Incoming Webhook URL"
+                    hint="Create one at api.slack.com/apps → your app → Incoming Webhooks → Add New Webhook">
+                    <input value={webhookUrl} onChange={e => setWebhookUrl(e.target.value)}
+                        placeholder="https://hooks.slack.com/services/T.../B.../..."
+                        style={inpSt}/>
+                </FL>
+                <FL label="Default channel" hint="The channel the webhook posts to (set when you create the webhook — shown here for reference)">
+                    <input value={channel} onChange={e => setChannel(e.target.value)}
+                        placeholder="#sales-alerts"
+                        style={{ ...inpSt, fontFamily: T.sans }}/>
+                </FL>
+                <div style={{ padding:'12px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid, fontFamily:T.sans, marginBottom:14 }}>
+                    <b style={{ color:T.info }}>What will post to Slack:</b> Deal silent alerts · Stuck stage alerts · Lapsed close date alerts · High-velocity deal alerts · AI score drops · Weekly manager digest
+                </div>
+                {testMsg && (
+                    <div style={{ padding:'10px 14px', background: testMsg.ok ? 'rgba(77,107,61,0.08)' : 'rgba(156,58,46,0.08)', borderLeft:`3px solid ${testMsg.ok ? T.ok : T.danger}`, borderRadius:4, fontSize:12, color: testMsg.ok ? T.ok : T.danger, fontFamily:T.sans, marginBottom:14 }}>
+                        {testMsg.text}
+                    </div>
+                )}
+            </div>
+            <IntModalFooter left={<IntBtn label={testing ? 'Sending…' : 'Send test message'} onClick={handleTest} disabled={!webhookUrl.trim() || testing}/>}>
+                <IntBtn label="Cancel" onClick={onClose}/>
+                <IntBtn label={saving ? 'Saving…' : 'Save configuration'} primary onClick={handleSave} disabled={!webhookUrl.trim() || saving}/>
+            </IntModalFooter>
+        </IntModal>
+    );
+};
+
+// ── Connected Apps — live version ─────────────────────────────────────────────
 const ConnectedAppsDetail = ({ onBack }) => {
-    const [connectModal, setConnectModal] = useState(null);
-    const [catFilter, setCatFilter] = useState('All');
-    const connected = INT_APPS.filter(a=>a.connected);
-    const popular   = INT_APPS.filter(a=>a.popular);
-    const catalog   = INT_APPS.filter(a=>!a.connected && !a.popular);
-    const cats = ['All',...new Set(catalog.map(a=>a.category))];
+    const [connectModal,  setConnectModal]  = React.useState(null);
+    const [slackModal,    setSlackModal]    = React.useState(false);
+    const [catFilter,     setCatFilter]     = React.useState('All');
+    const [connectedApps, setConnectedApps] = React.useState({});  // { [appId]: boolean }
+    const [slackConfig,   setSlackConfig]   = React.useState({});  // { webhookUrl, channel, enabled }
+    const [loading,       setLoading]       = React.useState(true);
+    const [error,         setError]         = React.useState(null);
+    const [disconnecting, setDisconnecting] = React.useState(null);
+
+    // ── Load real connected state from settings ────────────────
+    React.useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/settings');
+                const data = await res.json();
+                if (cancelled) return;
+                if (!res.ok) throw new Error(data.error || 'Failed to load settings');
+                setConnectedApps(data.settings?.connectedApps || {});
+                setSlackConfig(data.settings?.slackConfig     || {});
+            } catch (e) {
+                if (!cancelled) setError(e.message);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, []);
+
+    // ── Persist connected state ────────────────────────────────
+    const saveConnectedApps = async (next) => {
+        setConnectedApps(next);
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ connectedApps: next }),
+            });
+        } catch (e) {
+            console.error('saveConnectedApps error:', e.message);
+        }
+    };
+
+    const handleDisconnect = async (appId) => {
+        setDisconnecting(appId);
+        const next = { ...connectedApps, [appId]: false };
+        await saveConnectedApps(next);
+        setDisconnecting(null);
+    };
+
+    const handleMarkConnected = async (appId) => {
+        const next = { ...connectedApps, [appId]: true };
+        await saveConnectedApps(next);
+    };
+
+    // ── Slack config save ──────────────────────────────────────
+    const handleSaveSlack = async (config) => {
+        setSlackConfig(config);
+        const nextApps = { ...connectedApps, slack: true };
+        setConnectedApps(nextApps);
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ slackConfig: config, connectedApps: nextApps }),
+            });
+        } catch (e) {
+            console.error('saveSlackConfig error:', e.message);
+        }
+        setSlackModal(false);
+    };
+
+    // Build display lists — merge INT_APPS with real connected state
+    const isConnected = (app) => {
+        // Google Calendar uses its own connection table — check settings flag
+        if (app.id === 'gcal') return connectedApps['gcal'] === true;
+        return connectedApps[app.id] === true;
+    };
+
+    const liveApps   = INT_APPS.map(a => ({ ...a, connected: isConnected(a) }));
+    const connected  = liveApps.filter(a => a.connected);
+    const popular    = liveApps.filter(a => !a.connected && (a.popular || ['gcal','snowflake','clearbit'].includes(a.id)));
+    const catalog    = liveApps.filter(a => !a.connected && !popular.find(p => p.id === a.id));
+    const cats       = ['All', ...new Set(catalog.map(a => a.category))];
+
+    const slackConnected = connectedApps['slack'] === true && slackConfig?.webhookUrl;
+
+    if (loading) return (
+        <div style={{ fontFamily:T.sans }}>
+            <IntCrumb page="Connected apps" onBack={onBack}/>
+            <div style={{ padding:'60px 0', textAlign:'center', color:T.inkMuted, fontSize:13 }}>Loading…</div>
+        </div>
+    );
 
     return (
         <div style={{ fontFamily:T.sans }}>
             {connectModal && <ConnectAppModal app={connectModal} onClose={()=>setConnectModal(null)}/>}
-            <IntCrumb page="Connected apps" onBack={onBack}/>
-            <IntTitle title="Connected apps" sub={`${connected.length} connected · browse and manage your integration catalog`}
-                actions={[<IntBtn key="mkt" label="Browse marketplace"/>, <IntBtn key="req" label="+ Request integration" primary/>]}/>
+            {slackModal   && <SlackConfigModal existing={slackConfig} onClose={()=>setSlackModal(false)} onSave={handleSaveSlack}/>}
 
-            {/* Section 1 — Connected */}
-            <div style={{ marginBottom:24 }}>
-                <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:12 }}>Connected ({connected.length})</div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:14 }}>
-                    {connected.map(app => (
-                        <div key={app.id} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16, display:'flex', flexDirection:'column', gap:10 }}>
-                            <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
-                                <AppTile name={app.name} color={app.color} emoji={app.emoji} size={36}/>
-                                <div style={{ flex:1, minWidth:0 }}>
-                                    <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{app.name}</div>
-                                    <div style={{ fontSize:11, color:T.inkMuted }}>{app.category}</div>
+            <IntCrumb page="Connected apps" onBack={onBack}/>
+            <IntTitle title="Connected apps"
+                sub={`${connected.length} connected · browse and manage your integration catalog`}
+                actions={[
+                    <IntBtn key="mkt" label="Browse marketplace"/>,
+                    <IntBtn key="req" label="+ Request integration" primary/>,
+                ]}/>
+
+            {error && <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>{error}</div>}
+
+            {/* ── Slack callout — prominent if not yet configured ── */}
+            {!slackConnected && (
+                <div style={{ padding:'14px 16px', background:'rgba(74,21,75,0.06)', borderLeft:`3px solid #4a154b`, borderRadius:4, marginBottom:20, display:'flex', alignItems:'center', gap:14 }}>
+                    <AppTile name="Slack" color="#4a154b" emoji="💬" size={32}/>
+                    <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>Connect Slack to get pipeline alerts in your channel</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Stale deal alerts, stuck stage warnings, close date nudges, and weekly digests — all posted to Slack alongside email.</div>
+                    </div>
+                    <IntBtn label="Configure Slack" primary onClick={() => setSlackModal(true)}/>
+                </div>
+            )}
+
+            {/* ── Section 1: Connected ── */}
+            {connected.length > 0 && (
+                <div style={{ marginBottom:24 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:12 }}>Connected ({connected.length})</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:14 }}>
+                        {connected.map(app => (
+                            <div key={app.id} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16, display:'flex', flexDirection:'column', gap:10 }}>
+                                <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
+                                    <AppTile name={app.name} color={app.color} emoji={app.emoji} size={36}/>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{app.name}</div>
+                                        <div style={{ fontSize:11, color:T.inkMuted }}>{app.category}</div>
+                                    </div>
+                                    <span style={{ padding:'2px 7px', borderRadius:10, background:'rgba(77,107,61,0.12)', color:T.ok, fontSize:10.5, fontWeight:700 }}>Live</span>
+                                </div>
+                                <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.4 }}>{app.desc}</div>
+                                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', paddingTop:8, borderTop:`1px solid ${T.border}` }}>
+                                    <StatusDot tone="ok" label="Connected"/>
+                                    <div style={{ display:'flex', gap:8 }}>
+                                        {app.id === 'slack' && (
+                                            <button onClick={() => setSlackModal(true)}
+                                                style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Configure</button>
+                                        )}
+                                        <button onClick={() => handleDisconnect(app.id)} disabled={disconnecting === app.id}
+                                            style={{ fontSize:12, fontWeight:600, color:T.danger, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, opacity: disconnecting === app.id ? 0.5 : 1 }}>
+                                            {disconnecting === app.id ? 'Disconnecting…' : 'Disconnect'}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                            <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.4 }}>{app.desc}</div>
-                            <div style={{ paddingTop:8, borderTop:`1px solid ${T.border}` }}>
-                                <StatusDot tone={app.tone} label={app.traffic}/>
-                            </div>
-                            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                                <span style={{ fontSize:11, color:T.inkMuted }}>by {app.name} · connected today</span>
-                                <button style={{ fontSize:12, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Manage →</button>
-                            </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
-            </div>
+            )}
 
-            {/* Section 2 — Popular */}
+            {/* ── Section 2: Popular / not connected ── */}
             <div style={{ marginBottom:24 }}>
                 <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:10 }}>Popular</div>
                 <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
-                    {popular.map((app,i) => (
-                        <div key={app.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', borderBottom: i<popular.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                    {/* Slack row — special because it has its own config flow */}
+                    {!slackConnected && (
+                        <div style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', borderBottom:`1px solid ${T.border}` }}>
+                            <AppTile name="Slack" color="#4a154b" emoji="💬" size={32}/>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>Slack</div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted }}>Post deal updates, alerts, and digest to channels.</div>
+                            </div>
+                            <span style={{ fontSize:11.5, color:T.inkMuted, marginRight:8 }}>Messaging</span>
+                            <IntBtn label="Configure →" primary onClick={() => setSlackModal(true)}/>
+                        </div>
+                    )}
+                    {popular.map((app, i) => (
+                        <div key={app.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', borderBottom: i < popular.length-1 ? `1px solid ${T.border}` : 'none' }}>
                             <AppTile name={app.name} color={app.color} emoji={app.emoji} size={32}/>
                             <div style={{ flex:1 }}>
                                 <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{app.name}</div>
                                 <div style={{ fontSize:11.5, color:T.inkMuted }}>{app.desc}</div>
                             </div>
                             <span style={{ fontSize:11.5, color:T.inkMuted, marginRight:8 }}>{app.category}</span>
-                            <button onClick={()=>setConnectModal(app)}
+                            <button onClick={() => setConnectModal(app)}
                                 style={{ padding:'6px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Connect</button>
                         </div>
                     ))}
                 </div>
             </div>
 
-            {/* Section 3 — All apps catalog */}
+            {/* ── Section 3: All apps catalog ── */}
             <div>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
                     <div style={{ fontSize:14, fontWeight:700, color:T.ink }}>All apps</div>
                     <div style={{ display:'flex', gap:4 }}>
                         {cats.map(c => (
-                            <button key={c} onClick={()=>setCatFilter(c)}
+                            <button key={c} onClick={() => setCatFilter(c)}
                                 style={{ padding:'3px 10px', fontSize:11.5, fontWeight:600, borderRadius:10, border:`1px solid ${catFilter===c?T.ink:T.border}`, background:catFilter===c?T.ink:'transparent', color:catFilter===c?'#fbf8f3':T.inkMid, cursor:'pointer', fontFamily:T.sans }}>{c}</button>
                         ))}
                     </div>
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
-                    {catalog.filter(a=>catFilter==='All'||a.category===catFilter).map(app => (
-                        <div key={app.id} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:'12px 14px', display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}
-                            onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderStrong}
-                            onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                    {catalog.filter(a => catFilter==='All' || a.category===catFilter).map(app => (
+                        <div key={app.id}
+                            onClick={() => app.id === 'slack' ? setSlackModal(true) : setConnectModal(app)}
+                            style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:'12px 14px', display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}
+                            onMouseEnter={e => e.currentTarget.style.borderColor = T.borderStrong}
+                            onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
                             <AppTile name={app.name} color={app.color} emoji={app.emoji} size={28}/>
                             <div style={{ flex:1, minWidth:0 }}>
                                 <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{app.name}</div>
@@ -9162,95 +9718,558 @@ const ConnectedAppsDetail = ({ onBack }) => {
 };
 
 // ── ② API Keys ────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// API Keys · View Docs Popover — Variant B (working starter)
+// Anchored under the "View docs" button in the API Keys header.
+// ─────────────────────────────────────────────────────────────────
+const DOCS_RESOURCES = [
+    { label:'Accounts',      count:'14' },
+    { label:'Contacts',      count:'12' },
+    { label:'Opportunities', count:'18' },
+    { label:'Quotes',        count:'11' },
+    { label:'Reports',       count:'8'  },
+    { label:'Webhooks',      count:'6'  },
+];
+
+const SDK_LIST = [
+    { lang:'TypeScript', ver:'v3.2.0', cmd:'npm i @accelerep/sdk'            },
+    { lang:'Python',     ver:'v2.8.1', cmd:'pip install accelerep'            },
+    { lang:'Ruby',       ver:'v1.4.0', cmd:'gem install accelerep'            },
+    { lang:'Go',         ver:'v0.9.3', cmd:'go get github.com/accelerep/go'   },
+];
+
+const DocsPopoverB = ({ keys = [], onClose, btnRef }) => {
+    const ref    = React.useRef(null);
+    const [pos, setPos] = React.useState(null); // { top, right } — null until measured
+    const [tab,     setTab]     = React.useState('cURL');
+    const [copied,  setCopied]  = React.useState(false);
+    const [activeKey, setActiveKey] = React.useState(keys.find(k => !k.revokedAt) || null);
+
+    React.useEffect(() => {
+        if (!activeKey && keys.length > 0) setActiveKey(keys.find(k => !k.revokedAt) || null);
+    }, [keys]);
+
+    // Measure position once after mount
+    React.useLayoutEffect(() => {
+        if (!btnRef?.current || !ref.current) return;
+        const r   = btnRef.current.getBoundingClientRect();
+        const vw  = window.innerWidth;
+        const vh  = window.innerHeight;
+        const mH  = ref.current.offsetHeight || 500;
+        const GAP = 6; const EDGE = 8;
+        const top = (r.bottom + GAP + mH > vh - EDGE)
+            ? Math.max(EDGE, r.top - mH - GAP) : r.bottom + GAP;
+        const right = Math.max(EDGE, vw - r.right);
+        setPos({ top, right });
+    }, []); // run once on mount only
+
+    React.useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, []);
+
+    const keyPrefix = activeKey?.keyPrefix || 'spt_live_••••';
+
+    const snippets = {
+        cURL: `curl https://api.accelerep.com/v1/accounts \
+  -H "Authorization: Bearer ${keyPrefix}..." \
+  -H "Accept: application/json"`,
+        JS: `import { AccelerepClient } from '@accelerep/sdk';
+const client = new AccelerepClient('${keyPrefix}...');
+const accounts = await client.accounts.list();`,
+        Python: `import accelerep
+client = accelerep.Client('${keyPrefix}...')
+accounts = client.accounts.list()`,
+    };
+
+    const handleCopy = () => {
+        navigator.clipboard?.writeText(snippets[tab]);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const EB = ({ children }) => (
+        <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>
+            {children}
+        </div>
+    );
+
+    // Don't render until position is measured (avoids invisible overlay blocking clicks)
+    if (!pos) return (
+        <div ref={ref} style={{ position:'fixed', top:-9999, left:-9999, visibility:'hidden', pointerEvents:'none' }}>
+            <div style={{ width:440 }}/>
+        </div>
+    );
+
+    return (
+        <>
+            {/* Transparent backdrop — catches outside clicks without blocking nav */}
+            <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:399, background:'transparent' }}/>
+            <div ref={ref} style={{ position:'fixed', zIndex:400, top:pos.top, right:pos.right }}>
+            {/* Caret */}
+            <div style={{ position:'absolute', top:-7, right:20, width:12, height:12,
+                background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)', zIndex:1 }}/>
+
+            <div style={{ width:440, background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRadius:8, boxShadow:'0 8px 28px rgba(42,38,34,0.14), 0 2px 4px rgba(42,38,34,0.06)',
+                fontFamily:T.sans, overflow:'hidden' }}>
+
+                {/* Header */}
+                <div style={{ padding:'13px 16px 10px', borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
+                        <span style={{ fontSize:14, fontWeight:700, color:T.ink }}>API quick reference</span>
+                        <span style={{ flex:1 }}/>
+                        <span style={{ fontSize:10.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>v1 · api.accelerep.com</span>
+                        <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', lineHeight:1, padding:0 }}>×</button>
+                    </div>
+                    <div style={{ fontSize:11, color:T.inkMid, lineHeight:1.5 }}>
+                        Copy a starter for any active key, browse SDKs, or jump to a resource.
+                    </div>
+                </div>
+
+                {/* Quick start code block */}
+                <div style={{ padding:'12px 16px 0' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+                        <EB>Quick start</EB>
+                        <span style={{ flex:1 }}/>
+                        {['cURL','JS','Python'].map(t => (
+                            <span key={t} onClick={() => { setTab(t); setCopied(false); }}
+                                style={{ padding:'3px 9px', borderRadius:10, fontSize:11, fontWeight:600, cursor:'pointer',
+                                    background: tab===t ? T.ink : 'transparent',
+                                    color: tab===t ? '#fbf8f3' : T.inkMid,
+                                    border: `1px solid ${tab===t ? T.ink : T.border}` }}>
+                                {t}
+                            </span>
+                        ))}
+                    </div>
+
+                    {/* Code panel */}
+                    <div style={{ background:T.ink, borderRadius:4, padding:'12px 14px', position:'relative', marginBottom:8 }}>
+                        <pre style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:'#a8f0c8',
+                            lineHeight:1.55, margin:0, whiteSpace:'pre-wrap', wordBreak:'break-all' }}>
+                            {snippets[tab]}
+                        </pre>
+                        <button onClick={handleCopy}
+                            style={{ position:'absolute', top:8, right:8, fontSize:10, padding:'3px 8px',
+                                background:copied?'rgba(77,107,61,0.5)':'rgba(243,237,224,0.10)',
+                                color:'#f3ede0', border:'none', borderRadius:2, cursor:'pointer',
+                                fontWeight:600, fontFamily:T.sans, transition:'background 150ms' }}>
+                            {copied ? '✓ Copied' : 'Copy'}
+                        </button>
+                    </div>
+
+                    {/* Active key pill */}
+                    <div style={{ padding:'6px 10px', background:T.surface2, border:`1px solid ${T.border}`,
+                        borderRadius:4, fontSize:10.5, color:T.inkMid, display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+                        <span>Use key</span>
+                        {activeKey ? (
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5,
+                                background:T.surface, padding:'1px 6px', borderRadius:2,
+                                border:`1px solid ${T.border}`, color:T.ink, fontWeight:600 }}>
+                                {activeKey.name}
+                            </span>
+                        ) : (
+                            <span style={{ color:T.inkMuted }}>No active keys</span>
+                        )}
+                        <span style={{ flex:1 }}/>
+                        {keys.filter(k => !k.revokedAt).length > 1 && (
+                            <select value={activeKey?.id || ''} onChange={e => setActiveKey(keys.find(k => k.id === e.target.value))}
+                                style={{ fontSize:10.5, color:T.inkMid, background:'none', border:'none', cursor:'pointer',
+                                    fontFamily:T.sans, outline:'none', padding:0 }}>
+                                {keys.filter(k => !k.revokedAt).map(k => (
+                                    <option key={k.id} value={k.id}>{k.name}</option>
+                                ))}
+                            </select>
+                        )}
+                        {keys.filter(k => !k.revokedAt).length <= 1 && (
+                            <span style={{ color:T.inkMuted, fontWeight:600, cursor:'default' }}>Change ▾</span>
+                        )}
+                    </div>
+                </div>
+
+                {/* SDKs */}
+                <div style={{ padding:'10px 16px 4px', borderTop:`1px solid ${T.border}`, marginTop:10 }}>
+                    <EB>Official SDKs</EB>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:6, marginTop:8 }}>
+                        {SDK_LIST.map(s => (
+                            <div key={s.lang} style={{ border:`1px solid ${T.border}`, borderRadius:4,
+                                padding:'8px 10px', background:T.surface, cursor:'pointer' }}
+                                onMouseEnter={e => e.currentTarget.style.borderColor = T.borderStrong}
+                                onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
+                                <div style={{ display:'flex', alignItems:'baseline', gap:6, marginBottom:3 }}>
+                                    <span style={{ fontSize:12, fontWeight:700, color:T.ink }}>{s.lang}</span>
+                                    <span style={{ fontSize:9.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{s.ver}</span>
+                                    <span style={{ flex:1 }}/>
+                                    <span style={{ fontSize:10, color:T.inkMuted }}>↗</span>
+                                </div>
+                                <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5,
+                                    color:T.inkMid, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.cmd}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Jump to */}
+                <div style={{ padding:'10px 16px 10px', borderTop:`1px solid ${T.border}`, marginTop:8 }}>
+                    <div style={{ display:'flex', alignItems:'center', marginBottom:8 }}>
+                        <EB>Jump to</EB>
+                        <span style={{ flex:1 }}/>
+                        <span style={{ fontSize:11, color:T.inkMid, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Search ⌘K</span>
+                    </div>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                        {DOCS_RESOURCES.map(r => (
+                            <a key={r.label} href={`https://salespipelinetracker.com/api-docs.html#${r.label.toLowerCase()}`}
+                                target="_blank" rel="noopener noreferrer" style={{ textDecoration:'none' }}>
+                                <span style={{ padding:'4px 9px', background:T.surface2, border:`1px solid ${T.border}`,
+                                    borderRadius:10, fontSize:11, color:T.ink, fontWeight:600, cursor:'pointer', display:'inline-block' }}
+                                    onMouseEnter={e => e.currentTarget.style.borderColor = T.borderStrong}
+                                    onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
+                                    {r.label} <span style={{ color:T.inkMuted, fontWeight:400 }}>{r.count}</span>
+                                </span>
+                            </a>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding:'10px 16px', borderTop:`1px solid ${T.border}`, background:T.surface2,
+                    display:'flex', alignItems:'center', gap:10 }}>
+                    <a href="https://salespipelinetracker.com/api-docs.html" target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize:11, color:T.inkMid, fontWeight:600, cursor:'pointer', textDecoration:'none' }}>OpenAPI ↗</a>
+                    <a href="https://salespipelinetracker.com/api-docs.html" target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize:11, color:T.inkMid, fontWeight:600, cursor:'pointer', textDecoration:'none' }}>Postman ↗</a>
+                    <span style={{ fontSize:11, color:T.inkMuted, cursor:'pointer', fontFamily:T.sans }}>Changelog</span>
+                    <span style={{ flex:1 }}/>
+                    <a href="https://salespipelinetracker.com/api-docs.html" target="_blank" rel="noopener noreferrer"
+                        style={{ textDecoration:'none', display:'inline-block', padding:'7px 14px',
+                            background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r,
+                            fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans, whiteSpace:'nowrap' }}>
+                        Open full docs ↗
+                    </a>
+                </div>
+            </div>
+            </div>
+        </>
+    );
+};
+
+
+// ─────────────────────────────────────────────────────────────────
+// API Keys — live version
+// ─────────────────────────────────────────────────────────────────
+
+// Row ⋯ menu for API key rows
+const ApiKeyRowMenu = ({ k, onRevoke, onCopyPrefix, onClose }) => {
+    const MenuRow = ({ icon, label, danger:isDanger, onClick }) => (
+        <div onClick={() => { onClick(); onClose(); }}
+            style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderRadius:3, cursor:'pointer',
+                color: isDanger ? T.danger : T.ink, fontFamily:T.sans }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+            <span style={{ width:14, textAlign:'center', fontSize:13 }}>{icon}</span>
+            <span style={{ fontSize:12.5, fontWeight:500 }}>{label}</span>
+        </div>
+    );
+    return (
+        <div style={{ width:192, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
+            boxShadow:'0 8px 24px rgba(42,38,34,0.12)', padding:4, fontFamily:T.sans, position:'relative' }}>
+            <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
+                background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
+            <MenuRow icon="⎘" label="Copy key prefix" onClick={onCopyPrefix}/>
+            <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+            <MenuRow icon="⊘" label="Revoke key" danger onClick={onRevoke}/>
+        </div>
+    );
+};
+
+// Revoke confirm modal
+const RevokeKeyModal = ({ k, onConfirm, onClose }) => (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width:440, padding:24, boxShadow:'0 20px 56px rgba(20,16,12,0.28)', fontFamily:T.sans }}>
+            <div style={{ fontSize:16, fontWeight:700, color:T.ink, marginBottom:8 }}>Revoke API key?</div>
+            <div style={{ fontSize:13, color:T.inkMid, lineHeight:1.6, marginBottom:6 }}>
+                <b style={{ color:T.ink }}>{k.name}</b> will stop working immediately.
+            </div>
+            <div style={{ padding:'10px 14px', background:'rgba(156,58,46,0.07)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.inkMid, marginBottom:20 }}>
+                Any application using this key will lose access. This cannot be undone — you'll need to create a new key.
+            </div>
+            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+                <button onClick={onClose} style={{ padding:'7px 16px', background:'none', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, cursor:'pointer', color:T.inkMid, fontFamily:T.sans }}>Cancel</button>
+                <button onClick={onConfirm} style={{ padding:'7px 16px', background:T.danger, border:'none', borderRadius:T.r, fontSize:13, fontWeight:700, cursor:'pointer', color:'#fbf8f3', fontFamily:T.sans }}>Revoke key</button>
+            </div>
+        </div>
+    </div>
+);
+
 const ApiKeysDetail = ({ onBack }) => {
-    const [filter, setFilter] = useState('All');
-    const [showModal, setShowModal] = useState(false);
-    const visible = INT_API_KEYS.filter(k => filter==='All' || k.status===filter);
+    const [showDocs,    setShowDocs]    = React.useState(false);
+    const docsBtnRef = React.useRef(null);
+    const [keys,        setKeys]        = React.useState([]);
+    const [loading,     setLoading]     = React.useState(true);
+    const [error,       setError]       = React.useState(null);
+    const [filter,      setFilter]      = React.useState('Active');
+    const [showCreate,  setShowCreate]  = React.useState(false);
+    const [revokeKey,   setRevokeKey]   = React.useState(null); // key to confirm revoke
+    const [activeMenu,  setActiveMenu]  = React.useState(null); // key id with open menu
+    const [revoking,    setRevoking]    = React.useState(null);
+    const menuRefs = React.useRef({});
+
+    // ── Load keys from DB ────────────────────────────────────────
+    const loadKeys = async () => {
+        try {
+            const res  = await dbFetch('/.netlify/functions/api-keys');
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to load keys');
+            setKeys(data.keys || []);
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    React.useEffect(() => { loadKeys(); }, []);
+
+    // ── Revoke ───────────────────────────────────────────────────
+    const handleRevoke = async (k) => {
+        setRevoking(k.id);
+        try {
+            const res  = await dbFetch(`/.netlify/functions/api-keys?id=${k.id}`, { method:'DELETE' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            // Update local state immediately
+            setKeys(prev => prev.map(key => key.id === k.id ? { ...key, revokedAt: new Date().toISOString() } : key));
+            setRevokeKey(null);
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setRevoking(null);
+        }
+    };
+
+    // ── Helpers ──────────────────────────────────────────────────
+    const fmtDate = (iso) => {
+        if (!iso) return '—';
+        const d   = new Date(iso);
+        const now = new Date();
+        const diffMs  = now - d;
+        const diffMin = Math.round(diffMs / 60000);
+        if (diffMin < 1)    return 'just now';
+        if (diffMin < 60)   return diffMin + 'm ago';
+        if (diffMin < 1440) return Math.round(diffMin/60) + 'h ago';
+        if (diffMin < 2880) return 'yesterday';
+        return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    };
+
+    const keyStatus = (k) => {
+        if (k.revokedAt) return 'Revoked';
+        return 'Active';
+    };
+
+    // Filter logic
+    const visible = keys.filter(k => {
+        const s = keyStatus(k);
+        if (filter === 'Active')  return s === 'Active';
+        if (filter === 'Revoked') return s === 'Revoked';
+        return true;
+    });
+
+    const activeCount  = keys.filter(k => !k.revokedAt).length;
+    const revokedCount = keys.filter(k =>  k.revokedAt).length;
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showModal && <NewApiKeyModal onClose={()=>setShowModal(false)}/>}
+            {/* Modals */}
+            {showDocs && (
+                <DocsPopoverB
+                    keys={keys}
+                    btnRef={docsBtnRef}
+                    onClose={() => setShowDocs(false)}
+                />
+            )}
+            {showCreate && (
+                <NewApiKeyModal
+                    onClose={() => setShowCreate(false)}
+                    onCreated={(newKey) => { setKeys(prev => [newKey, ...prev]); }}
+                />
+            )}
+            {revokeKey && (
+                <RevokeKeyModal
+                    k={revokeKey}
+                    onClose={() => setRevokeKey(null)}
+                    onConfirm={() => handleRevoke(revokeKey)}
+                />
+            )}
+
             <IntCrumb page="API keys" onBack={onBack}/>
-            <IntTitle title="API keys" sub="Workspace REST API credentials · 3 active keys · last edited 2 months ago by Admin"
+            <IntTitle
+                title="API keys"
+                sub={loading ? 'Loading…' : `${activeCount} active key${activeCount!==1?'s':''} · ${revokedCount} revoked`}
                 actions={[
-                    <IntBtn key="docs" label="View docs ↗"/>,
-                    <IntBtn key="new" label="+ Create key" primary onClick={()=>setShowModal(true)}/>,
+                    <button ref={docsBtnRef} key="docs" onClick={() => setShowDocs(o => !o)}
+                        style={{ padding:'6px 12px', background:showDocs?T.surface2:T.surface,
+                            border:`1px solid ${showDocs?T.goldInk:T.borderStrong}`,
+                            color:showDocs?T.goldInk:T.ink,
+                            borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer',
+                            fontFamily:T.sans, display:'inline-flex', alignItems:'center', gap:5 }}>
+                        View docs <span style={{ fontSize:10 }}>↗</span>
+                    </button>,
+                    <IntBtn key="new" label="+ Create key" primary onClick={() => setShowCreate(true)}/>,
                 ]}/>
 
-            {/* Filter + table */}
+            {error && (
+                <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger, fontFamily:T.sans }}>{error}</div>
+            )}
+
+            {/* Keys table */}
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:18 }}>
                 <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                     <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Keys</div>
                     <div style={{ display:'flex', gap:0, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:2 }}>
-                        {['All','Live','Test','Stale'].map(f => (
-                            <button key={f} onClick={()=>setFilter(f)}
-                                style={{ padding:'4px 10px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans, background:filter===f?T.ink:'transparent', color:filter===f?'#fbf8f3':T.inkMid }}>{f}</button>
+                        {['All','Active','Revoked'].map(f => (
+                            <button key={f} onClick={() => setFilter(f)}
+                                style={{ padding:'4px 12px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer',
+                                    fontFamily:T.sans, background:filter===f?T.ink:'transparent', color:filter===f?'#fbf8f3':T.inkMid }}>
+                                {f}
+                            </button>
                         ))}
                     </div>
                 </div>
-                {/* Header */}
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 200px 160px 100px 120px 120px 90px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                    {['NAME','KEY','SCOPES','RATE LIMIT','LAST USED','7D TRAFFIC','STATUS',''].map((h,i) => (
+
+                {/* Column headers */}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 180px 180px 120px 100px 36px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                    {['NAME','PREFIX','SCOPES','LAST USED','STATUS',''].map((h,i) => (
                         <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
                     ))}
                 </div>
-                {visible.map((k,i) => {
-                    const stale = k.status==='Stale';
-                    return (
-                        <div key={k.id} style={{ display:'grid', gridTemplateColumns:'1fr 200px 160px 100px 120px 120px 90px 32px', gap:8, padding:'11px 16px', borderBottom:i<visible.length-1?`1px solid ${T.border}`:'none', alignItems:'center', opacity: stale ? 0.72 : 1 }}>
-                            {/* Name */}
-                            <div>
-                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{k.name}</div>
-                                <div style={{ fontSize:11, color:T.inkMuted }}>by {k.by} · {k.created}</div>
-                            </div>
-                            {/* Key */}
-                            <KeyMono prefix={k.prefix} tail={k.tail}/>
-                            {/* Scopes */}
-                            <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
-                                {k.scopes.slice(0,2).map(s => (
-                                    <span key={s} style={{ padding:'1px 5px', borderRadius:3, background:'rgba(58,90,122,0.10)', color:T.info, fontSize:10, fontFamily:'ui-monospace,Menlo,monospace' }}>{s}</span>
-                                ))}
-                                {k.scopes.length > 2 && <span style={{ fontSize:10, color:T.inkMuted }}>+{k.scopes.length-2}</span>}
-                            </div>
-                            {/* Rate limit */}
-                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>{k.rateLimit}</div>
-                            {/* Last used */}
-                            <div style={{ fontSize:12, color: stale ? T.danger : T.inkMid }}>{k.lastUsed}</div>
-                            {/* Sparkline + calls */}
-                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                                <MiniSpark data={k.traffic} color={stale?T.border:T.ok}/>
-                            </div>
-                            {/* Status */}
-                            <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
-                                background: k.status==='Live'?'rgba(77,107,61,0.12)':k.status==='Test'?'rgba(58,90,122,0.10)':'rgba(184,115,51,0.12)',
-                                color: k.status==='Live'?T.ok:k.status==='Test'?T.info:T.warn }}>
-                                {k.status}
-                            </span>
-                            <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+
+                {loading ? (
+                    <div style={{ padding:'40px', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>Loading keys…</div>
+                ) : visible.length === 0 ? (
+                    <div style={{ padding:'40px', textAlign:'center', fontFamily:T.sans }}>
+                        <div style={{ fontSize:24, marginBottom:8, opacity:0.3 }}>🔑</div>
+                        <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, marginBottom:4 }}>
+                            {filter === 'All' ? 'No API keys yet' : `No ${filter.toLowerCase()} keys`}
                         </div>
-                    );
-                })}
+                        <div style={{ fontSize:12.5, color:T.inkMuted, marginBottom:16 }}>
+                            {filter === 'All' ? 'Create a key to give programmatic access to Accelerep data.' : ''}
+                        </div>
+                        {filter === 'All' && (
+                            <button onClick={() => setShowCreate(true)}
+                                style={{ padding:'8px 20px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                                + Create first key
+                            </button>
+                        )}
+                    </div>
+                ) : (
+                    visible.map((k, i) => {
+                        const revoked = !!k.revokedAt;
+                        const status  = keyStatus(k);
+                        const isMenuOpen = activeMenu === k.id;
+                        return (
+                            <div key={k.id} style={{ display:'grid', gridTemplateColumns:'1fr 180px 180px 120px 100px 36px', gap:8,
+                                padding:'11px 16px', borderBottom:i<visible.length-1?`1px solid ${T.border}`:'none',
+                                alignItems:'center', opacity:revoked?0.65:1, position:'relative' }}>
+
+                                {/* Name + created by */}
+                                <div>
+                                    <div style={{ fontSize:13, fontWeight:600, color:T.ink, textDecoration:revoked?'line-through':'' }}>{k.name}</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted }}>by {k.createdBy || '—'} · {fmtDate(k.createdAt)}</div>
+                                </div>
+
+                                {/* Key prefix */}
+                                <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>
+                                    {k.keyPrefix}<span style={{ color:T.border }}>••••••••</span>
+                                </div>
+
+                                {/* Scopes */}
+                                <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
+                                    {(k.scopes || []).slice(0,3).map(s => (
+                                        <span key={s} style={{ padding:'1px 5px', borderRadius:3, background:'rgba(58,90,122,0.10)',
+                                            color:T.info, fontSize:10, fontFamily:'ui-monospace,Menlo,monospace' }}>{s}</span>
+                                    ))}
+                                    {(k.scopes || []).length > 3 && (
+                                        <span style={{ fontSize:10, color:T.inkMuted }}>+{k.scopes.length-3}</span>
+                                    )}
+                                </div>
+
+                                {/* Last used */}
+                                <div style={{ fontSize:12, color:T.inkMid }}>{fmtDate(k.lastUsedAt) || 'Never'}</div>
+
+                                {/* Status */}
+                                <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:10, fontSize:11, fontWeight:700,
+                                    background: revoked ? 'rgba(156,58,46,0.10)' : 'rgba(77,107,61,0.12)',
+                                    color: revoked ? T.danger : T.ok }}>
+                                    {status}
+                                </span>
+
+                                {/* ⋯ menu */}
+                                <div style={{ position:'relative' }}>
+                                    <button ref={el => menuRefs.current[k.id] = el}
+                                        onClick={e => { e.stopPropagation(); setActiveMenu(isMenuOpen ? null : k.id); }}
+                                        disabled={revoked}
+                                        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                            width:24, height:24, borderRadius:3, fontSize:16, fontWeight:700,
+                                            border:'none', cursor:revoked?'default':'pointer', lineHeight:1,
+                                            color:isMenuOpen?T.goldInk:T.inkMuted,
+                                            background:isMenuOpen?'rgba(200,185,154,0.30)':'transparent',
+                                            opacity:revoked?0.3:1 }}>⋯</button>
+
+                                    {isMenuOpen && (
+                                        <div style={{ position:'absolute', top:'100%', right:0, marginTop:4, zIndex:100 }}>
+                                            <ApiKeyRowMenu
+                                                k={k}
+                                                onClose={() => setActiveMenu(null)}
+                                                onCopyPrefix={() => navigator.clipboard?.writeText(k.keyPrefix + '••••••••')}
+                                                onRevoke={() => { setActiveMenu(null); setRevokeKey(k); }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
             </div>
 
-            {/* Workspace defaults */}
+            {/* Security note */}
+            <div style={{ padding:'12px 16px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`,
+                borderRadius:4, marginBottom:18, fontSize:12.5, color:T.inkMid, fontFamily:T.sans, lineHeight:1.6 }}>
+                <b style={{ color:T.info }}>Security:</b> Keys are hashed with SHA-256 before storage — Accelerep never stores the plaintext.
+                Each key is shown in full <b>once</b> at creation time. Store it in your secrets manager immediately.
+                API access is scoped per key and restricted to Admin-created credentials only.
+            </div>
+
+            {/* Workspace defaults — informational */}
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:18 }}>
-                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:14 }}>Workspace defaults</div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:18 }}>
+                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:14 }}>API reference</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:18, marginBottom:16 }}>
                     {[
-                        { label:'Default rate limit', value:'1,000 req/min' },
-                        { label:'Default expiration', value:'365 days' },
-                        { label:'Default IP allowlist', value:'0.0.0.0/0 (any)' },
+                        { label:'Base URL',          value:'https://api.accelerep.com/v1' },
+                        { label:'Authentication',    value:'Bearer <key>' },
+                        { label:'Key format',        value:'spt_live_<64 hex chars>' },
                     ].map((f,i) => (
                         <div key={i}>
-                            <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</div>
-                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, color:T.ink }}>{f.value}</div>
+                            <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{f.label}</div>
+                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.ink }}>{f.value}</div>
                         </div>
                     ))}
+                </div>
+                <div style={{ background:T.ink, borderRadius:6, padding:'12px 16px' }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:'rgba(200,185,154,0.7)', letterSpacing:0.6, textTransform:'uppercase', marginBottom:8 }}>Example request</div>
+                    <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:'#a8f0c8', display:'block', lineHeight:1.8 }}>
+                        {`curl -H "Authorization: Bearer spt_live_..." \
+  https://api.accelerep.com/v1/opportunities`}
+                    </code>
                 </div>
             </div>
         </div>
     );
 };
+
 
 // ── ③ Webhooks ────────────────────────────────────────────────
 const WebhooksDetail = ({ onBack, focusFailing=false }) => {
@@ -9866,15 +10885,20 @@ const SsoDetail = ({ onBack }) => {
                 updatedAt={SEC_SSO.configured ? 'Last edited by Morgan' : 'Last edited never by —'}
                 actions={[
                     <SecBtn key="dl" label="Download metadata"/>,
-                    <SecBtn key="tl" label="Test login"/>,
-                    <SecBtn key="act" label={SEC_SSO.configured ? 'Save changes' : 'Activate SSO'} primary/>,
+                    <SecBtn key="tl" label="Test login" disabled/>,
+                    <div key="act" title="SSO is available on the Enterprise plan" style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 14px', background:'rgba(138,131,120,0.12)', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, color:T.inkMuted, fontFamily:T.sans, cursor:'default', userSelect:'none' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                        Enterprise plan
+                    </div>,
                 ]}/>
 
             {/* Not configured callout */}
             {!SEC_SSO.configured && (
                 <SecCallout tone="warn" text={
                     <><b>SSO is not configured.</b> Workspaces with 10+ users should set up SSO so deactivating an IdP user revokes Accelerep access.</>
-                } actions={[<SecBtn key="wiz" label="Configure with wizard" onClick={()=>setShowWizard(true)}/>]}/>
+                } actions={[
+                    <span key="ent" style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans, fontStyle:'italic' }}>Available on Enterprise plan · <a href="mailto:sales@accelerep.com" style={{ color:T.info, textDecoration:'none' }}>contact us</a></span>
+                ]}/>
             )}
 
             {/* Provider preset */}
@@ -9984,9 +11008,38 @@ const SsoDetail = ({ onBack }) => {
 
 // ── ② MFA Detail ──────────────────────────────────────────────
 const MfaDetail = ({ onBack }) => {
-    const [showEnforce, setShowEnforce] = useState(false);
-    const { enrolled, total, perRole, notEnrolled } = SEC_MFA;
+    const [showEnforce, setShowEnforce] = React.useState(false);
+    const [mfaData,     setMfaData]     = React.useState(null);
+    const [loading,     setLoading]     = React.useState(true);
+    const [error,       setError]       = React.useState(null);
+
+    // ── Load real MFA enrollment from Clerk via backend ───────────
+    React.useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/clerk-mfa-status');
+                const data = await res.json();
+                if (cancelled) return;
+                if (!res.ok) throw new Error(data.error || 'Failed to load MFA status');
+                setMfaData(data);
+            } catch (e) {
+                if (!cancelled) setError(e.message);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, []);
+
+    // Fall back to empty state while loading
+    const enrolled        = mfaData?.enrolled        ?? 0;
+    const total           = mfaData?.total           ?? 0;
+    const notEnrolled     = mfaData?.notEnrolled     ?? [];
+    const byRole          = mfaData?.byRole          ?? [];
     const notEnrolledCount = total - enrolled;
+    const enrollPct       = total > 0 ? Math.round(enrolled / total * 100) : 0;
 
     return (
         <div style={{ fontFamily:T.sans }}>
@@ -9994,159 +11047,654 @@ const MfaDetail = ({ onBack }) => {
             <SecCrumb page="Multi-factor auth" onBack={onBack}/>
             <SecTitle
                 title="Multi-factor auth"
-                sub="Enforce a second factor on sign-in"
-                badge={`Optional · ${enrolled}/${total} enrolled`}
-                updatedAt="Last edited 3 months ago by Jeff Hammond"
+                sub="Enforce a second factor on sign-in · managed via Clerk"
+                badge={loading ? 'Loading…' : `${enrolled}/${total} enrolled · ${enrollPct}%`}
+                updatedAt="MFA factors configured in Clerk Dashboard"
                 actions={[
-                    <SecBtn key="rem" label="Send reminders"/>,
-                    <SecBtn key="enf" label="Enforce for all" primary onClick={()=>setShowEnforce(true)}/>,
+                    <SecBtn key="rem" label="Send reminders" disabled={loading || notEnrolledCount === 0}/>,
+                    <div key="enf" title="MFA policy is set in Clerk Dashboard" style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 14px', background:'rgba(138,131,120,0.12)', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, color:T.inkMuted, fontFamily:T.sans, cursor:'default', userSelect:'none' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                        Managed in Clerk
+                    </div>,
                 ]}/>
 
-            {/* Optional warn callout */}
-            {SEC_MFA.policy === 'optional' && (
-                <SecCallout tone="warn"
-                    text={<>MFA is optional. <b>{notEnrolledCount} users haven't enrolled.</b> Move to Required to lock down sign-in.</>}
-                    actions={[
-                        <SecBtn key="r" label="Send reminders"/>,
-                        <SecBtn key="e" label="Enforce now" primary onClick={()=>setShowEnforce(true)}/>,
-                    ]}/>
+            {/* Clerk dashboard link callout */}
+            <SecCallout tone="info"
+                text={<>MFA policy (required / optional) and allowed factors are configured in your <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" style={{ color:T.info, fontWeight:600 }}>Clerk Dashboard</a> under User &amp; Authentication → Multi-factor. Enrollment data below is live from Clerk.</>}
+            />
+
+            {error && (
+                <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger, fontFamily:T.sans }}>
+                    {error}
+                </div>
             )}
 
-            {/* Policy */}
-            <SecCard title="Policy">
-                <SecFieldRow fields={[
-                    { label:'Enforcement',                  value:SEC_MFA.enforcement   },
-                    { label:'Grace period (days after invite)',value:SEC_MFA.gracePeriod },
-                    { label:'Remember device',              value:SEC_MFA.rememberDevice },
-                    { label:'On factor reset',              value:SEC_MFA.onFactorReset  },
-                ]}/>
-                <div style={{ fontSize:11.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>Allowed factors</div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
-                    <OnOffTile label="Authenticator (TOTP)" sub="Google, 1Password, Authy" on={SEC_MFA.factors.totp}/>
-                    <OnOffTile label="Security key / Passkey" sub="WebAuthn, biometrics" on={SEC_MFA.factors.passkey}/>
-                    <OnOffTile label="SMS code" sub="Discouraged — NIST advises against" on={SEC_MFA.factors.sms}/>
-                    <OnOffTile label="Email code" sub="Lowest assurance" on={SEC_MFA.factors.email}/>
-                </div>
-            </SecCard>
+            {/* Not-enrolled callout */}
+            {!loading && notEnrolledCount > 0 && (
+                <SecCallout tone="warn"
+                    text={<>MFA is not fully enrolled. <b>{notEnrolledCount} user{notEnrolledCount !== 1 ? 's' : ''} haven't set up a second factor.</b> Require MFA in Clerk Dashboard to lock down sign-in.</>}
+                    actions={[
+                        <a key="dash" href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer">
+                            <SecBtn label="Open Clerk Dashboard →"/>
+                        </a>,
+                    ]}
+                />
+            )}
 
-            {/* Enrollment by role */}
-            <SecCard title={`Enrollment by role (${enrolled}/${total} · ${Math.round(enrolled/total*100)}%)`}>
-                <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 100px 1fr 140px 80px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                        {['ROLE','REQUIRED','ENROLLMENT','STATUS',''].map((h,i) => (
-                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
-                        ))}
-                    </div>
-                    {perRole.map((r,i) => {
-                        const pct = r.total > 0 ? Math.round(r.enrolled/r.total*100) : 0;
-                        const full = pct === 100;
-                        const pending = r.total - r.enrolled;
-                        return (
-                            <div key={r.role} style={{ display:'grid', gridTemplateColumns:'1fr 100px 1fr 140px 80px', gap:8, padding:'10px 14px', borderBottom:i<perRole.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
-                                <span style={{ fontSize:13, fontWeight:600, color:T.ink }}>{r.role}</span>
-                                <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
-                                    background:r.required?'rgba(156,58,46,0.10)':'rgba(184,115,51,0.10)',
-                                    color:r.required?T.danger:T.warn }}>
-                                    {r.required?'Required':'Optional'}
-                                </span>
-                                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                                    <div style={{ width:100, height:6, background:T.border, borderRadius:3, overflow:'hidden', flexShrink:0 }}>
-                                        <div style={{ width:`${pct}%`, height:'100%', background: full ? T.ok : T.warn, borderRadius:3 }}/>
-                                    </div>
-                                    <span style={{ fontSize:11.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{r.enrolled}/{r.total}</span>
-                                </div>
-                                <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
-                                    background: full ? 'rgba(77,107,61,0.12)' : 'rgba(184,115,51,0.12)',
-                                    color: full ? T.ok : T.warn }}>
-                                    {full ? 'Complete' : `${pending} pending`}
-                                </span>
-                                <button style={{ fontSize:12, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Remind →</button>
-                            </div>
-                        );
-                    })}
-                </div>
-            </SecCard>
-
-            {/* Not yet enrolled */}
-            <SecCard title="Not yet enrolled" desc="Send reminder, force enrollment on next sign-in, or grant exception.">
-                <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 100px 80px 80px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                        {['USER','ROLE','INVITED','',''].map((h,i) => (
-                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
-                        ))}
-                    </div>
-                    {notEnrolled.map((u,i) => (
-                        <div key={u.email} style={{ display:'grid', gridTemplateColumns:'1fr 120px 100px 80px 80px', gap:8, padding:'9px 14px', borderBottom:i<notEnrolled.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
-                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.ink }}>{u.email}</span>
-                            <span style={{ fontSize:12.5, color:T.inkMid }}>{u.role}</span>
-                            <span style={{ fontSize:12.5, color:u.never?T.danger:T.inkMid }}>{u.invited}</span>
-                            <button style={{ fontSize:12, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Remind</button>
-                            <button style={{ fontSize:12, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Exception</button>
+            {/* ── Enrollment by role ── */}
+            <SecCard title={loading ? 'Enrollment by role' : `Enrollment by role (${enrolled}/${total} · ${enrollPct}%)`}>
+                {loading ? (
+                    <div style={{ padding:'24px 0', textAlign:'center', fontSize:12.5, color:T.inkMuted, fontFamily:T.sans }}>Loading enrollment data…</div>
+                ) : byRole.length === 0 ? (
+                    <div style={{ padding:'24px 0', textAlign:'center', fontSize:12.5, color:T.inkMuted, fontFamily:T.sans }}>No users found in this organization.</div>
+                ) : (
+                    <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 80px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                            {['ROLE','ENROLLMENT',''].map((h,i) => (
+                                <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                            ))}
                         </div>
-                    ))}
+                        {byRole.map((r, i) => {
+                            const pct  = r.total > 0 ? Math.round(r.enrolled / r.total * 100) : 0;
+                            const full = pct === 100;
+                            const pending = r.total - r.enrolled;
+                            return (
+                                <div key={r.role} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 80px', gap:8, padding:'10px 14px', borderBottom:i<byRole.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                                    <span style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{r.role}</span>
+                                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                        <div style={{ width:100, height:6, background:T.border, borderRadius:3, overflow:'hidden', flexShrink:0 }}>
+                                            <div style={{ width:`${pct}%`, height:'100%', background: full ? T.ok : T.warn, borderRadius:3 }}/>
+                                        </div>
+                                        <span style={{ fontSize:11.5, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{r.enrolled}/{r.total}</span>
+                                        <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                            background: full ? 'rgba(77,107,61,0.12)' : 'rgba(184,115,51,0.12)',
+                                            color: full ? T.ok : T.warn }}>
+                                            {full ? 'Complete' : `${pending} pending`}
+                                        </span>
+                                    </div>
+                                    <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:T.info, textDecoration:'none', fontFamily:T.sans }}>Manage →</a>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </SecCard>
+
+            {/* ── Not yet enrolled ── */}
+            <SecCard title={`Not yet enrolled (${notEnrolledCount})`} desc="Users who have not set up any MFA factor. Manage enrollment in Clerk Dashboard.">
+                {loading ? (
+                    <div style={{ padding:'24px 0', textAlign:'center', fontSize:12.5, color:T.inkMuted, fontFamily:T.sans }}>Loading…</div>
+                ) : notEnrolled.length === 0 ? (
+                    <div style={{ padding:'18px 0', textAlign:'center', fontSize:12.5, color:T.ok, fontFamily:T.sans }}>
+                        ✓ All users have MFA enrolled.
+                    </div>
+                ) : (
+                    <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 120px 80px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                            {['USER','ROLE','NAME',''].map((h,i) => (
+                                <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                            ))}
+                        </div>
+                        {notEnrolled.map((u, i) => (
+                            <div key={u.userId} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 120px 80px', gap:8, padding:'9px 14px', borderBottom:i<notEnrolled.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{u.email}</span>
+                                <span style={{ fontSize:12.5, color:T.inkMid, fontFamily:T.sans }}>{u.role}</span>
+                                <span style={{ fontSize:12.5, color:T.inkMid, fontFamily:T.sans }}>{u.name}</span>
+                                <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer"
+                                    style={{ fontSize:12, color:T.info, textDecoration:'none', fontFamily:T.sans }}>Manage →</a>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </SecCard>
+
+            {/* ── Allowed factors — informational note ── */}
+            <SecCard title="Allowed factors" desc="Factor configuration is managed in Clerk Dashboard → User & Authentication → Multi-factor.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+                    <OnOffTile label="Authenticator (TOTP)" sub="Google Authenticator, 1Password, Authy" on={true}/>
+                    <OnOffTile label="Security key / Passkey" sub="WebAuthn, biometrics" on={true}/>
+                    <OnOffTile label="SMS code" sub="Discouraged — NIST advises against" on={false}/>
+                    <OnOffTile label="Email code" sub="Lowest assurance factor" on={false}/>
+                </div>
+                <div style={{ marginTop:12, fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>
+                    To change which factors are allowed, visit your <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" style={{ color:T.info }}>Clerk Dashboard</a>.
                 </div>
             </SecCard>
         </div>
     );
 };
 
-// ── ③ Session & Password Detail ───────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// Add / Edit IP range modal
+// ─────────────────────────────────────────────────────────────────
+const IpRangeModal = ({ existing, onClose, onSave }) => {
+    const [cidr,    setCidr]    = React.useState(existing?.cidr    || '');
+    const [label,   setLabel]   = React.useState(existing?.label   || '');
+    const [status,  setStatus]  = React.useState(existing?.status  || 'Enforced');
+    const [cidrErr, setCidrErr] = React.useState('');
+
+    const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r,
+        fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none',
+        background:T.surface, boxSizing:'border-box' };
+
+    // Basic CIDR validation
+    const validateCidr = (v) => {
+        const cidrRe = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$|^([0-9a-fA-F:]+)\/\d{1,3}$/;
+        if (!v.trim()) return 'CIDR is required';
+        if (!cidrRe.test(v.trim())) return 'Enter a valid CIDR range e.g. 10.0.0.0/8';
+        return '';
+    };
+
+    const handleSave = () => {
+        const err = validateCidr(cidr);
+        if (err) { setCidrErr(err); return; }
+        onSave({ cidr: cidr.trim(), label: label.trim() || cidr.trim(), status, hits: existing?.hits || '0' });
+    };
+
+    const FL = ({ label: lbl, hint, children }) => (
+        <div style={{ marginBottom:14 }}>
+            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{lbl}</label>
+            {children}
+            {hint && <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>{hint}</div>}
+        </div>
+    );
+
+    return (
+        <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:800,
+            display:'flex', alignItems:'center', justifyContent:'center', fontFamily:T.sans }}>
+            <div onClick={e => e.stopPropagation()}
+                style={{ background:T.surface, borderRadius:8, width:480, display:'flex', flexDirection:'column',
+                    overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)' }}>
+                {/* Header */}
+                <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div>
+                        <div style={{ fontSize:16, fontWeight:700, color:T.ink }}>{existing ? 'Edit IP range' : 'Add IP range'}</div>
+                        <div style={{ fontSize:12, color:T.inkMuted, marginTop:2 }}>CIDR notation — e.g. 10.0.0.0/8 or 203.0.113.42/32</div>
+                    </div>
+                    <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', lineHeight:1 }}>×</button>
+                </div>
+                {/* Body */}
+                <div style={{ padding:'18px 20px' }}>
+                    <FL label="CIDR range" hint="IPv4 or IPv6 in CIDR notation">
+                        <input value={cidr} onChange={e => { setCidr(e.target.value); setCidrErr(''); }}
+                            placeholder="e.g. 10.0.0.0/8"
+                            style={{ ...inpSt, borderColor: cidrErr ? T.danger : T.border }}/>
+                        {cidrErr && <div style={{ fontSize:11.5, color:T.danger, marginTop:4, fontFamily:T.sans }}>{cidrErr}</div>}
+                    </FL>
+                    <FL label="Label" hint="Friendly name shown in the table">
+                        <input value={label} onChange={e => setLabel(e.target.value)}
+                            placeholder="e.g. HQ VPN, AWS prod NAT"
+                            style={{ ...inpSt, fontFamily:T.sans }}/>
+                    </FL>
+                    <FL label="Status">
+                        <div style={{ display:'flex', gap:10 }}>
+                            {['Enforced','Logged'].map(s => (
+                                <div key={s} onClick={() => setStatus(s)}
+                                    style={{ flex:1, padding:'10px 14px', border:`1.5px solid ${status===s ? T.goldInk : T.border}`,
+                                        borderRadius:6, background:status===s?'rgba(200,185,154,0.12)':T.surface, cursor:'pointer' }}>
+                                    <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{s}</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>
+                                        {s === 'Enforced' ? 'Block sign-ins from outside this range' : 'Record attempts but allow sign-in'}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </FL>
+                </div>
+                {/* Footer */}
+                <div style={{ padding:'12px 20px', borderTop:`1px solid ${T.border}`, background:T.surface2,
+                    display:'flex', gap:8, justifyContent:'flex-end' }}>
+                    <SecBtn label="Cancel" onClick={onClose}/>
+                    <SecBtn label={existing ? 'Save changes' : 'Add range'} primary onClick={handleSave}/>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// ─────────────────────────────────────────────────────────────────
+// Session & password — shared dropdown primitives
+// ─────────────────────────────────────────────────────────────────
+
+const DropdownPanel = ({ children, width=280 }) => (
+    <div style={{ width, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
+        boxShadow:'0 8px 24px rgba(42,38,34,0.12), 0 2px 4px rgba(42,38,34,0.06)',
+        padding:4, fontFamily:T.sans, maxHeight:360, overflowY:'auto' }}>
+        {children}
+    </div>
+);
+
+const DropdownOption = ({ label, sub, selected, recommended, danger, blocked, onClick }) => (
+    <div onClick={blocked ? ()=>alert('Blocked by workspace policy') : onClick}
+        style={{ display:'grid', gridTemplateColumns:'18px 1fr auto', gap:10, alignItems:'center',
+            padding:'8px 10px', borderRadius:3, cursor: blocked ? 'not-allowed' : 'pointer',
+            background: selected ? 'rgba(200,185,154,0.18)' : 'transparent' }}
+        onMouseEnter={e=>{ if (!selected && !blocked) e.currentTarget.style.background='rgba(200,185,154,0.10)'; }}
+        onMouseLeave={e=>{ e.currentTarget.style.background = selected ? 'rgba(200,185,154,0.18)' : 'transparent'; }}>
+        <span style={{ fontSize:12, color: selected ? T.goldInk : 'transparent', textAlign:'center', fontWeight:700 }}>✓</span>
+        <div style={{ minWidth:0 }}>
+            <div style={{ fontSize:12.5, fontWeight: selected ? 700 : 500,
+                color: (danger || blocked) ? T.danger : T.ink, lineHeight:1.2 }}>{label}</div>
+            {sub && <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, lineHeight:1.4 }}>{sub}</div>}
+        </div>
+        {recommended && (
+            <span style={{ fontSize:9, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase',
+                color:T.goldInk, padding:'2px 6px', background:'rgba(200,185,154,0.25)', borderRadius:2, flexShrink:0 }}>Rec.</span>
+        )}
+    </div>
+);
+
+// Dropdown trigger — replaces the plain <select>
+const PolicySelect = ({ label, value, children, width=260 }) => {
+    const [open, setOpen] = React.useState(false);
+    const ref    = React.useRef(null);
+    const btnRef = React.useRef(null);
+    const [pos,  setPos]  = React.useState({ top:0, left:0 });
+
+    React.useEffect(() => {
+        if (!open) return;
+        const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target) && btnRef.current && !btnRef.current.contains(e.target)) setOpen(false); };
+        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        document.addEventListener('mousedown', onDoc);
+        document.addEventListener('keydown', onKey);
+        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+    }, [open]);
+
+    const openDropdown = () => {
+        if (btnRef.current) {
+            const r = btnRef.current.getBoundingClientRect();
+            setPos({ top: r.bottom + 2, left: r.left });
+        }
+        setOpen(o => !o);
+    };
+
+    return (
+        <div>
+            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{label}</label>
+            <button ref={btnRef} onClick={openDropdown}
+                style={{ width:'100%', padding:'8px 10px', border:`1px solid ${open ? T.borderStrong : T.border}`, borderRadius:T.r,
+                    fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer',
+                    display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, textAlign:'left' }}>
+                <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{value}</span>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ transform: open ? 'rotate(180deg)' : 'none', transition:'transform 100ms', flexShrink:0 }}>
+                    <path d="M6 9l6 6 6-6"/>
+                </svg>
+            </button>
+            {open && (
+                <div ref={ref} style={{ position:'fixed', top:pos.top, left:pos.left, zIndex:9999 }}>
+                    <DropdownPanel width={width}>{React.Children.map(children, child =>
+                        child ? React.cloneElement(child, { onClick: child.props.onClick ? () => { child.props.onClick(); setOpen(false); } : () => setOpen(false) }) : null
+                    )}</DropdownPanel>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// IP allowlist row menu (Variation B — Compact)
+const IpRowMenu = ({ row, onEdit, onRemove, onToggleEnforced }) => {
+    const [open, setOpen] = React.useState(false);
+    const ref    = React.useRef(null);
+    const btnRef = React.useRef(null);
+    const [pos,  setPos]  = React.useState({ top:0, right:0 });
+
+    React.useEffect(() => {
+        if (!open) return;
+        const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target) && btnRef.current && !btnRef.current.contains(e.target)) setOpen(false); };
+        const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+        document.addEventListener('mousedown', onDoc);
+        document.addEventListener('keydown', onKey);
+        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+    }, [open]);
+
+    const openMenu = () => {
+        if (btnRef.current) {
+            const r = btnRef.current.getBoundingClientRect();
+            setPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+        }
+        setOpen(o => !o);
+    };
+
+    const action = (fn) => { fn(); setOpen(false); };
+
+    const MenuRow = ({ icon, label, sub, kbd, danger:isDanger, onClick }) => (
+        <div onClick={() => action(onClick || (() => {}))}
+            style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:3, cursor:'pointer',
+                color: isDanger ? T.danger : T.ink }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+            <span style={{ width:16, textAlign:'center', fontSize:13, flexShrink:0 }}>{icon}</span>
+            <div style={{ flex:1 }}>
+                <div style={{ fontSize:12.5, fontWeight:500 }}>{label}</div>
+                {sub && <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:1 }}>{sub}</div>}
+            </div>
+            {kbd && <span style={{ fontSize:10.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', flexShrink:0 }}>{kbd}</span>}
+        </div>
+    );
+
+    return (
+        <div style={{ position:'relative' }}>
+            <button ref={btnRef} onClick={openMenu}
+                style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+                    width:22, height:22, borderRadius:3, fontSize:16, fontWeight:700,
+                    cursor:'pointer', border:'none', lineHeight:1,
+                    color: open ? T.goldInk : T.inkMuted,
+                    background: open ? 'rgba(200,185,154,0.30)' : 'transparent' }}>
+                ⋯
+            </button>
+            {open && (
+                <div ref={ref} style={{ position:'fixed', top:pos.top, right:pos.right, zIndex:9999,
+                    width:196, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
+                    boxShadow:'0 8px 24px rgba(42,38,34,0.12), 0 2px 4px rgba(42,38,34,0.06)', padding:4, fontFamily:T.sans }}>
+                    {/* Pointer */}
+                    <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
+                        background:T.surface, border:`1px solid ${T.borderStrong}`,
+                        borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
+                    <MenuRow icon="✎" label="Edit range" kbd="↵" onClick={() => onEdit && onEdit(row)}/>
+                    <MenuRow icon="⊕" label="Duplicate" kbd="⌘D" onClick={() => {}}/>
+                    <MenuRow icon="◑"
+                        label={row.status === 'Enforced' ? 'Switch to logged-only' : 'Enforce'}
+                        sub={row.status === 'Enforced' ? 'Record attempts only' : 'Block sign-ins outside'}
+                        onClick={() => onToggleEnforced && onToggleEnforced(row)}/>
+                    <MenuRow icon="⌕" label={`View ${row.hits || '0'} sign-ins`}  onClick={() => {}}/>
+                    <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+                    <MenuRow icon="🗑" label="Remove" danger onClick={() => onRemove && onRemove(row)}/>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// SessionDetail — live session & password policy
+// ─────────────────────────────────────────────────────────────────
 const SessionDetail = ({ onBack }) => {
-    const { ipAllowlist, passwordComplexity } = SEC_SESSION;
-    const [dirty, setDirty] = useState(false);
+    const { passwordComplexity } = SEC_SESSION;
+
+    // ── Local policy state — loaded from settings, saved on "Save policy" ──
+    const [policy, setPolicy] = React.useState({
+        idleTimeout:        SEC_SESSION.idleTimeout,
+        sessionLifetime:    SEC_SESSION.sessionLifetime,
+        concurrentSessions: SEC_SESSION.concurrentSessions,
+        reauth:             SEC_SESSION.reauth,
+        minLength:          SEC_SESSION.minLength,
+        rotation:           SEC_SESSION.rotation,
+        history:            SEC_SESSION.history,
+        lockout:            SEC_SESSION.lockout,
+        passwordComplexity: SEC_SESSION.passwordComplexity,
+        ipAllowlist:        SEC_SESSION.ipAllowlist || [],
+    });
+    const [dirty,      setDirty]      = React.useState(false);
+    const [saving,     setSaving]     = React.useState(false);
+    const [loading,    setLoading]    = React.useState(true);
+    const [toast,      setToast]      = React.useState(null);
+    const [showAddIp,  setShowAddIp]  = React.useState(false);
+    const [editingIp,  setEditingIp]  = React.useState(null); // null = add, row = edit
+
+    const showToast = (msg, err) => { setToast({ msg, err }); setTimeout(() => setToast(null), 3000); };
+
+    // Load real policy from settings on mount
+    React.useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/settings');
+                const data = await res.json();
+                if (cancelled) return;
+                if (res.ok && data.settings?.sessionPolicy) {
+                    setPolicy(p => ({ ...p, ...data.settings.sessionPolicy }));
+                }
+            } catch (e) { /* use defaults */ } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, []);
+
+    const set = (key, val) => { setPolicy(p => ({ ...p, [key]: val })); setDirty(true); };
+
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const res = await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ sessionPolicy: policy }),
+            });
+            if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            setDirty(false);
+            showToast('Policy saved.');
+        } catch (e) {
+            showToast(e.message, true);
+        } finally { setSaving(false); }
+    };
+
+    const handleRevert = async () => {
+        setLoading(true);
+        try {
+            const res  = await dbFetch('/.netlify/functions/settings');
+            const data = await res.json();
+            if (res.ok && data.settings?.sessionPolicy) setPolicy(p => ({ ...p, ...data.settings.sessionPolicy }));
+        } catch(e) {} finally { setDirty(false); setLoading(false); }
+    };
+
+    const handleToggleEnforced = (row) => {
+        const next = policy.ipAllowlist.map(r => r.cidr === row.cidr
+            ? { ...r, status: r.status === 'Enforced' ? 'Logged' : 'Enforced' }
+            : r
+        );
+        set('ipAllowlist', next);
+    };
+
+    const handleRemoveIp = (row) => {
+        set('ipAllowlist', policy.ipAllowlist.filter(r => r.cidr !== row.cidr));
+    };
+
+    // GroupLabel shorthand
+    const GL = ({ children }) => (
+        <div style={{ padding:'6px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>{children}</div>
+    );
+
+    const handleSaveIp = (row) => {
+        if (editingIp) {
+            // Edit existing
+            set('ipAllowlist', policy.ipAllowlist.map(r => r.cidr === editingIp.cidr ? row : r));
+        } else {
+            // Add new — check for duplicate CIDR
+            if (policy.ipAllowlist.find(r => r.cidr === row.cidr)) {
+                showToast('That CIDR already exists in the allowlist.', true);
+                return;
+            }
+            set('ipAllowlist', [...policy.ipAllowlist, row]);
+        }
+        setShowAddIp(false);
+        setEditingIp(null);
+    };
 
     return (
         <div style={{ fontFamily:T.sans }}>
+            {/* Add / Edit IP range modal */}
+            {showAddIp && (
+                <IpRangeModal
+                    existing={editingIp}
+                    onClose={() => { setShowAddIp(false); setEditingIp(null); }}
+                    onSave={handleSaveIp}
+                />
+            )}
+            {/* Toast */}
+            {toast && (
+                <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, padding:'10px 18px',
+                    background: toast.err ? T.danger : T.ok, color:'#fbf8f3', borderRadius:6,
+                    fontSize:13, fontWeight:600, boxShadow:'0 4px 16px rgba(0,0,0,0.2)', fontFamily:T.sans }}>
+                    {toast.msg}
+                </div>
+            )}
+
             <SecCrumb page="Session & password" onBack={onBack}/>
             <SecTitle
                 title="Session & password policy"
                 sub="Idle timeout, password rules, IP allowlist"
-                badge="Strong policy · 8h idle · 90-day rotation"
-                updatedAt="Last edited last week by Jeff Hammond"
+                badge={loading ? 'Loading…' : `${dirty ? 'Unsaved changes · ' : ''}Strong policy · 8h idle · 90-day rotation`}
+                updatedAt="Changes saved to your workspace settings"
                 dirty={dirty}
                 actions={[
-                    <SecBtn key="rev" label="Revert" onClick={()=>setDirty(false)}/>,
-                    <SecBtn key="sav" label="Save policy" primary onClick={()=>setDirty(false)}/>,
+                    <SecBtn key="rev" label="Revert" onClick={handleRevert} disabled={!dirty || saving}/>,
+                    <SecBtn key="sav" label={saving ? 'Saving…' : 'Save policy'} primary onClick={handleSave} disabled={!dirty || saving}/>,
                 ]}/>
 
-            {/* Session section */}
-            <SecCard title="Session" >
-                <SecFieldRow fields={[
-                    { label:'Idle timeout',                value:SEC_SESSION.idleTimeout        },
-                    { label:'Absolute session lifetime',   value:SEC_SESSION.sessionLifetime    },
-                    { label:'Concurrent sessions per user',value:SEC_SESSION.concurrentSessions },
-                    { label:'Re-auth for sensitive actions',value:SEC_SESSION.reauth            },
-                ]}/>
-            </SecCard>
+            {/* ── Session ── */}
+            <SecCard title="Session">
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:4 }}>
 
-            {/* Password section */}
-            <SecCard title="Password">
-                <SecFieldRow fields={[
-                    { label:'Minimum length',            value:SEC_SESSION.minLength },
-                    { label:'Rotation',                  value:SEC_SESSION.rotation  },
-                    { label:'History',                   value:SEC_SESSION.history   },
-                    { label:'Lockout after failed attempts',value:SEC_SESSION.lockout },
-                ]}/>
-                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>Complexity</div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
-                    <OnOffTile label="Mixed case" on={passwordComplexity.mixedCase}/>
-                    <OnOffTile label="Number"     on={passwordComplexity.number}/>
-                    <OnOffTile label="Symbol"     on={passwordComplexity.symbol}/>
-                    <OnOffTile label="Block common" on={passwordComplexity.blockCommon}/>
+                    <PolicySelect label="Idle timeout" value={policy.idleTimeout} width={300}>
+                        <GL>Idle timeout</GL>
+                        <DropdownOption label="15 minutes"  sub="Strict — high-security workspaces" onClick={() => set('idleTimeout','15 minutes')} selected={policy.idleTimeout==='15 minutes'}/>
+                        <DropdownOption label="30 minutes"  sub="SOC 2 baseline" onClick={() => set('idleTimeout','30 minutes')} selected={policy.idleTimeout==='30 minutes'}/>
+                        <DropdownOption label="60 minutes"  onClick={() => set('idleTimeout','60 minutes')} selected={policy.idleTimeout==='60 minutes'}/>
+                        <DropdownOption label="2 hours"     onClick={() => set('idleTimeout','2 hours')} selected={policy.idleTimeout==='2 hours'}/>
+                        <DropdownOption label="4 hours"     recommended onClick={() => set('idleTimeout','4 hours')} selected={policy.idleTimeout==='4 hours'}/>
+                        <DropdownOption label="8 hours (480 minutes)" sub="Current — full workday" onClick={() => set('idleTimeout','480 minutes')} selected={policy.idleTimeout==='480 minutes'}/>
+                        <DropdownOption label="Never" danger blocked sub="Not allowed — workspace requires idle timeout"/>
+                        <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+                        <div style={{ padding:'6px 10px 10px', display:'flex', alignItems:'center', gap:8 }}>
+                            <span style={{ fontSize:11, color:T.inkMid, flexShrink:0 }}>Custom</span>
+                            <input type="number" placeholder="e.g. 90" min={1}
+                                style={{ flex:1, padding:'6px 8px', border:`1px solid ${T.border}`, borderRadius:4, fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface }}
+                                onBlur={e => { if(e.target.value) set('idleTimeout', e.target.value + ' minutes'); }}/>
+                            <span style={{ fontSize:11, color:T.inkMid, flexShrink:0 }}>min</span>
+                        </div>
+                    </PolicySelect>
+
+                    <PolicySelect label="Absolute session lifetime" value={policy.sessionLifetime} width={300}>
+                        <GL>Absolute session lifetime</GL>
+                        <DropdownOption label="4 hours"  sub="Re-auth twice per shift" onClick={() => set('sessionLifetime','4 hours')} selected={policy.sessionLifetime==='4 hours'}/>
+                        <DropdownOption label="8 hours"  sub="Re-auth at start of next day" onClick={() => set('sessionLifetime','8 hours')} selected={policy.sessionLifetime==='8 hours'}/>
+                        <DropdownOption label="12 hours" sub="Current" onClick={() => set('sessionLifetime','12 hours')} selected={policy.sessionLifetime==='12 hours'}/>
+                        <DropdownOption label="24 hours" recommended onClick={() => set('sessionLifetime','24 hours')} selected={policy.sessionLifetime==='24 hours'}/>
+                        <DropdownOption label="3 days"   onClick={() => set('sessionLifetime','3 days')} selected={policy.sessionLifetime==='3 days'}/>
+                        <DropdownOption label="7 days"   sub="Maximum allowed by workspace policy" onClick={() => set('sessionLifetime','7 days')} selected={policy.sessionLifetime==='7 days'}/>
+                        <DropdownOption label="30 days"  danger blocked sub="Blocked — exceeds workspace cap of 7 days"/>
+                    </PolicySelect>
+
+                    <PolicySelect label="Concurrent sessions per user" value={policy.concurrentSessions} width={260}>
+                        <GL>Concurrent sessions per user</GL>
+                        <DropdownOption label="1 only"     sub="New sign-in revokes the old one" onClick={() => set('concurrentSessions','1 only')} selected={policy.concurrentSessions==='1 only'}/>
+                        <DropdownOption label="2 max"      onClick={() => set('concurrentSessions','2 max')} selected={policy.concurrentSessions==='2 max'}/>
+                        <DropdownOption label="3 max"      sub="Current" onClick={() => set('concurrentSessions','3 max')} selected={policy.concurrentSessions==='3 max'}/>
+                        <DropdownOption label="5 max"      onClick={() => set('concurrentSessions','5 max')} selected={policy.concurrentSessions==='5 max'}/>
+                        <DropdownOption label="10 max"     onClick={() => set('concurrentSessions','10 max')} selected={policy.concurrentSessions==='10 max'}/>
+                        <DropdownOption label="Unlimited"  sub="Not recommended for shared accounts" onClick={() => set('concurrentSessions','Unlimited')} selected={policy.concurrentSessions==='Unlimited'}/>
+                    </PolicySelect>
+
+                    <PolicySelect label="Re-auth for sensitive actions" value={policy.reauth} width={320}>
+                        <GL>Re-auth for sensitive actions</GL>
+                        <DropdownOption label="Always"                      sub="Every privileged click" onClick={() => set('reauth','Always')} selected={policy.reauth==='Always'}/>
+                        <DropdownOption label="Required (last 1 minute)"    onClick={() => set('reauth','Required (last 1 minute)')} selected={policy.reauth==='Required (last 1 minute)'}/>
+                        <DropdownOption label="Required (last 5 minutes)"   sub="Current — SOC 2 default" onClick={() => set('reauth','Required (last 5 minutes)')} selected={policy.reauth==='Required (last 5 minutes)'}/>
+                        <DropdownOption label="Required (last 15 minutes)"  recommended onClick={() => set('reauth','Required (last 15 minutes)')} selected={policy.reauth==='Required (last 15 minutes)'}/>
+                        <DropdownOption label="Required (last 1 hour)"      onClick={() => set('reauth','Required (last 1 hour)')} selected={policy.reauth==='Required (last 1 hour)'}/>
+                        <DropdownOption label="Never" danger sub="Disables step-up auth on quote send, role edit" onClick={() => set('reauth','Never')} selected={policy.reauth==='Never'}/>
+                        <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+                        <GL>What counts as sensitive</GL>
+                        <div style={{ padding:'4px 10px 10px', fontSize:11, color:T.inkMid, lineHeight:1.5 }}>
+                            Quote send · Role edit · API key create · MFA disable · Mass export · IP allowlist edit · Audit rule change
+                        </div>
+                    </PolicySelect>
                 </div>
             </SecCard>
 
-            {/* IP allowlist */}
+            {/* ── Password ── */}
+            <SecCard title="Password">
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
+
+                    <PolicySelect label="Minimum length" value={policy.minLength} width={260}>
+                        <GL>Minimum length</GL>
+                        <DropdownOption label="8 characters"  sub="Below NIST recommendation" onClick={() => set('minLength','8 characters')} selected={policy.minLength==='8 characters'}/>
+                        <DropdownOption label="10 characters" onClick={() => set('minLength','10 characters')} selected={policy.minLength==='10 characters'}/>
+                        <DropdownOption label="12 characters" sub="Current — NIST 800-63B" onClick={() => set('minLength','12 characters')} selected={policy.minLength==='12 characters'}/>
+                        <DropdownOption label="14 characters" recommended onClick={() => set('minLength','14 characters')} selected={policy.minLength==='14 characters'}/>
+                        <DropdownOption label="16 characters" onClick={() => set('minLength','16 characters')} selected={policy.minLength==='16 characters'}/>
+                        <DropdownOption label="20 characters" sub="Strong; consider passphrase guidance" onClick={() => set('minLength','20 characters')} selected={policy.minLength==='20 characters'}/>
+                    </PolicySelect>
+
+                    <PolicySelect label="Rotation" value={policy.rotation} width={300}>
+                        <GL>Password rotation</GL>
+                        <DropdownOption label="Never"          recommended sub="NIST: rotate only on suspicion of compromise" onClick={() => set('rotation','Never')} selected={policy.rotation==='Never'}/>
+                        <DropdownOption label="Every 180 days" onClick={() => set('rotation','Every 180 days')} selected={policy.rotation==='Every 180 days'}/>
+                        <DropdownOption label="Every 120 days" onClick={() => set('rotation','Every 120 days')} selected={policy.rotation==='Every 120 days'}/>
+                        <DropdownOption label="Every 90 days"  sub="Current — required by SOC 2 type II" onClick={() => set('rotation','Every 90 days')} selected={policy.rotation==='Every 90 days'}/>
+                        <DropdownOption label="Every 60 days"  onClick={() => set('rotation','Every 60 days')} selected={policy.rotation==='Every 60 days'}/>
+                        <DropdownOption label="Every 30 days"  sub="Aggressive — leads to weaker passwords" onClick={() => set('rotation','Every 30 days')} selected={policy.rotation==='Every 30 days'}/>
+                    </PolicySelect>
+
+                    <PolicySelect label="History (reuse prevention)" value={policy.history} width={260}>
+                        <GL>Reuse prevention</GL>
+                        <DropdownOption label="None"              sub="Any prior password OK" onClick={() => set('history','None')} selected={policy.history==='None'}/>
+                        <DropdownOption label="Last 3 prevented"  onClick={() => set('history','Last 3 prevented')} selected={policy.history==='Last 3 prevented'}/>
+                        <DropdownOption label="Last 5 prevented"  sub="Current" onClick={() => set('history','Last 5 prevented')} selected={policy.history==='Last 5 prevented'}/>
+                        <DropdownOption label="Last 10 prevented" recommended onClick={() => set('history','Last 10 prevented')} selected={policy.history==='Last 10 prevented'}/>
+                        <DropdownOption label="Last 24 prevented" onClick={() => set('history','Last 24 prevented')} selected={policy.history==='Last 24 prevented'}/>
+                    </PolicySelect>
+
+                    <PolicySelect label="Lockout after failed attempts" value={policy.lockout} width={300}>
+                        <GL>Lockout after failed attempts</GL>
+                        <DropdownOption label="3 failures"  sub="Strict — admin unlock required" onClick={() => set('lockout','3 failures')} selected={policy.lockout==='3 failures'}/>
+                        <DropdownOption label="5 failures"  sub="Current — auto-unlock after 15 min" onClick={() => set('lockout','5 failures')} selected={policy.lockout==='5 failures'}/>
+                        <DropdownOption label="10 failures" recommended onClick={() => set('lockout','10 failures')} selected={policy.lockout==='10 failures'}/>
+                        <DropdownOption label="25 failures" onClick={() => set('lockout','25 failures')} selected={policy.lockout==='25 failures'}/>
+                        <DropdownOption label="No lockout"  danger sub="Brute-force window opens" onClick={() => set('lockout','No lockout')} selected={policy.lockout==='No lockout'}/>
+                        <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+                        <GL>After lockout</GL>
+                        <DropdownOption label="Auto-unlock after 15 min" selected sub="Current" onClick={() => {}}/>
+                        <DropdownOption label="Auto-unlock after 1 hour" onClick={() => {}}/>
+                        <DropdownOption label="Admin unlock only" onClick={() => {}}/>
+                    </PolicySelect>
+                </div>
+
+                <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:10, fontFamily:T.sans }}>Complexity</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10 }}>
+                    {[
+                        { key:'mixedCase', label:'Mixed case' },
+                        { key:'number',    label:'Number' },
+                        { key:'symbol',    label:'Symbol' },
+                        { key:'blockCommon', label:'Block common' },
+                    ].map(({ key, label }) => (
+                        <div key={key} onClick={() => set('passwordComplexity', { ...policy.passwordComplexity, [key]: !policy.passwordComplexity?.[key] })}
+                            style={{ padding:'12px 14px', border:`1px solid ${policy.passwordComplexity?.[key] ? T.ok : T.border}`,
+                                borderRadius:6, background: policy.passwordComplexity?.[key] ? 'rgba(77,107,61,0.07)' : T.bg,
+                                display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer' }}>
+                            <span style={{ width:16, height:16, borderRadius:3, border:`1.5px solid ${policy.passwordComplexity?.[key] ? T.ok : T.border}`,
+                                background: policy.passwordComplexity?.[key] ? T.ok : 'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                flexShrink:0, marginTop:1 }}>
+                                {policy.passwordComplexity?.[key] && <span style={{ color:'#fff', fontSize:10, lineHeight:1 }}>✓</span>}
+                            </span>
+                            <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{label}</div>
+                        </div>
+                    ))}
+                </div>
+            </SecCard>
+
+            {/* ── IP allowlist ── */}
             <SecCard title="IP allowlist" desc="Restrict sign-in to these CIDR ranges. Empty = no restriction."
-                headAction={<SecBtn label="+ Add range" onClick={()=>setDirty(true)}/>}>
+                headAction={<SecBtn label="+ Add range" onClick={() => { setEditingIp(null); setShowAddIp(true); }}/>}>
                 <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'160px 1fr 100px 130px', gap:8, padding:'7px 14px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                        {['CIDR','LABEL','STATUS',''].map((h,i) => (
-                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'160px 1fr 100px 80px 36px', gap:8, padding:'7px 14px',
+                        background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                        {['CIDR','LABEL','STATUS','HITS 30d',''].map((h,i) => (
+                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans,
+                                textAlign: i===3 ? 'right' : 'left' }}>{h}</div>
                         ))}
                     </div>
-                    {ipAllowlist.map((row,i) => (
-                        <div key={row.cidr} style={{ display:'grid', gridTemplateColumns:'160px 1fr 100px 130px', gap:8, padding:'10px 14px', borderBottom:i<ipAllowlist.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
+                    {policy.ipAllowlist.length === 0 && (
+                        <div style={{ padding:'20px 14px', fontSize:12.5, color:T.inkMuted, fontFamily:T.sans, textAlign:'center' }}>
+                            No ranges — all IPs allowed.
+                        </div>
+                    )}
+                    {policy.ipAllowlist.map((row, i) => (
+                        <div key={row.cidr} style={{ display:'grid', gridTemplateColumns:'160px 1fr 100px 80px 36px', gap:8, padding:'10px 14px',
+                            borderBottom:i<policy.ipAllowlist.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
                             <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.ink }}>{row.cidr}</span>
                             <span style={{ fontSize:13, color:T.inkMid }}>{row.label}</span>
                             <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
@@ -10154,10 +11702,11 @@ const SessionDetail = ({ onBack }) => {
                                 color:row.status==='Enforced'?T.ok:T.warn }}>
                                 {row.status}
                             </span>
-                            <div style={{ display:'flex', gap:8 }}>
-                                <button style={{ fontSize:12, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Edit</button>
-                                <button style={{ fontSize:12, color:T.danger, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Remove</button>
-                            </div>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMid, textAlign:'right' }}>{row.hits || '—'}</span>
+                            <IpRowMenu row={row}
+                                onEdit={r => { setEditingIp(r); setShowAddIp(true); }}
+                                onRemove={handleRemoveIp}
+                                onToggleEnforced={handleToggleEnforced}/>
                         </div>
                     ))}
                 </div>
@@ -10165,6 +11714,7 @@ const SessionDetail = ({ onBack }) => {
         </div>
     );
 };
+
 
 // ── ④ Field-level security Detail ────────────────────────────
 // FLS matrix with click-to-cycle cells — defined at module level
@@ -10181,171 +11731,1370 @@ const FlsMatrixCell = ({ level, onCycle }) => {
     );
 };
 
-const FlsDetail = ({ onBack }) => {
-    const [objFilter, setObjFilter] = useState('Account');
-    const [search, setSearch] = useState('');
-    const [matrix, setMatrix] = useState(FLS_MATRIX_INIT.map(row=>[...row]));
-    const [dirty, setDirty] = useState(false);
-    const levels = ['Edit','Read','Masked','Hidden'];
+// ── Real FLS field definitions ─────────────────────────────────────────────────
+// Keys must match fieldKey strings used in canViewField / getFieldLevel calls.
+const FLS_OBJECT_FIELDS = {
+    Account: [
+        { key:'arr',              label:'ARR / Revenue',       type:'currency', pii:false },
+        { key:'creditScore',      label:'Credit Score',         type:'number',   pii:true  },
+        { key:'accountOwner',     label:'Account Owner',        type:'text',     pii:false },
+        { key:'industry',         label:'Industry',             type:'picklist', pii:false },
+        { key:'employeeCount',    label:'Employee Count',       type:'number',   pii:false },
+        { key:'website',          label:'Website',              type:'url',      pii:false },
+        { key:'phone',            label:'Phone',                type:'phone',    pii:false },
+        { key:'billingAddress',   label:'Billing Address',      type:'address',  pii:true  },
+        { key:'taxId',            label:'Tax ID / EIN',         type:'text',     pii:true  },
+        { key:'accountTier',      label:'Account Tier',         type:'picklist', pii:false },
+        { key:'renewalMonth',     label:'Renewal Month',        type:'text',     pii:false },
+    ],
+    Contact: [
+        { key:'contactEmail',     label:'Email',                type:'email',    pii:true  },
+        { key:'contactPhone',     label:'Phone',                type:'phone',    pii:true  },
+        { key:'mobilePhone',      label:'Mobile Phone',         type:'phone',    pii:true  },
+        { key:'homeAddress',      label:'Home Address',         type:'address',  pii:true  },
+        { key:'title',            label:'Title',                type:'text',     pii:false },
+        { key:'linkedIn',         label:'LinkedIn URL',         type:'url',      pii:false },
+        { key:'dateOfBirth',      label:'Date of Birth',        type:'date',     pii:true  },
+        { key:'personaTag',       label:'Persona Tag',          type:'picklist', pii:false },
+        { key:'execSponsor',      label:'Executive Sponsor',    type:'toggle',   pii:false },
+    ],
+    Opportunity: [
+        { key:'arr',              label:'ARR',                  type:'currency', pii:false },
+        { key:'probability',      label:'Win Probability',      type:'percent',  pii:false },
+        { key:'discountPct',      label:'Discount %',           type:'percent',  pii:false },
+        { key:'forecastNotes',    label:'Forecast Notes',       type:'text',     pii:false },
+        { key:'competitorInfo',   label:'Competitor Info',      type:'text',     pii:false },
+        { key:'decisionDate',     label:'Decision Date',        type:'date',     pii:false },
+        { key:'whyWeLose',        label:'Why We Lose',          type:'text',     pii:false },
+        { key:'nextSteps',        label:'Next Steps',           type:'text',     pii:false },
+        { key:'notes',            label:'Notes',                type:'text',     pii:false },
+        { key:'implementationCost',label:'Implementation Cost', type:'currency', pii:false },
+        { key:'forecastCategory', label:'Forecast Category',    type:'picklist', pii:false },
+    ],
+    Quote: [
+        { key:'cogs',             label:'COGS',                 type:'currency', pii:true  },
+        { key:'grossMargin',      label:'Gross Margin %',       type:'percent',  pii:true  },
+        { key:'quoteDiscount',    label:'Quote Discount',       type:'percent',  pii:false },
+        { key:'paymentTerms',     label:'Payment Terms',        type:'text',     pii:false },
+        { key:'signedAt',         label:'Signed Date',          type:'date',     pii:false },
+    ],
+    Lead: [
+        { key:'leadEmail',        label:'Email',                type:'email',    pii:true  },
+        { key:'leadPhone',        label:'Phone',                type:'phone',    pii:true  },
+        { key:'leadScore',        label:'Lead Score',           type:'number',   pii:false },
+        { key:'leadSource',       label:'Lead Source',          type:'picklist', pii:false },
+        { key:'budgetConfirmed',  label:'Budget Confirmed',     type:'toggle',   pii:false },
+        { key:'bantNotes',        label:'BANT Notes',           type:'text',     pii:false },
+    ],
+};
 
-    const cycleCell = (fi, ri) => {
+const FLS_OBJECTS_LIST = Object.keys(FLS_OBJECT_FIELDS);
+const FLS_LEVELS = ['Edit','Read','Masked','Hidden'];
+
+const FlsDetail = ({ onBack }) => {
+    const [objFilter, setObjFilter] = React.useState(FLS_OBJECTS_LIST[0]);
+    const [search,    setSearch]    = React.useState('');
+    const [matrix,    setMatrix]    = React.useState({}); // { [fieldKey]: { [role]: level } }
+    const [roles,     setRoles]     = React.useState(['Admin','Manager','Sales Rep','ReadOnly']);
+    const [dirty,     setDirty]     = React.useState(false);
+    const [loading,   setLoading]   = React.useState(true);
+    const [saving,    setSaving]    = React.useState(false);
+    const [toast,     setToast]     = React.useState(null);
+
+    const showToast = (msg, err) => { setToast({msg,err}); setTimeout(()=>setToast(null),3000); };
+
+    // ── Load real fieldVisibility + roles on mount ───────────────
+    React.useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/settings');
+                const data = await res.json();
+                if (cancelled) return;
+                if (!res.ok) throw new Error(data.error || 'Failed to load');
+                // Roles from real users, excluding system roles
+                const userRoles = [...new Set(
+                    (data.settings?.users || [])
+                        .map(u => u.role || u.userType)
+                        .filter(Boolean)
+                )].filter(r => r !== 'System');
+                if (userRoles.length > 0) setRoles(userRoles);
+                // Field visibility matrix
+                const fv = data.settings?.fieldVisibility || {};
+                setMatrix(fv);
+            } catch (e) {
+                showToast(e.message, true);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, []);
+
+    // ── Get level for a field+role, defaulting to 'Edit' ─────────
+    const getLevel = (fieldKey, role) => {
+        const rules = matrix[fieldKey];
+        if (!rules) return 'Edit';
+        const val = rules[role];
+        if (val === undefined || val === null) return 'Edit';
+        if (val === false) return 'Hidden';
+        if (val === true)  return 'Edit';
+        if (FLS_LEVELS.includes(val)) return val;
+        return 'Edit';
+    };
+
+    // ── Cycle a cell ──────────────────────────────────────────────
+    const cycleCell = (fieldKey, role) => {
         setMatrix(prev => {
-            const m = prev.map(r=>[...r]);
-            const idx = levels.indexOf(m[fi][ri]);
-            m[fi][ri] = levels[(idx+1) % levels.length];
-            return m;
+            const cur = getLevel(fieldKey, role);
+            const next = FLS_LEVELS[(FLS_LEVELS.indexOf(cur) + 1) % FLS_LEVELS.length];
+            return {
+                ...prev,
+                [fieldKey]: { ...(prev[fieldKey] || {}), [role]: next },
+            };
         });
         setDirty(true);
     };
 
-    const visFields = FLS_FIELDS.filter(f => {
-        const obj = f.name.split('.')[0];
-        return obj === objFilter && (!search || f.name.toLowerCase().includes(search.toLowerCase()));
-    });
+    // ── Bulk set entire column (role) ─────────────────────────────
+    const setColumn = (role, level) => {
+        const allFields = FLS_OBJECTS_LIST.flatMap(obj => FLS_OBJECT_FIELDS[obj]);
+        setMatrix(prev => {
+            const next = { ...prev };
+            allFields.forEach(f => {
+                next[f.key] = { ...(next[f.key] || {}), [role]: level };
+            });
+            return next;
+        });
+        setDirty(true);
+    };
 
-    const fieldIndices = visFields.map(f => FLS_FIELDS.indexOf(f));
+    // ── Save ──────────────────────────────────────────────────────
+    const handleSave = async () => {
+        setSaving(true);
+        try {
+            const res = await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ fieldVisibility: matrix }),
+            });
+            if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            setDirty(false);
+            showToast('Field-level security saved.');
+        } catch (e) {
+            showToast(e.message, true);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // ── Export matrix as CSV ──────────────────────────────────────
+    const handleExport = () => {
+        const allFields = FLS_OBJECTS_LIST.flatMap(obj =>
+            FLS_OBJECT_FIELDS[obj].map(f => ({ ...f, object: obj }))
+        );
+        const header = ['Object','Field','Key','Type','PII', ...roles].join(',');
+        const rows   = allFields.map(f => [
+            f.object, f.label, f.key, f.type, f.pii ? 'Yes' : 'No',
+            ...roles.map(r => getLevel(f.key, r)),
+        ].map(v => '"' + String(v).replace(/"/g,'""') + '"').join(','));
+        const csv  = [header, ...rows].join(String.fromCharCode(13)+String.fromCharCode(10));
+        const blob = new Blob([csv], { type:'text/csv' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'accelerep-fls-matrix.csv';
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    // ── Visible fields ────────────────────────────────────────────
+    const objFields = FLS_OBJECT_FIELDS[objFilter] || [];
+    const visFields = objFields.filter(f =>
+        !search || f.label.toLowerCase().includes(search.toLowerCase()) || f.key.toLowerCase().includes(search.toLowerCase())
+    );
+
+    // Stats for badge
+    const allFields = FLS_OBJECTS_LIST.flatMap(obj => FLS_OBJECT_FIELDS[obj]);
+    const maskedCount = allFields.filter(f => roles.some(r => getLevel(f.key,r) === 'Masked')).length;
+    const hiddenCount = allFields.filter(f => roles.some(r => getLevel(f.key,r) === 'Hidden')).length;
+    const piiCount    = allFields.filter(f => f.pii).length;
 
     return (
         <div style={{ fontFamily:T.sans }}>
+            {/* Toast */}
+            {toast && (
+                <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, padding:'10px 18px',
+                    background: toast.err ? T.danger : T.ok, color:'#fbf8f3', borderRadius:6,
+                    fontSize:13, fontWeight:600, boxShadow:'0 4px 16px rgba(0,0,0,0.2)', fontFamily:T.sans }}>
+                    {toast.msg}
+                </div>
+            )}
+
             <SecCrumb page="Field-level security" onBack={onBack}/>
             <SecTitle
                 title="Field-level security"
-                sub="5 objects · 8 sensitive fields tracked"
-                badge="2 fields with masking · 1 hidden from non-finance"
-                updatedAt="Last edited last week by Morgan Reyes"
+                sub={`${FLS_OBJECTS_LIST.length} objects · ${allFields.length} fields · ${piiCount} PII fields`}
+                badge={loading ? 'Loading…' : `${maskedCount} masked · ${hiddenCount} hidden`}
+                updatedAt="Changes persist to workspace settings"
                 dirty={dirty}
                 actions={[
-                    <SecBtn key="exp" label="Export matrix"/>,
-                    <SecBtn key="sav" label="Save changes" primary onClick={()=>setDirty(false)}/>,
+                    <SecBtn key="exp" label="Export CSV" onClick={handleExport}/>,
+                    <SecBtn key="sav" label={saving ? 'Saving…' : 'Save changes'} primary
+                        onClick={handleSave} disabled={!dirty || saving}/>,
                 ]}/>
 
-            {/* Object filter */}
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:'14px 16px', marginBottom:16, display:'flex', alignItems:'center', gap:10 }}>
-                <span style={{ fontSize:13, fontWeight:700, color:T.ink, marginRight:4 }}>Object filter</span>
-                <div style={{ display:'flex', gap:6 }}>
-                    {FLS_OBJECTS.map(obj => (
-                        <button key={obj} onClick={()=>setObjFilter(obj)}
-                            style={{ padding:'5px 14px', fontSize:12.5, fontWeight:600, borderRadius:4, border:`1px solid ${objFilter===obj?T.ink:T.border}`, background:objFilter===obj?T.ink:'transparent', color:objFilter===obj?'#fbf8f3':T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
-                            {obj}
-                        </button>
-                    ))}
+            {/* Info callout */}
+            <div style={{ padding:'11px 16px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`,
+                borderRadius:4, marginBottom:16, fontSize:12.5, color:T.inkMid, fontFamily:T.sans }}>
+                <b style={{ color:T.info }}>Edit</b> — full read/write &nbsp;·&nbsp;
+                <b style={{ color:T.info }}>Read</b> — visible, not editable &nbsp;·&nbsp;
+                <b style={{ color:T.warn }}>Masked</b> — value shown as •••• (e.g. last 2 digits only) &nbsp;·&nbsp;
+                <b style={{ color:T.danger }}>Hidden</b> — field not visible at all.
+                Click any cell to cycle. Click a role header to set the whole column.
+            </div>
+
+            {/* Object filter + search */}
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8,
+                padding:'12px 16px', marginBottom:16, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                <span style={{ fontSize:12.5, fontWeight:700, color:T.ink, marginRight:4 }}>Object</span>
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                    {FLS_OBJECTS_LIST.map(obj => {
+                        const objFields2 = FLS_OBJECT_FIELDS[obj] || [];
+                        const hasPii = objFields2.some(f => f.pii);
+                        return (
+                            <button key={obj} onClick={() => setObjFilter(obj)}
+                                style={{ padding:'5px 14px', fontSize:12.5, fontWeight:600, borderRadius:4,
+                                    border:`1px solid ${objFilter===obj?T.ink:T.border}`,
+                                    background:objFilter===obj?T.ink:'transparent',
+                                    color:objFilter===obj?'#fbf8f3':T.inkMid,
+                                    cursor:'pointer', fontFamily:T.sans, display:'flex', alignItems:'center', gap:5 }}>
+                                {obj}
+                                {hasPii && <span style={{ fontSize:9, fontWeight:700, color:objFilter===obj?'rgba(255,210,100,0.9)':T.warn }}>PII</span>}
+                            </button>
+                        );
+                    })}
                 </div>
                 <div style={{ flex:1 }}/>
-                <input value={search} onChange={e=>setSearch(e.target.value)}
+                <input value={search} onChange={e => setSearch(e.target.value)}
                     placeholder="Search field…"
-                    style={{ padding:'6px 12px', fontSize:12.5, border:`1px solid ${T.border}`, borderRadius:16, outline:'none', width:180, fontFamily:T.sans, background:T.surface, color:T.ink }}/>
+                    style={{ padding:'6px 12px', fontSize:12.5, border:`1px solid ${T.border}`,
+                        borderRadius:16, outline:'none', width:200, fontFamily:T.sans,
+                        background:T.surface, color:T.ink }}/>
             </div>
 
             {/* FLS matrix */}
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
-                {/* Matrix header */}
-                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`,
+                    display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                     <div>
                         <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>{objFilter} · Field × Role matrix</div>
-                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>Click any cell to change. Edit &gt; Read &gt; Masked &gt; Hidden.</div>
+                        <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>
+                            {loading ? 'Loading…' : `${visFields.length} field${visFields.length!==1?'s':''} · ${roles.length} roles`}
+                        </div>
                     </div>
-                    {/* Legend */}
-                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        {['Edit','Read','Masked','Hidden'].map(l => {
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        {FLS_LEVELS.map(l => {
                             const s = flsCellStyle(l);
-                            return <span key={l} style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11 }}>
-                                <span style={{ width:10, height:10, borderRadius:2, background:s.bg, border:`1px solid ${s.fg}22`, display:'inline-block' }}/>
-                                <span style={{ color:T.inkMuted }}>{l}</span>
-                            </span>;
+                            return (
+                                <span key={l} style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:11.5 }}>
+                                    <span style={{ width:10, height:10, borderRadius:2, background:s.bg, display:'inline-block', border:`1px solid ${s.fg}44` }}/>
+                                    <span style={{ color:T.inkMuted }}>{l}</span>
+                                </span>
+                            );
                         })}
                     </div>
                 </div>
-                {/* Scrollable matrix table */}
-                <div style={{ overflowX:'auto' }}>
-                    <table style={{ width:'100%', borderCollapse:'collapse', minWidth:600, fontFamily:T.sans }}>
-                        <thead>
-                            <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                                <th style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'left', minWidth:220, position:'sticky', left:0, background:T.surface2, zIndex:1 }}>FIELD</th>
-                                {FLS_ROLES.map(r => (
-                                    <th key={r} style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'center', minWidth:110 }}>{r}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {visFields.map((field, visIdx) => {
-                                const fi = fieldIndices[visIdx];
-                                return (
-                                    <tr key={field.name} style={{ borderBottom:`1px solid ${T.border}` }}
-                                        onMouseEnter={e=>Array.from(e.currentTarget.cells).forEach(c=>c.style.background=T.surface2)}
-                                        onMouseLeave={e=>Array.from(e.currentTarget.cells).forEach(c=>c.style.background='transparent')}>
+
+                {loading ? (
+                    <div style={{ padding:'40px 0', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>Loading field permissions…</div>
+                ) : (
+                    <div style={{ overflowX:'auto' }}>
+                        <table style={{ width:'100%', borderCollapse:'collapse', minWidth:500, fontFamily:T.sans }}>
+                            <thead>
+                                <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                                    <th style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted,
+                                        letterSpacing:0.6, textTransform:'uppercase', textAlign:'left',
+                                        minWidth:240, position:'sticky', left:0, background:T.surface2, zIndex:1 }}>FIELD</th>
+                                    {roles.map(r => (
+                                        <th key={r} style={{ padding:'8px 12px', fontSize:10, fontWeight:700,
+                                            color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase',
+                                            textAlign:'center', minWidth:100 }}>
+                                            <div>{r}</div>
+                                            {/* Bulk set column menu */}
+                                            <div style={{ display:'flex', gap:3, justifyContent:'center', marginTop:4 }}>
+                                                {FLS_LEVELS.map(l => {
+                                                    const s = flsCellStyle(l);
+                                                    return (
+                                                        <span key={l} onClick={() => setColumn(r, l)}
+                                                            title={`Set all ${r} → ${l}`}
+                                                            style={{ width:8, height:8, borderRadius:2, background:s.bg,
+                                                                border:`1px solid ${s.fg}44`, cursor:'pointer', display:'inline-block' }}/>
+                                                    );
+                                                })}
+                                            </div>
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {visFields.length === 0 && (
+                                    <tr><td colSpan={roles.length + 1} style={{ padding:'32px', textAlign:'center', color:T.inkMuted, fontSize:13 }}>
+                                        No fields match "{search}"
+                                    </td></tr>
+                                )}
+                                {visFields.map((field) => (
+                                    <tr key={field.key} style={{ borderBottom:`1px solid ${T.border}` }}
+                                        onMouseEnter={e => Array.from(e.currentTarget.cells).forEach(c => c.style.background = T.surface2)}
+                                        onMouseLeave={e => Array.from(e.currentTarget.cells).forEach(c => c.style.background = 'transparent')}>
                                         <td style={{ padding:'10px 16px', position:'sticky', left:0, background:T.surface, zIndex:1 }}>
-                                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, fontWeight:600, color:T.ink }}>{field.name}</div>
-                                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:2 }}>
-                                                {field.type} · {field.pii ? <span style={{ color:T.warn, fontWeight:600 }}>PII</span> : 'standard'}
+                                            <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{field.label}</div>
+                                            <div style={{ fontSize:11, color:T.inkMuted, marginTop:2, display:'flex', gap:6, alignItems:'center' }}>
+                                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace' }}>{field.key}</span>
+                                                <span>·</span>
+                                                <span>{field.type}</span>
+                                                {field.pii && (
+                                                    <span style={{ fontSize:9.5, fontWeight:700, color:T.warn,
+                                                        background:'rgba(184,115,51,0.10)', padding:'1px 5px', borderRadius:2 }}>PII</span>
+                                                )}
                                             </div>
                                         </td>
-                                        {FLS_ROLES.map((role, ri) => (
+                                        {roles.map(role => (
                                             <td key={role} style={{ padding:'8px 10px', textAlign:'center' }}>
-                                                <FlsMatrixCell level={matrix[fi]?.[ri] || 'Read'} onCycle={()=>cycleCell(fi,ri)}/>
+                                                <FlsMatrixCell
+                                                    level={getLevel(field.key, role)}
+                                                    onCycle={() => cycleCell(field.key, role)}/>
                                             </td>
                                         ))}
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+// ── ⑤ Audit Log Detail ────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// Audit log — shared primitives
+// ─────────────────────────────────────────────────────────────────
+
+// Reuses DropdownPanel + DropdownOption from Session policy (already defined above)
+// Reuses IpRowMenu pattern for anchored popovers
+
+// ── Category dropdown ─────────────────────────────────────────
+const AuditCategoryDropdown = ({ value, onChange }) => (
+    <DropdownPanel width={260}>
+        <div style={{ padding:'4px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Category</div>
+        <DropdownOption label="All categories" sub="No filter applied" selected={value==='All categories'} onClick={() => onChange('All categories')}/>
+        <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+        {[
+            { v:'auth',     sub:'Login, MFA, SSO' },
+            { v:'security', sub:'API keys, webhooks, allowlist' },
+            { v:'admin',    sub:'Users, roles, territories' },
+            { v:'data',     sub:'Pricebook, pipeline, custom fields' },
+            { v:'billing',  sub:'Plan, seats, invoices' },
+        ].map(c => (
+            <DropdownOption key={c.v} label={c.v} sub={c.sub} selected={value===c.v} onClick={() => onChange(c.v)}/>
+        ))}
+        <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+        <DropdownOption label="Severity: warn only" sub="Across all categories" selected={value==='warn'} onClick={() => onChange('warn')}/>
+    </DropdownPanel>
+);
+
+// ── Actor dropdown ────────────────────────────────────────────
+const AuditActorDropdown = ({ value, onChange, events = [] }) => {
+    const actors = ['All actors', ...new Set(events.map(e => e.actor).filter(Boolean))].filter((v,i,a) => a.indexOf(v) === i);
+    const [q, setQ] = React.useState('');
+    const filtered = q ? actors.filter(a => a.toLowerCase().includes(q.toLowerCase())) : actors;
+    return (
+        <DropdownPanel width={300}>
+            <div style={{ padding:'6px 8px 8px' }}>
+                <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search actor…"
+                    style={{ width:'100%', padding:'6px 8px', background:T.surface2, border:`1px solid ${T.border}`,
+                        borderRadius:3, fontSize:11.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace',
+                        outline:'none', boxSizing:'border-box' }}/>
+            </div>
+            <div style={{ padding:'4px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Top actors · last 30d</div>
+            {filtered.map(a => (
+                <DropdownOption key={a} label={a} selected={value===a} onClick={() => onChange(a)}/>
+            ))}
+        </DropdownPanel>
+    );
+};
+
+// ── Time range dropdown ───────────────────────────────────────
+const AuditTimeDropdown = ({ value, onChange }) => {
+    const ranges = [
+        { v:'Last 1 hour',    sub:null },
+        { v:'Last 24 hours',  sub:null },
+        { v:'Last 7 days',    sub:'Current' },
+        { v:'Last 30 days',   sub:null },
+        { v:'Last 90 days',   sub:'Covered by retention', rec:true },
+        { v:'Last 13 months', sub:'Full retention window' },
+    ];
+    return (
+        <DropdownPanel width={280}>
+            <div style={{ padding:'4px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Time range</div>
+            {ranges.map(r => (
+                <DropdownOption key={r.v} label={r.v} sub={r.sub} recommended={r.rec} selected={value===r.v} onClick={() => onChange(r.v)}/>
+            ))}
+            <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+            <div style={{ padding:'4px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Custom</div>
+            <div style={{ padding:'4px 10px 10px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+                <input type="date" style={{ padding:'6px 8px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:3, fontSize:11, fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMuted, outline:'none' }}/>
+                <input type="date" style={{ padding:'6px 8px', background:T.surface, border:`1px solid ${T.border}`, borderRadius:3, fontSize:11, fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMuted, outline:'none' }}/>
+            </div>
+        </DropdownPanel>
+    );
+};
+
+// ── Export split dropdown ─────────────────────────────────────
+const AuditExportDropdown = ({ events, onClose }) => {
+    const download = (fmt) => {
+        let content, mime, ext;
+        if (fmt === 'JSON') {
+            content = JSON.stringify(events, null, 2);
+            mime = 'application/json'; ext = 'json';
+        } else if (fmt === 'NDJSON') {
+            content = events.map(e => JSON.stringify(e)).join(String.fromCharCode(10));
+            mime = 'application/x-ndjson'; ext = 'ndjson';
+        } else {
+            // CSV
+            const cols = ['when','actor','action','target','cat','sev','ip'];
+            const header = cols.join(',');
+            const esc = (v) => '"' + String(v||'').replace(/"/g, '""') + '"';
+            const rows = events.map(e => cols.map(c => esc(e[c])).join(','));
+            content = [header, ...rows].join(String.fromCharCode(13)+String.fromCharCode(10));
+            mime = 'text/csv'; ext = 'csv';
+        }
+        const blob = new Blob([content], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `accelerep-audit-${new Date().toISOString().split('T')[0]}.${ext}`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        onClose();
+    };
+    return (
+        <DropdownPanel width={280}>
+            <div style={{ padding:'4px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Download current view</div>
+            <DropdownOption label="CSV" selected sub={`${events.length} events · spreadsheet-friendly`} onClick={() => download('CSV')}/>
+            <DropdownOption label="JSON" sub="Full event payload" onClick={() => download('JSON')}/>
+            <DropdownOption label="NDJSON" sub="One event per line · for log tools" onClick={() => download('NDJSON')}/>
+            <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+            <div style={{ padding:'4px 10px 2px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', fontFamily:T.sans }}>Larger exports</div>
+            <DropdownOption label="Export all 12,847 events…" sub="Async — emailed when ready" onClick={onClose}/>
+            <DropdownOption label="Schedule recurring export…" sub="Daily / weekly to S3 or email" onClick={onClose}/>
+        </DropdownPanel>
+    );
+};
+
+// ── Event popover (Variation B) ───────────────────────────────
+const AuditEventPopover = ({ event, onClose, onAddFilter }) => {
+    const sevColor = event.sev === 'warn' ? T.warn : event.sev === 'error' ? T.danger : T.ok;
+    const facets = [
+        { lbl:'actor',  val: event.actor },
+        { lbl:'action', val: event.action },
+        { lbl:'cat',    val: event.cat },
+        { lbl:'ip',     val: event.ip !== '—' ? event.ip : null },
+    ].filter(f => f.val);
+
+    const related = SEC_AUDIT_EVENTS.filter(e =>
+        e.actor === event.actor && e !== event
+    ).slice(0, 3);
+
+    return (
+        <div style={{ width:360, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
+            boxShadow:'0 8px 24px rgba(42,38,34,0.12), 0 2px 4px rgba(42,38,34,0.06)', fontFamily:T.sans, overflow:'hidden' }}>
+            <div style={{ padding:'14px 16px 12px', borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                    <span style={{ width:8, height:8, background:sevColor, borderRadius:'50%', flexShrink:0 }}/>
+                    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13.5, fontWeight:700, color:sevColor, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{event.action}</span>
+                    <span style={{ fontSize:10.5, color:T.inkMuted, flexShrink:0 }}>{event.when}</span>
+                </div>
+                <div style={{ fontSize:12, color:T.ink, lineHeight:1.5 }}>
+                    <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontWeight:600 }}>{event.actor}</span>
+                    {event.target && <><span style={{ color:T.inkMid }}> → </span><span style={{ fontWeight:600 }}>{event.target}</span></>}
+                </div>
+            </div>
+            {/* Facet chips */}
+            <div style={{ padding:'10px 12px 6px', display:'flex', gap:6, flexWrap:'wrap' }}>
+                {facets.map((c,i) => (
+                    <span key={i} onClick={() => { onAddFilter && onAddFilter(c.lbl, c.val); onClose(); }}
+                        style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:12, fontSize:11,
+                            background:T.surface2, border:`1px solid ${T.border}`, color:T.inkMid, cursor:'pointer' }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = T.borderStrong}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
+                        <span style={{ color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', fontSize:10 }}>{c.lbl}:</span>
+                        <span style={{ fontFamily:'ui-monospace,Menlo,monospace' }}>{c.val}</span>
+                        <span style={{ color:T.inkMuted, marginLeft:2, fontSize:10 }}>+</span>
+                    </span>
+                ))}
+            </div>
+            {/* Related events */}
+            {related.length > 0 && (
+                <div style={{ padding:'8px 16px 12px' }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase', marginBottom:6, fontFamily:T.sans }}>Related · same actor</div>
+                    {related.map((r,i) => (
+                        <div key={i} style={{ display:'flex', gap:8, padding:'4px 0', fontSize:11.5, alignItems:'baseline' }}>
+                            <span style={{ width:76, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, flexShrink:0 }}>{r.when}</span>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontWeight:600, color:T.ink, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.action}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+            <div style={{ padding:'10px 16px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', gap:8 }}>
+                <button onClick={() => { navigator.clipboard?.writeText(event.action + ' · ' + event.when); onClose(); }}
+                    style={{ fontSize:11.5, fontWeight:600, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>Copy event ID</button>
+                <span style={{ flex:1 }}/>
+                <SecBtn label="View full event" onClick={onClose}/>
+            </div>
+        </div>
+    );
+};
+
+// ── Event row ⋯ menu (Variation B) ───────────────────────────
+const AuditEventRowMenu = ({ event, onViewDetails, onFilterAction, onCreateAlert, onClose }) => {
+    const MenuRow = ({ icon, label, kbd, onClick }) => (
+        <div onClick={() => { onClick && onClick(); onClose(); }}
+            style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:3, cursor:'pointer' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+            <span style={{ width:16, textAlign:'center', fontSize:13, flexShrink:0 }}>{icon}</span>
+            <span style={{ flex:1, fontSize:12.5, fontWeight:500, color:T.ink }}>{label}</span>
+            {kbd && <span style={{ fontSize:10.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', flexShrink:0 }}>{kbd}</span>}
+        </div>
+    );
+    return (
+        <div style={{ width:208, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
+            boxShadow:'0 8px 24px rgba(42,38,34,0.12), 0 2px 4px rgba(42,38,34,0.06)', padding:4, fontFamily:T.sans }}>
+            <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
+                background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
+            <MenuRow icon="◫" label="View details" kbd="↵" onClick={onViewDetails}/>
+            <MenuRow icon="⌕" label="Investigate actor" onClick={() => onFilterAction && onFilterAction('actor', event.actor)}/>
+            <MenuRow icon="≡" label="Filter to this action" onClick={() => onFilterAction && onFilterAction('action', event.action)}/>
+            <MenuRow icon="⚠" label="Create alert from event" onClick={onCreateAlert}/>
+            <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+            <MenuRow icon="⎘" label="Copy event ID" kbd="⌘C" onClick={() => navigator.clipboard?.writeText(event.action)}/>
+        </div>
+    );
+};
+
+// ── Streaming destination ⋯ menu (Variation B) ───────────────
+const AuditDestRowMenu = ({ dest, onRemove, onClose }) => {
+    const MenuRow = ({ icon, label, danger:isDanger, onClick }) => (
+        <div onClick={() => { onClick && onClick(); onClose(); }}
+            style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:3, cursor:'pointer', color: isDanger ? T.danger : T.ink }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+            <span style={{ width:16, textAlign:'center', fontSize:13, flexShrink:0 }}>{icon}</span>
+            <span style={{ flex:1, fontSize:12.5, fontWeight:500 }}>{label}</span>
+        </div>
+    );
+    return (
+        <div style={{ width:196, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
+            boxShadow:'0 8px 24px rgba(42,38,34,0.12), 0 2px 4px rgba(42,38,34,0.06)', padding:4, fontFamily:T.sans, position:'relative' }}>
+            <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
+                background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
+            <MenuRow icon="✎" label="Edit" onClick={() => {}}/>
+            <MenuRow icon="↻" label="Send test event" onClick={() => {}}/>
+            <MenuRow icon="⏸" label="Pause" onClick={() => {}}/>
+            <MenuRow icon="⌕" label="Delivery log" onClick={() => {}}/>
+            <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+            <MenuRow icon="🗑" label="Remove" danger onClick={() => onRemove && onRemove(dest)}/>
+        </div>
+    );
+};
+
+// ── Generic anchored popover wrapper ─────────────────────────
+const AuditAnchoredMenu = ({ children, btnRef, onClose, alignRight=true }) => {
+    const ref    = React.useRef(null);
+    const [style, setStyle] = React.useState({ position:'fixed', zIndex:9999, top:-9999, left:-9999, visibility:'hidden' });
+
+    // Two-pass positioning: measure after first render, then lock position
+    const positionedRef = React.useRef(false);
+    React.useLayoutEffect(() => {
+        if (!btnRef?.current || !ref.current) return;
+        if (positionedRef.current) return; // already positioned — don't re-run
+        positionedRef.current = true;
+        const r       = btnRef.current.getBoundingClientRect();
+        const menuH   = ref.current.offsetHeight || 320;
+        const menuW   = ref.current.offsetWidth  || 260;
+        const vw      = window.innerWidth;
+        const vh      = window.innerHeight;
+        const GAP     = 4;
+        const EDGE    = 8;
+
+        // Vertical: prefer below button, flip above if it clips the bottom
+        const topBelow  = r.bottom + GAP;
+        const topAbove  = r.top - menuH - GAP;
+        const top = (topBelow + menuH > vh - EDGE) ? Math.max(EDGE, topAbove) : topBelow;
+
+        // Horizontal: prefer right-anchor (right edge of menu = right edge of button)
+        // Fall back to left-anchor if that would clip
+        let computed;
+        if (alignRight) {
+            const leftIfRightAnchored = r.right - menuW;
+            if (leftIfRightAnchored < EDGE) {
+                // Would clip left — anchor left side of menu to left side of button instead
+                computed = { left: Math.max(EDGE, r.left) };
+            } else {
+                computed = { right: Math.max(EDGE, vw - r.right) };
+            }
+        } else {
+            const rightIfLeftAnchored = r.left + menuW;
+            if (rightIfLeftAnchored > vw - EDGE) {
+                computed = { right: EDGE };
+            } else {
+                computed = { left: Math.max(EDGE, r.left) };
+            }
+        }
+
+        setStyle({ position:'fixed', zIndex:9999, top, ...computed, visibility:'visible' });
+    });
+
+    React.useEffect(() => {
+        const onDoc = (e) => {
+            if (ref.current && !ref.current.contains(e.target) &&
+                btnRef?.current && !btnRef.current.contains(e.target)) onClose();
+        };
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('mousedown', onDoc);
+        document.addEventListener('keydown', onKey);
+        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+    }, []);
+
+    return (
+        <div ref={ref} style={style}>
+            {children}
+        </div>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────
+// AuditDetail — live version
+// ─────────────────────────────────────────────────────────────────
+// ── Manage Alerts modal ────────────────────────────────────────────────────────
+const ManageAlertsModal = ({ alertCount, onClose }) => {
+    const [alerts, setAlerts] = React.useState([
+        { id:1, name:'Failed login spike',      condition:'login.failed > 5 in 10 min',      channel:'Email + Slack', active:true  },
+        { id:2, name:'API key created',         condition:'action = apikey.created',          channel:'Email',         active:true  },
+        { id:3, name:'Role permission changed', condition:'action = role.permission_changed',  channel:'Email',         active:true  },
+        { id:4, name:'MFA disabled',            condition:'action = mfa.disabled',            channel:'Email + Slack', active:false },
+    ]);
+    const [showNew,    setShowNew]    = React.useState(false);
+    const [newName,    setNewName]    = React.useState('');
+    const [newCond,    setNewCond]    = React.useState('');
+    const [newChannel, setNewChannel] = React.useState('Email');
+    const [confirmDel, setConfirmDel] = React.useState(null); // id to confirm delete
+
+    const toggleAlert  = (id) => setAlerts(prev => prev.map(a => a.id === id ? {...a, active:!a.active} : a));
+    const deleteAlert  = (id) => { setAlerts(prev => prev.filter(a => a.id !== id)); setConfirmDel(null); };
+    const addAlert     = () => {
+        if (!newName.trim() || !newCond.trim()) return;
+        setAlerts(prev => [...prev, { id: Date.now(), name:newName.trim(), condition:newCond.trim(), channel:newChannel, active:true }]);
+        setNewName(''); setNewCond(''); setShowNew(false);
+    };
+
+    const inpSt = { padding:'6px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, width:'100%', boxSizing:'border-box' };
+    const rowSt = { display:'grid', gridTemplateColumns:'1fr 1fr 110px 52px 36px', gap:10, padding:'10px 16px', alignItems:'center', borderBottom:`1px solid ${T.border}`, fontFamily:T.sans };
+
+    return (
+        <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width:740, display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)', maxHeight:'85vh' }}>
+                {/* Header */}
+                <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div>
+                        <div style={{ fontSize:16, fontWeight:700, color:T.ink }}>Manage alerts</div>
+                        <div style={{ fontSize:12, color:T.inkMuted, marginTop:2 }}>{alertCount} alert{alertCount!==1?'s':''} triggered today · rules fire on matching audit events</div>
+                    </div>
+                    <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', lineHeight:1 }}>×</button>
+                </div>
+
+                {/* Table */}
+                <div style={{ flex:1, overflowY:'auto' }}>
+                    {/* Header row */}
+                    <div style={{ ...rowSt, background:T.surface2, borderTop:'none', padding:'8px 16px' }}>
+                        {['RULE NAME','CONDITION','CHANNEL','ON',''].map((h,i) => (
+                            <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase' }}>{h}</div>
+                        ))}
+                    </div>
+
+                    {alerts.map(a => (
+                        <div key={a.id} style={rowSt}>
+                            <span style={{ fontSize:13, fontWeight:600, color:T.ink }}>{a.name}</span>
+                            <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMid, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.condition}</span>
+                            <span style={{ fontSize:12, color:T.inkMid }}>{a.channel}</span>
+                            {/* Toggle */}
+                            <div onClick={() => toggleAlert(a.id)}
+                                style={{ width:30, height:18, borderRadius:9, background:a.active?T.ok:T.border, position:'relative', cursor:'pointer', transition:'background 120ms', flexShrink:0 }}>
+                                <span style={{ position:'absolute', top:2, left:a.active?14:2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+                            </div>
+                            {/* Delete */}
+                            {confirmDel === a.id ? (
+                                <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+                                    <button onClick={() => deleteAlert(a.id)}
+                                        style={{ fontSize:10, fontWeight:700, color:'#fbf8f3', background:T.danger, border:'none', borderRadius:3, padding:'2px 6px', cursor:'pointer', fontFamily:T.sans }}>Del</button>
+                                    <button onClick={() => setConfirmDel(null)}
+                                        style={{ fontSize:10, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>✕</button>
+                                </div>
+                            ) : (
+                                <button onClick={() => setConfirmDel(a.id)}
+                                    title="Delete rule"
+                                    style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:24, height:24, borderRadius:4, border:`1px solid ${T.border}`, background:'none', color:T.inkMuted, cursor:'pointer', fontSize:13, fontFamily:T.sans, flexShrink:0 }}>
+                                    🗑
+                                </button>
+                            )}
+                        </div>
+                    ))}
+
+                    {/* New rule inline form */}
+                    {showNew && (
+                        <div style={{ ...rowSt, background:'rgba(200,185,154,0.08)', borderTop:`1px solid ${T.border}` }}>
+                            <input value={newName} onChange={e => setNewName(e.target.value)}
+                                placeholder="Rule name…" style={inpSt} autoFocus/>
+                            <input value={newCond} onChange={e => setNewCond(e.target.value)}
+                                placeholder="e.g. action = login.failed" style={{ ...inpSt, fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}
+                                onKeyDown={e => { if (e.key === 'Enter') addAlert(); if (e.key === 'Escape') setShowNew(false); }}/>
+                            <select value={newChannel} onChange={e => setNewChannel(e.target.value)}
+                                style={{ ...inpSt, appearance:'none', cursor:'pointer' }}>
+                                <option>Email</option>
+                                <option>Slack</option>
+                                <option>Email + Slack</option>
+                            </select>
+                            <div style={{ display:'flex', gap:6 }}>
+                                <button onClick={addAlert} disabled={!newName.trim() || !newCond.trim()}
+                                    style={{ fontSize:11, fontWeight:700, color:'#fbf8f3', background:T.ok, border:'none', borderRadius:3, padding:'4px 8px', cursor:'pointer', fontFamily:T.sans, opacity:(!newName.trim()||!newCond.trim())?0.5:1 }}>Add</button>
+                                <button onClick={() => setShowNew(false)}
+                                    style={{ fontSize:11, color:T.inkMid, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>✕</button>
+                            </div>
+                            <div/>
+                        </div>
+                    )}
+
+                    {alerts.length === 0 && !showNew && (
+                        <div style={{ padding:'32px', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>No alert rules. Add one below.</div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding:'12px 20px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', gap:8, justifyContent:'space-between', alignItems:'center' }}>
+                    <button onClick={() => { setShowNew(true); setConfirmDel(null); }}
+                        style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 12px', background:'none',
+                            border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600,
+                            color:T.ink, cursor:'pointer', fontFamily:T.sans }}>
+                        + New alert rule
+                    </button>
+                    <SecBtn label="Done" primary onClick={onClose}/>
                 </div>
             </div>
         </div>
     );
 };
 
-// ── ⑤ Audit Log Detail ────────────────────────────────────────
-const AuditDetail = ({ onBack }) => {
-    const [catFilter, setCatFilter]   = useState('All categories');
-    const [actorFilter, setActorFilter] = useState('All actors');
-    const [timeFilter, setTimeFilter]   = useState('Last 7 days');
-    const [search, setSearch]           = useState('');
+// ── Add Destination modal ──────────────────────────────────────────────────────
+const AddDestinationModal = ({ onClose, onSave }) => {
+    const [dest,   setDest]   = React.useState('');
+    const [url,    setUrl]    = React.useState('');
+    const [fmt,    setFmt]    = React.useState('JSON');
+    const [saving, setSaving] = React.useState(false);
+    const [err,    setErr]    = React.useState('');
 
-    const visible = SEC_AUDIT_EVENTS.filter(e => {
-        if (catFilter !== 'All categories' && e.cat !== catFilter) return false;
-        if (actorFilter !== 'All actors'   && e.actor !== actorFilter) return false;
-        const q = search.toLowerCase();
-        return !q || e.action.includes(q) || e.actor.includes(q) || e.target.includes(q);
+    const PRESET_DESTS = [
+        { label:'Datadog Logs',   url:'https://http-intake.logs.datadoghq.com/api/v/logs',  fmt:'JSON' },
+        { label:'Splunk HEC',     url:'https://splunk.example.com:8088/services/collector', fmt:'JSON' },
+        { label:'S3 archive',     url:'s3://your-bucket/accelerep-audit/',                  fmt:'NDJSON.gz' },
+        { label:'SIEM webhook',   url:'https://siem.example.com/ingest',                    fmt:'JSON' },
+    ];
+
+    const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' };
+    const FL = ({ label:lbl, hint, children }) => (
+        <div style={{ marginBottom:14 }}>
+            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{lbl}</label>
+            {children}
+            {hint && <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>{hint}</div>}
+        </div>
+    );
+
+    const handleSave = async () => {
+        if (!dest.trim()) { setErr('Destination name is required'); return; }
+        if (!url.trim())  { setErr('Endpoint URL is required'); return; }
+        setSaving(true);
+        const newDest = { dest: dest.trim(), url: url.trim(), fmt, status:'Active', lastDelivered:'Never' };
+        await onSave(newDest);
+        setSaving(false);
+    };
+
+    return (
+        <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.40)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width:540, display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 56px rgba(20,16,12,0.28)' }}>
+                <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <div>
+                        <div style={{ fontSize:16, fontWeight:700, color:T.ink }}>Add streaming destination</div>
+                        <div style={{ fontSize:12, color:T.inkMuted, marginTop:2 }}>Audit events will be forwarded in real-time</div>
+                    </div>
+                    <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:20, cursor:'pointer', lineHeight:1 }}>×</button>
+                </div>
+                <div style={{ padding:'18px 20px' }}>
+                    {/* Presets */}
+                    <div style={{ fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:8, fontFamily:T.sans }}>Quick presets</div>
+                    <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:16 }}>
+                        {PRESET_DESTS.map(p => (
+                            <button key={p.label} onClick={() => { setDest(p.label); setUrl(p.url); setFmt(p.fmt); }}
+                                style={{ padding:'5px 10px', fontSize:12, fontWeight:500, background:dest===p.label?T.ink:T.surface2,
+                                    color:dest===p.label?'#fbf8f3':T.inkMid, border:`1px solid ${dest===p.label?T.ink:T.border}`,
+                                    borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>
+                                {p.label}
+                            </button>
+                        ))}
+                    </div>
+                    <FL label="Destination name">
+                        <input value={dest} onChange={e => { setDest(e.target.value); setErr(''); }} placeholder="e.g. Datadog production" style={{ ...inpSt, fontFamily:T.sans }}/>
+                    </FL>
+                    <FL label="Endpoint URL" hint="HTTP/HTTPS URL or s3:// path">
+                        <input value={url} onChange={e => { setUrl(e.target.value); setErr(''); }} placeholder="https://..." style={inpSt}/>
+                    </FL>
+                    <FL label="Format">
+                        <div style={{ display:'flex', gap:8 }}>
+                            {['JSON','NDJSON','NDJSON.gz'].map(f => (
+                                <button key={f} onClick={() => setFmt(f)}
+                                    style={{ flex:1, padding:'8px 0', fontSize:12.5, fontWeight:600, textAlign:'center',
+                                        background:fmt===f?T.ink:T.surface2, color:fmt===f?'#fbf8f3':T.inkMid,
+                                        border:`1px solid ${fmt===f?T.ink:T.border}`, borderRadius:T.r, cursor:'pointer',
+                                        fontFamily:'ui-monospace,Menlo,monospace' }}>
+                                    {f}
+                                </button>
+                            ))}
+                        </div>
+                    </FL>
+                    {err && <div style={{ fontSize:12, color:T.danger, fontFamily:T.sans, marginBottom:8 }}>{err}</div>}
+                    <div style={{ padding:'10px 12px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid, fontFamily:T.sans }}>
+                        Events are forwarded with HMAC-SHA256 signatures. Verify the <code>X-Accelerep-Signature</code> header on your endpoint.
+                    </div>
+                </div>
+                <div style={{ padding:'12px 20px', borderTop:`1px solid ${T.border}`, background:T.surface2, display:'flex', gap:8, justifyContent:'flex-end' }}>
+                    <SecBtn label="Cancel" onClick={onClose}/>
+                    <SecBtn label={saving?'Adding…':'Add destination'} primary onClick={handleSave} disabled={saving}/>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// ─────────────────────────────────────────────────────────────────
+// Configure Streaming Popover — Variant B (Destinations overview)
+// Matches design spec: destinations list + collapsible stream-wide settings
+// ─────────────────────────────────────────────────────────────────
+const ConfigureStreamingPopover = ({ streams, onClose, onAddDest, onTogglePause, onRemoveDest, onSaveGlobals, btnRef }) => {
+    const ref = React.useRef(null);
+    const posRef = React.useRef(false);
+    const [style, setStyle] = React.useState({ position:'fixed', zIndex:9999, top:-9999, left:-9999, visibility:'hidden' });
+    const [globalsOpen, setGlobalsOpen] = React.useState(false);
+    const [globals, setGlobals] = React.useState({
+        retention:  '13 months',
+        redactPII:  true,
+        signing:    'hmac-sha256',
+        onFailure:  'Buffer & retry',
     });
 
-    const catSel = { padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', appearance:'none', cursor:'pointer', background:T.surface };
+    // Two-pass positioning — same pattern as AuditAnchoredMenu
+    React.useLayoutEffect(() => {
+        if (!btnRef?.current || !ref.current || posRef.current) return;
+        posRef.current = true;
+        const r    = btnRef.current.getBoundingClientRect();
+        const menuW = ref.current.offsetWidth  || 480;
+        const menuH = ref.current.offsetHeight || 400;
+        const vw   = window.innerWidth;
+        const vh   = window.innerHeight;
+        const GAP  = 6;
+        const EDGE = 8;
+        const top  = (r.bottom + GAP + menuH > vh - EDGE)
+            ? Math.max(EDGE, r.top - menuH - GAP)
+            : r.bottom + GAP;
+        // Left-anchor (aligns to button left edge), clamp if it would overflow right
+        const left = Math.min(r.left, vw - menuW - EDGE);
+        setStyle({ position:'fixed', zIndex:9999, top, left: Math.max(EDGE, left), visibility:'visible' });
+    });
+
+    React.useEffect(() => {
+        const onDoc = (e) => {
+            if (ref.current && !ref.current.contains(e.target) &&
+                btnRef?.current && !btnRef.current.contains(e.target)) onClose();
+        };
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('mousedown', onDoc);
+        document.addEventListener('keydown',   onKey);
+        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+    }, []);
+
+    const activeCount  = streams.filter(s => s.status === 'Active'  && !s.paused).length;
+    const failingCount = streams.filter(s => s.status === 'Failing').length;
+
+    const SRow = ({ label, sub, control, divider=true }) => (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:16, alignItems:'center',
+            padding:'10px 16px', borderBottom:divider?`1px solid ${T.border}`:'none' }}>
+            <div>
+                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{label}</div>
+                {sub && <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2, lineHeight:1.4, fontFamily:T.sans }}>{sub}</div>}
+            </div>
+            {control}
+        </div>
+    );
+
+    const SToggle = ({ on, onChange }) => (
+        <div onClick={onChange}
+            style={{ width:32, height:18, borderRadius:9, background:on?T.ok:T.borderStrong,
+                position:'relative', cursor:'pointer', transition:'background 120ms', flexShrink:0 }}>
+            <span style={{ position:'absolute', top:2, left:on?16:2, width:14, height:14, borderRadius:'50%',
+                background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+        </div>
+    );
+
+    const SSelect = ({ value, options, onChange, width=130 }) => (
+        <select value={value} onChange={e => onChange(e.target.value)}
+            style={{ padding:'4px 8px', background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRadius:T.r, fontSize:11.5, color:T.ink, outline:'none', cursor:'pointer',
+                fontFamily:T.sans, minWidth:width, appearance:'none' }}>
+            {options.map(o => <option key={o}>{o}</option>)}
+        </select>
+    );
+
+    return (
+        <div ref={ref} style={style}>
+            {/* Pointer caret */}
+            <div style={{ position:'absolute', top:-7, left:32, width:12, height:12,
+                background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)', zIndex:1 }}/>
+
+            <div style={{ width:480, background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRadius:8, boxShadow:'0 8px 28px rgba(42,38,34,0.14), 0 2px 4px rgba(42,38,34,0.06)',
+                fontFamily:T.sans, overflow:'hidden' }}>
+
+                {/* Header */}
+                <div style={{ padding:'13px 16px 11px', borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
+                        <span style={{ fontSize:14, fontWeight:700, color:T.ink }}>Streaming destinations</span>
+                        <span style={{ flex:1 }}/>
+                        <span style={{ fontSize:10.5, color:T.inkMuted }}>
+                            {activeCount} active{failingCount > 0 ? ` · ${failingCount} failing` : ''}
+                        </span>
+                        <button onClick={onClose} style={{ background:'none', border:'none', color:T.inkMuted, fontSize:18, cursor:'pointer', lineHeight:1, padding:0 }}>×</button>
+                    </div>
+                    <div style={{ fontSize:11, color:T.inkMid, lineHeight:1.5 }}>
+                        Toggle a row to pause its stream. Events buffer for 24h while paused.
+                    </div>
+                </div>
+
+                {/* Destination rows */}
+                <div>
+                    {streams.length === 0 ? (
+                        <div style={{ padding:'24px 16px', textAlign:'center', color:T.inkMuted, fontSize:13 }}>
+                            No destinations configured. Add one below.
+                        </div>
+                    ) : streams.map((s, i) => {
+                        const isActive  = s.status === 'Active'  && !s.paused;
+                        const isFailing = s.status === 'Failing';
+                        const dotColor  = s.paused ? T.inkMuted : isFailing ? T.warn : T.ok;
+                        return (
+                            <div key={s.dest || i} style={{ display:'grid', gridTemplateColumns:'14px 1fr auto auto',
+                                gap:10, alignItems:'center', padding:'10px 16px',
+                                borderBottom:`1px solid ${T.border}` }}>
+                                {/* Status dot */}
+                                <span style={{ width:8, height:8, borderRadius:'50%', background:dotColor,
+                                    boxShadow:isFailing && !s.paused ? `0 0 0 3px ${T.warn}33` : 'none',
+                                    flexShrink:0 }}/>
+                                <div style={{ minWidth:0 }}>
+                                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
+                                        <span style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{s.dest}</span>
+                                        <span style={{ padding:'1px 5px', borderRadius:3, fontSize:10, fontWeight:700,
+                                            background:'rgba(138,131,120,0.12)', color:T.inkMid,
+                                            fontFamily:'ui-monospace,Menlo,monospace' }}>{s.fmt}</span>
+                                        {s.paused && <span style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5 }}>paused</span>}
+                                    </div>
+                                    <div style={{ fontSize:10.5, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace',
+                                        overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.url}</div>
+                                    <div style={{ fontSize:10, color:isFailing && !s.paused ? T.warn : T.inkMuted, marginTop:2 }}>
+                                        {s.paused ? 'Buffering · resume to flush'
+                                            : isFailing ? `⚠ Last delivery ${s.lastDelivered}`
+                                            : `Last delivered ${s.lastDelivered || 'never'}`}
+                                    </div>
+                                </div>
+                                {/* Pause/resume toggle */}
+                                <SToggle on={isActive} onChange={() => onTogglePause && onTogglePause(s)}/>
+                                {/* ⋯ remove button */}
+                                <button onClick={() => onRemoveDest && onRemoveDest(s)}
+                                    title="Remove destination"
+                                    style={{ background:'none', border:'none', color:T.inkMuted, fontSize:13,
+                                        cursor:'pointer', padding:'2px 4px', fontFamily:T.sans, lineHeight:1 }}>🗑</button>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Add destination row */}
+                <div onClick={() => { onClose(); onAddDest && onAddDest(); }}
+                    style={{ padding:'10px 16px', borderBottom:`1px solid ${T.border}`,
+                        display:'flex', alignItems:'center', gap:8, cursor:'pointer',
+                        background:T.surface }}
+                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                    onMouseLeave={e => e.currentTarget.style.background = T.surface}>
+                    <span style={{ width:18, height:18, borderRadius:3, border:`1px dashed ${T.borderStrong}`,
+                        display:'inline-flex', alignItems:'center', justifyContent:'center',
+                        fontSize:12, color:T.inkMuted, flexShrink:0 }}>+</span>
+                    <span style={{ fontSize:12, fontWeight:600, color:T.ink }}>Add destination</span>
+                    <span style={{ fontSize:10.5, color:T.inkMuted }}>· Splunk, Datadog, S3, generic webhook…</span>
+                </div>
+
+                {/* Stream-wide settings — collapsible drawer */}
+                <div style={{ background:T.surface2 }}>
+                    <div onClick={() => setGlobalsOpen(o => !o)}
+                        style={{ padding:'10px 16px', display:'flex', alignItems:'center', gap:8, cursor:'pointer',
+                            borderBottom: globalsOpen ? `1px solid ${T.border}` : 'none' }}>
+                        <span style={{ fontSize:10, color:T.inkMuted, display:'inline-block',
+                            transform:globalsOpen?'rotate(90deg)':'rotate(0)', transition:'transform 150ms' }}>▶</span>
+                        <span style={{ fontSize:11.5, fontWeight:700, color:T.ink, letterSpacing:0.3 }}>Stream-wide settings</span>
+                        <span style={{ fontSize:10.5, color:T.inkMuted }}>
+                            Retention {globals.retention} · {globals.redactPII ? 'PII redacted' : 'PII not redacted'} · {globals.signing}
+                        </span>
+                    </div>
+                    {globalsOpen && (
+                        <div>
+                            <SRow label="Retention"
+                                sub="How long Accelerep keeps events queryable in this UI."
+                                control={<SSelect value={globals.retention} options={['13 months','6 months','3 months','1 month']} onChange={v => setGlobals(g=>({...g,retention:v}))} width={120}/>}/>
+                            <SRow label="Redact PII before streaming"
+                                sub="Mask matching fields in event payloads before sending."
+                                control={<SToggle on={globals.redactPII} onChange={() => setGlobals(g=>({...g,redactPII:!g.redactPII}))}/>}/>
+                            <SRow label="Payload signing"
+                                sub="Sign each request with HMAC key. Receivers verify on intake."
+                                control={<SSelect value={globals.signing} options={['hmac-sha256','none']} onChange={v => setGlobals(g=>({...g,signing:v}))} width={130}/>}/>
+                            <SRow label="On delivery failure"
+                                control={<SSelect value={globals.onFailure} options={['Buffer & retry','Drop events','Alert only']} onChange={v => setGlobals(g=>({...g,onFailure:v}))} width={140}/>}
+                                divider={false}/>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding:'10px 16px', borderTop:`1px solid ${T.border}`, background:T.surface,
+                    display:'flex', gap:8, alignItems:'center' }}>
+                    <span style={{ fontSize:11, color:T.inkMid, cursor:'pointer', fontWeight:600,
+                        fontFamily:T.sans, textDecoration:'none' }}>View delivery logs</span>
+                    <span style={{ flex:1 }}/>
+                    {globalsOpen && (
+                        <SecBtn label="Save settings" primary onClick={() => { onSaveGlobals && onSaveGlobals(globals); setGlobalsOpen(false); }}/>
+                    )}
+                    <SecBtn label="Done" primary={!globalsOpen} onClick={onClose}/>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// ── Audit display helpers ─────────────────────────────────────────────────────
+const fmtEventAge = (iso) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMin = Math.round((now - d) / 60000);
+    if (diffMin < 1)    return 'just now';
+    if (diffMin < 60)   return diffMin + ' minutes ago';
+    if (diffMin < 120)  return '1 hour ago';
+    if (diffMin < 1440) return Math.round(diffMin/60) + ' hours ago';
+    if (diffMin < 2880) return 'yesterday';
+    if (diffMin < 10080) return Math.round(diffMin/1440) + ' days ago';
+    return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+};
+
+const mapEntityTypeToCat = (entityType) => {
+    const map = {
+        user:'admin', role:'admin', territory:'admin', team:'admin',
+        opportunity:'data', account:'data', contact:'data', lead:'data',
+        task:'data', activity:'data', pipeline:'data', stage:'data',
+        pricebook:'data', quote:'data',
+        apikey:'security', webhook:'security', setting:'security', export:'security',
+        login:'auth', mfa:'auth', sso:'auth', session:'auth',
+        billing:'billing', plan:'billing', seat:'billing',
+    };
+    const key = (entityType||'').toLowerCase();
+    return map[key] || 'admin';
+};
+
+const mapActionToSev = (action) => {
+    const a = (action||'').toLowerCase();
+    // Exact-suffix matches — look for 'failed', 'deleted', 'revoked', 'disabled', 'blocked'
+    const warnSuffixes = ['failed','deleted','revoked','disabled','blocked','unauthorized','denied','error'];
+    // Exact action matches
+    const warnExact = ['apikey.created','webhook.created','role.permission_changed','user.invited',
+        'export.bulk','setting.security_changed','mfa.policy_changed','sso.activated'];
+    if (warnExact.includes(a)) return 'warn';
+    if (warnSuffixes.some(s => a.endsWith('.' + s) || a.endsWith('_' + s))) return 'warn';
+    return 'info';
+};
+
+const AuditDetail = ({ onBack }) => {
+    const [catFilter,   setCatFilter]   = React.useState('All categories');
+    const [actorFilter, setActorFilter] = React.useState('All actors');
+    const [timeFilter,  setTimeFilter]  = React.useState('Last 7 days');
+    const [search,      setSearch]      = React.useState('');
+
+    // Popover/menu state — which row is active and what's showing
+    const [activeRow,   setActiveRow]   = React.useState(null); // index
+    const [activeMode,  setActiveMode]  = React.useState(null); // 'popover' | 'menu'
+    const [activeDestRow, setActiveDestRow] = React.useState(null);
+
+    // Export split button state
+    const [exportOpen,   setExportOpen]   = React.useState(false);
+    const [showAlerts,     setShowAlerts]     = React.useState(false);
+    const [showAddDest,   setShowAddDest]   = React.useState(false);
+    const [showStreaming,  setShowStreaming]  = React.useState(false);
+    const streamingBtnRef = React.useRef(null);
+
+    // Live audit events from DB — start empty, never fall back to mock
+    const [events,      setEvents]      = React.useState([]);
+    const [eventsLoading, setEventsLoading] = React.useState(true);
+    const [eventsError, setEventsError] = React.useState(null);
+
+    // Streaming destinations — live from settings (never use mock as default)
+    const [streams, setStreams] = React.useState([]);
+    const [streamsLoading, setStreamsLoading] = React.useState(true);
+
+    // Button refs for anchoring
+    const rowMenuRefs    = React.useRef({});
+    const destSectionRef = React.useRef(null);
+    const exportBtnRef = React.useRef(null);
+    const destMenuRefs = React.useRef({});
+
+    // Load real audit events and streaming destinations from DB on mount
+    React.useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const [auditRes, settingsRes] = await Promise.all([
+                    dbFetch('/.netlify/functions/audit-log'),
+                    dbFetch('/.netlify/functions/settings'),
+                ]);
+                if (cancelled) return;
+                const [auditData, settingsData] = await Promise.all([auditRes.json(), settingsRes.json()]);
+                if (auditRes.ok && auditData.entries?.length > 0) {
+                    // Map DB shape → display shape
+                    const mapped = auditData.entries.map(e => ({
+                        when:   fmtEventAge(e.timestamp),
+                        rawTs:  e.timestamp, // keep for time filter
+                        actor:  e.userName || e.userId || 'System',
+                        action: e.action,
+                        target: e.entityName || e.entityId || '—',
+                        cat:    mapEntityTypeToCat(e.entityType),
+                        sev:    mapActionToSev(e.action),
+                        ip:     '—', // IP not stored in current schema
+                    }));
+                    setEvents(mapped);
+                }
+                if (settingsRes.ok) {
+                    // Always replace — even empty array overwrites the default []
+                    setStreams(settingsData.settings?.streamingDestinations || []);
+                }
+                setStreamsLoading(false);
+            } catch (e) {
+                console.error('AuditDetail load error:', e.message);
+                if (!cancelled) setEventsError(e.message);
+            } finally {
+                if (!cancelled) setEventsLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, []);
+
+    // Alert badge count (warn events)
+    const alertCount = events.filter(e => e.sev === 'warn').length;
+
+    // Filter logic
+    const visible = events.filter(e => {
+        if (catFilter === 'warn') { if (e.sev !== 'warn') return false; }
+        else if (catFilter !== 'All categories' && e.cat !== catFilter) return false;
+        if (actorFilter !== 'All actors' && e.actor !== actorFilter) return false;
+        // Time filter — applied to e.rawTs (ISO string) stored during mapping
+        if (timeFilter !== 'All time' && e.rawTs) {
+            const evMs  = new Date(e.rawTs).getTime();
+            const nowMs = Date.now();
+            const limitMap = {
+                'Last 1 hour':    60 * 60 * 1000,
+                'Last 24 hours':  24 * 60 * 60 * 1000,
+                'Last 7 days':    7  * 24 * 60 * 60 * 1000,
+                'Last 30 days':   30 * 24 * 60 * 60 * 1000,
+                'Last 90 days':   90 * 24 * 60 * 60 * 1000,
+                'Last 13 months': 395 * 24 * 60 * 60 * 1000,
+            };
+            const limit = limitMap[timeFilter];
+            if (limit && (nowMs - evMs) > limit) return false;
+        }
+        const q = search.toLowerCase();
+        return !q || e.action.toLowerCase().includes(q) || e.actor.toLowerCase().includes(q) || (e.target||'').toLowerCase().includes(q);
+    });
+
+    const handleAddFilter = (key, val) => {
+        if (key === 'actor')  setActorFilter(val);
+        if (key === 'cat')    setCatFilter(val);
+        if (key === 'action') setSearch(val);
+        setActiveRow(null); setActiveMode(null);
+    };
+
+    const handleTogglePause = async (dest) => {
+        const next = streams.map(s => s.dest === dest.dest ? {...s, paused: !s.paused} : s);
+        setStreams(next);
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ streamingDestinations: next }),
+            });
+        } catch (e) { console.error('togglePause error:', e.message); }
+    };
+
+    const handleRemoveDest = async (dest) => {
+        const next = streams.filter(d => d.dest !== dest.dest);
+        setStreams(next);
+        setActiveDestRow(null);
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ streamingDestinations: next }),
+            });
+        } catch (e) { console.error('removeDest error:', e.message); }
+    };
+
+    const handleSaveGlobals = async (globals) => {
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ streamingGlobals: globals }),
+            });
+        } catch (e) { console.error('saveGlobals error:', e.message); }
+    };
+
+    const handleSaveDest = async (newDest) => {
+        const next = [...streams, newDest];
+        setStreams(next);
+        setShowAddDest(false);
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ streamingDestinations: next }),
+            });
+        } catch (e) { console.error('saveDest error:', e.message); }
+    };
+
+    const auditCatStyle = (cat) => {
+        const map = { auth:'rgba(58,90,122,0.12)', security:'rgba(156,58,46,0.10)', admin:'rgba(77,107,61,0.10)', data:'rgba(200,185,154,0.20)', billing:'rgba(184,115,51,0.10)' };
+        const col = { auth:T.info, security:T.danger, admin:T.ok, data:T.goldInk, billing:T.warn };
+        return { bg: map[cat] || 'rgba(138,131,120,0.10)', fg: col[cat] || T.inkMid };
+    };
 
     return (
         <div style={{ fontFamily:T.sans }}>
+            {showAlerts  && <ManageAlertsModal alertCount={alertCount} onClose={() => setShowAlerts(false)}/>}
+            {showAddDest && <AddDestinationModal onClose={() => setShowAddDest(false)} onSave={handleSaveDest}/>}
+            {showStreaming && (
+                <ConfigureStreamingPopover
+                    streams={streams}
+                    btnRef={streamingBtnRef}
+                    onClose={() => setShowStreaming(false)}
+                    onAddDest={() => { setShowStreaming(false); setShowAddDest(true); }}
+                    onTogglePause={handleTogglePause}
+                    onRemoveDest={handleRemoveDest}
+                    onSaveGlobals={handleSaveGlobals}
+                />
+            )}
             <SecCrumb page="Audit log" onBack={onBack}/>
             <SecTitle
                 title="Audit log"
-                sub="12 events · last 7 days · retention 13 months"
+                sub={`${visible.length} events · ${timeFilter} · retention 13 months`}
                 badge="Streaming to Splunk · 2 alerts triggered today"
-                updatedAt="Last edited real-time by —"
+                updatedAt="Real-time"
                 actions={[
-                    <SecBtn key="str" label="Configure streaming"/>,
-                    <SecBtn key="exp" label="Export CSV"/>,
-                    <SecBtn key="ale" label="Manage alerts" primary/>,
+                    <button ref={streamingBtnRef} key="str" onClick={() => setShowStreaming(o => !o)}
+                        style={{ padding:'6px 12px', background:showStreaming?T.surface2:T.surface, border:`1px solid ${showStreaming?T.goldInk:T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, color:T.ink, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', gap:5 }}>
+                        Configure streaming <span style={{ fontSize:9, color:T.inkMuted }}>▾</span>
+                    </button>,,
+
+                    <div key="exp" style={{ display:'inline-flex', position:'relative' }}>
+                        <button onClick={() => {
+                            // Body click — download CSV directly
+                            const cols = ['when','actor','action','target','cat','sev','ip'];
+                            const header = cols.join(',');
+                            const esc2 = (v) => '"' + String(v||'').replace(/"/g, '""') + '"';
+                            const rows = visible.map(e => cols.map(c => esc2(e[c])).join(','));
+                            const blob = new Blob([[header,...rows].join(String.fromCharCode(10))], { type:'text/csv' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url; a.download = `accelerep-audit-${new Date().toISOString().split('T')[0]}.csv`;
+                            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        }} style={{ padding:'7px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRight:'none',
+                            borderRadius:`${T.r}px 0 0 ${T.r}px`, fontSize:12.5, fontWeight:600, color:T.ink, cursor:'pointer', fontFamily:T.sans }}>
+                            Export CSV
+                        </button>
+                        <button ref={exportBtnRef} onClick={() => setExportOpen(o => !o)}
+                            style={{ padding:'7px 8px', background: exportOpen ? T.surface2 : T.surface, border:`1px solid ${T.borderStrong}`,
+                                borderRadius:`0 ${T.r}px ${T.r}px 0`, fontSize:10, color:T.inkMid, cursor:'pointer',
+                                display:'inline-flex', alignItems:'center', fontFamily:T.sans }}>▾</button>
+                        {exportOpen && (
+                            <AuditAnchoredMenu btnRef={exportBtnRef} onClose={() => setExportOpen(false)} alignRight={true}>
+                                <AuditExportDropdown events={visible} onClose={() => setExportOpen(false)}/>
+                            </AuditAnchoredMenu>
+                        )}
+                    </div>,
+
+                    <button key="ale" onClick={() => setShowAlerts(true)} style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'7px 14px',
+                        background:T.ink, color:'#fbf8f3', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer',
+                        border:'none', fontFamily:T.sans }}>
+                        Manage alerts
+                        {alertCount > 0 && (
+                            <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                minWidth:18, height:18, padding:'0 5px', background:T.warn, color:'#fbf8f3',
+                                borderRadius:9, fontSize:10.5, fontWeight:700, lineHeight:1 }}>{alertCount}</span>
+                        )}
+                    </button>,
                 ]}/>
 
-            {/* Filters */}
+            {/* ── Filters ── */}
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:'14px 16px', marginBottom:16 }}>
                 <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:12 }}>Filters</div>
-                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                    <input value={search} onChange={e=>setSearch(e.target.value)}
+                <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                    <input value={search} onChange={e => setSearch(e.target.value)}
                         placeholder="Search action, actor, target…"
-                        style={{ flex:1, padding:'7px 12px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface }}/>
-                    <select value={catFilter} onChange={e=>setCatFilter(e.target.value)} style={catSel}>
-                        {['All categories','auth','security','data','admin','billing'].map(c=><option key={c}>{c}</option>)}
-                    </select>
-                    <select value={actorFilter} onChange={e=>setActorFilter(e.target.value)} style={catSel}>
-                        {['All actors','System','jeff@accelerep.com','morgan@accelerep.com','priya@accelerep.com','theo@accelerep.com'].map(a=><option key={a}>{a}</option>)}
-                    </select>
-                    <select value={timeFilter} onChange={e=>setTimeFilter(e.target.value)} style={catSel}>
-                        {['Last 7 days','Last 30 days','Last 90 days','Custom'].map(t=><option key={t}>{t}</option>)}
-                    </select>
-                    <span style={{ fontSize:12.5, color:T.inkMuted, whiteSpace:'nowrap' }}>Showing {visible.length} of 12,847</span>
+                        style={{ flex:1, minWidth:180, padding:'7px 12px', border:`1px solid ${T.border}`, borderRadius:T.r,
+                            fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface }}/>
+                    <PolicySelect label="" value={catFilter} width={260}>
+                        <AuditCategoryDropdown value={catFilter} onChange={v => { setCatFilter(v); }}/>
+                    </PolicySelect>
+                    <PolicySelect label="" value={actorFilter} width={300}>
+                        <AuditActorDropdown value={actorFilter} onChange={v => { setActorFilter(v); }} events={events}/>
+                    </PolicySelect>
+                    <PolicySelect label="" value={timeFilter} width={280}>
+                        <AuditTimeDropdown value={timeFilter} onChange={v => { setTimeFilter(v); }}/>
+                    </PolicySelect>
+                    {(catFilter !== 'All categories' || actorFilter !== 'All actors' || search) && (
+                        <button onClick={() => { setCatFilter('All categories'); setActorFilter('All actors'); setSearch(''); }}
+                            style={{ fontSize:12, color:T.danger, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans, fontWeight:600, whiteSpace:'nowrap' }}>
+                            Clear filters
+                        </button>
+                    )}
+                    <span style={{ fontSize:12.5, color:T.inkMuted, whiteSpace:'nowrap', marginLeft:'auto' }}>Showing {visible.length} of {events.length} {eventsLoading ? '(loading…)' : ''}</span>
                 </div>
             </div>
 
-            {/* Event stream */}
+            {/* ── Event stream ── */}
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:16 }}>
                 <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}` }}>
                     <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Event stream</div>
@@ -10353,56 +13102,148 @@ const AuditDetail = ({ onBack }) => {
                 <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans }}>
                     <thead>
                         <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                            {['WHEN','ACTOR','ACTION','TARGET','CATEGORY','IP'].map((h,i) => (
-                                <th key={i} style={{ padding:'8px 14px', fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', textAlign:'left' }}>{h}</th>
+                            {['WHEN','ACTOR','ACTION','TARGET','CATEGORY','IP',''].map((h,i) => (
+                                <th key={i} style={{ padding:'8px 14px', fontSize:10, fontWeight:700, color:T.inkMuted,
+                                    letterSpacing:0.6, textTransform:'uppercase', textAlign:'left',
+                                    width: i===6 ? 36 : 'auto' }}>{h}</th>
                             ))}
                         </tr>
                     </thead>
                     <tbody>
-                        {visible.map((ev,i) => {
+                        {!eventsLoading && events.length === 0 && (
+                            <tr><td colSpan={7} style={{ padding:'48px', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>
+                                <div style={{ marginBottom:8, fontSize:24, opacity:0.3 }}>📋</div>
+                                <div style={{ fontWeight:600, color:T.ink, marginBottom:4 }}>No audit events yet</div>
+                                <div>Events will appear here as users take actions in the app.</div>
+                                {eventsError && <div style={{ color:T.danger, marginTop:8, fontSize:12 }}>Load error: {eventsError}</div>}
+                            </td></tr>
+                        )}
+                        {visible.length === 0 && events.length > 0 && (
+                            <tr><td colSpan={7} style={{ padding:'32px', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>
+                                No events match these filters.
+                            </td></tr>
+                        )}
+                        {visible.map((ev, i) => {
                             const cs = auditCatStyle(ev.cat);
                             const isWarn = ev.sev === 'warn';
+                            const isActiveRow = activeRow === i;
                             return (
-                                <tr key={i} style={{ borderBottom:`1px solid ${T.border}`, background: isWarn ? 'rgba(184,115,51,0.05)' : 'transparent' }}>
+                                <tr key={i} style={{ borderBottom:`1px solid ${T.border}`,
+                                    background: isActiveRow ? 'rgba(200,185,154,0.18)' : isWarn ? 'rgba(184,115,51,0.05)' : 'transparent',
+                                    cursor:'pointer', position:'relative' }}
+                                    onClick={() => { setActiveRow(i); setActiveMode('popover'); setActiveDestRow(null); }}>
                                     <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMuted, whiteSpace:'nowrap' }}>{ev.when}</td>
                                     <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.ink, whiteSpace:'nowrap' }}>{ev.actor}</td>
-                                    <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, fontWeight:600, color: isWarn ? T.warn : T.ink, whiteSpace:'nowrap' }}>{ev.action}</td>
+                                    <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, fontWeight:600, color:isWarn?T.warn:T.ink, whiteSpace:'nowrap' }}>{ev.action}</td>
                                     <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid, maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ev.target}</td>
                                     <td style={{ padding:'9px 14px' }}>
                                         <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:3, fontSize:11, fontWeight:700, background:cs.bg, color:cs.fg }}>{ev.cat}</span>
                                     </td>
                                     <td style={{ padding:'9px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMuted }}>{ev.ip}</td>
+                                    <td style={{ padding:'9px 14px', textAlign:'right' }} onClick={e => { e.stopPropagation(); setActiveRow(i); setActiveMode('menu'); setActiveDestRow(null); }}>
+                                        <button ref={el => rowMenuRefs.current[i] = el}
+                                            style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                                width:22, height:22, borderRadius:3, fontSize:16, fontWeight:700, border:'none',
+                                                cursor:'pointer', lineHeight:1,
+                                                color: isActiveRow && activeMode==='menu' ? T.goldInk : T.inkMuted,
+                                                background: isActiveRow && activeMode==='menu' ? 'rgba(200,185,154,0.30)' : 'transparent' }}>⋯</button>
+                                    </td>
                                 </tr>
                             );
                         })}
                     </tbody>
                 </table>
+
+                {/* Event popover — anchored below-left of the row */}
+                {activeRow !== null && activeMode === 'popover' && visible[activeRow] && (
+                    <AuditAnchoredMenu
+                        btnRef={{ current: rowMenuRefs.current[activeRow] }}
+                        onClose={() => { setActiveRow(null); setActiveMode(null); }}
+                        alignRight={false}>
+                        <AuditEventPopover
+                            event={visible[activeRow]}
+                            onClose={() => { setActiveRow(null); setActiveMode(null); }}
+                            onAddFilter={handleAddFilter}/>
+                    </AuditAnchoredMenu>
+                )}
+
+                {/* Row ⋯ menu — anchored top-right of ⋯ button */}
+                {activeRow !== null && activeMode === 'menu' && visible[activeRow] && (
+                    <AuditAnchoredMenu
+                        btnRef={{ current: rowMenuRefs.current[activeRow] }}
+                        onClose={() => { setActiveRow(null); setActiveMode(null); }}
+                        alignRight={true}>
+                        <div style={{ position:'relative' }}>
+                            <AuditEventRowMenu
+                                event={visible[activeRow]}
+                                onViewDetails={() => { setActiveMode('popover'); }}
+                                onFilterAction={(key,val) => { handleAddFilter(key,val); }}
+                                onCreateAlert={() => { setActiveRow(null); setActiveMode(null); }}
+                                onClose={() => { setActiveRow(null); setActiveMode(null); }}/>
+                        </div>
+                    </AuditAnchoredMenu>
+                )}
             </div>
 
-            {/* Streaming destinations */}
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+            {/* ── Streaming destinations ── */}
+            <div ref={destSectionRef} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
                 <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                     <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Streaming destinations</div>
-                    <button style={{ fontSize:12.5, fontWeight:600, color:T.info, background:'none', border:'none', cursor:'pointer', fontFamily:T.sans }}>+ Add destination</button>
+                    <SecBtn label="+ Add destination" onClick={() => setShowAddDest(true)}/>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'140px 1fr 100px 90px 120px', gap:8, padding:'7px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                    {['DESTINATION','ENDPOINT','FORMAT','STATUS','LAST DELIVERED'].map((h,i) => (
-                        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
-                    ))}
-                </div>
-                {SEC_AUDIT_STREAMS.map((s,i) => (
-                    <div key={s.dest} style={{ display:'grid', gridTemplateColumns:'140px 1fr 100px 90px 120px', gap:8, padding:'10px 16px', borderBottom:i<SEC_AUDIT_STREAMS.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
-                        <span style={{ fontSize:13, fontWeight:600, color:T.ink }}>{s.dest}</span>
-                        <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMuted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.url}</span>
-                        <span style={{ display:'inline-block', padding:'2px 6px', borderRadius:3, fontSize:11, fontWeight:600, background:'rgba(138,131,120,0.12)', color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{s.fmt}</span>
-                        <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
-                            background:s.status==='Active'?'rgba(77,107,61,0.12)':'rgba(156,58,46,0.12)',
-                            color:s.status==='Active'?T.ok:T.danger }}>
-                            {s.status}
-                        </span>
-                        <span style={{ fontSize:12, color:s.status==='Failing'?T.danger:T.inkMid }}>{s.lastDelivered}</span>
-                    </div>
-                ))}
+                <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans }}>
+                    <thead>
+                        <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                            {['DESTINATION','ENDPOINT','FORMAT','STATUS','LAST DELIVERED',''].map((h,i) => (
+                                <th key={i} style={{ padding:'8px 14px', fontSize:10, fontWeight:700, color:T.inkMuted,
+                                    letterSpacing:0.6, textTransform:'uppercase', textAlign:'left', width:i===5?36:'auto' }}>{h}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {streams.map((s, i) => (
+                            <tr key={s.dest} style={{ borderBottom:i<streams.length-1?`1px solid ${T.border}`:'none',
+                                background: activeDestRow===i ? 'rgba(200,185,154,0.18)' : 'transparent' }}>
+                                <td style={{ padding:'10px 14px', fontWeight:600, color:T.ink, fontSize:13 }}>{s.dest}</td>
+                                <td style={{ padding:'10px 14px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMuted, maxWidth:280, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.url}</td>
+                                <td style={{ padding:'10px 14px' }}>
+                                    <span style={{ display:'inline-block', padding:'2px 6px', borderRadius:3, fontSize:11, fontWeight:600,
+                                        background:'rgba(138,131,120,0.12)', color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace' }}>{s.fmt}</span>
+                                </td>
+                                <td style={{ padding:'10px 14px' }}>
+                                    <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
+                                        background:s.status==='Active'?'rgba(77,107,61,0.12)':s.status==='Failing'?'rgba(156,58,46,0.12)':'rgba(138,131,120,0.12)',
+                                        color:s.status==='Active'?T.ok:s.status==='Failing'?T.danger:T.inkMid }}>
+                                        {s.status}
+                                    </span>
+                                </td>
+                                <td style={{ padding:'10px 14px', fontSize:12, color:s.status==='Failing'?T.danger:T.inkMid }}>{s.lastDelivered}</td>
+                                <td style={{ padding:'10px 14px', textAlign:'right' }}>
+                                    <button ref={el => destMenuRefs.current[i] = el}
+                                        onClick={e => { e.stopPropagation(); setActiveDestRow(activeDestRow===i ? null : i); setActiveRow(null); }}
+                                        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                            width:22, height:22, borderRadius:3, fontSize:16, fontWeight:700, border:'none',
+                                            cursor:'pointer', lineHeight:1,
+                                            color: activeDestRow===i ? T.goldInk : T.inkMuted,
+                                            background: activeDestRow===i ? 'rgba(200,185,154,0.30)' : 'transparent' }}>⋯</button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+
+                {/* Destination ⋯ menu */}
+                {activeDestRow !== null && streams[activeDestRow] && (
+                    <AuditAnchoredMenu
+                        btnRef={{ current: destMenuRefs.current[activeDestRow] }}
+                        onClose={() => setActiveDestRow(null)}
+                        alignRight={true}>
+                        <AuditDestRowMenu
+                            dest={streams[activeDestRow]}
+                            onRemove={handleRemoveDest}
+                            onClose={() => setActiveDestRow(null)}/>
+                    </AuditAnchoredMenu>
+                )}
             </div>
         </div>
     );
@@ -10448,69 +13289,34 @@ const DATA_IMPORT = {
     },
 };
 
-const DATA_EXPORT = {
-    schedules:[
-        { id:'sch-01', name:'Weekly account snapshot',         scope:'Accounts (all)',                cadence:'Weekly · Mon 06:00 UTC', destination:'s3://acme-export/accounts/',  format:'CSV',       last:'2 days ago', size:'12.4 MB', enabled:true,  status:'ok' },
-        { id:'sch-02', name:'Pipeline weekly digest',          scope:'Opportunities (open)',          cadence:'Weekly · Fri 22:00 UTC', destination:'email:finance@…',             format:'XLSX',      last:'5 days ago', size:'480 KB',  enabled:true,  status:'ok' },
-        { id:'sch-03', name:'Daily activity log',              scope:'Activity (all touchpoints)',    cadence:'Daily · 02:00 UTC',      destination:'snowflake:stg.activity',      format:'NDJSON.gz', last:'14h ago',    size:'88 MB',   enabled:true,  status:'ok' },
-        { id:'sch-04', name:'Marketing handoff',               scope:'Leads (closed-won)',            cadence:'Weekly · Wed 08:00 UTC', destination:'webhook:hubspot.com/…',       format:'JSON',      last:'failing 3×', size:'—',       enabled:true,  status:'failing' },
-        { id:'sch-05', name:'GDPR DSR archive',                scope:'Per-subject (PII bundle)',      cadence:'On request',             destination:'secure download link',        format:'ZIP',       last:'3 weeks ago',size:'2.1 MB',  enabled:true,  status:'ok' },
-        { id:'sch-06', name:'Closed deals quarterly (paused)', scope:'Opportunities (won)',           cadence:'Quarterly · 1st 00:00',  destination:'sftp://reporting.acme/…',     format:'CSV',       last:'6 weeks ago',size:'—',       enabled:false, status:'ok' },
-    ],
-    recent:[
-        { ts:'today, 14:02', name:'Ad-hoc · Q1 deals',         by:'jeff@accelerep.com',   rows:248,   format:'XLSX',size:'120 KB', ms:412 },
-        { ts:'today, 09:14', name:'Weekly account snapshot',   by:'system (schedule)',    rows:14210, format:'CSV', size:'12.4 MB',ms:2840 },
-        { ts:'yesterday',    name:'Ad-hoc · NA territory map', by:'morgan@accelerep.com', rows:612,   format:'CSV', size:'88 KB',  ms:220 },
-        { ts:'2 days ago',   name:'Pipeline weekly digest',    by:'system (schedule)',    rows:412,   format:'XLSX',size:'480 KB', ms:980 },
-        { ts:'4 days ago',   name:'Ad-hoc · contact opt-outs', by:'priya@accelerep.com',  rows:47,    format:'CSV', size:'8 KB',   ms:90 },
-    ],
-    dsrQueue:[
-        { id:'dsr-018', subject:'k.harper@example.com', type:'access',  submitted:'2 days ago',  sla:'28 days remaining', status:'in-progress' },
-        { id:'dsr-017', subject:'matt@thirdrock.io',    type:'erasure', submitted:'1 week ago',  sla:'23 days remaining', status:'in-progress' },
-        { id:'dsr-016', subject:'p.mehta@globex.test',  type:'access',  submitted:'3 weeks ago', sla:'completed',         status:'completed'   },
-    ],
-};
-
+// DATA_EXPORT removed — ExportDetail fetches live data from /.netlify/functions/
 // DATA_BACKUP removed — BackupDetail loads live data from /.netlify/functions/backup
 
-const DATA_FEATURES = {
-    flags:[
-        { id:'deal-scoring',     name:'Deal scoring',           desc:'AI-driven probability and next-step suggestions on opportunities',      on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'writing-assist',   name:'Writing assist',         desc:'Inline AI writing help in notes, emails, and proposals',                on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'meeting-summaries',name:'Meeting summaries',      desc:'Auto-summarize Zoom/Teams calls and post to record',                    on:true,  scope:'workspace · 75% rollout', beta:true,  new:false },
-        { id:'sentiment',        name:'Email sentiment',        desc:'Score reply sentiment on incoming threads',                             on:false, scope:'off',                     beta:true,  new:true  },
-        { id:'forecast-roll',    name:'Forecast rollup',        desc:'Hierarchical forecast with manager adjustments',                        on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'territory-rules',  name:'Territory rules engine', desc:'Auto-assign accounts to territories on create/update',                  on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'lead-routing',     name:'Lead routing',           desc:'Round-robin + skill-based lead distribution',                           on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'duplicate-merge',  name:'Smart duplicate merge',  desc:'Suggest merges when accounts/contacts collide',                         on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'health-scores',    name:'Account health scores',  desc:'Health 0–100 per account based on usage and sentiment',                 on:false, scope:'off',                     beta:true,  new:false },
-        { id:'mobile-offline',   name:'Mobile offline mode',    desc:'Cache and sync recent records on iOS/Android',                          on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'mobile-voice',     name:'Mobile voice notes',     desc:'Dictate notes on the go with auto-transcription',                       on:true,  scope:'workspace · 100%',        beta:false, new:true  },
-        { id:'quote-redlines',   name:'Quote redlines',         desc:'Track legal redline rounds on quote PDFs',                              on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'esign-bulk',       name:'Bulk e-sign',            desc:'Send the same agreement to many counterparties at once',                on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'public-api-v2',    name:'Public API v2',          desc:'New REST + webhooks; v1 deprecation in 90 days',                        on:true,  scope:'workspace · 100%',        beta:true,  new:false },
-        { id:'graphql',          name:'GraphQL endpoint',       desc:'Read-only GraphQL on top of v2',                                        on:false, scope:'off',                     beta:true,  new:false },
-        { id:'audit-streaming',  name:'Audit log streaming',    desc:'Push audit events to Splunk / Datadog / S3',                            on:true,  scope:'workspace · 100%',        beta:false, new:false },
-        { id:'workflows-loops',  name:'Workflow loops',         desc:'For-each automation steps over collections',                            on:false, scope:'off',                     beta:true,  new:false },
-        { id:'commit-categories',name:'Commit categories',      desc:'Pipeline / Best Case / Commit / Closed buckets',                        on:true,  scope:'workspace · 100%',        beta:false, new:false },
-    ],
-};
+// Feature flag master list — source of truth for the UI.
+// 'live' = wired to real functionality. 'coming-soon' = stored but UI-gated.
+// Default 'on' value is the initial state written to DB on first toggle.
+const FLAG_DEFS = [
+    { id:'deal-scoring',      name:'Deal scoring',           desc:'Health score (0–100) on every opportunity based on activity, stage age, and close date.',   beta:false, new:false, live:true  },
+    { id:'account-health-scores', name:'Account health scores', desc:'Aggregate health score per account rolled up from open opportunities.',                  beta:false, new:false, live:true  },
+    { id:'territory-rules',   name:'Territory rules engine', desc:'Auto-assign accounts and opportunities to territories on create/update.',                    beta:false, new:false, live:true  },
+    { id:'commit-categories', name:'Commit categories',      desc:'Pipeline / Best Case / Commit / Omit forecast buckets on every opportunity.',               beta:false, new:false, live:true  },
+    { id:'writing-assist',    name:'Writing assist',         desc:'AI-assisted text drafting in notes, emails, and descriptions.',                             beta:true,  new:false, live:false },
+    { id:'duplicate-merge',   name:'Smart duplicate merge',  desc:'Fuzzy match on account/contact create with merge UI to resolve conflicts.',                 beta:true,  new:false, live:false },
+    { id:'meeting-summaries', name:'Meeting summaries',      desc:'Auto-summarize Zoom/Teams calls and post to the related record.',                           beta:true,  new:false, live:false },
+    { id:'sentiment',         name:'Email sentiment',        desc:'Score reply sentiment on incoming email threads.',                                           beta:true,  new:true,  live:false },
+    { id:'forecast-roll',     name:'Forecast rollup',        desc:'Hierarchical forecast with manager overrides and commit/best-case roll-up.',                beta:false, new:false, live:false },
+    { id:'lead-routing',      name:'Lead routing',           desc:'Round-robin and skill-based lead distribution rules.',                                       beta:false, new:false, live:false },
+    { id:'mobile-offline',    name:'Mobile offline mode',    desc:'Cache and sync recent records on iOS/Android when offline.',                                beta:false, new:false, live:false },
+    { id:'mobile-voice',      name:'Mobile voice notes',     desc:'Dictate notes on the go with auto-transcription.',                                          beta:false, new:true,  live:false },
+    { id:'quote-redlines',    name:'Quote redlines',         desc:'Track legal redline rounds on quote PDFs.',                                                  beta:false, new:false, live:false },
+    { id:'esign-bulk',        name:'Bulk e-sign',            desc:'Send the same agreement to many counterparties at once.',                                   beta:false, new:false, live:false },
+    { id:'public-api-v2',     name:'Public API v2',          desc:'New REST + webhooks; v1 deprecation in 90 days.',                                           beta:true,  new:false, live:false },
+    { id:'graphql',           name:'GraphQL endpoint',       desc:'Read-only GraphQL on top of the v2 API.',                                                   beta:true,  new:false, live:false },
+    { id:'audit-streaming',   name:'Audit log streaming',    desc:'Push audit events to Splunk / Datadog / S3.',                                               beta:false, new:false, live:false },
+    { id:'workflows-loops',   name:'Workflow loops',         desc:'For-each automation steps over record collections.',                                         beta:true,  new:false, live:false },
+];
 
-const DATA_AI = {
-    enabled:true, model:'claude-sonnet-4-5', fallback:'claude-haiku-4-5',
-    region:'US · us-east-2', tokenBudget:25000000, tokensUsed:4280000,
-    trainingOptIn:false, zeroRetention:true, piiRedaction:true, byok:false, byokProvider:'—',
-    dpaSignedAt:'2025-11-04',
-    usage:{ tokens30d:4280000, requests30d:29680, avgLatency:'1.4s', piiBlocked:142,
-        byFeature:[
-            { feature:'Writing assist',    requests:18420, tokens:2104000, pctBudget:8.4, avgLatency:'1.1s' },
-            { feature:'Deal scoring',      requests:9420,  tokens:1408000, pctBudget:5.6, avgLatency:'0.9s' },
-            { feature:'Meeting summaries', requests:1840,  tokens:612000,  pctBudget:2.4, avgLatency:'4.2s' },
-            { feature:'Email sentiment',   requests:0,     tokens:0,       pctBudget:0,   avgLatency:'—'    },
-            { feature:'Account health',    requests:0,     tokens:0,       pctBudget:0,   avgLatency:'—'    },
-        ],
-    },
-};
+// DATA_AI removed — FeaturesDetail reads aiSettings from live settings
 
 // ── Shared primitives ─────────────────────────────────────────
 
@@ -10711,27 +13517,68 @@ const NewImportModal = ({ onClose }) => (
 );
 
 // 2. New scheduled export modal
-const NewExportModal = ({ onClose }) => {
+const NewExportModal = ({ onClose, onSave, existing }) => {
     const selStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' };
     const inpStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' };
     const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
+    const nameRef  = React.useRef(null);
+    const [scope,  setScope]  = React.useState(existing?.scope       || 'accounts');
+    const [fmt,    setFmt]    = React.useState(existing?.format      || 'CSV');
+    const [cadence,setCadence]= React.useState(existing?.cadence     || 'Weekly · Mondays 06:00 UTC');
+    const [dest,   setDest]   = React.useState(existing?.destination || 'download');
+    const [saving, setSaving] = React.useState(false);
+
+    const handleSave = async () => {
+        const name = nameRef.current?.value?.trim();
+        if (!name) return;
+        setSaving(true);
+        await onSave({ id: existing?.id || null, name, scope, format:fmt, cadence, destination:dest, enabled:true, status:'ok' });
+        setSaving(false);
+    };
+
     return (
         <DataModal onClose={onClose}>
-            <DataModalHead title="New scheduled export" sub="Recurring delivery to S3, SFTP, email, or webhook." onClose={onClose}/>
+            <DataModalHead title={existing ? 'Edit scheduled export' : 'New scheduled export'} sub="Define a recurring export. Manual trigger available immediately." onClose={onClose}/>
             <div style={{ flex:1, overflowY:'auto', padding:22 }}>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-                    <FL label="Name"><input defaultValue="Weekly accounts → S3" style={inpStyle}/></FL>
-                    <FL label="Object"><select style={selStyle}><option>Accounts</option><option>Contacts</option><option>Opportunities</option></select></FL>
-                    <FL label="Filter (CRMQL)"><input defaultValue="updated_at > now() - 7d" style={{ ...inpStyle, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}/></FL>
-                    <FL label="Format"><select style={selStyle}><option>CSV</option><option>XLSX</option><option>NDJSON.gz</option><option>JSON</option></select></FL>
-                    <FL label="Frequency"><select style={selStyle}><option>Weekly · Mondays 06:00 UTC</option><option>Daily · 02:00 UTC</option><option>Monthly</option></select></FL>
-                    <FL label="Destination"><select style={selStyle}><option>S3 · acme-exports/accounts/</option><option>SFTP</option><option>Email</option><option>Webhook</option></select></FL>
+                    <FL label="Name"><input ref={nameRef} defaultValue={existing?.name || ''} placeholder="e.g. Weekly accounts" style={inpStyle}/></FL>
+                    <FL label="Entity (scope)">
+                        <select value={scope} onChange={e => setScope(e.target.value)} style={selStyle}>
+                            {['accounts','contacts','opportunities','tasks','activities','leads'].map(s => (
+                                <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                            ))}
+                        </select>
+                    </FL>
+                    <FL label="Format">
+                        <select value={fmt} onChange={e => setFmt(e.target.value)} style={selStyle}>
+                            <option>CSV</option><option>JSON</option>
+                        </select>
+                    </FL>
+                    <FL label="Cadence">
+                        <select value={cadence} onChange={e => setCadence(e.target.value)} style={selStyle}>
+                            <option>Daily · 02:00 UTC</option>
+                            <option>Weekly · Mondays 06:00 UTC</option>
+                            <option>Weekly · Fridays 22:00 UTC</option>
+                            <option>Monthly · 1st 00:00 UTC</option>
+                            <option>Quarterly · 1st 00:00 UTC</option>
+                            <option>On request</option>
+                        </select>
+                    </FL>
+                    <FL label="Destination" style={{ gridColumn:'span 2' }}>
+                        <select value={dest} onChange={e => setDest(e.target.value)} style={selStyle}>
+                            <option value="download">Browser download (manual trigger)</option>
+                            <option value="email">Email</option>
+                            <option value="webhook">Webhook</option>
+                        </select>
+                    </FL>
+                </div>
+                <div style={{ marginTop:12, padding:'10px 12px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:3, fontSize:12, color:T.inkMid }}>
+                    <b style={{ color:T.info }}>Note:</b> Automated delivery (S3, SFTP, Snowflake) is on the roadmap. Schedules created today can be triggered manually from the export page.
                 </div>
             </div>
             <DataModalFoot>
-                <DataBtn label="Run once now"/>
                 <DataBtn label="Cancel" onClick={onClose}/>
-                <DataBtn label="Create schedule" primary onClick={onClose}/>
+                <DataBtn label={saving ? 'Saving…' : (existing ? 'Save changes' : 'Create schedule')} primary disabled={saving} onClick={handleSave}/>
             </DataModalFoot>
         </DataModal>
     );
@@ -10877,31 +13724,473 @@ const ResetAiModal = ({ onClose }) => {
 };
 
 // ── ① Import Detail ───────────────────────────────────────────
-const ImportDetail = ({ onBack }) => {
-    const [showModal, setShowModal] = useState(false);
-    const w = DATA_IMPORT.wizard;
-    const mapped = w.columns.filter(c => c.target !== '__skip__').length;
 
-    const th = { padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans, textAlign:'left' };
-    const td = (extra={}) => ({ padding:'8px 12px', fontFamily:T.sans, ...extra });
+// Importable fields per object — derived from schema.ts
+const IMPORT_FIELDS = {
+    Accounts: [
+        { value:'name',              label:'Name *'            },
+        { value:'website',           label:'Website'           },
+        { value:'phone',             label:'Phone'             },
+        { value:'industry',          label:'Industry'          },
+        { value:'verticalMarket',    label:'Vertical market'   },
+        { value:'annualRevenue',     label:'Annual revenue'    },
+        { value:'totalEmployees',    label:'Total employees'   },
+        { value:'address',           label:'Address'           },
+        { value:'city',              label:'City'              },
+        { value:'state',             label:'State'             },
+        { value:'zip',               label:'ZIP'               },
+        { value:'country',           label:'Country'           },
+        { value:'accountSegment',    label:'Segment'           },
+        { value:'accountOwner',      label:'Account owner'     },
+        { value:'assignedRep',       label:'Assigned rep'      },
+        { value:'assignedTerritory', label:'Territory'         },
+        { value:'description',       label:'Description'       },
+        { value:'notes',             label:'Notes'             },
+        { value:'linkedInUrl',       label:'LinkedIn URL'      },
+        { value:'foundedYear',       label:'Founded year'      },
+        { value:'externalId',        label:'External ID'       },
+    ],
+    Contacts: [
+        { value:'firstName',         label:'First name *'      },
+        { value:'lastName',          label:'Last name *'       },
+        { value:'email',             label:'Email *'           },
+        { value:'phone',             label:'Phone'             },
+        { value:'mobile',            label:'Mobile'            },
+        { value:'title',             label:'Title'             },
+        { value:'company',           label:'Company'           },
+        { value:'department',        label:'Department'        },
+        { value:'address',           label:'Address'           },
+        { value:'city',              label:'City'              },
+        { value:'state',             label:'State'             },
+        { value:'zip',               label:'ZIP'               },
+        { value:'country',           label:'Country'           },
+        { value:'assignedRep',       label:'Assigned rep'      },
+        { value:'assignedTerritory', label:'Territory'         },
+        { value:'notes',             label:'Notes'             },
+        { value:'externalId',        label:'External ID'       },
+    ],
+    Leads: [
+        { value:'firstName',         label:'First name *'      },
+        { value:'lastName',          label:'Last name *'       },
+        { value:'email',             label:'Email *'           },
+        { value:'phone',             label:'Phone'             },
+        { value:'company',           label:'Company'           },
+        { value:'title',             label:'Title'             },
+        { value:'source',            label:'Lead source'       },
+        { value:'status',            label:'Status'            },
+        { value:'notes',             label:'Notes'             },
+        { value:'assignedRep',       label:'Assigned rep'      },
+        { value:'externalId',        label:'External ID'       },
+    ],
+    Opportunities: [
+        { value:'opportunityName',   label:'Opportunity name *'},
+        { value:'account',           label:'Account'           },
+        { value:'stage',             label:'Stage *'           },
+        { value:'arr',               label:'ARR'               },
+        { value:'forecastedCloseDate',label:'Close date'       },
+        { value:'salesRep',          label:'Sales rep'         },
+        { value:'probability',       label:'Probability'       },
+        { value:'territory',         label:'Territory'         },
+        { value:'team',              label:'Team'              },
+        { value:'notes',             label:'Notes'             },
+        { value:'externalId',        label:'External ID'       },
+    ],
+};
+
+const REQUIRED_FIELDS = {
+    Accounts:      ['name'],
+    Contacts:      ['firstName','lastName','email'],
+    Leads:         ['firstName','lastName','email'],
+    Opportunities: ['opportunityName','stage'],
+};
+
+// Auto-map a CSV column name to a field value using similarity heuristics
+function autoMap(csvName, objectType) {
+    const fields = IMPORT_FIELDS[objectType] || [];
+    const n = csvName.toLowerCase().replace(/[^a-z0-9]/g,'');
+    const exact = fields.find(f => f.value.toLowerCase() === n || f.label.toLowerCase().replace(/[^a-z0-9]/g,'') === n);
+    if (exact) return { target: exact.value, confidence: 0.98 };
+    const partial = fields.find(f => n.includes(f.value.toLowerCase()) || f.value.toLowerCase().includes(n));
+    if (partial) return { target: partial.value, confidence: 0.80 };
+    // Common aliases
+    const aliases = {
+        accountname:'name', company:'name', companyname:'name', organization:'name',
+        domain:'website', url:'website', web:'website', homepage:'website',
+        revenue:'annualRevenue', annrev:'annualRevenue',
+        employees:'totalEmployees', headcount:'totalEmployees', emp:'totalEmployees',
+        firstname:'firstName', first:'firstName', givenname:'firstName',
+        lastname:'lastName', last:'lastName', surname:'lastName', familyname:'lastName',
+        dealname:'opportunityName', opportunity:'opportunityName', deal:'opportunityName',
+        closedate:'forecastedCloseDate', closingdate:'forecastedCloseDate',
+        amount:'arr', value:'arr', dealsize:'arr', dealvalue:'arr',
+        sfid:'externalId', salesforceid:'externalId', crmid:'externalId', hubspotid:'externalId',
+        owner:'accountOwner', rep:'salesRep',
+        segment:'accountSegment', tier:'accountSegment',
+        vertical:'verticalMarket', industry:'industry',
+        leadsource:'source', source:'source',
+    };
+    const mapped = aliases[n];
+    if (mapped && fields.find(f => f.value === mapped)) return { target: mapped, confidence: 0.88 };
+    return { target: '__skip__', confidence: 0.0 };
+}
+
+// Parse a CSV file in the browser — returns { headers, rows, sample }
+function parseCSVHeaders(text) {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (!lines.length) return { headers: [], sample: [] };
+    const parseRow = (line) => {
+        const out = []; let cur = ''; let inQ = false;
+        for (const ch of line) {
+            if (ch === '"') { inQ = !inQ; }
+            else if (ch === ',' && !inQ) { out.push(cur.trim()); cur = ''; }
+            else cur += ch;
+        }
+        out.push(cur.trim());
+        return out;
+    };
+    const headers = parseRow(lines[0]);
+    const sample  = lines.slice(1, 4).map(parseRow);
+    return { headers, rows: lines.length - 1, sample };
+}
+
+// Save mapping preset modal
+const SavePresetModal = ({ columns, object, onClose }) => {
+    const [name,   setName]   = useState('');
+    const [saving, setSaving] = useState(false);
+    const [saved,  setSaved]  = useState(false);
+
+    const handleSave = async () => {
+        if (!name.trim()) return;
+        setSaving(true);
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({
+                    importPresets: [{ name: name.trim(), object, columns: columns.map(c => ({ csv: c.csv, target: c.target })) }],
+                }),
+            });
+            setSaved(true); setTimeout(onClose, 800);
+        } catch(e) { /* silent */ } finally { setSaving(false); }
+    };
+
+    const inp = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, background:T.surface, fontFamily:T.sans, outline:'none', boxSizing:'border-box' };
+    return (
+        <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={onClose}>
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:420, boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }} onClick={e=>e.stopPropagation()}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>Save mapping as preset</div>
+                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer' }}>×</button>
+                </div>
+                <div style={{ padding:'20px' }}>
+                    <div style={{ fontSize:12, color:T.inkMid, marginBottom:12 }}>Save this column mapping so you can reuse it for future <b>{object}</b> imports.</div>
+                    <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>Preset name</label>
+                    <input value={name} onChange={e=>setName(e.target.value)} placeholder={`e.g. Salesforce → ${object}`} style={inp} autoFocus onKeyDown={e=>e.key==='Enter'&&handleSave()}/>
+                </div>
+                <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'14px 20px', borderTop:`1px solid ${T.border}` }}>
+                    <button onClick={onClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    <button onClick={handleSave} disabled={!name.trim()||saving||saved} style={{ padding:'7px 16px', background: saved ? T.ok : T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>
+                        {saved ? '✓ Saved' : saving ? 'Saving…' : 'Save preset'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Run import confirmation modal
+const RunImportModal = ({ wizard, object, onClose, onComplete }) => {
+    const [running, setRunning] = useState(false);
+    const [result,  setResult]  = useState(null);
+    const [err,     setErr]     = useState('');
+    const mapped = wizard.columns.filter(c => c.target !== '__skip__');
+
+    const handleRun = async () => {
+        setRunning(true); setErr('');
+        try {
+            const res  = await dbFetch('/.netlify/functions/import', {
+                method: 'POST',
+                body: JSON.stringify({
+                    object,
+                    dedupe:  wizard.dedupe,
+                    columns: mapped.map(c => ({ csv: c.csv, target: c.target })),
+                    preview: wizard.preview,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Import failed');
+            setResult(data);
+        } catch(e) {
+            setErr(e.message || 'Import failed. Please try again.');
+        } finally { setRunning(false); }
+    };
+
+    return (
+        <div style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={!result ? onClose : undefined}>
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, width:480, boxShadow:'0 8px 32px rgba(42,38,34,0.18)', fontFamily:T.sans }} onClick={e=>e.stopPropagation()}>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:`1px solid ${T.border}` }}>
+                    <div style={{ fontSize:15, fontWeight:700, color:T.ink }}>{result ? 'Import complete' : 'Run import'}</div>
+                    <button onClick={result ? onComplete : onClose} style={{ background:'none', border:'none', fontSize:18, color:T.inkMuted, cursor:'pointer' }}>×</button>
+                </div>
+                <div style={{ padding:'20px' }}>
+                    {result ? (
+                        <div>
+                            <div style={{ fontSize:13, color:T.ok, fontWeight:700, marginBottom:12 }}>✓ Import completed successfully</div>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                                {[
+                                    { label:'Created', value: result.created ?? wizard.preview.willCreate },
+                                    { label:'Updated', value: result.updated ?? wizard.preview.willUpdate },
+                                    { label:'Skipped', value: result.skipped ?? wizard.preview.willSkip  },
+                                    { label:'Errors',  value: result.errors  ?? 0, warn: true             },
+                                ].map((s,i) => (
+                                    <div key={i} style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, padding:'10px 14px' }}>
+                                        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:4 }}>{s.label}</div>
+                                        <div style={{ fontSize:22, fontWeight:700, color: s.warn && s.value > 0 ? T.warn : T.ink }}>{s.value}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div>
+                            <div style={{ padding:'10px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, marginBottom:14, fontSize:12.5, color:T.inkMid }}>
+                                This will import <b>{wizard.file.rows.toLocaleString()} rows</b> into <b>{object}</b> using your column mapping and dedupe rules. This action cannot be undone.
+                            </div>
+                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+                                {[
+                                    { label:'Will create', value: wizard.preview.willCreate },
+                                    { label:'Will update', value: wizard.preview.willUpdate },
+                                    { label:'Will skip',   value: wizard.preview.willSkip   },
+                                    { label:'Errors',      value: wizard.preview.errors.length, warn: true },
+                                ].map((s,i) => (
+                                    <div key={i} style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:6, padding:'10px 14px' }}>
+                                        <div style={{ fontSize:10.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', marginBottom:4 }}>{s.label}</div>
+                                        <div style={{ fontSize:22, fontWeight:700, color: s.warn && s.value > 0 ? T.warn : T.ink }}>{s.value}</div>
+                                    </div>
+                                ))}
+                            </div>
+                            {err && <div style={{ fontSize:12, color:T.danger, fontWeight:600, marginBottom:10 }}>{err}</div>}
+                        </div>
+                    )}
+                </div>
+                <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'14px 20px', borderTop:`1px solid ${T.border}` }}>
+                    {result ? (
+                        <button onClick={onComplete} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>Done</button>
+                    ) : (
+                        <>
+                            <button onClick={onClose} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                            <button onClick={handleRun} disabled={running} style={{ padding:'7px 16px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:700, cursor:'pointer', fontFamily:T.sans, opacity:running?0.7:1 }}>
+                                {running ? 'Running…' : 'Run import now'}
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ImportDetail = ({ onBack }) => {
+    const fileInputRef   = React.useRef(null);
+    const [showPreset,   setShowPreset]   = useState(false);
+    const [showRun,      setShowRun]      = useState(false);
+    const [showHistory,  setShowHistory]  = useState(false);
+    const [object,       setObject]       = useState('Accounts');
+    const [uploading,    setUploading]    = useState(false);
+    const [uploadErr,    setUploadErr]    = useState('');
+
+    // Wizard state — starts from mock data, becomes live after file upload
+    const initWizard = () => ({
+        step:    'map',
+        file:    DATA_IMPORT.wizard.file,
+        columns: DATA_IMPORT.wizard.columns.map(c => ({ ...c })),
+        dedupe:  { ...DATA_IMPORT.wizard.dedupe },
+        preview: { ...DATA_IMPORT.wizard.preview, errors: [...DATA_IMPORT.wizard.preview.errors] },
+    });
+    const [wizard, setWizard] = useState(initWizard);
+
+    const STEPS = ['upload','map','dedupe','preview','done'];
+    const stepIdx    = STEPS.indexOf(wizard.step);
+    const mapped     = wizard.columns.filter(c => c.target !== '__skip__').length;
+    const fields     = IMPORT_FIELDS[object] || [];
+    const reqFields  = REQUIRED_FIELDS[object] || [];
+    const reqMapped  = reqFields.every(f => wizard.columns.some(c => c.target === f));
+    const canContinue = reqMapped && wizard.step !== 'done';
+
+    // ── Helpers ───────────────────────────────────────────────────
+    const setColumnTarget = (csv, target) => {
+        setWizard(w => ({ ...w, columns: w.columns.map(c => c.csv === csv ? { ...c, target } : c) }));
+    };
+    const toggleSkip = (csv) => {
+        setWizard(w => ({
+            ...w,
+            columns: w.columns.map(c => {
+                if (c.csv !== csv) return c;
+                if (c.target === '__skip__') {
+                    const { target } = autoMap(csv, object);
+                    return { ...c, target: target || '__skip__' };
+                }
+                return { ...c, target: '__skip__' };
+            }),
+        }));
+    };
+    const autoMapAll = () => {
+        setWizard(w => ({
+            ...w,
+            columns: w.columns.map(c => {
+                if (c.confidence >= 0.85 && c.target !== '__skip__') return c;
+                const { target, confidence } = autoMap(c.csv, object);
+                return { ...c, target, confidence };
+            }),
+        }));
+    };
+    const setDedupe = (patch) => setWizard(w => ({ ...w, dedupe: { ...w.dedupe, ...patch } }));
+
+    const advance = () => {
+        const next = STEPS[stepIdx + 1];
+        if (next) setWizard(w => ({ ...w, step: next }));
+    };
+
+    const continueLabel = () => {
+        if (wizard.step === 'map')     return 'Continue → Dedupe';
+        if (wizard.step === 'dedupe')  return 'Continue → Preview';
+        if (wizard.step === 'preview') return 'Run import ▶';
+        return 'Continue';
+    };
+
+    // ── File upload ───────────────────────────────────────────────
+    const handleFile = async (file) => {
+        if (!file) return;
+        if (file.size > 100 * 1024 * 1024) { setUploadErr('File exceeds 100 MB limit.'); return; }
+        setUploading(true); setUploadErr('');
+        try {
+            const text    = await file.text();
+            const { headers, rows, sample } = parseCSVHeaders(text);
+            if (!headers.length) { setUploadErr('Could not read CSV headers.'); return; }
+            if (rows > 250000)   { setUploadErr('File exceeds 250,000 row limit. Use the API for larger imports.'); return; }
+
+            const columns = headers.map((csv, i) => {
+                const { target, confidence } = autoMap(csv, object);
+                const sampleVal = sample.map(row => row[i]).find(v => v) || '';
+                const type = /\d{4}-\d{2}-\d{2}/.test(sampleVal) ? 'datetime'
+                    : /^\$[\d,]+/.test(sampleVal) ? 'currency'
+                    : /^[\d,]+$/.test(sampleVal) ? 'number'
+                    : /^https?:\/\//.test(sampleVal) ? 'url'
+                    : /@/.test(sampleVal) ? 'email' : 'text';
+                const required = (REQUIRED_FIELDS[object]||[]).includes(target);
+                return { csv, target, type, sample: sampleVal, confidence, required };
+            });
+
+            const sizeKB = file.size / 1024;
+            const sizeLbl = sizeKB > 1024 ? `${(sizeKB/1024).toFixed(1)} MB` : `${sizeKB.toFixed(1)} KB`;
+
+            setWizard(w => ({
+                ...w,
+                step:    'map',
+                file:    { name: file.name, size: sizeLbl, rows, encoding: 'UTF-8' },
+                columns,
+                preview: { willCreate: 0, willUpdate: 0, willSkip: 0, errors: [] },
+            }));
+        } catch(e) {
+            setUploadErr('Failed to read file. Ensure it is a valid UTF-8 CSV.');
+        } finally { setUploading(false); }
+    };
+
+    const onFileInput = (e) => { const f = e.target.files?.[0]; if (f) handleFile(f); };
+    const onDrop = (e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f); };
+
+    const inp = { padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer', appearance:'none', width:'100%', boxSizing:'border-box' };
+    const lbl = { display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 };
+    const thSt = { padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans, textAlign:'left' };
+    const tdSt = (extra={}) => ({ padding:'8px 12px', fontFamily:T.sans, ...extra });
+
+    // ── History view ──────────────────────────────────────────────
+    if (showHistory) {
+        const totalRows   = DATA_IMPORT.history.reduce((a,b)=>a+b.rows, 0);
+        const totalErrors = DATA_IMPORT.history.reduce((a,b)=>a+b.errors, 0);
+        return (
+            <div style={{ fontFamily:T.sans }}>
+                <DataCrumb page="Import history" onBack={onBack}/>
+                <DataTitle title="Import history" sub="All CSV imports for this workspace"
+                    actions={[
+                        <DataBtn key="back" label="← Back to wizard" onClick={()=>setShowHistory(false)}/>,
+                        <DataBtn key="new" label="+ New import" primary onClick={()=>setShowHistory(false)}/>,
+                    ]}/>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:18 }}>
+                    {[
+                        { label:'Total runs',   value: DATA_IMPORT.history.length },
+                        { label:'Total rows',   value: totalRows.toLocaleString() },
+                        { label:'Total errors', value: totalErrors, warn: totalErrors > 0 },
+                        { label:'Success rate', value: `${(100 - (totalErrors/totalRows)*100).toFixed(1)}%` },
+                    ].map((s,i) => <DataStatCard key={i} label={s.label} value={s.value} warn={s.warn}/>)}
+                </div>
+                <DataCard title="Recent imports">
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
+                        <thead><tr style={{ background:T.surface2 }}>{['Run ID','When','Object','Rows','Errors','Status','Actor'].map((h,i)=><th key={i} style={thSt}>{h}</th>)}</tr></thead>
+                        <tbody>
+                            {DATA_IMPORT.history.map((h,i) => {
+                                const tone  = h.status==='success'?'ok':h.status==='partial'?'warn':'neutral';
+                                const label = h.status==='success'?'Success':h.status==='partial'?'Partial':'Cancelled';
+                                return (
+                                    <tr key={h.id} style={{ borderBottom:i<DATA_IMPORT.history.length-1?`1px solid ${T.border}`:'none', background:h.errors>0?`rgba(184,115,51,0.06)`:'transparent' }}>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{h.id}</td>
+                                        <td style={{ padding:'10px 12px', color:T.inkMid }}>{h.ts}</td>
+                                        <td style={{ padding:'10px 12px' }}>{h.object}</td>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{h.rows.toLocaleString()}</td>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:h.errors>0?T.warn:T.inkMid }}>{h.errors||'—'}</td>
+                                        <td style={{ padding:'10px 12px' }}><DPill tone={tone}>{label}</DPill></td>
+                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{h.by}</td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </DataCard>
+            </div>
+        );
+    }
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showModal && <NewImportModal onClose={()=>setShowModal(false)}/>}
+            {/* Hidden file input */}
+            <input ref={fileInputRef} type="file" accept=".csv,text/csv" style={{ display:'none' }} onChange={onFileInput}/>
+
+            {/* Modals */}
+            {showPreset && <SavePresetModal columns={wizard.columns} object={object} onClose={()=>setShowPreset(false)}/>}
+            {showRun && (
+                <RunImportModal
+                    wizard={wizard} object={object}
+                    onClose={()=>setShowRun(false)}
+                    onComplete={() => { setShowRun(false); setWizard(w => ({ ...w, step:'done' })); }}/>
+            )}
+
             <DataCrumb page="Import" onBack={onBack}/>
             <DataTitle
                 title="Import data"
                 sub="CSV import for accounts, contacts, leads, opportunities"
+                badge={`Last: ${DATA_IMPORT.lastRun.rows} rows · ${DATA_IMPORT.lastRun.errors} errors · ${DATA_IMPORT.lastRun.ts}`}
                 updatedBy={DATA_IMPORT.lastRun.by}
                 updatedAt={DATA_IMPORT.lastRun.ts}
                 actions={[
-                    <DataBtn key="h" label="View history" onClick={()=>setShowModal(true)}/>,
-                    <DataBtn key="m" label="Save mapping as preset"/>,
-                    <DataBtn key="c" label="Continue → Dedupe" primary/>,
+                    <DataBtn key="h" label="View history" onClick={()=>setShowHistory(true)}/>,
+                    <DataBtn key="m" label="Save mapping as preset" onClick={()=>setShowPreset(true)}/>,
+                    <DataBtn key="c"
+                        label={wizard.step === 'preview' ? 'Run import ▶' : continueLabel()}
+                        primary
+                        disabled={!canContinue}
+                        onClick={() => wizard.step === 'preview' ? setShowRun(true) : advance()}
+                    />,
                 ]}/>
 
-            {/* Warn callout when last run had errors */}
-            {DATA_IMPORT.lastRun.errors > 0 && (
+            {/* Error callout */}
+            {uploadErr && (
+                <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, display:'flex', alignItems:'center', gap:12 }}>
+                    <span style={{ color:T.danger, fontSize:15 }}>⚠</span>
+                    <div style={{ flex:1, fontSize:12.5, color:T.inkMid }}><b style={{ color:T.danger }}>Upload error.</b> {uploadErr}</div>
+                    <DataBtn label="Dismiss" onClick={()=>setUploadErr('')}/>
+                </div>
+            )}
+
+            {/* Last-run errors callout */}
+            {!uploadErr && DATA_IMPORT.lastRun.errors > 0 && wizard.step !== 'done' && (
                 <div style={{ padding:'11px 16px', background:'rgba(184,115,51,0.09)', borderLeft:`3px solid ${T.warn}`, borderRadius:4, marginBottom:16, display:'flex', alignItems:'center', gap:12 }}>
                     <span style={{ color:T.warn, fontSize:15 }}>⚠</span>
                     <div style={{ flex:1, fontSize:12.5, color:T.inkMid }}>
@@ -10912,58 +14201,93 @@ const ImportDetail = ({ onBack }) => {
                 </div>
             )}
 
-            <DataStepRail step={w.step}/>
+            {/* Step rail */}
+            <DataStepRail step={wizard.step}/>
 
-            {/* File section */}
-            <DataCard title="File" desc="Step 1 — uploaded.">
-                <div style={{ display:'flex', alignItems:'center', gap:14, padding:'4px 0' }}>
-                    <div style={{ width:44, height:56, borderRadius:3, background:T.surface2, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', flexShrink:0 }}>CSV</div>
-                    <div style={{ flex:1 }}>
-                        <div style={{ fontSize:13, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{w.file.name}</div>
-                        <div style={{ fontSize:11.5, color:T.inkMid, marginTop:2 }}>{w.file.size} · {w.file.rows.toLocaleString()} rows · {w.file.encoding}</div>
+            {/* ── Step 1: File ── */}
+            <DataCard title="File" desc={wizard.file.name ? 'Step 1 — uploaded.' : 'Step 1 — upload a CSV file.'}>
+                {wizard.file.name ? (
+                    // File uploaded — show info row
+                    <div style={{ display:'flex', alignItems:'center', gap:14, padding:'4px 0' }}>
+                        <div style={{ width:44, height:56, borderRadius:3, background:T.surface2, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', flexShrink:0 }}>CSV</div>
+                        <div style={{ flex:1 }}>
+                            <div style={{ fontSize:13, fontWeight:600, fontFamily:'ui-monospace,Menlo,monospace' }}>{wizard.file.name}</div>
+                            <div style={{ fontSize:11.5, color:T.inkMid, marginTop:2 }}>{wizard.file.size} · {wizard.file.rows.toLocaleString()} rows · {wizard.file.encoding}</div>
+                        </div>
+                        <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                            <label style={{ ...lbl, marginBottom:2 }}>Object</label>
+                            <select value={object} onChange={e => { setObject(e.target.value); autoMapAll(); }} style={{ ...inp, width:160 }}>
+                                {['Accounts','Contacts','Leads','Opportunities'].map(o => <option key={o}>{o}</option>)}
+                            </select>
+                        </div>
+                        <DataBtn label={uploading ? 'Reading…' : 'Replace file'} disabled={uploading} onClick={()=>fileInputRef.current?.click()}/>
                     </div>
-                    <select style={{ padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer', appearance:'none' }}>
-                        <option>Accounts</option>
-                    </select>
-                    <DataBtn label="Replace file"/>
-                </div>
+                ) : (
+                    // No file — drop zone
+                    <div
+                        onDrop={onDrop}
+                        onDragOver={e=>e.preventDefault()}
+                        onClick={()=>fileInputRef.current?.click()}
+                        style={{ border:`2px dashed ${T.border}`, borderRadius:6, padding:'40px 24px', textAlign:'center', background:T.surface2, cursor:'pointer' }}>
+                        <div style={{ fontSize:28, color:T.inkMuted, marginBottom:8 }}>↑</div>
+                        <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>Drop CSV here, or <span style={{ color:T.info, textDecoration:'underline' }}>browse</span></div>
+                        <div style={{ fontSize:11.5, color:T.inkMid, marginTop:6 }}>UTF-8 · max 100 MB · max 250,000 rows</div>
+                    </div>
+                )}
             </DataCard>
 
-            {/* Map columns */}
-            <DataCard title={`Map columns (${mapped} of ${w.columns.length} mapped)`} desc="Step 2 — confirm Accelerep field for each CSV column. Low-confidence rows highlighted."
-                headAction={<span style={{ fontSize:11.5, color:T.info, cursor:'pointer', fontWeight:600 }}>Auto-map all →</span>}>
+            {/* ── Step 2: Map columns ── */}
+            <DataCard
+                title={`Map columns (${mapped} of ${wizard.columns.length} mapped)`}
+                desc="Step 2 — confirm Accelerep field for each CSV column. Low-confidence rows are highlighted."
+                headAction={
+                    <span onClick={autoMapAll} style={{ fontSize:11.5, color:T.info, cursor:'pointer', fontWeight:600 }}>Auto-map all →</span>
+                }>
+                {wizard.columns.length === 0 ? (
+                    <div style={{ color:T.inkMuted, fontSize:13, textAlign:'center', padding:'24px 0' }}>Upload a CSV file to see column mapping.</div>
+                ) : (
                 <div style={{ overflowX:'auto' }}>
                     <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
-                        <thead><tr style={{ background:T.surface2 }}>{['CSV column','Sample value','Type','Accelerep field','Confidence',''].map((h,i) => <th key={i} style={{ ...th }}>{h}</th>)}</tr></thead>
+                        <thead><tr style={{ background:T.surface2 }}>
+                            {['CSV column','Sample value','Type','Accelerep field','Confidence',''].map((h,i)=><th key={i} style={thSt}>{h}</th>)}
+                        </tr></thead>
                         <tbody>
-                            {w.columns.map((c,i) => {
-                                const low = c.confidence < 0.85;
+                            {wizard.columns.map((c,i) => {
+                                const low  = c.confidence < 0.85;
                                 const skip = c.target === '__skip__';
                                 return (
-                                    <tr key={c.csv} style={{ borderBottom: i<w.columns.length-1?`1px solid ${T.border}`:'none', background: low && !skip ? 'rgba(184,115,51,0.08)' : 'transparent', opacity: skip ? 0.55 : 1 }}>
-                                        <td style={{ ...td(), fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, fontWeight:600 }}>
+                                    <tr key={c.csv} style={{ borderBottom: i<wizard.columns.length-1?`1px solid ${T.border}`:'none', background: low&&!skip?'rgba(184,115,51,0.06)':'transparent', opacity: skip?0.55:1 }}>
+                                        <td style={{ ...tdSt(), fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, fontWeight:600 }}>
                                             {c.csv}
                                             {c.required && !skip && <span style={{ marginLeft:6, padding:'1px 5px', borderRadius:10, background:'rgba(184,115,51,0.12)', color:T.warn, fontSize:10, fontWeight:700 }}>Required</span>}
                                         </td>
-                                        <td style={{ ...td(), fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMid, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.sample}</td>
-                                        <td style={{ ...td() }}>
+                                        <td style={{ ...tdSt(), fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMid, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.sample}</td>
+                                        <td style={tdSt()}>
                                             <span style={{ padding:'2px 7px', borderRadius:10, background:'rgba(138,131,120,0.12)', color:T.inkMid, fontSize:11, fontWeight:600 }}>{c.type}</span>
                                         </td>
-                                        <td style={{ ...td() }}>
-                                            <select defaultValue={skip ? 'Skip column' : c.target} style={{ padding:'5px 8px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, cursor:'pointer', appearance:'none', minWidth:180 }}>
-                                                <option>{skip ? 'Skip column' : c.target}</option>
+                                        <td style={tdSt()}>
+                                            <select
+                                                value={skip ? '__skip__' : c.target}
+                                                onChange={e => setColumnTarget(c.csv, e.target.value)}
+                                                style={{ ...inp, width:200, fontSize:12 }}>
+                                                <option value="__skip__">— Skip column —</option>
+                                                <optgroup label={`${object} fields`}>
+                                                    {fields.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                                                </optgroup>
                                             </select>
                                         </td>
-                                        <td style={{ ...td() }}>
+                                        <td style={tdSt()}>
                                             <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                                                <div style={{ width:60, height:5, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:3, overflow:'hidden' }}>
-                                                    <div style={{ width:`${Math.round(c.confidence*100)}%`, height:'100%', background: c.confidence > 0.9 ? T.ok : c.confidence > 0.7 ? T.warn : T.danger }}/>
+                                                <div style={{ width:60, height:5, background:T.surface2, border:`1px solid ${T.border}`, borderRadius:3, overflow:'hidden', flexShrink:0 }}>
+                                                    <div style={{ width:`${Math.round(c.confidence*100)}%`, height:'100%', background: c.confidence>0.9?T.ok:c.confidence>0.7?T.warn:T.danger }}/>
                                                 </div>
-                                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMid }}>{Math.round(c.confidence*100)}%</span>
+                                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10.5, color:T.inkMid, flexShrink:0 }}>{Math.round(c.confidence*100)}%</span>
                                             </div>
                                         </td>
-                                        <td style={{ ...td(), textAlign:'right' }}>
-                                            <span style={{ fontSize:11, color:T.inkMid, cursor:'pointer', fontWeight:600 }}>{skip ? 'Map →' : 'Skip'}</span>
+                                        <td style={{ ...tdSt(), textAlign:'right' }}>
+                                            <button onClick={() => toggleSkip(c.csv)} style={{ fontSize:11, color:T.inkMid, cursor:'pointer', fontWeight:600, background:'none', border:'none', fontFamily:T.sans }}>
+                                                {skip ? 'Map →' : 'Skip'}
+                                            </button>
                                         </td>
                                     </tr>
                                 );
@@ -10971,159 +14295,480 @@ const ImportDetail = ({ onBack }) => {
                         </tbody>
                     </table>
                 </div>
-            </DataCard>
-
-            {/* Dedupe rules */}
-            <DataCard title="Dedupe rules" desc="Step 3 — what to do when an incoming row matches an existing record.">
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16, marginBottom:14 }}>
-                    {[
-                        { label:'Match on',            value:'Domain (case-insensitive)' },
-                        { label:'On match',            value:'Update existing'            },
-                        { label:'Blank values in CSV', value:'Skip — keep existing'       },
-                    ].map((f,i) => (
-                        <div key={i}>
-                            <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</label>
-                            <select defaultValue={f.value} style={{ width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' }}>
-                                <option>{f.value}</option>
-                            </select>
-                        </div>
-                    ))}
-                </div>
-                <div style={{ padding:'10px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid }}>
-                    <span style={{ fontWeight:700, color:T.info }}>Note.</span> Falls back to Salesforce ID when the chosen key is empty.
-                </div>
-            </DataCard>
-
-            {/* Preview */}
-            <DataCard title="Preview" desc="Step 4 — inspect what the import will do before committing.">
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12, marginBottom:16 }}>
-                    <DataStatCard label="Will create" value={w.preview.willCreate}/>
-                    <DataStatCard label="Will update" value={w.preview.willUpdate}/>
-                    <DataStatCard label="Will skip"   value={w.preview.willSkip} />
-                    <DataStatCard label="Errors"      value={w.preview.errors.length} warn/>
-                </div>
-                {w.preview.errors.length > 0 && (
-                    <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
-                        <div style={{ display:'grid', gridTemplateColumns:'60px 1fr 1fr', gap:8, padding:'7px 12px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                            {['Row','Field','Message'].map((h,i) => <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase' }}>{h}</div>)}
-                        </div>
-                        {w.preview.errors.map((e,i) => (
-                            <div key={i} style={{ display:'grid', gridTemplateColumns:'60px 1fr 1fr', gap:8, padding:'8px 12px', borderBottom:i<w.preview.errors.length-1?`1px solid ${T.border}`:'none', alignItems:'center' }}>
-                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMuted }}>{e.row}</span>
-                                <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{e.field}</span>
-                                <span style={{ fontSize:12.5, color:T.warn }}>{e.msg}</span>
-                            </div>
-                        ))}
+                )}
+                {!reqMapped && wizard.columns.length > 0 && (
+                    <div style={{ marginTop:10, padding:'8px 12px', background:'rgba(184,115,51,0.08)', borderLeft:`3px solid ${T.warn}`, borderRadius:4, fontSize:12, color:T.inkMid }}>
+                        <b style={{ color:T.warn }}>Required fields missing.</b> Please map: {reqFields.filter(f => !wizard.columns.some(c => c.target===f)).join(', ')} before continuing.
                     </div>
                 )}
             </DataCard>
+
+            {/* ── Step 3: Dedupe ── */}
+            <DataCard title="Dedupe rules" desc="Step 3 — what to do when an incoming row matches an existing record.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16, marginBottom:14 }}>
+                    <div>
+                        <label style={lbl}>Match on</label>
+                        <select value={wizard.dedupe.match} onChange={e=>setDedupe({match:e.target.value})} style={inp}>
+                            <option value="domain">Domain (case-insensitive)</option>
+                            <option value="email">Email address</option>
+                            <option value="externalId">External ID (Salesforce / HubSpot)</option>
+                            <option value="name">Name (fuzzy)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style={lbl}>On match</label>
+                        <select value={wizard.dedupe.onMatch} onChange={e=>setDedupe({onMatch:e.target.value})} style={inp}>
+                            <option value="update">Update existing record</option>
+                            <option value="create">Create duplicate</option>
+                            <option value="skip">Skip — keep existing</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style={lbl}>Blank values in CSV</label>
+                        <select value={wizard.dedupe.skipBlanks ? 'skip' : 'overwrite'} onChange={e=>setDedupe({skipBlanks:e.target.value==='skip'})} style={inp}>
+                            <option value="skip">Skip — keep existing</option>
+                            <option value="overwrite">Overwrite with blank</option>
+                        </select>
+                    </div>
+                </div>
+                <div style={{ padding:'10px 14px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`, borderRadius:4, fontSize:12, color:T.inkMid }}>
+                    <span style={{ fontWeight:700, color:T.info }}>Note.</span> Falls back to External ID when the chosen key is blank on a row.
+                </div>
+            </DataCard>
+
+            {/* ── Step 4: Preview ── */}
+            <DataCard title="Preview" desc="Step 4 — inspect what the import will do before committing.">
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12, marginBottom:16 }}>
+                    <DataStatCard label="Will create" value={wizard.preview.willCreate}/>
+                    <DataStatCard label="Will update" value={wizard.preview.willUpdate}/>
+                    <DataStatCard label="Will skip"   value={wizard.preview.willSkip}/>
+                    <DataStatCard label="Errors"      value={wizard.preview.errors.length} warn={wizard.preview.errors.length > 0}/>
+                </div>
+                {wizard.step === 'preview' ? (
+                    wizard.preview.errors.length > 0 ? (
+                        <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                            <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans }}>
+                                <thead><tr style={{ background:T.surface2 }}>{['Row','Field','Message'].map((h,i)=><th key={i} style={thSt}>{h}</th>)}</tr></thead>
+                                <tbody>
+                                    {wizard.preview.errors.map((e,i) => (
+                                        <tr key={i} style={{ borderBottom:i<wizard.preview.errors.length-1?`1px solid ${T.border}`:'none' }}>
+                                            <td style={{ padding:'8px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMuted }}>{e.row}</td>
+                                            <td style={{ padding:'8px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{e.field}</td>
+                                            <td style={{ padding:'8px 12px', fontSize:12.5, color:T.warn }}>{e.msg}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div style={{ padding:'12px 16px', background:'rgba(77,107,61,0.08)', borderLeft:`3px solid ${T.ok}`, borderRadius:4, fontSize:12.5, color:T.inkMid }}>
+                            <b style={{ color:T.ok }}>✓ No errors detected.</b> Ready to import.
+                        </div>
+                    )
+                ) : (
+                    <div style={{ padding:'12px 16px', background:T.surface2, borderRadius:4, fontSize:12.5, color:T.inkMuted, textAlign:'center' }}>
+                        Preview computed from last run. Click <b>Continue → Preview</b> to generate a fresh dry-run.
+                    </div>
+                )}
+            </DataCard>
+
+            {/* ── Step 5: Done ── */}
+            {wizard.step === 'done' && (
+                <DataCard title="Import complete" desc="Your data has been imported successfully.">
+                    <div style={{ padding:'20px', textAlign:'center' }}>
+                        <div style={{ fontSize:32, marginBottom:8 }}>✓</div>
+                        <div style={{ fontSize:15, fontWeight:700, color:T.ok, marginBottom:6 }}>Import complete</div>
+                        <div style={{ fontSize:13, color:T.inkMid, marginBottom:16 }}>Records have been imported into <b>{object}</b>.</div>
+                        <button onClick={()=>setWizard(initWizard())} style={{ padding:'8px 20px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:T.sans }}>
+                            Start new import
+                        </button>
+                    </div>
+                </DataCard>
+            )}
         </div>
     );
 };
 
 // ── ② Export Detail ───────────────────────────────────────────
 const ExportDetail = ({ onBack }) => {
-    const [showModal, setShowModal] = useState(false);
-    const e = DATA_EXPORT;
-    const failing = e.schedules.find(s => s.status === 'failing');
-    const activeCount = e.schedules.filter(s => s.enabled).length;
-    const openDsr = e.dsrQueue.filter(d => d.status !== 'completed').length;
-    const th = { padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans, textAlign:'left' };
+    // dbFetch is imported at the top of this file from ../utils/storage
+    const [schedules,  setSchedules]  = React.useState([]);
+    const [runs,       setRuns]       = React.useState([]);
+    const [dsrItems,   setDsrItems]   = React.useState([]);
+    const [loading,    setLoading]    = React.useState(true);
+    const [error,      setError]      = React.useState(null);
+    const [showModal,  setShowModal]  = React.useState(false);
+    const [showDsrModal, setShowDsrModal] = React.useState(false);
+    const [adHocScope, setAdHocScope] = React.useState('accounts');
+    const [adHocFmt,   setAdHocFmt]   = React.useState('CSV');
+    const [adhocLoading, setAdhocLoading] = React.useState(false);
+    const [adhocError,   setAdhocError]   = React.useState(null);
+    const [editingSched, setEditingSched] = React.useState(null); // schedule being edited
+
+    // ── load all three endpoints on mount ─────────────────────
+    React.useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const [schRes, runRes, dsrRes] = await Promise.all([
+                    dbFetch('/.netlify/functions/export-schedules'),
+                    dbFetch('/.netlify/functions/export-runs'),
+                    dbFetch('/.netlify/functions/export-dsr'),
+                ]);
+                if (cancelled) return;
+                const [schData, runData, dsrData] = await Promise.all([
+                    schRes.json(), runRes.json(), dsrRes.json(),
+                ]);
+                if (!schRes.ok)  throw new Error(schData.error || 'Failed to load schedules');
+                if (!runRes.ok)  throw new Error(runData.error || 'Failed to load runs');
+                if (!dsrRes.ok)  throw new Error(dsrData.error || 'Failed to load DSR queue');
+                setSchedules(schData.schedules || []);
+                setRuns(runData.runs || []);
+                setDsrItems(dsrData.dsrQueue || []);
+            } catch (e) {
+                if (!cancelled) setError(e.message);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, []);
+
+    const failing    = schedules.find(s => s.status === 'failing');
+    const activeCount = schedules.filter(s => s.enabled).length;
+    const openDsr    = dsrItems.filter(d => d.status !== 'completed').length;
+    const th         = { padding:'9px 12px', fontSize:10, fontWeight:700, letterSpacing:0.6, textTransform:'uppercase', color:T.inkMuted, fontFamily:T.sans, textAlign:'left' };
+
+    // ── toggle schedule enabled/disabled ──────────────────────
+    const handleToggle = async (sched) => {
+        const updated = { ...sched, enabled: !sched.enabled };
+        setSchedules(prev => prev.map(s => s.id === sched.id ? updated : s));
+        try {
+            const res  = await dbFetch('/.netlify/functions/export-schedules', { method:'PUT', body: JSON.stringify(updated) });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            setSchedules(prev => prev.map(s => s.id === sched.id ? (data.schedule || updated) : s));
+        } catch (e) {
+            // Revert on error
+            setSchedules(prev => prev.map(s => s.id === sched.id ? sched : s));
+        }
+    };
+
+    // ── delete schedule ───────────────────────────────────────
+    const handleDeleteSched = async (id) => {
+        setSchedules(prev => prev.filter(s => s.id !== id));
+        try {
+            await dbFetch(`/.netlify/functions/export-schedules?id=${id}`, { method:'DELETE' });
+        } catch (e) {
+            console.error('Delete schedule failed:', e.message);
+        }
+    };
+
+    // ── ad-hoc export ─────────────────────────────────────────
+    const handleAdHoc = async () => {
+        setAdhocLoading(true);
+        setAdhocError(null);
+        try {
+            const id  = 'run_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+            const res = await dbFetch('/.netlify/functions/export-runs', {
+                method: 'POST',
+                body: JSON.stringify({ id, scope: adHocScope, format: adHocFmt }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Export failed');
+
+            // Trigger browser download from base64 payload
+            const dl  = data.download;
+            const bin = atob(dl.data);
+            const arr = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            const blob = new Blob([arr], { type: dl.contentType });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
+            a.download = dl.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            // Add run to recent list
+            if (data.run) setRuns(prev => [data.run, ...prev].slice(0, 20));
+        } catch (e) {
+            setAdhocError(e.message);
+        } finally {
+            setAdhocLoading(false);
+        }
+    };
+
+    // ── update DSR status ─────────────────────────────────────
+    const handleDsrStatus = async (dsr, newStatus) => {
+        const updated = { ...dsr, status: newStatus };
+        setDsrItems(prev => prev.map(d => d.id === dsr.id ? updated : d));
+        try {
+            const res  = await dbFetch('/.netlify/functions/export-dsr', { method:'PUT', body: JSON.stringify(updated) });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            setDsrItems(prev => prev.map(d => d.id === dsr.id ? (data.dsr || updated) : d));
+        } catch (e) {
+            setDsrItems(prev => prev.map(d => d.id === dsr.id ? dsr : d));
+        }
+    };
+
+    // ── format helpers ────────────────────────────────────────
+    const fmtTs = (iso) => {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        const now = new Date();
+        const diffMs = now - d;
+        const diffMin = Math.round(diffMs / 60000);
+        if (diffMin < 1)   return 'just now';
+        if (diffMin < 60)  return diffMin + 'm ago';
+        const diffH = Math.round(diffMin / 60);
+        if (diffH < 24)    return diffH + 'h ago';
+        const diffD = Math.round(diffH / 24);
+        if (diffD === 1)   return 'yesterday';
+        if (diffD < 7)     return diffD + 'd ago';
+        return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    };
+
+    const fmtSize = (bytes) => {
+        if (!bytes || bytes === 0) return '—';
+        if (bytes < 1024)        return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    };
+
+    if (loading) return (
+        <div style={{ fontFamily:T.sans }}>
+            <DataCrumb page="Export" onBack={onBack}/>
+            <div style={{ padding:'60px 0', textAlign:'center', color:T.inkMuted, fontSize:13 }}>Loading export data…</div>
+        </div>
+    );
+
+    if (error) return (
+        <div style={{ fontFamily:T.sans }}>
+            <DataCrumb page="Export" onBack={onBack}/>
+            <div style={{ padding:'12px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:13, color:T.danger }}>{error}</div>
+        </div>
+    );
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showModal && <NewExportModal onClose={()=>setShowModal(false)}/>}
+            {showModal    && <NewExportModal onClose={() => { setShowModal(false); setEditingSched(null); }} existing={editingSched} onSave={async (payload) => {
+                try {
+                    const isEdit = !!payload.id && schedules.find(s => s.id === payload.id);
+                    const method = isEdit ? 'PUT' : 'POST';
+                    if (!isEdit) payload.id = 'sch_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                    const res  = await dbFetch('/.netlify/functions/export-schedules', { method, body: JSON.stringify(payload) });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error);
+                    if (isEdit) setSchedules(prev => prev.map(s => s.id === payload.id ? data.schedule : s));
+                    else        setSchedules(prev => [data.schedule, ...prev]);
+                    setShowModal(false); setEditingSched(null);
+                } catch(e) { alert('Save failed: ' + e.message); }
+            }}/>}
+            {showDsrModal && <NewDsrModal onClose={() => setShowDsrModal(false)} onSave={async (payload) => {
+                try {
+                    payload.id = 'dsr_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+                    const res  = await dbFetch('/.netlify/functions/export-dsr', { method:'POST', body: JSON.stringify(payload) });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error);
+                    setDsrItems(prev => [data.dsr, ...prev]);
+                    setShowDsrModal(false);
+                } catch(e) { alert('Save failed: ' + e.message); }
+            }}/>}
+
             <DataCrumb page="Export" onBack={onBack}/>
             <DataTitle
                 title="Export"
                 sub="Scheduled and ad-hoc exports; GDPR data subject requests"
-                badge={`${activeCount} active schedules · ${openDsr} open DSR`}
-                updatedBy="Morgan Reyes" updatedAt="3 months ago"
+                badge={`${activeCount} active schedule${activeCount !== 1 ? 's' : ''} · ${openDsr} open DSR`}
+                updatedBy={runs[0] ? (runs[0].triggeredBy || 'system') : null}
+                updatedAt={runs[0] ? fmtTs(runs[0].createdAt) : null}
                 actions={[
-                    <DataBtn key="adhoc" label="Run ad-hoc export"/>,
-                    <DataBtn key="new" label="+ New scheduled export" primary onClick={()=>setShowModal(true)}/>,
-                ]}/>
+                    <DataBtn key="adhoc" label={adhocLoading ? 'Exporting…' : 'Run ad-hoc export'} disabled={adhocLoading} onClick={() => {
+                        // Show inline ad-hoc panel by toggling a flag
+                        setAdHocScope('accounts'); setAdHocFmt('CSV'); setAdhocError(null);
+                        setShowModal(false);
+                    }}/>,
+                    <DataBtn key="new" label="+ New scheduled export" primary onClick={() => { setEditingSched(null); setShowModal(true); }}/>,
+                ]}
+            />
 
             {/* Failing callout */}
             {failing && (
                 <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:13 }}>
-                    <b style={{ color:T.danger }}>"{failing.name}" failing.</b>
-                    <span style={{ color:T.inkMid, marginLeft:6 }}>Last attempt {failing.last}.</span>
+                    <b style={{ color:T.danger }}>"{failing.name}" is failing.</b>
+                    <span style={{ color:T.inkMid, marginLeft:6 }}>Last run: {fmtTs(failing.lastRunAt)}. {failing.lastError || ''}</span>
                 </div>
             )}
 
-            {/* Scheduled exports table */}
-            <DataCard title={`Scheduled exports (${e.schedules.length})`} desc="Recurring exports to S3, Snowflake, email, or webhook.">
-                <div style={{ overflowX:'auto' }}>
+            {/* ── Ad-hoc export panel ── */}
+            <DataCard title="Ad-hoc export" desc="Download a one-time export of any entity directly to your browser.">
+                <div style={{ display:'flex', gap:12, alignItems:'flex-end', flexWrap:'wrap' }}>
+                    <div>
+                        <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>Entity</label>
+                        <select value={adHocScope} onChange={e => setAdHocScope(e.target.value)}
+                            style={{ padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', minWidth:180, cursor:'pointer' }}>
+                            {['accounts','contacts','opportunities','tasks','activities','leads'].map(s => (
+                                <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>Format</label>
+                        <select value={adHocFmt} onChange={e => setAdHocFmt(e.target.value)}
+                            style={{ padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', minWidth:100, cursor:'pointer' }}>
+                            <option>CSV</option>
+                            <option>JSON</option>
+                        </select>
+                    </div>
+                    <DataBtn label={adhocLoading ? 'Exporting…' : '↓ Download now'} primary disabled={adhocLoading} onClick={handleAdHoc}/>
+                </div>
+                {adhocError && <div style={{ marginTop:10, fontSize:12, color:T.danger, fontWeight:600 }}>{adhocError}</div>}
+            </DataCard>
+
+            {/* ── Scheduled exports table ── */}
+            <DataCard
+                title={`Scheduled exports (${schedules.length})`}
+                desc="Recurring exports — manual trigger only in this release; automated delivery coming soon."
+                headAction={<DataBtn label="+ New" onClick={() => { setEditingSched(null); setShowModal(true); }}/>}
+            >
+                {schedules.length === 0 ? (
+                    <div style={{ padding:'24px 0', textAlign:'center', fontSize:12.5, color:T.inkMuted }}>
+                        No schedules yet. Create one to get started.
+                    </div>
+                ) : (
+                    <div style={{ overflowX:'auto' }}>
+                        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
+                            <thead><tr style={{ background:T.surface2 }}>{['Name','Scope','Cadence','Destination','Format','Last run','Status',''].map((h,i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
+                            <tbody>
+                                {schedules.map((s,i) => {
+                                    const tone  = !s.enabled ? 'neutral' : s.status === 'failing' ? 'danger' : 'ok';
+                                    const label = !s.enabled ? 'Paused' : s.status === 'failing' ? 'Failing' : 'Active';
+                                    return (
+                                        <tr key={s.id} style={{ borderBottom: i < schedules.length-1 ? `1px solid ${T.border}` : 'none', opacity: s.enabled ? 1 : 0.62 }}>
+                                            <td style={{ padding:'10px 12px', fontWeight:600 }}>{s.name}</td>
+                                            <td style={{ padding:'10px 12px', fontSize:12, color:T.inkMid }}>{s.scope}</td>
+                                            <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{s.cadence}</td>
+                                            <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.destination}</td>
+                                            <td style={{ padding:'10px 12px' }}><DPill tone="neutral">{s.format}</DPill></td>
+                                            <td style={{ padding:'10px 12px', color:T.inkMid, fontSize:12 }}>{s.lastRunAt ? fmtTs(s.lastRunAt) : '—'}{s.lastSize ? ' · ' + s.lastSize : ''}</td>
+                                            <td style={{ padding:'10px 12px' }}><DPill tone={tone}>{label}</DPill></td>
+                                            <td style={{ padding:'10px 12px' }}>
+                                                <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+                                                    <span onClick={() => handleToggle(s)} style={{ fontSize:11, color:T.info, cursor:'pointer', fontWeight:600 }}>
+                                                        {s.enabled ? 'Pause' : 'Enable'}
+                                                    </span>
+                                                    <span onClick={() => { setEditingSched(s); setShowModal(true); }} style={{ fontSize:11, color:T.info, cursor:'pointer', fontWeight:600 }}>Edit</span>
+                                                    <span onClick={() => handleDeleteSched(s.id)} style={{ fontSize:11, color:T.danger, cursor:'pointer', fontWeight:600 }}>Delete</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </DataCard>
+
+            {/* ── Recent runs ── */}
+            <DataCard title="Recent activity" desc="Ad-hoc and scheduled runs (last 20).">
+                {runs.length === 0 ? (
+                    <div style={{ padding:'24px 0', textAlign:'center', fontSize:12.5, color:T.inkMuted }}>No export runs yet.</div>
+                ) : (
                     <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
-                        <thead><tr style={{ background:T.surface2 }}>{['Name','Scope','Cadence','Destination','Format','Last run','Status',''].map((h,i)=><th key={i} style={th}>{h}</th>)}</tr></thead>
+                        <thead><tr style={{ background:T.surface2 }}>{['When','Name','By','Rows','Format','Size','Duration'].map((h,i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
                         <tbody>
-                            {e.schedules.map((s,i) => {
-                                const tone = !s.enabled ? 'neutral' : s.status==='failing' ? 'danger' : 'ok';
-                                const label = !s.enabled ? 'Paused' : s.status==='failing' ? 'Failing' : 'Active';
-                                return (
-                                    <tr key={s.id} style={{ borderBottom:i<e.schedules.length-1?`1px solid ${T.border}`:'none', opacity:s.enabled?1:0.62 }}>
-                                        <td style={{ padding:'10px 12px', fontWeight:600 }}>{s.name}</td>
-                                        <td style={{ padding:'10px 12px', fontSize:12, color:T.inkMid }}>{s.scope}</td>
-                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{s.cadence}</td>
-                                        <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.destination}</td>
-                                        <td style={{ padding:'10px 12px' }}><DPill tone="neutral">{s.format}</DPill></td>
-                                        <td style={{ padding:'10px 12px', color:T.inkMid, fontSize:12 }}>{s.last} · {s.size}</td>
-                                        <td style={{ padding:'10px 12px' }}><DPill tone={tone}>{label}</DPill></td>
-                                        <td style={{ padding:'10px 12px', textAlign:'right' }}>
-                                            <span style={{ fontSize:11, color:T.info, cursor:'pointer', fontWeight:600 }}>Edit</span>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
+                            {runs.map((r,i) => (
+                                <tr key={r.id} style={{ borderBottom: i < runs.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                                    <td style={{ padding:'10px 12px', color:T.inkMuted }}>{fmtTs(r.createdAt)}</td>
+                                    <td style={{ padding:'10px 12px', fontWeight:500 }}>{r.name}</td>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{r.triggeredBy || 'system'}</td>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{(r.rowCount || 0).toLocaleString()}</td>
+                                    <td style={{ padding:'10px 12px' }}><DPill tone="neutral">{r.format}</DPill></td>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{fmtSize(r.sizeBytes)}</td>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{r.durationMs ? r.durationMs + 'ms' : '—'}</td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
-                </div>
+                )}
             </DataCard>
 
-            {/* Recent activity */}
-            <DataCard title="Recent activity" desc="One-off and scheduled runs in the last few days.">
-                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
-                    <thead><tr style={{ background:T.surface2 }}>{['When','Name','By','Rows','Format','Size','Duration'].map((h,i)=><th key={i} style={th}>{h}</th>)}</tr></thead>
-                    <tbody>
-                        {e.recent.map((r,i) => (
-                            <tr key={i} style={{ borderBottom:i<e.recent.length-1?`1px solid ${T.border}`:'none' }}>
-                                <td style={{ padding:'10px 12px', color:T.inkMuted }}>{r.ts}</td>
-                                <td style={{ padding:'10px 12px', fontWeight:500 }}>{r.name}</td>
-                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{r.by}</td>
-                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{r.rows.toLocaleString()}</td>
-                                <td style={{ padding:'10px 12px' }}><DPill tone="neutral">{r.format}</DPill></td>
-                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{r.size}</td>
-                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{r.ms}ms</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </DataCard>
-
-            {/* GDPR / DSR queue */}
-            <DataCard title={`GDPR / DSR queue (${openDsr} open)`} desc="Data Subject Requests — export or delete a subject's data within 30 days.">
-                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
-                    <thead><tr style={{ background:T.surface2 }}>{['Ticket','Subject','Type','Submitted','SLA','Status'].map((h,i)=><th key={i} style={th}>{h}</th>)}</tr></thead>
-                    <tbody>
-                        {e.dsrQueue.map((d,i) => (
-                            <tr key={d.id} style={{ borderBottom:i<e.dsrQueue.length-1?`1px solid ${T.border}`:'none' }}>
-                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{d.id}</td>
-                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{d.subject}</td>
-                                <td style={{ padding:'10px 12px' }}><DPill tone={d.type==='erasure'?'danger':'neutral'}>{d.type==='erasure'?'Erasure':'Access'}</DPill></td>
-                                <td style={{ padding:'10px 12px', color:T.inkMid }}>{d.submitted}</td>
-                                <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color:T.inkMid }}>{d.sla}</td>
-                                <td style={{ padding:'10px 12px' }}><DPill tone={d.status==='completed'?'ok':'info'}>{d.status==='completed'?'Completed':'In progress'}</DPill></td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
+            {/* ── GDPR / DSR queue ── */}
+            <DataCard
+                title={`GDPR / DSR queue (${openDsr} open)`}
+                desc="Data Subject Requests — respond within 30 days per GDPR Art. 15–17."
+                headAction={<DataBtn label="+ New DSR" onClick={() => setShowDsrModal(true)}/>}
+            >
+                {dsrItems.length === 0 ? (
+                    <div style={{ padding:'24px 0', textAlign:'center', fontSize:12.5, color:T.inkMuted }}>No DSR requests on record.</div>
+                ) : (
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5, fontFamily:T.sans }}>
+                        <thead><tr style={{ background:T.surface2 }}>{['Ticket','Subject','Type','Submitted','SLA','Status',''].map((h,i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
+                        <tbody>
+                            {dsrItems.map((d,i) => (
+                                <tr key={d.id} style={{ borderBottom: i < dsrItems.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{d.id}</td>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5 }}>{d.subject}</td>
+                                    <td style={{ padding:'10px 12px' }}><DPill tone={d.type === 'erasure' ? 'danger' : 'neutral'}>{d.type === 'erasure' ? 'Erasure' : 'Access'}</DPill></td>
+                                    <td style={{ padding:'10px 12px', color:T.inkMid }}>{fmtTs(d.createdAt)}</td>
+                                    <td style={{ padding:'10px 12px', fontFamily:'ui-monospace,Menlo,monospace', fontSize:11, color: d.slaLabel === 'Overdue' ? T.danger : T.inkMid }}>{d.slaLabel}</td>
+                                    <td style={{ padding:'10px 12px' }}><DPill tone={d.status === 'completed' ? 'ok' : 'info'}>{d.status === 'completed' ? 'Completed' : 'In progress'}</DPill></td>
+                                    <td style={{ padding:'10px 12px', textAlign:'right' }}>
+                                        {d.status !== 'completed' && (
+                                            <span onClick={() => handleDsrStatus(d, 'completed')} style={{ fontSize:11, color:T.ok, cursor:'pointer', fontWeight:600 }}>Mark complete</span>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
             </DataCard>
         </div>
     );
 };
 
-// ── ③ Backup Detail ───────────────────────────────────────────
+// ── New DSR modal ─────────────────────────────────────────────────────────────
+const NewDsrModal = ({ onClose, onSave }) => {
+    const [subject, setSubject] = React.useState('');
+    const [type,    setType]    = React.useState('access');
+    const [notes,   setNotes]   = React.useState('');
+    const [saving,  setSaving]  = React.useState(false);
+    const inpStyle = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' };
+    const FL = ({ label, children }) => (<div style={{ marginBottom:14 }}><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
+    const handleSave = async () => {
+        if (!subject.trim()) return;
+        setSaving(true);
+        await onSave({ subject: subject.trim(), type, notes: notes.trim() || null });
+        setSaving(false);
+    };
+    return (
+        <DataModal onClose={onClose}>
+            <DataModalHead title="New DSR request" sub="Log a GDPR Data Subject Request. 30-day SLA starts today." onClose={onClose}/>
+            <div style={{ flex:1, overflowY:'auto', padding:22 }}>
+                <FL label="Subject (email or identifier)"><input value={subject} onChange={e => setSubject(e.target.value)} placeholder="user@example.com" style={inpStyle}/></FL>
+                <FL label="Request type">
+                    <select value={type} onChange={e => setType(e.target.value)} style={{ ...inpStyle, appearance:'none', cursor:'pointer' }}>
+                        <option value="access">Access — provide a copy of their data</option>
+                        <option value="erasure">Erasure — delete all their data (Right to be forgotten)</option>
+                    </select>
+                </FL>
+                <FL label="Notes (optional)"><textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Any context…" style={{ ...inpStyle, resize:'vertical' }}/></FL>
+            </div>
+            <DataModalFoot>
+                <DataBtn label="Cancel" onClick={onClose}/>
+                <DataBtn label={saving ? 'Saving…' : 'Create request'} primary disabled={!subject.trim() || saving} onClick={handleSave}/>
+            </DataModalFoot>
+        </DataModal>
+    );
+};
+
 const BackupDetail = ({ onBack }) => {
     // ── Data state
     const [snapshots,    setSnapshots]    = useState([]);
@@ -11480,74 +15125,233 @@ const BackupDetail = ({ onBack }) => {
 
 // ── ④ Features & AI Detail ────────────────────────────────────
 const FeaturesDetail = ({ onBack }) => {
-    const [showReset, setShowReset] = useState(false);
-    const [aiRegion, setAiRegion]   = useState(DATA_AI.region);
-    const [dirty, setDirty]         = useState(false);
-    const f  = DATA_FEATURES;
-    const ai = DATA_AI;
-    const onCount = f.flags.filter(x=>x.on).length;
-    const betaOn  = f.flags.filter(x=>x.beta && x.on).length;
+    const [flags,      setFlags]      = React.useState({});      // { [flagId]: boolean }
+    const [aiSettings, setAiSettings] = React.useState({});
+    const [loading,    setLoading]    = React.useState(true);
+    const [saving,     setSaving]     = React.useState(false);
+    const [dirty,      setDirty]      = React.useState(false);
+    const [showReset,  setShowReset]  = React.useState(false);
+    const [error,      setError]      = React.useState(null);
+    const [filterCat,  setFilterCat]  = React.useState('All');
 
-    const selSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer',
-        backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a8378' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
-        backgroundRepeat:'no-repeat', backgroundPosition:'right 10px center', paddingRight:28 };
+    // ── Load current flag + AI state from settings ────────────
+    React.useEffect(() => {
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const res  = await dbFetch('/.netlify/functions/settings');
+                const data = await res.json();
+                if (cancelled) return;
+                if (!res.ok) throw new Error(data.error || 'Failed to load settings');
+                setFlags(data.settings?.featureFlags || {});
+                setAiSettings(data.settings?.aiSettings || {
+                    model: 'claude-sonnet-4-6',
+                    fallback: 'claude-haiku-4-5-20251001',
+                    region: 'US · us-east-2',
+                    tokenBudget: 25000000,
+                    trainingOptIn: false,
+                    zeroRetention: true,
+                    piiRedaction: true,
+                    byok: false,
+                    byokProvider: '',
+                    dpaSignedAt: '',
+                    auditLogging: 'All AI requests · 13mo retention',
+                    blockList: '',
+                    budgetExceed: 'Throttle to 1 req/s',
+                    availableTo: 'All roles',
+                });
+            } catch (e) {
+                if (!cancelled) setError(e.message);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+        load();
+        return () => { cancelled = true; };
+    }, []);
+
+    // ── Toggle a flag — saves immediately ─────────────────────
+    const handleToggle = async (flagId, isLive) => {
+        if (!isLive) return; // coming-soon flags are not togglable
+        const next = { ...flags, [flagId]: !(flags[flagId] !== false) };
+        setFlags(next);
+        try {
+            const res = await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ featureFlags: next }),
+            });
+            if (!res.ok) {
+                const d = await res.json();
+                throw new Error(d.error);
+            }
+        } catch (e) {
+            // Revert on error
+            setFlags(flags);
+            setError('Failed to save flag: ' + e.message);
+        }
+    };
+
+    // ── Save AI settings ──────────────────────────────────────
+    const handleSaveAi = async () => {
+        setSaving(true);
+        try {
+            const res = await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ aiSettings }),
+            });
+            if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            setDirty(false);
+        } catch (e) {
+            setError('Failed to save AI settings: ' + e.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // ── Export config ─────────────────────────────────────────
+    const handleExportConfig = () => {
+        const payload = JSON.stringify({ featureFlags: flags, aiSettings }, null, 2);
+        const blob = new Blob([payload], { type: 'application/json' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url; a.download = 'accelerep-feature-config.json';
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a); URL.revokeObjectURL(url);
+    };
+
+    const isOn = (flagId) => flags[flagId] !== false;
+    const onCount  = FLAG_DEFS.filter(f => isOn(f.id)).length;
+    const betaOn   = FLAG_DEFS.filter(f => f.beta && isOn(f.id)).length;
+    const aiRegion = aiSettings.region || 'US · us-east-2';
+
+    const selSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', background:T.surface, appearance:'none', cursor:'pointer' };
     const inpSt = { width:'100%', padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' };
-    const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{label}</label>{children}</div>);
+    const FL = ({ label, children }) => (<div><label style={{ display:'block', fontSize:11.5, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{label}</label>{children}</div>);
+
+    const CAT_FILTERS = ['All', 'Live', 'Coming soon', 'Beta'];
+    const visibleFlags = FLAG_DEFS.filter(f => {
+        if (filterCat === 'Live')        return f.live;
+        if (filterCat === 'Coming soon') return !f.live;
+        if (filterCat === 'Beta')        return f.beta;
+        return true;
+    });
+
+    if (loading) return (
+        <div style={{ fontFamily:T.sans }}>
+            <DataCrumb page="Features & AI" onBack={onBack}/>
+            <div style={{ padding:'60px 0', textAlign:'center', color:T.inkMuted, fontSize:13 }}>Loading…</div>
+        </div>
+    );
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showReset && <ResetAiModal onClose={()=>setShowReset(false)}/>}
+            {showReset && <ResetAiModal onClose={() => setShowReset(false)}/>}
+
             <DataCrumb page="Features & AI" onBack={onBack}/>
             <DataTitle
                 title="Features & AI"
-                sub="App-wide feature flags and AI controls (model, residency, training, redaction)"
-                badge={`${onCount} of ${f.flags.length} on · AI enabled · ${ai.region}`}
-                updatedBy="Morgan Reyes" updatedAt="1 month ago"
+                sub="App-wide feature flags and AI controls (model, Residency, Training, redaction)"
+                badge={`${onCount} of ${FLAG_DEFS.length} on · AI · ${aiRegion}`}
                 dirty={dirty}
                 actions={[
-                    <DataBtn key="exp" label="Export config"/>,
-                    <DataBtn key="sav" label="Save changes" primary onClick={()=>setDirty(false)}/>,
-                ]}/>
+                    <DataBtn key="exp" label="Export config" onClick={handleExportConfig}/>,
+                    <DataBtn key="sav" label={saving ? 'Saving…' : 'Save AI changes'} primary disabled={saving || !dirty} onClick={handleSaveAi}/>,
+                ]}
+            />
 
-            {/* Beta callout */}
+            {error && (
+                <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger }}>{error}</div>
+            )}
+
             {betaOn > 0 && (
                 <div style={{ padding:'11px 16px', background:'rgba(58,90,122,0.08)', borderLeft:`3px solid ${T.info}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.inkMid }}>
                     <b style={{ color:T.info }}>Beta features active.</b> Workspace has {betaOn} beta flag{betaOn>1?'s':''} enabled. Behavior may change between releases.
                 </div>
             )}
 
-            {/* Feature flags */}
-            <DataCard title={`Feature flags (${onCount} / ${f.flags.length} on)`} desc="Workspace-wide toggles. Some flags affect billing or pricing.">
-                <div style={{ display:'flex', gap:6, marginBottom:10 }}>
-                    {['All','Sales','Quoting','Reports','AI','Beta'].map((p,i) => (
-                        <span key={p} style={{ padding:'4px 10px', borderRadius:3, background:i===0?T.ink:T.surface2, color:i===0?'#fbf8f3':T.inkMid, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>{p}</span>
+            {/* ── Feature flags ── */}
+            <DataCard title={`Feature flags (${onCount} / ${FLAG_DEFS.length} on)`} desc="Toggle workspace-wide features. Live flags take effect immediately. Coming soon flags are stored but not yet active.">
+                <div style={{ display:'flex', gap:6, marginBottom:12 }}>
+                    {CAT_FILTERS.map(cat => (
+                        <span key={cat} onClick={() => setFilterCat(cat)}
+                            style={{ padding:'4px 10px', borderRadius:3, background:filterCat===cat?T.ink:T.surface2, color:filterCat===cat?'#fbf8f3':T.inkMid, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                            {cat}
+                        </span>
                     ))}
                 </div>
-                {f.flags.map((flag,i) => <DataFlagRow key={flag.id} f={flag} last={i===f.flags.length-1}/>)}
+                {visibleFlags.map((flag, i) => {
+                    const on = isOn(flag.id);
+                    return (
+                        <div key={flag.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 0', borderBottom: i < visibleFlags.length-1 ? `1px solid ${T.border}` : 'none', opacity: flag.live ? 1 : 0.72 }}>
+                            {/* Toggle — disabled for coming-soon */}
+                            <div onClick={() => handleToggle(flag.id, flag.live)} title={flag.live ? (on ? 'Click to disable' : 'Click to enable') : 'Coming soon'}
+                                style={{ width:30, height:18, borderRadius:9, background: on ? (flag.live ? T.ok : T.border) : T.border, position:'relative', flexShrink:0, cursor: flag.live ? 'pointer' : 'not-allowed', transition:'background 120ms' }}>
+                                <span style={{ position:'absolute', top:2, left: on ? 14 : 2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+                            </div>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, display:'flex', alignItems:'center', gap:6 }}>
+                                    {flag.name}
+                                    {flag.live && <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(77,107,61,0.12)', color:T.ok, fontSize:10.5, fontWeight:700 }}>Live</span>}
+                                    {!flag.live && <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(138,131,120,0.12)', color:T.inkMuted, fontSize:10.5, fontWeight:700 }}>Coming soon</span>}
+                                    {flag.beta && <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(58,90,122,0.10)', color:T.info, fontSize:10.5, fontWeight:700 }}>Beta</span>}
+                                    {flag.new  && <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(184,115,51,0.10)', color:T.warn, fontSize:10.5, fontWeight:700 }}>New</span>}
+                                </div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>{flag.desc}</div>
+                            </div>
+                            <div style={{ fontSize:11, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', textAlign:'right', minWidth:80 }}>
+                                {flag.live ? (on ? 'Enabled' : 'Disabled') : '—'}
+                            </div>
+                        </div>
+                    );
+                })}
             </DataCard>
 
-            {/* AI model & access */}
+            {/* ── AI model & access ── */}
             <DataCard title="AI · Model & access" desc="Which model powers AI features and which roles can use them.">
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
-                    <FL label="Model"><select style={selSt}><option>{ai.model}</option></select></FL>
-                    <FL label="Fallback"><select style={selSt}><option>{ai.fallback}</option></select></FL>
-                    <FL label="Available to"><select style={selSt}><option>All roles except Finance</option></select></FL>
-                    <FL label="Daily token budget"><input defaultValue={ai.tokenBudget.toLocaleString()} style={inpSt}/></FL>
-                    <FL label="Used today"><input readOnly value={`${ai.tokensUsed.toLocaleString()} (${Math.round(ai.tokensUsed/ai.tokenBudget*100)}%)`} style={{ ...inpSt, cursor:'default' }}/></FL>
-                    <FL label="On budget exceed"><select style={selSt}><option>Throttle to 1 req/s</option></select></FL>
+                    <FL label="Model">
+                        <select style={selSt} value={aiSettings.model || 'claude-sonnet-4-6'} onChange={e => { setAiSettings(p => ({...p, model:e.target.value})); setDirty(true); }}>
+                            <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+                            <option value="claude-opus-4-6">claude-opus-4-6</option>
+                            <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+                        </select>
+                    </FL>
+                    <FL label="Fallback">
+                        <select style={selSt} value={aiSettings.fallback || 'claude-haiku-4-5-20251001'} onChange={e => { setAiSettings(p => ({...p, fallback:e.target.value})); setDirty(true); }}>
+                            <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+                            <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+                        </select>
+                    </FL>
+                    <FL label="Available to">
+                        <select style={selSt} value={aiSettings.availableTo || 'All roles'} onChange={e => { setAiSettings(p => ({...p, availableTo:e.target.value})); setDirty(true); }}>
+                            <option>All roles</option>
+                            <option>Admin + Manager only</option>
+                            <option>Admin only</option>
+                        </select>
+                    </FL>
+                    <FL label="Daily token budget">
+                        <input style={inpSt} value={(aiSettings.tokenBudget || 25000000).toLocaleString()} onChange={e => { setAiSettings(p => ({...p, tokenBudget: parseInt(e.target.value.replace(/,/g,''))||25000000})); setDirty(true); }}/>
+                    </FL>
+                    <FL label="On budget exceed">
+                        <select style={selSt} value={aiSettings.budgetExceed || 'Throttle to 1 req/s'} onChange={e => { setAiSettings(p => ({...p, budgetExceed:e.target.value})); setDirty(true); }}>
+                            <option>Throttle to 1 req/s</option>
+                            <option>Block all AI requests</option>
+                            <option>Allow with warning</option>
+                        </select>
+                    </FL>
                 </div>
             </DataCard>
 
-            {/* AI data residency & training */}
-            <DataCard title="AI · Data residency & training" desc="Where requests are processed and whether your data trains the model.">
+            {/* ── AI Data Residency & Training ── */}
+            <DataCard title="AI · Data Residency & Training" desc="Where requests are processed and whether your data trains the model.">
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
                     {[
-                        { id:'us', region:'US · us-east-2', latency:'+0ms'           },
-                        { id:'eu', region:'EU · eu-west-1', latency:'+82ms (from US)' },
+                        { id:'us', region:'US · us-east-2', latency:'+0ms'            },
+                        { id:'eu', region:'EU · eu-west-1', latency:'+82ms (from US)'  },
                     ].map(r => {
                         const sel = aiRegion === r.region;
                         return (
-                            <div key={r.id} onClick={()=>{ setAiRegion(r.region); setDirty(true); }}
+                            <div key={r.id} onClick={() => { setAiSettings(p => ({...p, region:r.region})); setDirty(true); }}
                                 style={{ border:`1px solid ${sel?T.goldInk:T.border}`, background:sel?'rgba(200,185,154,0.10)':T.surface, borderRadius:6, padding:'12px 14px', cursor:'pointer', transition:'border-color 100ms' }}>
                                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                                     <span style={{ width:14, height:14, borderRadius:'50%', border:`1.5px solid ${sel?T.goldInk:T.inkMuted}`, position:'relative', flexShrink:0 }}>
@@ -11562,49 +15366,126 @@ const FeaturesDetail = ({ onBack }) => {
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                     {[
-                        { id:'training',  on:!ai.trainingOptIn, label:'Training opt-out',    desc:'Your prompts and outputs do not train the model.' },
-                        { id:'logging',   on:ai.zeroRetention,  label:'Zero data retention', desc:'AI provider stores no request data after response.' },
-                        { id:'redaction', on:ai.piiRedaction,   label:'PII redaction',        desc:'Personal email, phone, SSN replaced with placeholders pre-prompt.' },
-                        { id:'byok',      on:ai.byok,           label:'BYOK (bring your own key)', desc: ai.byok ? `Active · ${ai.byokProvider}` : 'Use your own model API key for AI requests.' },
-                    ].map(t => (
-                        <div key={t.id} style={{ border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', background: t.on ? 'rgba(77,107,61,0.07)' : T.surface, display:'flex', alignItems:'flex-start', gap:10 }}>
-                            <span style={{ width:18, height:18, borderRadius:3, border:`1.5px solid ${t.on?T.ok:T.border}`, background:t.on?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#fbf8f3', fontSize:11, fontWeight:700, flexShrink:0, marginTop:1 }}>
-                                {t.on ? '✓' : ''}
-                            </span>
-                            <div>
-                                <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{t.label}</div>
-                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>{t.desc}</div>
+                        { key:'trainingOptIn',  invert:true,  label:'Training opt-out',        desc:'Your prompts and outputs do not train the model.' },
+                        { key:'zeroRetention',  invert:false, label:'Zero data retention',     desc:'AI provider stores no request data after response.' },
+                        { key:'piiRedaction',   invert:false, label:'PII redaction',            desc:'Personal email, phone, SSN replaced with placeholders pre-prompt.' },
+                        { key:'byok',           invert:false, label:'BYOK (bring your own key)',desc: aiSettings.byok ? `Active · ${aiSettings.byokProvider||''}` : 'Use your own model API key for AI requests.' },
+                    ].map(t => {
+                        const rawVal = aiSettings[t.key] ?? (t.key === 'zeroRetention' || t.key === 'piiRedaction' ? true : false);
+                        const on = t.invert ? !rawVal : rawVal;
+                        return (
+                            <div key={t.key} onClick={() => { setAiSettings(p => ({...p, [t.key]: !p[t.key]})); setDirty(true); }}
+                                style={{ border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', background: on ? 'rgba(77,107,61,0.07)' : T.surface, display:'flex', alignItems:'flex-start', gap:10, cursor:'pointer' }}>
+                                <span style={{ width:18, height:18, borderRadius:3, border:`1.5px solid ${on?T.ok:T.border}`, background:on?T.ok:'transparent', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#fbf8f3', fontSize:11, fontWeight:700, flexShrink:0, marginTop:1 }}>
+                                    {on ? '✓' : ''}
+                                </span>
+                                <div>
+                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{t.label}</div>
+                                    <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2 }}>{t.desc}</div>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
+                {/* BYOK key input — shown when BYOK is enabled */}
+                {aiSettings.byok && (
+                    <div style={{ marginTop:12, display:'flex', flexDirection:'column', gap:6 }}>
+                        <label style={{ fontSize:11.5, fontWeight:600, color:T.inkMid, fontFamily:T.sans }}>
+                            Your Anthropic API key
+                        </label>
+                        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                            <input
+                                type="password"
+                                value={aiSettings.byokProvider || ''}
+                                onChange={e => { setAiSettings(p => ({...p, byokProvider: e.target.value})); setDirty(true); }}
+                                placeholder="sk-ant-..."
+                                style={{ flex:1, padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:'ui-monospace,Menlo,monospace', outline:'none', background:T.surface, boxSizing:'border-box' }}
+                            />
+                            {aiSettings.byokProvider && (
+                                <span style={{ fontSize:11, color:T.ok, fontWeight:600, fontFamily:T.sans, whiteSpace:'nowrap' }}>✓ Key set</span>
+                            )}
+                        </div>
+                        <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>
+                            Your key is encrypted with AES-256-GCM before storage. It is never logged or transmitted in plaintext.
+                        </div>
+                    </div>
+                )}
             </DataCard>
 
-            {/* AI governance */}
+            {/* ── AI governance ── */}
             <DataCard title="AI · Governance" desc="Compliance metadata and danger-zone actions.">
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16, marginBottom:16 }}>
-                    <FL label="DPA signed"><input readOnly value={ai.dpaSignedAt} style={{ ...inpSt, cursor:'default' }}/></FL>
-                    <FL label="Audit logging"><select style={selSt}><option>All AI requests · 13mo retention</option></select></FL>
-                    <FL label="Block list (regex, comma-separated)"><input placeholder="e.g. \\bSSN\\b, \\bpassword\\b" style={{ ...inpSt, fontFamily:'ui-monospace,Menlo,monospace' }}/></FL>
+                    <FL label="DPA signed">
+                        <input style={{ ...inpSt, cursor:'text' }} value={aiSettings.dpaSignedAt || ''} placeholder="YYYY-MM-DD" onChange={e => { setAiSettings(p => ({...p, dpaSignedAt:e.target.value})); setDirty(true); }}/>
+                    </FL>
+                    <FL label="Audit logging">
+                        <select style={selSt} value={aiSettings.auditLogging || 'All AI requests · 13mo retention'} onChange={e => { setAiSettings(p => ({...p, auditLogging:e.target.value})); setDirty(true); }}>
+                            <option>All AI requests · 13mo retention</option>
+                            <option>Errors only</option>
+                            <option>Disabled</option>
+                        </select>
+                    </FL>
+                    <FL label="Block list (regex, comma-separated)">
+                        <input style={inpSt} value={aiSettings.blockList || ''} placeholder="e.g. \bSSN\b, \bpassword\b" onChange={e => { setAiSettings(p => ({...p, blockList:e.target.value})); setDirty(true); }}/>
+                    </FL>
                 </div>
-                {/* Danger zone */}
                 <div style={{ padding:'14px 16px', background:'rgba(156,58,46,0.06)', borderLeft:`3px solid ${T.danger}`, borderRadius:4 }}>
                     <div style={{ fontSize:13, fontWeight:700, color:T.danger, marginBottom:4 }}>Reset training data</div>
                     <div style={{ fontSize:12.5, color:T.inkMid, marginBottom:10 }}>Removes any data your workspace has contributed to model training. Takes up to 30 days at the provider.</div>
-                    <DataBtn label="Request reset" danger onClick={()=>setShowReset(true)}/>
+                    <DataBtn label="Request reset" danger onClick={() => setShowReset(true)}/>
                 </div>
             </DataCard>
         </div>
     );
 };
 
-// ADMIN WORKSPACE VIEW
-// ─────────────────────────────────────────────────────────────
 const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter }) => {
     const [scope, setScope] = useState('workspace');
     const [tab,   setTab  ] = useState('All');
     const [search, setSearch] = useState('');
     const [activeItem, setActiveItem] = useState(null); // detail panel state
+
+    // ── Needs Attention snooze/dismiss ───────────────────────────────────────
+    const [naMenuOpen,   setNaMenuOpen]   = React.useState(null);
+    const [naHidden,     setNaHidden]     = React.useState({});
+    const [naShowHidden, setNaShowHidden] = React.useState(false);
+    const now = Date.now();
+
+    const isHidden = (id) => {
+        const h = naHidden[id];
+        if (!h) return false;
+        if (h.until === 'forever') return true;
+        return new Date(h.until).getTime() > now;
+    };
+
+    const handleNaSnooze = (item, days) => {
+        const until = new Date(now + days * 86400000);
+        const label = until.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+        setNaHidden(prev => ({ ...prev, [item.id]: { until: until.toISOString(), name: item.name, snoozedUntilLabel: label } }));
+        setNaMenuOpen(null);
+    };
+
+    const handleNaDismiss = (item) => {
+        setNaHidden(prev => ({ ...prev, [item.id]: { until: 'forever', name: item.name, snoozedUntilLabel: null } }));
+        setNaMenuOpen(null);
+    };
+
+    const handleNaRestore = (id) => {
+        setNaHidden(prev => { const n = {...prev}; delete n[id]; return n; });
+    };
+
+    React.useEffect(() => {
+        if (!naMenuOpen) return;
+        const onDoc = (e) => {
+            const menu = document.getElementById('na-menu-' + naMenuOpen);
+            const btn  = document.getElementById('na-btn-'  + naMenuOpen);
+            if (menu && !menu.contains(e.target) && btn && !btn.contains(e.target)) setNaMenuOpen(null);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') setNaMenuOpen(null); };
+        document.addEventListener('mousedown', onDoc);
+        document.addEventListener('keydown',   onKey);
+        return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+    }, [naMenuOpen]);
 
     // Detail panels that have real content — others just open the card (no-op for now)
     const DETAIL_PANELS = {
@@ -11735,7 +15616,13 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
     const pipelines = settings?.pipelines || [];
     const funnelStages = settings?.funnelStages || [];
     const calConnected = settings?.googleCalendarConnected || false;
-    const attentionItems = SETTINGS_ITEMS.filter(i => i.attention);
+    const allAttentionItems = SETTINGS_ITEMS.filter(i => i.attention);
+    const visibleAttention  = allAttentionItems.filter(it => !isHidden(it.id));
+    const hiddenAttention   = allAttentionItems.filter(it =>  isHidden(it.id));
+    const attentionItems    = visibleAttention; // alias for any remaining references
+    const hiddenCount       = hiddenAttention.length;
+    const lastHidden        = hiddenAttention.length > 0 ? hiddenAttention[hiddenAttention.length - 1] : null;
+    const lastHiddenInfo    = lastHidden ? naHidden[lastHidden.id] : null;
     const healthChecks = [
         { label:'SSO configured',          ok: false                       },
         { label:'MFA enforced',            ok: false                       },
@@ -11746,8 +15633,15 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         { label:'Session policy set',      ok: true                        },
         { label:'Quote branding configured', ok: true                      },
     ];
-    const healthOk = healthChecks.filter(h => h.ok).length;
-    const healthPct = Math.round((healthOk / healthChecks.length) * 100);
+    // Exclude hidden attention items from health denominator
+    const activeHealthChecks = healthChecks.filter(h => {
+        if (h.label === 'SSO configured'       && isHidden('sso'))      return false;
+        if (h.label === 'MFA enforced'         && isHidden('mfa'))      return false;
+        if (h.label === 'Webhooks all healthy' && isHidden('webhooks')) return false;
+        return true;
+    });
+    const healthOk  = activeHealthChecks.filter(h => h.ok).length;
+    const healthPct = Math.round((healthOk / activeHealthChecks.length) * 100);
 
     // Recently changed feed (static + real user count)
     const recentFeed = [
@@ -11793,26 +15687,162 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
                         <Ring value={healthPct} size={72} stroke={7} color={T.ok} trackColor={T.border}/>
                         <div style={{ flex:1 }}>
                             <div style={{ ...eb(T.ok), marginBottom:4 }}>WORKSPACE HEALTH</div>
-                            <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:4, fontFamily:T.sans }}>{healthOk} of {healthChecks.length} checks passing</div>
+                            <div style={{ fontSize:14, fontWeight:700, color:T.ink, marginBottom:4, fontFamily:T.sans }}>{healthOk} of {activeHealthChecks.length} checks passing</div>
                             <div style={{ fontSize:11.5, color:T.inkMid, lineHeight:1.5, fontFamily:T.sans }}>Set up SSO and enforce MFA to reach 90%+ — standard for multi-rep workspaces.</div>
                         </div>
                     </div>
                     {/* Needs attention */}
                     <div style={{ background:'rgba(156,58,46,0.04)', border:'1px solid rgba(156,58,46,0.2)', borderRadius:6, padding:16 }}>
-                        <div style={{ ...eb('#9c3a2e'), marginBottom:10, display:'flex', alignItems:'center', gap:6 }}>
-                            <span>⚠</span> NEEDS ATTENTION
+                        {/* Header */}
+                        <div style={{ ...eb('#9c3a2e'), marginBottom:10, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                            <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                                <span>⚠</span> NEEDS ATTENTION
+                            </span>
+                            {hiddenCount > 0 && (
+                                <span style={{ fontSize:9.5, color:T.inkMuted, letterSpacing:0, textTransform:'none', fontWeight:400, fontFamily:T.sans }}>
+                                    {hiddenCount} hidden · <span onClick={() => setNaShowHidden(v => !v)}
+                                        style={{ color:T.info, fontWeight:600, cursor:'pointer' }}>
+                                        {naShowHidden ? 'Hide' : 'Show'}
+                                    </span>
+                                </span>
+                            )}
                         </div>
-                        {attentionItems.slice(0,3).map((it, i) => (
-                            <div key={it.id} style={{ padding:'8px 0', borderBottom: i < Math.min(attentionItems.length,3)-1 ? `1px dashed rgba(156,58,46,0.15)` : 'none', display:'flex', alignItems:'center', gap:10 }}>
-                                <div style={{ flex:1, minWidth:0 }}>
-                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{it.name}</div>
-                                    <div style={{ fontSize:11, color:T.inkMid, marginTop:1, fontFamily:T.sans }}>{it.statusDetail}</div>
+
+                        {/* Visible attention rows */}
+                        {visibleAttention.slice(0,3).map((it, i) => {
+                            const isOpen  = naMenuOpen === it.id;
+                            const fixable = it.id !== 'sso';
+                            return (
+                                <div key={it.id} style={{ padding:'8px 0',
+                                    borderBottom: i < Math.min(visibleAttention.length,3)-1 ? `1px dashed rgba(156,58,46,0.15)` : 'none',
+                                    display:'flex', alignItems:'center', gap:8, position:'relative',
+                                    background: isOpen ? 'rgba(200,185,154,0.07)' : 'transparent' }}>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{it.name}</div>
+                                        <div style={{ fontSize:11, color:T.inkMid, marginTop:1, fontFamily:T.sans }}>{it.statusDetail}</div>
+                                    </div>
+                                    {/* Fix button */}
+                                    <button onClick={() => fixable && setActiveItem(SETTINGS_ITEMS.find(s => s.id===it.id)||it)}
+                                        style={{ padding:'4px 10px', fontSize:11, fontWeight:600,
+                                            background: fixable ? T.danger : 'rgba(156,58,46,0.35)',
+                                            color:'#fbf8f3', border:'none', borderRadius:T.r,
+                                            cursor: fixable ? 'pointer' : 'not-allowed', fontFamily:T.sans,
+                                            display:'inline-flex', alignItems:'center', gap:4 }}>
+                                        Fix <span style={{ fontSize:10 }}>→</span>
+                                    </button>
+                                    {/* Kebab ⋯ */}
+                                    <button id={'na-btn-' + it.id}
+                                        onClick={() => setNaMenuOpen(isOpen ? null : it.id)}
+                                        style={{ width:24, height:24, display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                            borderRadius:3, cursor:'pointer', border:'none', padding:0,
+                                            color: isOpen ? T.goldInk : T.inkMuted,
+                                            background: isOpen ? 'rgba(200,185,154,0.30)' : 'transparent',
+                                            fontSize:15, fontWeight:700, lineHeight:1 }}>⋯</button>
+                                    {/* Kebab menu */}
+                                    {isOpen && (
+                                        <div id={'na-menu-' + it.id}
+                                            style={{ position:'absolute', top:'100%', right:0, zIndex:50, marginTop:4,
+                                                width:220, background:T.surface, border:`1px solid ${T.borderStrong}`,
+                                                borderRadius:4, padding:4, fontFamily:T.sans,
+                                                boxShadow:'0 8px 24px rgba(42,38,34,0.12), 0 2px 4px rgba(42,38,34,0.06)' }}>
+                                            <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
+                                                background:T.surface, border:`1px solid ${T.borderStrong}`,
+                                                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
+                                            <div style={{ padding:'6px 12px 4px', fontSize:9.5, fontWeight:800,
+                                                color:T.inkMuted, letterSpacing:0.7, textTransform:'uppercase' }}>
+                                                Remind me later
+                                            </div>
+                                            {[
+                                                { days:7,  label:'Snooze 7 days',  sub:'Until next Monday' },
+                                                { days:30, label:'Snooze 30 days', sub:'Recommended'       },
+                                                { days:90, label:'Snooze 90 days', sub:'Once a quarter'    },
+                                            ].map(o => (
+                                                <div key={o.days} onClick={() => handleNaSnooze(it, o.days)}
+                                                    style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', borderRadius:3, cursor:'pointer' }}
+                                                    onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.10)'}
+                                                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                    <span style={{ fontSize:12, color:T.inkMid, flexShrink:0 }}>◷</span>
+                                                    <div>
+                                                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink }}>{o.label}</div>
+                                                        <div style={{ fontSize:10.5, color:T.inkMuted }}>{o.sub}</div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+                                            <div onClick={() => handleNaDismiss(it)}
+                                                style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', borderRadius:3, cursor:'pointer' }}
+                                                onMouseEnter={e => e.currentTarget.style.background='rgba(200,185,154,0.10)'}
+                                                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                <span style={{ fontSize:12, color:T.danger, flexShrink:0 }}>🗑</span>
+                                                <div>
+                                                    <div style={{ fontSize:12.5, fontWeight:600, color:T.danger }}>Dismiss permanently</div>
+                                                    <div style={{ fontSize:10.5, color:T.inkMuted }}>Won't show again on this workspace</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                                <button onClick={() => setActiveItem(SETTINGS_ITEMS.find(i=>i.id===it.id)||it)}
-                                    style={{ padding:'4px 10px', fontSize:11, fontWeight:600, background:T.danger, color:'#fbf8f3', border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Fix →</button>
+                            );
+                        })}
+
+                        {/* Hidden items — shown when "Show" toggled */}
+                        {naShowHidden && hiddenAttention.map(it => {
+                            const info = naHidden[it.id];
+                            return (
+                                <div key={it.id} style={{ padding:'8px 0',
+                                    borderTop:`1px dashed rgba(156,58,46,0.15)`,
+                                    display:'flex', alignItems:'center', gap:10, opacity:0.55 }}>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, fontFamily:T.sans,
+                                            textDecoration:'line-through', textDecorationColor:'rgba(42,38,34,0.35)' }}>
+                                            {it.name}
+                                        </div>
+                                        <div style={{ fontSize:11, color:T.inkMid, marginTop:1, fontFamily:T.sans }}>
+                                            <span style={{ padding:'1px 5px', borderRadius:2, fontSize:9.5, fontWeight:700,
+                                                background:'rgba(58,90,122,0.12)', color:T.info, marginRight:6,
+                                                textTransform:'uppercase', letterSpacing:0.5 }}>
+                                                {info?.until === 'forever' ? 'Dismissed' : 'Snoozed'}
+                                            </span>
+                                            {info?.until !== 'forever' && info?.snoozedUntilLabel
+                                                ? 'Until ' + info.snoozedUntilLabel
+                                                : 'Permanently hidden'}
+                                        </div>
+                                    </div>
+                                    <span onClick={() => handleNaRestore(it.id)}
+                                        style={{ fontSize:10.5, color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                                        Restore
+                                    </span>
+                                </div>
+                            );
+                        })}
+
+                        {/* All clear states */}
+                        {visibleAttention.length === 0 && hiddenCount === 0 && (
+                            <div style={{ fontSize:12, color:T.ok, fontFamily:T.sans }}>All checks passing ✓</div>
+                        )}
+                        {visibleAttention.length === 0 && hiddenCount > 0 && (
+                            <div style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans, fontStyle:'italic' }}>
+                                All visible checks passing — {hiddenCount} hidden.
                             </div>
-                        ))}
-                        {attentionItems.length === 0 && <div style={{ fontSize:12, color:T.ok, fontFamily:T.sans }}>All checks passing ✓</div>}
+                        )}
+
+                        {/* Info strip — most recently hidden item */}
+                        {lastHidden && lastHiddenInfo && !naShowHidden && (
+                            <div style={{ marginTop:10, padding:'8px 10px',
+                                background:'rgba(58,90,122,0.06)', borderRadius:3,
+                                fontSize:10.5, color:T.inkMid, display:'flex', alignItems:'center', gap:6, fontFamily:T.sans }}>
+                                <span style={{ fontSize:11, color:T.info }}>◷</span>
+                                <span>
+                                    <b style={{ color:T.ink }}>{lastHiddenInfo.name}</b>
+                                    {lastHiddenInfo.until === 'forever'
+                                        ? ' dismissed permanently.'
+                                        : ` snoozed until ${lastHiddenInfo.snoozedUntilLabel}.`}
+                                    {' '}
+                                    <span onClick={() => handleNaRestore(lastHidden.id)}
+                                        style={{ color:T.info, fontWeight:600, cursor:'pointer' }}>Restore</span>
+                                </span>
+                            </div>
+                        )}
                     </div>
                     {/* Recently changed */}
                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:16 }}>

@@ -255,6 +255,9 @@ export default function PipelineTab() {
         setLostReasonModal, setCsvImportType, setShowCsvImportModal,
         setActivePipelineId, isMobile,
     } = useApp();
+    // Safe wrapper — defaults to true if AppContext hasn't been updated yet
+    const { isFeatureEnabled: _ife } = useApp();
+    const isFeatureEnabled = (id) => typeof _ife === 'function' ? _ife(id) : true;
 
     const isAdmin    = userRole === 'Admin';
     const isManager  = userRole === 'Manager';
@@ -472,7 +475,7 @@ export default function PipelineTab() {
     const handleExport = () => {
         const headers = ['Deal', 'Account', 'Stage', 'Revenue', 'Probability', 'Weighted Revenue', 'Close Date', 'Sales Rep', 'Health', 'AI Score', 'Days in Stage'];
         const rows = smartFilteredOpps.map(o => {
-            const health     = calculateDealHealth(o);
+            const health     = isFeatureEnabled('deal-scoring') ? calculateDealHealth(o) : { score: '', status: '' };
             const daysInStage = o.stageChangedDate ? Math.max(0, Math.floor((new Date() - new Date(o.stageChangedDate + 'T12:00:00')) / 86400000)) : '';
             const weightedVal = ((parseFloat(o.arr)||0) * (parseFloat(o.probability)||0) / 100).toFixed(0);
             return [
@@ -780,8 +783,9 @@ export default function PipelineTab() {
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                         {pipelineFilteredOpps.map(opp => {
-                            const health = calculateDealHealth(opp);
-                            const healthColor = health.score >= 70 ? T.ok : health.score >= 40 ? T.warn : T.danger;
+                            const dealScoringOn = isFeatureEnabled('deal-scoring');
+                            const health = dealScoringOn ? calculateDealHealth(opp) : null;
+                            const healthColor = health ? (health.score >= 70 ? T.ok : health.score >= 40 ? T.warn : T.danger) : T.border;
                             const sc = getStageColor(opp.stage);
                             return (
                                 <div key={opp.id} className="mobile-record-card" onClick={() => { setEditingOpp(opp); setShowModal(true); }}>
@@ -794,8 +798,8 @@ export default function PipelineTab() {
                                     </div>
                                     <div className="mobile-card-meta">
                                         <span style={{ background: sc.text + '22', color: sc.text, padding: '0.125rem 0.5rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700' }}>{opp.stage}</span>
-                                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: healthColor, display: 'inline-block' }} />
-                                        <span className="mobile-card-meta-item" style={{ color: healthColor, fontWeight: '600' }}>{health.status}</span>
+                                        {health && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: healthColor, display: 'inline-block' }} />}
+                                        {health && <span className="mobile-card-meta-item" style={{ color: healthColor, fontWeight: '600' }}>{health.status}</span>}
                                         {opp.forecastedCloseDate && <span className="mobile-card-meta-item">📅 {new Date(opp.forecastedCloseDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
                                     </div>
                                 </div>
@@ -878,8 +882,9 @@ export default function PipelineTab() {
                     const ForecastCard = ({ opp }) => {
                         const closedays = opp.forecastedCloseDate ? Math.round((new Date(opp.forecastedCloseDate+'T12:00:00') - new Date()) / 86400000) : null;
                         const overdue   = closedays !== null && closedays < 0;
-                        const health    = calculateDealHealth(opp);
-                        const hColor    = health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger;
+                        const forecastDealScoringOn = isFeatureEnabled('deal-scoring');
+                        const health    = forecastDealScoringOn ? calculateDealHealth(opp) : null;
+                        const hColor    = health ? (health.score >= 65 ? T.ok : health.score >= 45 ? T.warn : T.danger) : T.border;
                         const relDay    = d => {
                             if (!d) return '—';
                             const diff = Math.round((new Date(d+'T12:00:00') - new Date()) / 86400000);

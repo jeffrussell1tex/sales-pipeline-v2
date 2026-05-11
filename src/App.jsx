@@ -111,7 +111,6 @@ function App() {
     // Destructure for use in this component
     const {
         activeTab, setActiveTab, activePipelineId, setActivePipelineId,
-        accountsDeepFilter, setAccountsDeepFilter,
         isMobile, setIsMobile,
         quickLogOpen, setQuickLogOpen, quickLogForm, setQuickLogForm,
         quickLogContactResults, setQuickLogContactResults,
@@ -503,12 +502,36 @@ dbFetch('/.netlify/functions/users?me=true')
     };
 
     // Field-level visibility helper
-    const canViewField = (fieldKey) => {
+    // ── Field-level security ─────────────────────────────────────────────────────
+    // getFieldLevel returns 'Edit'|'Read'|'Masked'|'Hidden' for the current user's role.
+    // Default is 'Edit' (fully accessible) if no rule is configured.
+    // Levels stored as: fieldVisibility[fieldKey][role] = 'Edit'|'Read'|'Masked'|'Hidden'
+    // Backward-compat: if stored value is boolean (old format), coerce to level.
+    const getFieldLevel = (fieldKey) => {
         const fv = settings.fieldVisibility || {};
         const fieldRules = fv[fieldKey];
-        if (!fieldRules) return true; // not configured = visible
+        if (!fieldRules) return 'Edit'; // not configured = full access
         const role = userRole || 'User';
-        return fieldRules[role] !== false;
+        const val  = fieldRules[role];
+        if (val === undefined || val === null) return 'Edit';
+        // Coerce legacy boolean values
+        if (val === false) return 'Hidden';
+        if (val === true)  return 'Edit';
+        // Return level string directly
+        if (['Edit','Read','Masked','Hidden'].includes(val)) return val;
+        return 'Edit';
+    };
+
+    // canViewField — backward-compatible wrapper. Returns true for Edit/Read/Masked, false for Hidden.
+    const canViewField = (fieldKey) => getFieldLevel(fieldKey) !== 'Hidden';
+
+    // maskFieldValue — applies Masked rendering (replaces value with •••••).
+    // Consuming components: check getFieldLevel and call maskFieldValue when 'Masked'.
+    const maskFieldValue = (value) => {
+        if (!value) return '—';
+        const s = String(value);
+        if (s.length <= 4) return '•'.repeat(s.length);
+        return s.slice(0, 2) + '•'.repeat(Math.min(s.length - 2, 6));
     };
 
     // Filtered data based on role
@@ -541,15 +564,7 @@ dbFetch('/.netlify/functions/users?me=true')
     const visibleOpportunities = applyViewingFilter(
         (opportunities || [])
         .filter(opp => isRepVisible(opp.salesRep))
-        .filter(opp => {
-            // Deals with no pipelineId or the legacy 'default' string belong to
-            // whichever pipeline is marked isDefault, or the first pipeline.
-            const defaultPipeline = allPipelines.find(p => p.isDefault) || allPipelines[0];
-            const oppPipelineId = (!opp.pipelineId || opp.pipelineId === 'default')
-                ? defaultPipeline.id
-                : opp.pipelineId;
-            return oppPipelineId === activePipeline.id;
-        })
+        .filter(opp => (opp.pipelineId || 'default') === activePipeline.id)
     );
     const visibleAccounts = (accounts || [])
         .filter(acc => isRepVisible(acc.accountOwner))
@@ -1284,6 +1299,8 @@ dbFetch('/.netlify/functions/users?me=true')
         softDelete,
         addAudit,
         canViewField,
+        getFieldLevel,
+        maskFieldValue,
         isRepVisible,
         // Derived
         stages,
@@ -1345,7 +1362,6 @@ dbFetch('/.netlify/functions/users?me=true')
         fetchCalendarEvents,
         // Navigation
         activeTab, setActiveTab,
-        accountsDeepFilter, setAccountsDeepFilter,
         activePipelineId, setActivePipelineId,
         allRepNames,
         allTeamNames,
@@ -1464,14 +1480,6 @@ dbFetch('/.netlify/functions/users?me=true')
                 setViewingContact={setViewingContact}
                 dbOffline={dbOffline}
                 setDbOffline={setDbOffline}
-                overdueTaskCount={(() => {
-                    const now = new Date(); now.setHours(0,0,0,0);
-                    return visibleTasks.filter(t => {
-                        const s = t.status || (t.completed ? 'Completed' : 'Open');
-                        return (s === 'Open' || s === 'In-Process') && t.dueDate && new Date(t.dueDate + 'T12:00:00') < now;
-                    }).length;
-                })()}
-                mentionCount={(opportunities || []).reduce((acc, opp) => acc + (opp.comments || []).filter(c => c.timestamp > feedLastRead && c.author !== currentUser && (c.mentions || []).includes(currentUser)).length, 0)}
             />
 
             {/* ── DB OFFLINE BANNER ── */}
@@ -1484,6 +1492,96 @@ dbFetch('/.netlify/functions/users?me=true')
                     <button onClick={() => setDbOffline(false)} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:'#fff', borderRadius:'4px', padding:'2px 8px', cursor:'pointer', fontSize:'0.75rem', fontWeight:'700', fontFamily:'inherit' }}>✕</button>
                 </div>
             )}
+
+            <nav className="nav-tabs">
+                <button 
+                    className={`nav-tab ${activeTab === 'home' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('home')}
+                >
+                    HOME
+                </button>
+                <button 
+                    className={`nav-tab ${activeTab === 'pipeline' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('pipeline')}
+                >
+                    PIPELINE
+                </button>
+                <button 
+                    className={`nav-tab ${activeTab === 'tasks' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('tasks')}
+                    style={{ position: 'relative' }}
+                >
+                    TASKS
+                    {(() => {
+                        const now = new Date(); now.setHours(0,0,0,0);
+                        const overdueCount = visibleTasks.filter(t => {
+                            const s = t.status || (t.completed ? 'Completed' : 'Open');
+                            return (s === 'Open' || s === 'In-Process') && t.dueDate && new Date(t.dueDate + 'T12:00:00') < now;
+                        }).length;
+                        return overdueCount > 0 ? (
+                            <span style={{ position: 'absolute', top: '3px', right: '3px', background: '#ef4444', color: '#fff', borderRadius: '999px', fontSize: '0.5rem', fontWeight: '800', minWidth: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 }}>
+                                {overdueCount > 99 ? '99+' : overdueCount}
+                            </span>
+                        ) : null;
+                    })()}
+                    {(opportunities || []).reduce((acc, opp) => acc + (opp.comments || []).filter(c => c.timestamp > feedLastRead && c.author !== currentUser && (c.mentions || []).includes(currentUser)).length, 0) > 0 && (
+                        <span style={{ position: 'absolute', top: '4px', right: '4px', background: '#ef4444', color: '#fff', borderRadius: '999px', fontSize: '0.5rem', fontWeight: '800', minWidth: '13px', height: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 2px', lineHeight: 1 }}>!</span>
+                    )}
+                </button>
+                <button 
+                    className={`nav-tab ${activeTab === 'accounts' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('accounts')}
+                >
+                    ACCOUNTS
+                </button>
+                <button 
+                    className={`nav-tab ${activeTab === 'contacts' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('contacts')}
+                >
+                    CONTACTS
+                </button>
+                <button 
+                    className={`nav-tab ${activeTab === 'leads' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('leads')}
+                    style={{ display: settings.leadsEnabled === false ? 'none' : '' }}
+                >
+                    LEADS
+                </button>
+                <button
+                    className={`nav-tab ${activeTab === 'quotes' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('quotes')}
+                    style={{ display: settings.quotesEnabled === false ? 'none' : '' }}
+                >
+                    QUOTES
+                </button>
+                <button 
+                    className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('reports')}
+                >
+                    REPORTS
+                </button>
+                {(isAdmin || isManager) && (
+                    <button
+                        className={`nav-tab ${activeTab === 'salesManager' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('salesManager')}
+                    >
+                        SALES MANAGER
+                    </button>
+                )}
+                {isAdmin && (
+                    <button 
+                        className={`nav-tab ${activeTab === 'settings' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('settings')}
+                    >
+                        SETTINGS
+                    </button>
+                )}
+                {isReadOnly && (
+                    <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', padding: '0 0.75rem', fontSize: '0.6875rem', color: 'rgba(255,255,255,0.6)', fontWeight: '600', fontStyle: 'italic' }}>
+                        👁 View Only Mode
+                    </div>
+                )}
+            </nav>
 
             {activeTab === 'home' && (
                 <ErrorBoundary tabName="Home">
@@ -1505,11 +1603,7 @@ dbFetch('/.netlify/functions/users?me=true')
 
             {activeTab === 'accounts' && (
                 <ErrorBoundary tabName="Accounts">
-                    <AccountsTab
-                        initialAccountSegmentFilter={accountsDeepFilter?.accountSegment || '__all__'}
-                        initialIndustryFilter={accountsDeepFilter?.industry || '__all__'}
-                        onDeepFilterConsumed={() => setAccountsDeepFilter(null)}
-                    />
+                    <AccountsTab />
                 </ErrorBoundary>
             )}
 
@@ -1600,10 +1694,10 @@ dbFetch('/.netlify/functions/users?me=true')
                     <>
                         {/* Backdrop */}
                         <div onClick={() => { setMeetingPrepOpen(false); setMeetingPrepOppId(null); }}
-                            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 10500 }} />
+                            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.25)', zIndex: 9000 }} />
 
                         {/* Slide-in panel */}
-                        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '420px', background: '#fff', zIndex: 10501, boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+                        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '420px', background: '#fff', zIndex: 9001, boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
 
                             {/* Header */}
                             <div style={{ background: '#1c1917', padding: '1.25rem 1.5rem', color: '#f5f1eb', flexShrink: 0 }}>

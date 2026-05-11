@@ -75,6 +75,13 @@ export const handler = async (event) => {
                 // BYOK: send back the plaintext key so the UI can display it,
                 // but NEVER log or expose it in error responses
                 anthropicApiKey:  decryptedKey || null,
+                // Feature flags and AI settings
+                featureFlags:     row.extra?.featureFlags     || {},
+                aiSettings:       row.extra?.aiSettings       || {},
+                connectedApps:    row.extra?.connectedApps    || {},
+                slackConfig:      row.extra?.slackConfig      || {},
+                sessionPolicy:         row.extra?.sessionPolicy         || {},
+                streamingDestinations: row.extra?.streamingDestinations  || [],
             }})};
         }
 
@@ -148,6 +155,13 @@ export const handler = async (event) => {
                 customerTypeTiers:    'customerTypeTiers'    in data ? (data.customerTypeTiers    || null) : existingExtra.customerTypeTiers    || null,
                 industries:           'industries'           in data ? (data.industries           || null) : existingExtra.industries           || null,
                 painPoints:           'painPoints'           in data ? (data.painPoints           || [])   : existingExtra.painPoints           || [],
+                // Feature flags and AI settings
+                featureFlags:         'featureFlags'         in data ? (data.featureFlags         || {})   : existingExtra.featureFlags         || {},
+                aiSettings:           'aiSettings'           in data ? (data.aiSettings           || {})   : existingExtra.aiSettings           || {},
+                streamingDestinations: 'streamingDestinations' in data ? (data.streamingDestinations || [])   : existingExtra.streamingDestinations || [],
+                sessionPolicy:        'sessionPolicy'        in data ? (data.sessionPolicy        || {})   : existingExtra.sessionPolicy        || {},
+                connectedApps:        'connectedApps'        in data ? (data.connectedApps        || {})   : existingExtra.connectedApps        || {},
+                slackConfig:          'slackConfig'          in data ? (data.slackConfig          || {})   : existingExtra.slackConfig          || {},
                 // Store encrypted ciphertext — never the plaintext key
                 anthropicApiKey:  encryptedApiKey,
             };
@@ -162,7 +176,7 @@ export const handler = async (event) => {
                 taskTypes:       data.taskTypes       || ['Call', 'Meeting', 'Email'],
                 painPoints:      data.painPoints      || [],
                 verticalMarkets: data.verticalMarkets || [],
-                fieldVisibility: data.fieldVisibility || {},
+                fieldVisibility: 'fieldVisibility' in data ? (data.fieldVisibility || {}) : (existing[0]?.fieldVisibility || {}),
                 extra,
                 updatedAt:       new Date(),
             };
