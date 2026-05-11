@@ -12033,8 +12033,9 @@ const AuditDetail = ({ onBack }) => {
     const [eventsLoading, setEventsLoading] = React.useState(true);
     const [eventsError, setEventsError] = React.useState(null);
 
-    // Streaming destinations — live from settings
-    const [streams, setStreams] = React.useState(SEC_AUDIT_STREAMS);
+    // Streaming destinations — live from settings (never use mock as default)
+    const [streams, setStreams] = React.useState([]);
+    const [streamsLoading, setStreamsLoading] = React.useState(true);
 
     // Button refs for anchoring
     const rowMenuRefs    = React.useRef({});
@@ -12067,9 +12068,11 @@ const AuditDetail = ({ onBack }) => {
                     }));
                     setEvents(mapped);
                 }
-                if (settingsRes.ok && settingsData.settings?.streamingDestinations?.length > 0) {
-                    setStreams(settingsData.settings.streamingDestinations);
+                if (settingsRes.ok) {
+                    // Always replace — even empty array overwrites the default []
+                    setStreams(settingsData.settings?.streamingDestinations || []);
                 }
+                setStreamsLoading(false);
             } catch (e) {
                 console.error('AuditDetail load error:', e.message);
                 if (!cancelled) setEventsError(e.message);
