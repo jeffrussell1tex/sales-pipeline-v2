@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Accelerep API Reference — v1</title>
+<style>
+  :root {
+    --bg:        #f0ece4;
+    --surface:   #fbf8f3;
+    --surface2:  #f5efe3;
+    --border:    #e0d8cc;
+    --border-strong: #ccc3b4;
+    --ink:       #2a2622;
+    --ink-mid:   #5a544c;
+    --ink-muted: #8a8378;
+    --gold:      #c8b99a;
+    --gold-ink:  #7a6a48;
+    --ok:        #4d6b3d;
+    --warn:      #b87333;
+    --danger:    #9c3a2e;
+    --info:      #3a5a7a;
+    --sans:      'Plus Jakarta Sans', system-ui, sans-serif;
+    --mono:      'ui-monospace', 'Menlo', 'Monaco', monospace;
+    --r:         3px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.6;
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── Sidebar ── */
+  nav {
+    width: 260px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    overflow-y: auto;
+    padding-bottom: 40px;
+  }
+  .nav-logo {
+    padding: 22px 20px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-logo-mark {
+    width: 28px; height: 28px;
+    background: var(--ink);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 800; color: var(--gold);
+    flex-shrink: 0;
+  }
+  .nav-logo-text { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+  .nav-logo-version {
+    font-size: 10px; font-weight: 700; color: var(--ink-muted);
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 2px; padding: 1px 5px; letter-spacing: 0.5px;
+  }
+  .nav-section-label {
+    font-size: 9.5px; font-weight: 800; color: var(--ink-muted);
+    letter-spacing: 0.9px; text-transform: uppercase;
+    padding: 16px 20px 6px;
+  }
+  nav a {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 20px; font-size: 12.5px; font-weight: 500;
+    color: var(--ink-mid); text-decoration: none;
+    border-radius: 0; transition: background 80ms, color 80ms;
+  }
+  nav a:hover { background: var(--surface2); color: var(--ink); }
+  nav a.active { background: rgba(200,185,154,0.18); color: var(--gold-ink); font-weight: 700; }
+  nav a .method-badge {
+    font-size: 9px; font-weight: 700; padding: 1px 5px;
+    border-radius: 2px; font-family: var(--mono); flex-shrink: 0;
+  }
+  .badge-get    { background: rgba(77,107,61,0.12);  color: var(--ok);     }
+  .badge-post   { background: rgba(58,90,122,0.12);  color: var(--info);   }
+  .badge-put    { background: rgba(184,115,51,0.12); color: var(--warn);   }
+  .badge-delete { background: rgba(156,58,46,0.10);  color: var(--danger); }
+
+  /* ── Main content ── */
+  main {
+    flex: 1;
+    max-width: 900px;
+    padding: 48px 56px 96px;
+    min-width: 0;
+  }
+
+  /* ── Section headings ── */
+  h1 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 32px; font-weight: 300; font-style: italic;
+    color: var(--ink); margin-bottom: 10px; line-height: 1.2;
+  }
+  h2 {
+    font-size: 20px; font-weight: 700; color: var(--ink);
+    margin: 52px 0 16px; padding-top: 52px;
+    border-top: 1px solid var(--border);
+  }
+  h2:first-of-type { border-top: none; margin-top: 32px; padding-top: 0; }
+  h3 {
+    font-size: 14px; font-weight: 700; color: var(--ink);
+    margin: 28px 0 10px;
+  }
+  h4 { font-size: 12px; font-weight: 700; color: var(--ink-mid); margin: 16px 0 6px; }
+  p { color: var(--ink-mid); margin-bottom: 12px; }
+  a { color: var(--info); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── Endpoint card ── */
+  .endpoint {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 28px;
+    overflow: hidden;
+  }
+  .endpoint-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .method {
+    font-family: var(--mono); font-size: 11px; font-weight: 800;
+    padding: 3px 8px; border-radius: var(--r); flex-shrink: 0;
+    letter-spacing: 0.3px;
+  }
+  .method.GET    { background: rgba(77,107,61,0.12);  color: var(--ok);     }
+  .method.POST   { background: rgba(58,90,122,0.12);  color: var(--info);   }
+  .method.PUT    { background: rgba(184,115,51,0.12); color: var(--warn);   }
+  .method.DELETE { background: rgba(156,58,46,0.10);  color: var(--danger); }
+  .endpoint-path {
+    font-family: var(--mono); font-size: 13px; color: var(--ink); font-weight: 500;
+  }
+  .endpoint-desc { font-size: 12px; color: var(--ink-muted); margin-left: auto; }
+  .endpoint-body { padding: 16px 18px; }
+  .endpoint-body p { font-size: 13px; margin-bottom: 12px; }
+
+  /* ── Code blocks ── */
+  pre, code {
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  pre {
+    background: var(--ink);
+    color: #a8f0c8;
+    border-radius: 4px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    line-height: 1.7;
+    margin: 10px 0 16px;
+    position: relative;
+  }
+  pre .comment { color: #6a8a72; }
+  pre .key     { color: #c8b99a; }
+  pre .str     { color: #a8c8f0; }
+  pre .num     { color: #f0c8a8; }
+  pre .kw      { color: #e8a8c8; }
+  pre .url     { color: #f3ede0; opacity: 0.8; }
+  code:not(pre code) {
+    background: rgba(42,38,34,0.07);
+    border: 1px solid var(--border);
+    border-radius: 3px; padding: 1px 5px;
+    font-size: 12px; color: var(--ink);
+  }
+
+  /* ── Tables ── */
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: 12.5px; margin: 10px 0 20px;
+  }
+  th {
+    text-align: left; font-size: 10px; font-weight: 800;
+    color: var(--ink-muted); letter-spacing: 0.7px; text-transform: uppercase;
+    padding: 8px 12px; background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 9px 12px; border-bottom: 1px solid var(--border);
+    vertical-align: top; color: var(--ink-mid);
+  }
+  td:first-child { font-family: var(--mono); font-size: 11.5px; color: var(--ink); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .req-badge {
+    display: inline-block; font-size: 9px; font-weight: 700;
+    padding: 1px 5px; border-radius: 2px; margin-left: 4px; vertical-align: middle;
+    background: rgba(156,58,46,0.10); color: var(--danger); letter-spacing: 0.3px;
+  }
+  .opt-badge {
+    display: inline-block; font-size: 9px; font-weight: 700;
+    padding: 1px 5px; border-radius: 2px; margin-left: 4px; vertical-align: middle;
+    background: rgba(138,131,120,0.10); color: var(--ink-muted); letter-spacing: 0.3px;
+  }
+
+  /* ── Callouts ── */
+  .callout {
+    padding: 12px 16px; border-radius: 4px; margin: 14px 0;
+    font-size: 12.5px; line-height: 1.6;
+  }
+  .callout.info  { background: rgba(58,90,122,0.08);  border-left: 3px solid var(--info);   color: var(--ink-mid); }
+  .callout.warn  { background: rgba(184,115,51,0.08); border-left: 3px solid var(--warn);   color: var(--ink-mid); }
+  .callout.ok    { background: rgba(77,107,61,0.08);  border-left: 3px solid var(--ok);     color: var(--ink-mid); }
+  .callout b     { color: var(--ink); }
+
+  /* ── Tags ── */
+  .tag {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 2px 6px; border-radius: 10px; margin-right: 4px;
+  }
+  .tag-event  { background: rgba(58,90,122,0.10); color: var(--info); font-family: var(--mono); }
+
+  /* ── Response examples ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 10px 0; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* ── Hero ── */
+  .hero {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 28px 32px;
+    margin-bottom: 40px;
+  }
+  .hero-meta { display: flex; gap: 24px; margin-top: 16px; flex-wrap: wrap; }
+  .hero-meta-item { }
+  .hero-meta-label { font-size: 10px; font-weight: 700; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.7px; }
+  .hero-meta-value { font-family: var(--mono); font-size: 12.5px; color: var(--ink); margin-top: 2px; }
+
+  /* ── Status codes ── */
+  .status-grid { display: grid; grid-template-columns: 80px 1fr; gap: 0; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; margin: 10px 0 20px; }
+  .status-code { font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .status-desc { font-size: 12.5px; color: var(--ink-mid); padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .status-grid > *:nth-last-child(-n+2) { border-bottom: none; }
+  .s2 { color: var(--ok); }
+  .s4 { color: var(--warn); }
+  .s5 { color: var(--danger); }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════ SIDEBAR ═══ -->
+<nav>
+  <div class="nav-logo">
+    <div class="nav-logo-mark">A</div>
+    <div>
+      <div class="nav-logo-text">Accelerep API</div>
+      <div class="nav-logo-version">v1</div>
+    </div>
+  </div>
+
+  <div class="nav-section-label">Getting started</div>
+  <a href="#overview">Overview</a>
+  <a href="#authentication">Authentication</a>
+  <a href="#base-url">Base URL</a>
+  <a href="#errors">Errors &amp; status codes</a>
+  <a href="#pagination">Pagination</a>
+  <a href="#rate-limits">Rate limits</a>
+
+  <div class="nav-section-label">Resources</div>
+  <a href="#opportunities">Opportunities</a>
+  <a href="#opp-get"><span class="method-badge badge-get">GET</span> List</a>
+  <a href="#opp-post"><span class="method-badge badge-post">POST</span> Create</a>
+  <a href="#opp-put"><span class="method-badge badge-put">PUT</span> Update</a>
+  <a href="#opp-delete"><span class="method-badge badge-delete">DEL</span> Delete</a>
+
+  <a href="#accounts">Accounts</a>
+  <a href="#acc-get"><span class="method-badge badge-get">GET</span> List</a>
+  <a href="#acc-post"><span class="method-badge badge-post">POST</span> Create / Bulk</a>
+  <a href="#acc-put"><span class="method-badge badge-put">PUT</span> Update</a>
+  <a href="#acc-delete"><span class="method-badge badge-delete">DEL</span> Delete</a>
+
+  <a href="#contacts">Contacts</a>
+  <a href="#con-get"><span class="method-badge badge-get">GET</span> List</a>
+  <a href="#con-post"><span class="method-badge badge-post">POST</span> Create / Bulk</a>
+  <a href="#con-put"><span class="method-badge badge-put">PUT</span> Update</a>
+  <a href="#con-delete"><span class="method-badge badge-delete">DEL</span> Delete</a>
+
+  <a href="#leads">Leads</a>
+  <a href="#lead-get"><span class="method-badge badge-get">GET</span> List</a>
+  <a href="#lead-post"><span class="method-badge badge-post">POST</span> Create</a>
+  <a href="#lead-put"><span class="method-badge badge-put">PUT</span> Update</a>
+  <a href="#lead-delete"><span class="method-badge badge-delete">DEL</span> Delete</a>
+
+  <a href="#quotes">Quotes</a>
+  <a href="#quote-get"><span class="method-badge badge-get">GET</span> List</a>
+  <a href="#quote-post"><span class="method-badge badge-post">POST</span> Create</a>
+  <a href="#quote-put"><span class="method-badge badge-put">PUT</span> Update</a>
+  <a href="#quote-delete"><span class="method-badge badge-delete">DEL</span> Delete</a>
+
+  <a href="#webhooks">Webhooks</a>
+  <a href="#wh-events">Event types</a>
+  <a href="#wh-get"><span class="method-badge badge-get">GET</span> List</a>
+  <a href="#wh-post"><span class="method-badge badge-post">POST</span> Create</a>
+  <a href="#wh-put"><span class="method-badge badge-put">PUT</span> Update</a>
+  <a href="#wh-delete"><span class="method-badge badge-delete">DEL</span> Delete</a>
+  <a href="#wh-verify">Verifying signatures</a>
+
+  <div class="nav-section-label">API Keys</div>
+  <a href="#apikeys">Managing keys</a>
+  <a href="#apikeys-get"><span class="method-badge badge-get">GET</span> List</a>
+  <a href="#apikeys-post"><span class="method-badge badge-post">POST</span> Create</a>
+  <a href="#apikeys-delete"><span class="method-badge badge-delete">DEL</span> Revoke</a>
+</nav>
+
+<!-- ══════════════════════════════════════════════════ MAIN ═══════ -->
+<main>
+
+  <h1>Accelerep API Reference</h1>
+  <p style="font-size:15px; color:var(--ink-mid); margin-bottom:32px;">Full reference for the Accelerep REST API v1. All endpoints require a valid API key issued from <strong>Settings → Integrations → API keys</strong>.</p>
+
+  <div class="hero">
+    <div class="hero-meta">
+      <div class="hero-meta-item">
+        <div class="hero-meta-label">Base URL</div>
+        <div class="hero-meta-value">https://salespipelinetracker.com/.netlify/functions</div>
+      </div>
+      <div class="hero-meta-item">
+        <div class="hero-meta-label">Auth header</div>
+        <div class="hero-meta-value">Authorization: Bearer &lt;key&gt;</div>
+      </div>
+      <div class="hero-meta-item">
+        <div class="hero-meta-label">Content type</div>
+        <div class="hero-meta-value">application/json</div>
+      </div>
+      <div class="hero-meta-item">
+        <div class="hero-meta-label">Versioning</div>
+        <div class="hero-meta-value">URL-stable · breaking changes increment version</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ AUTHENTICATION ═══ -->
+  <h2 id="authentication">Authentication</h2>
+  <p>Every request must include your API key in the <code>Authorization</code> header as a Bearer token. Keys are issued from Settings → Integrations → API keys and require Admin role to create.</p>
+
+  <pre>curl https://salespipelinetracker.com/.netlify/functions/opportunities \
+  -H <span class="str">"Authorization: Bearer spt_live_a1b2c3..."</span> \
+  -H <span class="str">"Accept: application/json"</span></pre>
+
+  <div class="callout info">
+    <b>Key format:</b> Keys are prefixed <code>spt_live_</code> followed by 64 hex characters. Keys are hashed with SHA-256 before storage — Accelerep never stores the plaintext. Each key is shown in full once at creation time only.
+  </div>
+
+  <div class="callout warn">
+    <b>Key scope:</b> Keys currently grant read/write access to all resources within the workspace. Scope granularity is on the roadmap. Treat keys as workspace credentials and rotate them if compromised.
+  </div>
+
+  <!-- ═══ ERRORS ═══ -->
+  <h2 id="errors">Errors &amp; Status Codes</h2>
+  <p>All errors return JSON with an <code>error</code> string. HTTP status codes follow REST conventions.</p>
+
+  <div class="status-grid">
+    <div class="status-code s2">200</div><div class="status-desc">OK — request succeeded. Body contains the resource or collection.</div>
+    <div class="status-code s2">201</div><div class="status-desc">Created — resource was successfully inserted. Body contains the created record.</div>
+    <div class="status-code s2">204</div><div class="status-desc">No content — used for OPTIONS preflight responses.</div>
+    <div class="status-code s4">400</div><div class="status-desc">Bad request — missing or invalid fields. Check the <code>error</code> field for details.</div>
+    <div class="status-code s4">401</div><div class="status-desc">Unauthorized — missing, expired, or revoked API key.</div>
+    <div class="status-code s4">403</div><div class="status-desc">Forbidden — key is valid but the operation requires a higher-privilege role (e.g. Admin-only endpoint).</div>
+    <div class="status-code s4">404</div><div class="status-desc">Not found — the resource does not exist or belongs to a different organization.</div>
+    <div class="status-code s4">405</div><div class="status-desc">Method not allowed — HTTP method is not supported on this endpoint.</div>
+    <div class="status-code s4">409</div><div class="status-desc">Conflict — e.g. attempting to revoke a key that is already revoked.</div>
+    <div class="status-code s5">500</div><div class="status-desc">Internal server error — unexpected failure. Contact support if this persists.</div>
+  </div>
+
+  <pre><span class="comment">// Error response shape</span>
+{
+  <span class="key">"error"</span>: <span class="str">"id is required"</span>
+}</pre>
+
+  <!-- ═══ PAGINATION ═══ -->
+  <h2 id="pagination">Pagination</h2>
+  <p>Collection endpoints currently return all records for the authenticated organization (up to 500 for audit log). Cursor-based pagination is on the roadmap. For large datasets, use the <code>?limit</code> parameter where documented.</p>
+
+  <!-- ═══ RATE LIMITS ═══ -->
+  <h2 id="rate-limits">Rate Limits</h2>
+  <p>Rate limits are enforced per API key and per organization. Default limits: <strong>1,000 requests/minute</strong> for standard keys. Exceeding limits returns <code>429 Too Many Requests</code> with a <code>Retry-After</code> header.</p>
+
+  <!-- ══════════════════════════════════════ OPPORTUNITIES ══════════ -->
+  <h2 id="opportunities">Opportunities</h2>
+  <p>Opportunities represent sales deals tracked through your pipeline. Each opportunity belongs to one pipeline, one stage, and optionally one account and sales rep.</p>
+
+  <h3>The opportunity object</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>id</td><td>string</td><td>Unique identifier. Client-generated on create.</td></tr>
+      <tr><td>pipelineId</td><td>string</td><td>Pipeline this deal belongs to. Defaults to <code>"default"</code>.</td></tr>
+      <tr><td>opportunityName</td><td>string</td><td>Deal name / title.</td></tr>
+      <tr><td>account</td><td>string</td><td>Account name (display string, not a foreign key).</td></tr>
+      <tr><td>salesRep</td><td>string</td><td>Assigned rep display name.</td></tr>
+      <tr><td>stage</td><td>string</td><td>Current pipeline stage. Defaults to <code>"Discovery"</code>.</td></tr>
+      <tr><td>arr</td><td>string|number</td><td>Annual recurring revenue value.</td></tr>
+      <tr><td>implementationCost</td><td>string|number</td><td>One-time implementation fee.</td></tr>
+      <tr><td>forecastedCloseDate</td><td>string</td><td>Expected close date in <code>YYYY-MM-DD</code> format.</td></tr>
+      <tr><td>forecastCategory</td><td>string</td><td>Forecast bucket: <code>pipeline</code>, <code>best_case</code>, <code>commit</code>, or <code>omit</code>.</td></tr>
+      <tr><td>probability</td><td>number</td><td>Win probability 0–100.</td></tr>
+      <tr><td>territory</td><td>string</td><td>Assigned territory name.</td></tr>
+      <tr><td>notes</td><td>string</td><td>Free-form notes.</td></tr>
+      <tr><td>nextSteps</td><td>string</td><td>Next action items.</td></tr>
+      <tr><td>stageHistory</td><td>array</td><td>Array of stage transition objects <code>{stage, date, prevStage}</code>.</td></tr>
+      <tr><td>lostReason</td><td>string</td><td>Populated when stage = Closed Lost.</td></tr>
+      <tr><td>wonDate</td><td>string</td><td>Date closed won (<code>YYYY-MM-DD</code>).</td></tr>
+      <tr><td>lostDate</td><td>string</td><td>Date closed lost (<code>YYYY-MM-DD</code>).</td></tr>
+      <tr><td>createdDate</td><td>string</td><td>Creation date (<code>YYYY-MM-DD</code>).</td></tr>
+      <tr><td>aiScore</td><td>object</td><td>AI health score object <code>{score, verdict, headline}</code>.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="endpoint" id="opp-get">
+    <div class="endpoint-header">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/.netlify/functions/opportunities</span>
+      <span class="endpoint-desc">List all opportunities</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns all opportunities for the authenticated organization, ordered by creation date. Role-scoped: non-admin users see only their own opportunities.</p>
+      <pre>curl https://salespipelinetracker.com/.netlify/functions/opportunities \
+  -H <span class="str">"Authorization: Bearer spt_live_..."</span></pre>
+      <pre><span class="comment">// Response 200</span>
+{
+  <span class="key">"opportunities"</span>: [
+    {
+      <span class="key">"id"</span>: <span class="str">"opp_abc123"</span>,
+      <span class="key">"pipelineId"</span>: <span class="str">"default"</span>,
+      <span class="key">"opportunityName"</span>: <span class="str">"Acme Corp — Enterprise"</span>,
+      <span class="key">"account"</span>: <span class="str">"Acme Corp"</span>,
+      <span class="key">"salesRep"</span>: <span class="str">"Morgan Reyes"</span>,
+      <span class="key">"stage"</span>: <span class="str">"Proposal"</span>,
+      <span class="key">"arr"</span>: <span class="str">"48000"</span>,
+      <span class="key">"forecastedCloseDate"</span>: <span class="str">"2025-03-31"</span>,
+      <span class="key">"forecastCategory"</span>: <span class="str">"commit"</span>,
+      <span class="key">"probability"</span>: <span class="num">75</span>,
+      <span class="key">"createdDate"</span>: <span class="str">"2025-01-10"</span>,
+      <span class="key">"orgId"</span>: <span class="str">"org_xyz"</span>
+    }
+  ]
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="opp-post">
+    <div class="endpoint-header">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/.netlify/functions/opportunities</span>
+      <span class="endpoint-desc">Create an opportunity</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Creates a single opportunity. Triggers <code>opportunity.created</code> webhook and notifies the assigned rep by email if their notification preferences allow it.</p>
+      <table>
+        <thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>id</td><td><span class="req-badge">required</span></td><td>Client-generated unique ID (e.g. UUID or timestamp-based).</td></tr>
+          <tr><td>opportunityName</td><td><span class="opt-badge">optional</span></td><td>Deal name. Defaults to account name if omitted.</td></tr>
+          <tr><td>account</td><td><span class="opt-badge">optional</span></td><td>Account name string.</td></tr>
+          <tr><td>salesRep</td><td><span class="opt-badge">optional</span></td><td>Rep display name. Must match a user record for email notifications to fire.</td></tr>
+          <tr><td>stage</td><td><span class="opt-badge">optional</span></td><td>Defaults to <code>"Discovery"</code>.</td></tr>
+          <tr><td>arr</td><td><span class="opt-badge">optional</span></td><td>Annual recurring revenue.</td></tr>
+          <tr><td>forecastedCloseDate</td><td><span class="opt-badge">optional</span></td><td><code>YYYY-MM-DD</code></td></tr>
+        </tbody>
+      </table>
+      <pre>curl -X POST https://salespipelinetracker.com/.netlify/functions/opportunities \
+  -H <span class="str">"Authorization: Bearer spt_live_..."</span> \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -d <span class="str">'{
+    "id": "opp_newdeal_001",
+    "opportunityName": "Globex — Starter",
+    "account": "Globex Corp",
+    "salesRep": "Priya Sharma",
+    "stage": "Discovery",
+    "arr": 12000,
+    "forecastedCloseDate": "2025-06-30",
+    "forecastCategory": "pipeline"
+  }'</span></pre>
+      <pre><span class="comment">// Response 201</span>
+{
+  <span class="key">"opportunity"</span>: { <span class="comment">/* full opportunity object */</span> }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="opp-put">
+    <div class="endpoint-header">
+      <span class="method PUT">PUT</span>
+      <span class="endpoint-path">/.netlify/functions/opportunities</span>
+      <span class="endpoint-desc">Update an opportunity</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Upserts an opportunity by <code>id</code>. Triggers <code>opportunity.stage_changed</code>, <code>opportunity.won</code>, or <code>opportunity.lost</code> webhooks as appropriate. Sends email notifications to the rep on stage changes.</p>
+      <div class="callout info"><b>Upsert behaviour:</b> If a record with this <code>id</code> doesn't exist, it will be created. If it does exist, only the fields included in the request body are updated (other fields are preserved).</div>
+      <pre>curl -X PUT https://salespipelinetracker.com/.netlify/functions/opportunities \
+  -H <span class="str">"Authorization: Bearer spt_live_..."</span> \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -d <span class="str">'{
+    "id": "opp_newdeal_001",
+    "stage": "Proposal",
+    "probability": 60,
+    "forecastCategory": "best_case"
+  }'</span></pre>
+      <pre><span class="comment">// Response 200</span>
+{
+  <span class="key">"opportunity"</span>: { <span class="comment">/* updated opportunity object */</span> }
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="opp-delete">
+    <div class="endpoint-header">
+      <span class="method DELETE">DELETE</span>
+      <span class="endpoint-path">/.netlify/functions/opportunities?id=&lt;id&gt;</span>
+      <span class="endpoint-desc">Delete an opportunity</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Permanently deletes an opportunity. Pass <code>?id=</code> for a single record.</p>
+      <pre>curl -X DELETE \
+  <span class="str">"https://salespipelinetracker.com/.netlify/functions/opportunities?id=opp_newdeal_001"</span> \
+  -H <span class="str">"Authorization: Bearer spt_live_..."</span></pre>
+      <pre><span class="comment">// Response 200</span>
+{ <span class="key">"success"</span>: <span class="kw">true</span> }</pre>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════ ACCOUNTS ══════════ -->
+  <h2 id="accounts">Accounts</h2>
+  <p>Accounts represent companies or organizations in your CRM. Accounts support a parent/child hierarchy — a parent account can have multiple business units (child accounts) beneath it. Territory auto-assignment rules are applied automatically on create and update.</p>
+
+  <h3>The account object</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>id</td><td>string</td><td>Unique identifier.</td></tr>
+      <tr><td>name</td><td>string</td><td>Account name. Defaults to <code>"Unnamed Account"</code>.</td></tr>
+      <tr><td>verticalMarket</td><td>string</td><td>Market vertical (e.g. Healthcare, Finance).</td></tr>
+      <tr><td>industry</td><td>string</td><td>Industry classification.</td></tr>
+      <tr><td>address / city / state / zip / country</td><td>string</td><td>Physical address fields.</td></tr>
+      <tr><td>website</td><td>string</td><td>Website URL.</td></tr>
+      <tr><td>phone</td><td>string</td><td>Main phone number.</td></tr>
+      <tr><td>accountOwner</td><td>string</td><td>Owning rep display name.</td></tr>
+      <tr><td>assignedRep</td><td>string</td><td>Assigned rep (may differ from owner).</td></tr>
+      <tr><td>assignedTerritory</td><td>string</td><td>Territory name. Auto-assigned if territory rules are configured.</td></tr>
+      <tr><td>parentAccountId</td><td>string</td><td>ID of parent account for business-unit hierarchy.</td></tr>
+      <tr><td>accountTier</td><td>string</td><td><code>"account"</code> or <code>"business_unit"</code>.</td></tr>
+      <tr><td>customerTypes</td><td>array</td><td>Array of customer type strings.</td></tr>
+      <tr><td>doNotContact</td><td>boolean</td><td>DNC flag. Defaults to <code>false</code>.</td></tr>
+      <tr><td>annualRevenue</td><td>string</td><td>Account's annual revenue.</td></tr>
+      <tr><td>totalEmployees</td><td>string</td><td>Employee count.</td></tr>
+      <tr><td>sicCode / naicsCode</td><td>string</td><td>Industry classification codes.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="endpoint" id="acc-get">
+    <div class="endpoint-header">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/.netlify/functions/accounts</span>
+      <span class="endpoint-desc">List all accounts</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns all accounts for the organization, ordered alphabetically by name. Includes both top-level accounts and business units.</p>
+      <pre><span class="comment">// Response 200</span>
+{
+  <span class="key">"accounts"</span>: [
+    {
+      <span class="key">"id"</span>: <span class="str">"acc_abc"</span>,
+      <span class="key">"name"</span>: <span class="str">"Acme Corp"</span>,
+      <span class="key">"industry"</span>: <span class="str">"Manufacturing"</span>,
+      <span class="key">"assignedTerritory"</span>: <span class="str">"Northeast"</span>,
+      <span class="key">"accountTier"</span>: <span class="str">"account"</span>,
+      <span class="key">"doNotContact"</span>: <span class="kw">false</span>,
+      <span class="key">"customerTypes"</span>: [<span class="str">"Enterprise"</span>]
+    }
+  ]
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="acc-post">
+    <div class="endpoint-header">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/.netlify/functions/accounts</span>
+      <span class="endpoint-desc">Create account or bulk import</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Pass a single object to create one account, or an array to bulk-import. Bulk imports use <code>onConflictDoNothing</code> — duplicate IDs are silently skipped. Territory auto-assignment runs on single creates.</p>
+      <div class="two-col">
+        <div>
+          <h4>Single create</h4>
+          <pre>-d <span class="str">'{
+  "id": "acc_globex",
+  "name": "Globex Corp",
+  "industry": "Technology",
+  "verticalMarket": "SaaS",
+  "assignedRep": "Priya Sharma"
+}'</span></pre>
+        </div>
+        <div>
+          <h4>Bulk import</h4>
+          <pre>-d <span class="str">'[
+  { "id": "acc_1", "name": "Alpha Co" },
+  { "id": "acc_2", "name": "Beta Inc" }
+]'</span></pre>
+        </div>
+      </div>
+      <pre><span class="comment">// Single response 201</span>
+{ <span class="key">"account"</span>: { <span class="comment">/* full account object */</span> } }
+
+<span class="comment">// Bulk response 201</span>
+{ <span class="key">"accounts"</span>: [ <span class="comment">/* inserted records */</span> ], <span class="key">"inserted"</span>: <span class="num">2</span> }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="acc-put">
+    <div class="endpoint-header">
+      <span class="method PUT">PUT</span>
+      <span class="endpoint-path">/.netlify/functions/accounts</span>
+      <span class="endpoint-desc">Update an account</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Upserts by <code>id</code>. When a parent account is deleted, its children are automatically promoted to top-level. Territory auto-assignment runs if <code>assignedTerritory</code> is not already set.</p>
+      <pre>curl -X PUT https://salespipelinetracker.com/.netlify/functions/accounts \
+  -H <span class="str">"Authorization: Bearer spt_live_..."</span> \
+  -d <span class="str">'{ "id": "acc_globex", "assignedTerritory": "Southwest" }'</span></pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="acc-delete">
+    <div class="endpoint-header">
+      <span class="method DELETE">DELETE</span>
+      <span class="endpoint-path">/.netlify/functions/accounts?id=&lt;id&gt;</span>
+      <span class="endpoint-desc">Delete an account</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Deletes a single account. Child accounts (business units) are automatically promoted to top-level before deletion. Pass <code>?clear=true</code> to delete all accounts for the org (use with caution).</p>
+      <pre>curl -X DELETE \
+  <span class="str">"https://salespipelinetracker.com/.netlify/functions/accounts?id=acc_globex"</span> \
+  -H <span class="str">"Authorization: Bearer spt_live_..."</span></pre>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════ CONTACTS ══════════ -->
+  <h2 id="contacts">Contacts</h2>
+  <p>Contacts are individual people associated with accounts and opportunities. Contacts support rich org-chart data including managers, direct reports, and assistant name.</p>
+
+  <h3>The contact object</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>id</td><td>string</td><td>Unique identifier.</td></tr>
+      <tr><td>firstName / lastName</td><td>string</td><td>Name fields.</td></tr>
+      <tr><td>prefix / suffix / nickName</td><td>string</td><td>Honorific and alternate names.</td></tr>
+      <tr><td>title</td><td>string</td><td>Job title.</td></tr>
+      <tr><td>company</td><td>string</td><td>Associated account name.</td></tr>
+      <tr><td>department</td><td>string</td><td>Business department.</td></tr>
+      <tr><td>email</td><td>string</td><td>Primary work email.</td></tr>
+      <tr><td>personalEmail</td><td>string</td><td>Personal email (PII — respect field-level security).</td></tr>
+      <tr><td>phone / mobile</td><td>string</td><td>Phone numbers.</td></tr>
+      <tr><td>address / city / state / zip / country</td><td>string</td><td>Address fields.</td></tr>
+      <tr><td>managers</td><td>array</td><td>Array of manager name strings.</td></tr>
+      <tr><td>directReports</td><td>array</td><td>Array of direct report name strings.</td></tr>
+      <tr><td>assistantName</td><td>string</td><td>Executive assistant name.</td></tr>
+      <tr><td>assignedRep</td><td>string</td><td>Owning rep display name.</td></tr>
+      <tr><td>doNotContact</td><td>boolean</td><td>DNC flag.</td></tr>
+      <tr><td>notes</td><td>string</td><td>Free-form notes.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="endpoint" id="con-get">
+    <div class="endpoint-header">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/.netlify/functions/contacts</span>
+      <span class="endpoint-desc">List all contacts</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns all contacts for the organization, ordered by last name.</p>
+      <pre><span class="comment">// Response 200</span>
+{ <span class="key">"contacts"</span>: [ <span class="comment">/* array of contact objects */</span> ] }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="con-post">
+    <div class="endpoint-header">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/.netlify/functions/contacts</span>
+      <span class="endpoint-desc">Create contact or bulk import</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Single object or array. Bulk uses <code>onConflictDoNothing</code>.</p>
+      <pre>-d <span class="str">'{
+  "id": "con_jdoe",
+  "firstName": "Jane",
+  "lastName": "Doe",
+  "title": "VP Engineering",
+  "company": "Acme Corp",
+  "email": "jane.doe@acme.com",
+  "assignedRep": "Morgan Reyes"
+}'</span></pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="con-put">
+    <div class="endpoint-header">
+      <span class="method PUT">PUT</span>
+      <span class="endpoint-path">/.netlify/functions/contacts</span>
+      <span class="endpoint-desc">Update a contact</span>
+    </div>
+    <div class="endpoint-body"><p>Upserts by <code>id</code>. All fields are optional except <code>id</code>.</p></div>
+  </div>
+
+  <div class="endpoint" id="con-delete">
+    <div class="endpoint-header">
+      <span class="method DELETE">DELETE</span>
+      <span class="endpoint-path">/.netlify/functions/contacts?id=&lt;id&gt;</span>
+      <span class="endpoint-desc">Delete a contact</span>
+    </div>
+    <div class="endpoint-body"><p>Pass <code>?id=</code> for single delete or <code>?clear=true</code> to delete all contacts in the org.</p></div>
+  </div>
+
+  <!-- ══════════════════════════════════════ LEADS ══════════ -->
+  <h2 id="leads">Leads</h2>
+  <p>Leads are prospective contacts that haven't yet been qualified into opportunities. The API fires <code>lead.created</code> and <code>lead.converted</code> webhooks automatically. Converting a lead (setting <code>status: "Converted"</code>) auto-sets <code>convertedAt</code>.</p>
+
+  <h3>The lead object</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>id</td><td>string</td><td>Unique identifier.</td></tr>
+      <tr><td>firstName / lastName</td><td>string</td><td>Lead name.</td></tr>
+      <tr><td>company</td><td>string</td><td>Company name.</td></tr>
+      <tr><td>title</td><td>string</td><td>Job title.</td></tr>
+      <tr><td>email / phone</td><td>string</td><td>Contact details.</td></tr>
+      <tr><td>source</td><td>string</td><td>Lead source (e.g. <code>"website"</code>, <code>"partner"</code>).</td></tr>
+      <tr><td>status</td><td>string</td><td><code>New</code>, <code>Contacted</code>, <code>Qualified</code>, <code>Converted</code>, <code>Disqualified</code>. Defaults to <code>"New"</code>.</td></tr>
+      <tr><td>score</td><td>number</td><td>Lead score 0–100. Defaults to 50.</td></tr>
+      <tr><td>estimatedARR</td><td>number</td><td>Estimated deal value.</td></tr>
+      <tr><td>assignedTo</td><td>string</td><td>Assigned rep display name.</td></tr>
+      <tr><td>convertedAt</td><td>string</td><td>Auto-set to today when <code>status</code> is first set to <code>Converted</code>.</td></tr>
+      <tr><td>firstTouchDate</td><td>string</td><td>Auto-set when the lead is first assigned or status moves beyond New.</td></tr>
+      <tr><td>notes</td><td>string</td><td>Free-form notes.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="endpoint" id="lead-get">
+    <div class="endpoint-header">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/.netlify/functions/leads</span>
+      <span class="endpoint-desc">List leads</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns leads ordered by creation date. Non-admin users see only leads assigned to them.</p>
+      <pre><span class="comment">// Response 200</span>
+{ <span class="key">"leads"</span>: [ <span class="comment">/* array of lead objects */</span> ] }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="lead-post">
+    <div class="endpoint-header">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/.netlify/functions/leads</span>
+      <span class="endpoint-desc">Create a lead</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Creates a lead and fires the <code>lead.created</code> webhook.</p>
+      <pre>-d <span class="str">'{
+  "id": "lead_web_001",
+  "firstName": "Alex",
+  "lastName": "Chen",
+  "company": "StartupCo",
+  "email": "alex@startupco.io",
+  "source": "website",
+  "score": 72,
+  "estimatedARR": 24000
+}'</span></pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="lead-put">
+    <div class="endpoint-header">
+      <span class="method PUT">PUT</span>
+      <span class="endpoint-path">/.netlify/functions/leads</span>
+      <span class="endpoint-desc">Update a lead</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Upserts by <code>id</code>. Setting <code>status: "Converted"</code> for the first time auto-populates <code>convertedAt</code> and fires the <code>lead.converted</code> webhook.</p>
+      <pre>-d <span class="str">'{
+  "id": "lead_web_001",
+  "status": "Converted",
+  "assignedTo": "Priya Sharma"
+}'</span></pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="lead-delete">
+    <div class="endpoint-header">
+      <span class="method DELETE">DELETE</span>
+      <span class="endpoint-path">/.netlify/functions/leads?id=&lt;id&gt;</span>
+      <span class="endpoint-desc">Delete a lead</span>
+    </div>
+    <div class="endpoint-body"><p>Pass <code>?id=</code> for single delete or <code>?clear=true</code> to delete all.</p></div>
+  </div>
+
+  <!-- ══════════════════════════════════════ QUOTES ══════════ -->
+  <h2 id="quotes">Quotes</h2>
+  <p>Quotes are pricing proposals attached to opportunities. Totals are calculated server-side from line items to prevent client tampering. Approval tiers are computed automatically based on average discount percentage. When a quote is accepted, the linked opportunity's ARR is automatically updated.</p>
+
+  <h3>The quote object</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>id</td><td>string</td><td>Unique identifier.</td></tr>
+      <tr><td>opportunityId</td><td>string</td><td>ID of the linked opportunity.</td></tr>
+      <tr><td>quoteNumber</td><td>string</td><td>Human-readable quote number.</td></tr>
+      <tr><td>version</td><td>number</td><td>Version number for revision tracking.</td></tr>
+      <tr><td>name</td><td>string</td><td>Quote name / title.</td></tr>
+      <tr><td>status</td><td>string</td><td><code>Draft</code>, <code>Sent</code>, <code>Viewed</code>, <code>Accepted</code>, <code>Declined</code>.</td></tr>
+      <tr><td>validUntil</td><td>string</td><td>Expiry date <code>YYYY-MM-DD</code>.</td></tr>
+      <tr><td>paymentTerms</td><td>string</td><td>e.g. <code>"Net 30"</code>.</td></tr>
+      <tr><td>lineItems</td><td>array</td><td>Array of line item objects (see below).</td></tr>
+      <tr><td>subtotal</td><td>string</td><td>Server-calculated before deal discount.</td></tr>
+      <tr><td>dealDiscount</td><td>number</td><td>Deal-level discount percentage (0–100).</td></tr>
+      <tr><td>totalValue</td><td>string</td><td>Server-calculated after deal discount.</td></tr>
+      <tr><td>recurringValue</td><td>string</td><td>Annualized recurring revenue portion.</td></tr>
+      <tr><td>oneTimeValue</td><td>string</td><td>One-time fee portion.</td></tr>
+      <tr><td>approvalTier</td><td>string</td><td>Computed approval tier label (e.g. <code>"Mgr approval"</code>).</td></tr>
+      <tr><td>createdBy</td><td>string</td><td>Rep display name who created the quote.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Line item object</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td>productId</td><td>Product ID reference.</td></tr>
+      <tr><td>productName</td><td>Product display name.</td></tr>
+      <tr><td>productType</td><td><code>"recurring"</code> or <code>"one_time"</code>.</td></tr>
+      <tr><td>quantity</td><td>Number of units.</td></tr>
+      <tr><td>unit</td><td><code>"month"</code> or <code>"year"</code> (for recurring). Monthly recurring is annualized × 12.</td></tr>
+      <tr><td>listPrice</td><td>Per-unit list price before discount.</td></tr>
+      <tr><td>discountPct</td><td>Line-item discount 0–100.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="endpoint" id="quote-get">
+    <div class="endpoint-header">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/.netlify/functions/quotes</span>
+      <span class="endpoint-desc">List quotes</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns all quotes for the org. Filter by opportunity using <code>?opportunityId=</code>.</p>
+      <pre>GET /.netlify/functions/quotes?opportunityId=opp_abc123</pre>
+      <pre><span class="comment">// Response 200</span>
+{ <span class="key">"quotes"</span>: [ <span class="comment">/* array of quote objects */</span> ] }</pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="quote-post">
+    <div class="endpoint-header">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/.netlify/functions/quotes</span>
+      <span class="endpoint-desc">Create a quote</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="callout info"><b>Server-side totals:</b> Do not compute <code>subtotal</code>, <code>totalValue</code>, <code>recurringValue</code>, or <code>oneTimeValue</code> yourself — they are recalculated server-side from <code>lineItems</code> and <code>dealDiscount</code> on every write.</div>
+      <pre>-d <span class="str">'{
+  "id": "quote_001_v1",
+  "opportunityId": "opp_abc123",
+  "quoteNumber": "Q-2025-0047",
+  "version": 1,
+  "name": "Acme Corp — Enterprise Proposal",
+  "status": "Draft",
+  "validUntil": "2025-04-30",
+  "paymentTerms": "Net 30",
+  "dealDiscount": 10,
+  "lineItems": [
+    {
+      "productId": "prod_platform",
+      "productName": "Platform — Enterprise",
+      "productType": "recurring",
+      "quantity": 1,
+      "unit": "year",
+      "listPrice": 48000,
+      "discountPct": 0
+    }
+  ],
+  "createdBy": "Morgan Reyes"
+}'</span></pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="quote-put">
+    <div class="endpoint-header">
+      <span class="method PUT">PUT</span>
+      <span class="endpoint-path">/.netlify/functions/quotes</span>
+      <span class="endpoint-desc">Update a quote</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Upserts by <code>id</code>. Setting <code>status: "Accepted"</code> automatically syncs <code>totalValue</code> to the linked opportunity's <code>arr</code> field.</p>
+    </div>
+  </div>
+
+  <div class="endpoint" id="quote-delete">
+    <div class="endpoint-header">
+      <span class="method DELETE">DELETE</span>
+      <span class="endpoint-path">/.netlify/functions/quotes?id=&lt;id&gt;</span>
+      <span class="endpoint-desc">Delete a quote</span>
+    </div>
+    <div class="endpoint-body"><p>Permanently deletes the quote record.</p></div>
+  </div>
+
+  <!-- ══════════════════════════════════════ WEBHOOKS ══════════ -->
+  <h2 id="webhooks">Webhooks</h2>
+  <p>Webhooks allow your backend to receive real-time notifications when CRM events occur. Each subscription defines an endpoint URL and the list of event types it subscribes to. Payloads are signed with HMAC-SHA256.</p>
+
+  <h3 id="wh-events">Supported event types</h3>
+  <table>
+    <thead><tr><th>Event</th><th>Fired when</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag tag-event">opportunity.created</span></td><td>A new opportunity is created via the API or the app.</td></tr>
+      <tr><td><span class="tag tag-event">opportunity.stage_changed</span></td><td>An opportunity moves to a new pipeline stage.</td></tr>
+      <tr><td><span class="tag tag-event">opportunity.won</span></td><td>Stage is set to "Closed Won".</td></tr>
+      <tr><td><span class="tag tag-event">opportunity.lost</span></td><td>Stage is set to "Closed Lost".</td></tr>
+      <tr><td><span class="tag tag-event">lead.created</span></td><td>A new lead is created.</td></tr>
+      <tr><td><span class="tag tag-event">lead.converted</span></td><td>A lead's status is first set to "Converted".</td></tr>
+      <tr><td><span class="tag tag-event">task.overdue</span></td><td>A task passes its due date without being completed.</td></tr>
+      <tr><td><span class="tag tag-event">task.completed</span></td><td>A task is marked complete.</td></tr>
+      <tr><td><span class="tag tag-event">spiff.claimed</span></td><td>A SPIFF incentive is claimed by a rep.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Payload format</h3>
+  <pre>{
+  <span class="key">"event"</span>:     <span class="str">"opportunity.stage_changed"</span>,
+  <span class="key">"timestamp"</span>: <span class="str">"2025-03-15T14:22:00.000Z"</span>,
+  <span class="key">"org_id"</span>:    <span class="str">"org_xyz"</span>,
+  <span class="key">"data"</span>: {
+    <span class="comment">// resource-specific fields — see each event type</span>
+  }
+}</pre>
+
+  <h3 id="wh-verify">Verifying signatures</h3>
+  <p>Every request includes an <code>X-SPT-Signature</code> header and an <code>X-SPT-Event</code> header. Always verify the signature before processing the payload.</p>
+
+  <div class="callout warn"><b>Important:</b> Never process a webhook payload without verifying its signature. Unverified webhooks can be spoofed.</div>
+
+  <pre><span class="comment">// Node.js — verify signature</span>
+<span class="kw">const</span> crypto = require(<span class="str">'crypto'</span>);
+
+<span class="kw">function</span> verifyWebhook(rawBody, signature, secret) {
+  <span class="kw">const</span> expected = <span class="str">'sha256='</span> + crypto
+    .createHmac(<span class="str">'sha256'</span>, secret)
+    .update(rawBody)  <span class="comment">// raw request body string, not parsed JSON</span>
+    .digest(<span class="str">'hex'</span>);
+  <span class="kw">return</span> crypto.timingSafeEqual(
+    Buffer.from(signature), Buffer.from(expected)
+  );
+}
+
+<span class="comment">// Express handler</span>
+app.post(<span class="str">'/webhooks/accelerep'</span>, express.raw({ type: <span class="str">'application/json'</span> }), (req, res) => {
+  <span class="kw">const</span> sig = req.headers[<span class="str">'x-spt-signature'</span>];
+  <span class="kw">if</span> (!verifyWebhook(req.body.toString(), sig, process.env.WEBHOOK_SECRET)) {
+    <span class="kw">return</span> res.status(<span class="num">401</span>).send(<span class="str">'Invalid signature'</span>);
+  }
+  <span class="kw">const</span> event = JSON.parse(req.body);
+  console.log(<span class="str">'Received:'</span>, event.event, event.data);
+  res.status(<span class="num">200</span>).send(<span class="str">'OK'</span>);
+});</pre>
+
+  <div class="endpoint" id="wh-get">
+    <div class="endpoint-header">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/.netlify/functions/webhooks</span>
+      <span class="endpoint-desc">List subscriptions</span>
+    </div>
+    <div class="endpoint-body">
+      <pre><span class="comment">// Response 200</span>
+{
+  <span class="key">"subscriptions"</span>: [
+    {
+      <span class="key">"id"</span>: <span class="str">"wh_abc"</span>,
+      <span class="key">"name"</span>: <span class="str">"Pipeline → Zapier"</span>,
+      <span class="key">"targetUrl"</span>: <span class="str">"https://hooks.zapier.com/..."</span>,
+      <span class="key">"eventTypes"</span>: [<span class="str">"opportunity.won"</span>, <span class="str">"opportunity.stage_changed"</span>],
+      <span class="key">"active"</span>: <span class="kw">true</span>,
+      <span class="key">"lastFiredAt"</span>: <span class="str">"2025-03-15T14:22:00.000Z"</span>,
+      <span class="key">"lastStatus"</span>: <span class="num">200</span>
+    }
+  ]
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="wh-post">
+    <div class="endpoint-header">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/.netlify/functions/webhooks</span>
+      <span class="endpoint-desc">Create a subscription</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Creates a webhook subscription. A signing secret (<code>whsec_...</code>) is auto-generated and returned once — store it immediately as it cannot be retrieved again.</p>
+      <table>
+        <thead><tr><th>Field</th><th>Required</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>name</td><td><span class="req-badge">required</span></td><td>Human-readable name for this subscription.</td></tr>
+          <tr><td>targetUrl</td><td><span class="req-badge">required</span></td><td>HTTPS endpoint that will receive POST requests.</td></tr>
+          <tr><td>eventTypes</td><td><span class="req-badge">required</span></td><td>Array of event type strings (see list above).</td></tr>
+        </tbody>
+      </table>
+      <pre>-d <span class="str">'{
+  "name": "Stage changes → ERP",
+  "targetUrl": "https://erp.example.com/webhooks/crm",
+  "eventTypes": ["opportunity.stage_changed", "opportunity.won"]
+}'</span></pre>
+      <pre><span class="comment">// Response 201 — secret shown ONCE only</span>
+{
+  <span class="key">"subscription"</span>: { <span class="comment">/* subscription object */</span> },
+  <span class="key">"secret"</span>: <span class="str">"whsec_a1b2c3d4e5f6..."</span>
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="wh-put">
+    <div class="endpoint-header">
+      <span class="method PUT">PUT</span>
+      <span class="endpoint-path">/.netlify/functions/webhooks</span>
+      <span class="endpoint-desc">Update a subscription</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Update <code>name</code>, <code>targetUrl</code>, <code>eventTypes</code>, or toggle <code>active</code> to pause/resume delivery.</p>
+      <pre>-d <span class="str">'{
+  "id": "wh_abc",
+  "active": false
+}'</span></pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="wh-delete">
+    <div class="endpoint-header">
+      <span class="method DELETE">DELETE</span>
+      <span class="endpoint-path">/.netlify/functions/webhooks?id=&lt;id&gt;</span>
+      <span class="endpoint-desc">Delete a subscription</span>
+    </div>
+    <div class="endpoint-body"><p>Permanently removes the subscription. No further events will be delivered.</p></div>
+  </div>
+
+  <!-- ══════════════════════════════════════ API KEYS ══════════ -->
+  <h2 id="apikeys">API Keys</h2>
+  <p>API keys are managed via the <code>api-keys</code> endpoint. All operations require Admin role. Keys are hashed with SHA-256 before storage — the plaintext is returned only at creation time.</p>
+
+  <div class="endpoint" id="apikeys-get">
+    <div class="endpoint-header">
+      <span class="method GET">GET</span>
+      <span class="endpoint-path">/.netlify/functions/api-keys</span>
+      <span class="endpoint-desc">List API keys</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Returns all keys for the org. <code>keyHash</code> is never returned — only <code>keyPrefix</code> (the first 16 characters) for identification.</p>
+      <pre><span class="comment">// Response 200</span>
+{
+  <span class="key">"keys"</span>: [
+    {
+      <span class="key">"id"</span>: <span class="str">"apikey_1234567890_abc"</span>,
+      <span class="key">"name"</span>: <span class="str">"Production sync"</span>,
+      <span class="key">"keyPrefix"</span>: <span class="str">"spt_live_a1b2c3d"</span>,
+      <span class="key">"scopes"</span>: [<span class="str">"read"</span>],
+      <span class="key">"createdBy"</span>: <span class="str">"user_abc"</span>,
+      <span class="key">"createdAt"</span>: <span class="str">"2025-01-14T10:00:00.000Z"</span>,
+      <span class="key">"lastUsedAt"</span>: <span class="str">"2025-03-15T14:22:00.000Z"</span>,
+      <span class="key">"revokedAt"</span>: <span class="kw">null</span>
+    }
+  ]
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="apikeys-post">
+    <div class="endpoint-header">
+      <span class="method POST">POST</span>
+      <span class="endpoint-path">/.netlify/functions/api-keys</span>
+      <span class="endpoint-desc">Create an API key</span>
+    </div>
+    <div class="endpoint-body">
+      <div class="callout warn"><b>Store immediately:</b> The <code>plaintextKey</code> is returned only in this response. It is hashed before storage and cannot be retrieved again.</div>
+      <pre>-d <span class="str">'{ "name": "BI pipeline sync" }'</span></pre>
+      <pre><span class="comment">// Response 201</span>
+{
+  <span class="key">"key"</span>: {
+    <span class="key">"id"</span>: <span class="str">"apikey_1234_xyz"</span>,
+    <span class="key">"name"</span>: <span class="str">"BI pipeline sync"</span>,
+    <span class="key">"keyPrefix"</span>: <span class="str">"spt_live_a1b2c3d"</span>,
+    <span class="key">"scopes"</span>: [<span class="str">"read"</span>],
+    <span class="key">"createdAt"</span>: <span class="str">"2025-03-15T14:00:00.000Z"</span>
+  },
+  <span class="key">"plaintextKey"</span>: <span class="str">"spt_live_a1b2c3d4e5f6..."</span>
+}</pre>
+    </div>
+  </div>
+
+  <div class="endpoint" id="apikeys-delete">
+    <div class="endpoint-header">
+      <span class="method DELETE">DELETE</span>
+      <span class="endpoint-path">/.netlify/functions/api-keys?id=&lt;id&gt;</span>
+      <span class="endpoint-desc">Revoke an API key</span>
+    </div>
+    <div class="endpoint-body">
+      <p>Soft-revokes the key by setting <code>revokedAt</code>. The key stops working immediately. Revocation is permanent — create a new key if access is needed again.</p>
+      <pre>curl -X DELETE \
+  <span class="str">"https://salespipelinetracker.com/.netlify/functions/api-keys?id=apikey_1234_xyz"</span> \
+  -H <span class="str">"Authorization: Bearer spt_live_..."</span></pre>
+      <pre><span class="comment">// Response 200</span>
+{ <span class="key">"success"</span>: <span class="kw">true</span> }</pre>
+    </div>
+  </div>
+
+  <div style="margin-top: 80px; padding-top: 32px; border-top: 1px solid var(--border); font-size: 12px; color: var(--ink-muted); display: flex; justify-content: space-between; align-items: center;">
+    <span>Accelerep API Reference · v1 · Generated for salespipelinetracker.com</span>
+    <span>Support: <a href="mailto:support@salespipelinetracker.com">support@salespipelinetracker.com</a></span>
+  </div>
+
+</main>
+
+<script>
+  // Highlight active nav item on scroll
+  const sections = document.querySelectorAll('[id]');
+  const navLinks = document.querySelectorAll('nav a[href^="#"]');
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => {
+          a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id);
+        });
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>
