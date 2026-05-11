@@ -180,7 +180,7 @@ export default function AppHeader({
             </div>
 
             {/* CENTER: nav tabs — overflow:hidden + minWidth:0 prevents tabs from pushing the RIGHT group off screen */}
-            <div style={{ display: 'flex', alignItems: 'stretch', flex: 1, height: 48, overflow: 'hidden', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'stretch', flex: 1, height: 48, overflowX: 'auto', overflowY: 'hidden', minWidth: 0, scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 {tabs.map(tab => {
                     const active = activeTab === tab.id;
                     return (
