@@ -11560,8 +11560,8 @@ const AuditCategoryDropdown = ({ value, onChange }) => (
 );
 
 // ── Actor dropdown ────────────────────────────────────────────
-const AuditActorDropdown = ({ value, onChange }) => {
-    const actors = ['All actors','jeff@accelerep.com','morgan@accelerep.com','priya@accelerep.com','theo@accelerep.com','System'];
+const AuditActorDropdown = ({ value, onChange, events = [] }) => {
+    const actors = ['All actors', ...new Set(events.map(e => e.actor).filter(Boolean))].filter((v,i,a) => a.indexOf(v) === i);
     const [q, setQ] = React.useState('');
     const filtered = q ? actors.filter(a => a.toLowerCase().includes(q.toLowerCase())) : actors;
     return (
@@ -11771,9 +11771,12 @@ const AuditAnchoredMenu = ({ children, btnRef, onClose, alignRight=true }) => {
     const ref    = React.useRef(null);
     const [style, setStyle] = React.useState({ position:'fixed', zIndex:9999, top:-9999, left:-9999, visibility:'hidden' });
 
-    // Two-pass positioning: first render hidden, then measure and position correctly
+    // Two-pass positioning: measure after first render, then lock position
+    const positionedRef = React.useRef(false);
     React.useLayoutEffect(() => {
         if (!btnRef?.current || !ref.current) return;
+        if (positionedRef.current) return; // already positioned — don't re-run
+        positionedRef.current = true;
         const r       = btnRef.current.getBoundingClientRect();
         const menuH   = ref.current.offsetHeight || 320;
         const menuW   = ref.current.offsetWidth  || 260;
@@ -11998,10 +12001,15 @@ const mapEntityTypeToCat = (entityType) => {
 };
 
 const mapActionToSev = (action) => {
-    const warnActions = ['login.failed','sso.test_login_failed','mfa.disabled','role.permission_changed',
-        'apikey.created','webhook.created','user.deleted','export.bulk','setting.security_changed'];
     const a = (action||'').toLowerCase();
-    return warnActions.some(w => a.includes(w.split('.')[0]) && a.includes(w.split('.')[1]||'')) ? 'warn' : 'info';
+    // Exact-suffix matches — look for 'failed', 'deleted', 'revoked', 'disabled', 'blocked'
+    const warnSuffixes = ['failed','deleted','revoked','disabled','blocked','unauthorized','denied','error'];
+    // Exact action matches
+    const warnExact = ['apikey.created','webhook.created','role.permission_changed','user.invited',
+        'export.bulk','setting.security_changed','mfa.policy_changed','sso.activated'];
+    if (warnExact.includes(a)) return 'warn';
+    if (warnSuffixes.some(s => a.endsWith('.' + s) || a.endsWith('_' + s))) return 'warn';
+    return 'info';
 };
 
 const AuditDetail = ({ onBack }) => {
@@ -12020,15 +12028,17 @@ const AuditDetail = ({ onBack }) => {
     const [showAlerts,   setShowAlerts]   = React.useState(false);
     const [showAddDest,  setShowAddDest]  = React.useState(false);
 
-    // Live audit events from DB
-    const [events,      setEvents]      = React.useState(SEC_AUDIT_EVENTS); // start with mock, replace on load
+    // Live audit events from DB — start empty, never fall back to mock
+    const [events,      setEvents]      = React.useState([]);
     const [eventsLoading, setEventsLoading] = React.useState(true);
+    const [eventsError, setEventsError] = React.useState(null);
 
     // Streaming destinations — live from settings
     const [streams, setStreams] = React.useState(SEC_AUDIT_STREAMS);
 
     // Button refs for anchoring
-    const rowMenuRefs  = React.useRef({});
+    const rowMenuRefs    = React.useRef({});
+    const destSectionRef = React.useRef(null);
     const exportBtnRef = React.useRef(null);
     const destMenuRefs = React.useRef({});
 
@@ -12047,6 +12057,7 @@ const AuditDetail = ({ onBack }) => {
                     // Map DB shape → display shape
                     const mapped = auditData.entries.map(e => ({
                         when:   fmtEventAge(e.timestamp),
+                        rawTs:  e.timestamp, // keep for time filter
                         actor:  e.userName || e.userId || 'System',
                         action: e.action,
                         target: e.entityName || e.entityId || '—',
@@ -12061,7 +12072,7 @@ const AuditDetail = ({ onBack }) => {
                 }
             } catch (e) {
                 console.error('AuditDetail load error:', e.message);
-                // Keep mock data as fallback
+                if (!cancelled) setEventsError(e.message);
             } finally {
                 if (!cancelled) setEventsLoading(false);
             }
@@ -12075,11 +12086,26 @@ const AuditDetail = ({ onBack }) => {
 
     // Filter logic
     const visible = events.filter(e => {
-        if (catFilter === 'warn') return e.sev === 'warn';
-        if (catFilter !== 'All categories' && e.cat !== catFilter) return false;
+        if (catFilter === 'warn') { if (e.sev !== 'warn') return false; }
+        else if (catFilter !== 'All categories' && e.cat !== catFilter) return false;
         if (actorFilter !== 'All actors' && e.actor !== actorFilter) return false;
+        // Time filter — applied to e.rawTs (ISO string) stored during mapping
+        if (timeFilter !== 'All time' && e.rawTs) {
+            const evMs  = new Date(e.rawTs).getTime();
+            const nowMs = Date.now();
+            const limitMap = {
+                'Last 1 hour':    60 * 60 * 1000,
+                'Last 24 hours':  24 * 60 * 60 * 1000,
+                'Last 7 days':    7  * 24 * 60 * 60 * 1000,
+                'Last 30 days':   30 * 24 * 60 * 60 * 1000,
+                'Last 90 days':   90 * 24 * 60 * 60 * 1000,
+                'Last 13 months': 395 * 24 * 60 * 60 * 1000,
+            };
+            const limit = limitMap[timeFilter];
+            if (limit && (nowMs - evMs) > limit) return false;
+        }
         const q = search.toLowerCase();
-        return !q || e.action.includes(q) || e.actor.includes(q) || e.target.includes(q);
+        return !q || e.action.toLowerCase().includes(q) || e.actor.toLowerCase().includes(q) || (e.target||'').toLowerCase().includes(q);
     });
 
     const handleAddFilter = (key, val) => {
@@ -12089,9 +12115,16 @@ const AuditDetail = ({ onBack }) => {
         setActiveRow(null); setActiveMode(null);
     };
 
-    const handleRemoveDest = (dest) => {
-        setStreams(s => s.filter(d => d.dest !== dest.dest));
+    const handleRemoveDest = async (dest) => {
+        const next = streams.filter(d => d.dest !== dest.dest);
+        setStreams(next);
         setActiveDestRow(null);
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ streamingDestinations: next }),
+            });
+        } catch (e) { console.error('removeDest error:', e.message); }
     };
 
     const handleSaveDest = async (newDest) => {
@@ -12123,7 +12156,7 @@ const AuditDetail = ({ onBack }) => {
                 badge="Streaming to Splunk · 2 alerts triggered today"
                 updatedAt="Real-time"
                 actions={[
-                    <SecBtn key="str" label="Configure streaming" onClick={() => {}}/>,
+                    <SecBtn key="str" label="Configure streaming" onClick={() => destSectionRef.current?.scrollIntoView({ behavior:'smooth', block:'start' })}/>,
 
                     <div key="exp" style={{ display:'inline-flex', position:'relative' }}>
                         <button onClick={() => {
@@ -12177,7 +12210,7 @@ const AuditDetail = ({ onBack }) => {
                         <AuditCategoryDropdown value={catFilter} onChange={v => { setCatFilter(v); }}/>
                     </PolicySelect>
                     <PolicySelect label="" value={actorFilter} width={300}>
-                        <AuditActorDropdown value={actorFilter} onChange={v => { setActorFilter(v); }}/>
+                        <AuditActorDropdown value={actorFilter} onChange={v => { setActorFilter(v); }} events={events}/>
                     </PolicySelect>
                     <PolicySelect label="" value={timeFilter} width={280}>
                         <AuditTimeDropdown value={timeFilter} onChange={v => { setTimeFilter(v); }}/>
@@ -12188,7 +12221,7 @@ const AuditDetail = ({ onBack }) => {
                             Clear filters
                         </button>
                     )}
-                    <span style={{ fontSize:12.5, color:T.inkMuted, whiteSpace:'nowrap', marginLeft:'auto' }}>Showing {visible.length} of 12,847</span>
+                    <span style={{ fontSize:12.5, color:T.inkMuted, whiteSpace:'nowrap', marginLeft:'auto' }}>Showing {visible.length} of {events.length} {eventsLoading ? '(loading…)' : ''}</span>
                 </div>
             </div>
 
@@ -12208,6 +12241,19 @@ const AuditDetail = ({ onBack }) => {
                         </tr>
                     </thead>
                     <tbody>
+                        {!eventsLoading && events.length === 0 && (
+                            <tr><td colSpan={7} style={{ padding:'48px', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>
+                                <div style={{ marginBottom:8, fontSize:24, opacity:0.3 }}>📋</div>
+                                <div style={{ fontWeight:600, color:T.ink, marginBottom:4 }}>No audit events yet</div>
+                                <div>Events will appear here as users take actions in the app.</div>
+                                {eventsError && <div style={{ color:T.danger, marginTop:8, fontSize:12 }}>Load error: {eventsError}</div>}
+                            </td></tr>
+                        )}
+                        {visible.length === 0 && events.length > 0 && (
+                            <tr><td colSpan={7} style={{ padding:'32px', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>
+                                No events match these filters.
+                            </td></tr>
+                        )}
                         {visible.map((ev, i) => {
                             const cs = auditCatStyle(ev.cat);
                             const isWarn = ev.sev === 'warn';
@@ -12271,7 +12317,7 @@ const AuditDetail = ({ onBack }) => {
             </div>
 
             {/* ── Streaming destinations ── */}
-            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
+            <div ref={destSectionRef} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden' }}>
                 <div style={{ padding:'12px 16px 8px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                     <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Streaming destinations</div>
                     <SecBtn label="+ Add destination" onClick={() => setShowAddDest(true)}/>
