@@ -9060,87 +9060,172 @@ const ConnectAppModal = ({ app, onClose }) => {
 };
 
 // 2. New API key modal — post-creation reveal state
-const NewApiKeyModal = ({ onClose }) => {
-    const [step, setStep] = useState('form'); // form | reveal
-    const [name, setName] = useState('');
-    const [env,  setEnv]  = useState('live');
-    const mockKey = 'acc_live_sk_9fKpQ2mXr7wZ3nDk8vLj1hYtBcEs4uGo';
-    const copied = React.useRef(false);
+const NewApiKeyModal = ({ onClose, onCreated }) => {
+    const [step,    setStep]    = React.useState('form'); // form | creating | reveal
+    const [name,    setName]    = React.useState('');
+    const [env,     setEnv]     = React.useState('live');
+    const [scopes,  setScopes]  = React.useState(new Set(['read']));
+    const [error,   setError]   = React.useState('');
+    const [result,  setResult]  = React.useState(null); // { key, plaintextKey }
+    const [copied,  setCopied]  = React.useState(false);
 
-    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
+    const ALL_SCOPES = ['read','leads:write','contacts:write','opportunities:write','quotes:write','webhooks:write'];
+
+    const toggleScope = (s) => setScopes(prev => {
+        const n = new Set(prev);
+        if (s === 'read') return n; // read is always included
+        n.has(s) ? n.delete(s) : n.add(s);
+        return n;
+    });
+
+    const handleCreate = async () => {
+        if (!name.trim()) { setError('Key name is required'); return; }
+        setStep('creating');
+        setError('');
+        try {
+            const res  = await dbFetch('/.netlify/functions/api-keys', {
+                method: 'POST',
+                body: JSON.stringify({ name: name.trim(), scopes: [...scopes] }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to create key');
+            setResult(data);
+            if (onCreated) onCreated(data.key);
+            setStep('reveal');
+        } catch (e) {
+            setError(e.message);
+            setStep('form');
+        }
+    };
+
+    const handleCopy = () => {
+        if (!result?.plaintextKey) return;
+        navigator.clipboard?.writeText(result.plaintextKey);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const inp = { padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13,
+        color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box', background:T.surface };
 
     return (
         <IntModal width={580} onClose={onClose}>
-            <IntModalHeader onClose={onClose} title={step==='form' ? 'Create API key' : 'Key created — copy it now'} sub={step==='form' ? 'Keys give programmatic access to Accelerep data.' : undefined}/>
+            <IntModalHeader onClose={onClose}
+                title={step === 'reveal' ? 'Key created — copy it now' : 'Create API key'}
+                sub={step !== 'reveal' ? 'Keys give programmatic access to Accelerep data. Stored as SHA-256 hash.' : undefined}/>
             <div style={{ flex:1, overflowY:'auto', padding:'18px 22px' }}>
-                {step === 'form' ? (
+                {step === 'form' && (
                     <>
                         <div style={{ display:'grid', gridTemplateColumns:'1fr 120px', gap:12, marginBottom:14 }}>
                             <div>
                                 <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Key name</label>
-                                <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Production pipeline sync" style={inp}/>
+                                <input value={name} onChange={e => { setName(e.target.value); setError(''); }}
+                                    placeholder="e.g. Production pipeline sync"
+                                    onKeyDown={e => e.key === 'Enter' && handleCreate()}
+                                    autoFocus style={inp}/>
                             </div>
                             <div>
                                 <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:4 }}>Environment</label>
-                                <select value={env} onChange={e=>setEnv(e.target.value)} style={{ ...inp, appearance:'none', cursor:'pointer' }}>
+                                <select value={env} onChange={e => setEnv(e.target.value)}
+                                    style={{ ...inp, appearance:'none', cursor:'pointer' }}>
                                     <option value="live">Live</option>
                                     <option value="test">Test</option>
                                 </select>
                             </div>
                         </div>
                         <div style={{ marginBottom:14 }}>
-                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:6 }}>Scopes</label>
+                            <label style={{ display:'block', fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:6 }}>
+                                Scopes <span style={{ color:T.inkMuted, fontWeight:400 }}>(read is always included)</span>
+                            </label>
                             <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-                                {['leads:read','leads:write','contacts:read','opps:read','opps:write','quotes:read','webhooks:read'].map(s => (
-                                    <span key={s} style={{ padding:'3px 8px', borderRadius:3, background:'rgba(58,90,122,0.10)', color:T.info, fontSize:11.5, fontFamily:'ui-monospace,Menlo,monospace' }}>{s}</span>
-                                ))}
+                                {ALL_SCOPES.map(s => {
+                                    const on = scopes.has(s);
+                                    const locked = s === 'read';
+                                    return (
+                                        <span key={s} onClick={() => !locked && toggleScope(s)}
+                                            style={{ display:'inline-flex', alignItems:'center', gap:5,
+                                                padding:'4px 10px', borderRadius:4, fontSize:11.5,
+                                                fontFamily:'ui-monospace,Menlo,monospace',
+                                                border:`1px solid ${on ? T.info : T.border}`,
+                                                background: on ? 'rgba(58,90,122,0.10)' : 'transparent',
+                                                color: on ? T.info : T.inkMuted,
+                                                cursor: locked ? 'default' : 'pointer' }}>
+                                            {on && <span style={{ fontSize:9 }}>✓</span>}
+                                            {s}
+                                        </span>
+                                    );
+                                })}
                             </div>
                         </div>
+                        {error && <div style={{ fontSize:12, color:T.danger, marginBottom:10, fontFamily:T.sans }}>{error}</div>}
                     </>
-                ) : (
+                )}
+
+                {step === 'creating' && (
+                    <div style={{ padding:'40px 0', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>
+                        Generating key…
+                    </div>
+                )}
+
+                {step === 'reveal' && result && (
                     <>
-                        {/* Success tile */}
-                        <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', background:'rgba(77,107,61,0.08)', border:`1px solid rgba(77,107,61,0.2)`, borderRadius:6, marginBottom:16 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px',
+                            background:'rgba(77,107,61,0.08)', border:`1px solid rgba(77,107,61,0.2)`,
+                            borderRadius:6, marginBottom:16 }}>
                             <span style={{ fontSize:22, color:T.ok }}>✓</span>
                             <div>
-                                <div style={{ fontSize:13.5, fontWeight:700, color:T.ok }}>Key created successfully</div>
-                                <div style={{ fontSize:12, color:T.inkMid, marginTop:1 }}>Copy it now — you won't be able to see it again.</div>
+                                <div style={{ fontSize:13.5, fontWeight:700, color:T.ok }}>Key created — <b>{result.key?.name}</b></div>
+                                <div style={{ fontSize:12, color:T.inkMid, marginTop:1 }}>Copy it now. You won't be able to see it again.</div>
                             </div>
                         </div>
-                        {/* Dark key panel */}
+
+                        {/* Full key in dark panel */}
                         <div style={{ background:T.ink, borderRadius:6, padding:'14px 16px', marginBottom:14 }}>
                             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
-                                <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:'#a8f0c8', wordBreak:'break-all', flex:1 }}>{mockKey}</code>
-                                <button onClick={()=>{ navigator.clipboard?.writeText(mockKey); }}
-                                    style={{ padding:'5px 12px', background:'rgba(255,255,255,0.12)', color:'#fbf8f3', border:'1px solid rgba(255,255,255,0.18)', borderRadius:4, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, flexShrink:0 }}>
-                                    Copy
+                                <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:'#a8f0c8',
+                                    wordBreak:'break-all', flex:1, lineHeight:1.6 }}>
+                                    {result.plaintextKey}
+                                </code>
+                                <button onClick={handleCopy}
+                                    style={{ padding:'6px 14px', background: copied ? 'rgba(77,107,61,0.5)' : 'rgba(255,255,255,0.12)',
+                                        color:'#fbf8f3', border:'1px solid rgba(255,255,255,0.18)', borderRadius:4,
+                                        fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, flexShrink:0,
+                                        transition:'background 150ms' }}>
+                                    {copied ? '✓ Copied' : 'Copy'}
                                 </button>
                             </div>
                         </div>
-                        {/* Warn callout */}
-                        <div style={{ padding:'10px 14px', background:'rgba(184,115,51,0.09)', borderLeft:`3px solid ${T.warn}`, borderRadius:4, marginBottom:14 }}>
+
+                        {/* Warning */}
+                        <div style={{ padding:'10px 14px', background:'rgba(184,115,51,0.09)',
+                            borderLeft:`3px solid ${T.warn}`, borderRadius:4, marginBottom:14 }}>
                             <div style={{ fontSize:12, color:T.warn, fontWeight:600, marginBottom:2 }}>Store this key securely</div>
-                            <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.5 }}>Never commit it to source control. Use environment variables or a secrets manager (Vault, 1Password, AWS SSM).</div>
+                            <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.5 }}>
+                                Never commit to source control. Use environment variables or a secrets manager (Vault, 1Password, AWS SSM).
+                                This key is stored as a SHA-256 hash — Accelerep cannot recover it.
+                            </div>
                         </div>
-                        {/* curl snippet */}
+
+                        {/* Curl snippet */}
                         <div style={{ background:'rgba(42,38,34,0.04)', border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px' }}>
                             <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase', marginBottom:6 }}>Test with curl</div>
-                            <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMid, lineHeight:1.6, display:'block' }}>
-                                {`curl -H "Authorization: Bearer ${mockKey.slice(0,22)}..." \\\n  https://api.accelerep.com/v1/leads`}
+                            <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:11.5, color:T.inkMid, lineHeight:1.6, display:'block', whiteSpace:'pre-wrap' }}>
+                                {`curl -H "Authorization: Bearer ${(result.plaintextKey||'').slice(0,18)}..." \
+  https://api.accelerep.com/v1/opportunities`}
                             </code>
                         </div>
                     </>
                 )}
             </div>
-            <IntModalFooter left={step==='reveal' ? 'Download as .env' : ''}>
-                {step === 'form' ? (
+            <IntModalFooter>
+                {step === 'form' && (
                     <>
                         <IntBtn label="Cancel" onClick={onClose}/>
-                        <IntBtn label="Create key" primary onClick={()=>setStep('reveal')}/>
+                        <IntBtn label="Create key" primary onClick={handleCreate} disabled={!name.trim()}/>
                     </>
-                ) : (
-                    <IntBtn label="I've stored it — close" primary onClick={onClose}/>
                 )}
+                {step === 'creating' && <IntBtn label="Creating…" primary disabled/>}
+                {step === 'reveal'   && <IntBtn label="I've stored it — close" primary onClick={onClose}/>}
             </IntModalFooter>
         </IntModal>
     );
@@ -9633,95 +9718,307 @@ const ConnectedAppsDetail = ({ onBack }) => {
 };
 
 // ── ② API Keys ────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
+// API Keys — live version
+// ─────────────────────────────────────────────────────────────────
+
+// Row ⋯ menu for API key rows
+const ApiKeyRowMenu = ({ k, onRevoke, onCopyPrefix, onClose }) => {
+    const MenuRow = ({ icon, label, danger:isDanger, onClick }) => (
+        <div onClick={() => { onClick(); onClose(); }}
+            style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderRadius:3, cursor:'pointer',
+                color: isDanger ? T.danger : T.ink, fontFamily:T.sans }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+            <span style={{ width:14, textAlign:'center', fontSize:13 }}>{icon}</span>
+            <span style={{ fontSize:12.5, fontWeight:500 }}>{label}</span>
+        </div>
+    );
+    return (
+        <div style={{ width:192, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:4,
+            boxShadow:'0 8px 24px rgba(42,38,34,0.12)', padding:4, fontFamily:T.sans, position:'relative' }}>
+            <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
+                background:T.surface, border:`1px solid ${T.borderStrong}`,
+                borderRight:'none', borderBottom:'none', transform:'rotate(45deg)' }}/>
+            <MenuRow icon="⎘" label="Copy key prefix" onClick={onCopyPrefix}/>
+            <div style={{ height:1, background:T.border, margin:'2px 6px' }}/>
+            <MenuRow icon="⊘" label="Revoke key" danger onClick={onRevoke}/>
+        </div>
+    );
+};
+
+// Revoke confirm modal
+const RevokeKeyModal = ({ k, onConfirm, onClose }) => (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(42,38,34,0.45)', zIndex:900, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:8, width:440, padding:24, boxShadow:'0 20px 56px rgba(20,16,12,0.28)', fontFamily:T.sans }}>
+            <div style={{ fontSize:16, fontWeight:700, color:T.ink, marginBottom:8 }}>Revoke API key?</div>
+            <div style={{ fontSize:13, color:T.inkMid, lineHeight:1.6, marginBottom:6 }}>
+                <b style={{ color:T.ink }}>{k.name}</b> will stop working immediately.
+            </div>
+            <div style={{ padding:'10px 14px', background:'rgba(156,58,46,0.07)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, fontSize:12, color:T.inkMid, marginBottom:20 }}>
+                Any application using this key will lose access. This cannot be undone — you'll need to create a new key.
+            </div>
+            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+                <button onClick={onClose} style={{ padding:'7px 16px', background:'none', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, fontWeight:600, cursor:'pointer', color:T.inkMid, fontFamily:T.sans }}>Cancel</button>
+                <button onClick={onConfirm} style={{ padding:'7px 16px', background:T.danger, border:'none', borderRadius:T.r, fontSize:13, fontWeight:700, cursor:'pointer', color:'#fbf8f3', fontFamily:T.sans }}>Revoke key</button>
+            </div>
+        </div>
+    </div>
+);
+
 const ApiKeysDetail = ({ onBack }) => {
-    const [filter, setFilter] = useState('All');
-    const [showModal, setShowModal] = useState(false);
-    const visible = INT_API_KEYS.filter(k => filter==='All' || k.status===filter);
+    const [keys,        setKeys]        = React.useState([]);
+    const [loading,     setLoading]     = React.useState(true);
+    const [error,       setError]       = React.useState(null);
+    const [filter,      setFilter]      = React.useState('Active');
+    const [showCreate,  setShowCreate]  = React.useState(false);
+    const [revokeKey,   setRevokeKey]   = React.useState(null); // key to confirm revoke
+    const [activeMenu,  setActiveMenu]  = React.useState(null); // key id with open menu
+    const [revoking,    setRevoking]    = React.useState(null);
+    const menuRefs = React.useRef({});
+
+    // ── Load keys from DB ────────────────────────────────────────
+    const loadKeys = async () => {
+        try {
+            const res  = await dbFetch('/.netlify/functions/api-keys');
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to load keys');
+            setKeys(data.keys || []);
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    React.useEffect(() => { loadKeys(); }, []);
+
+    // ── Revoke ───────────────────────────────────────────────────
+    const handleRevoke = async (k) => {
+        setRevoking(k.id);
+        try {
+            const res  = await dbFetch(`/.netlify/functions/api-keys?id=${k.id}`, { method:'DELETE' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            // Update local state immediately
+            setKeys(prev => prev.map(key => key.id === k.id ? { ...key, revokedAt: new Date().toISOString() } : key));
+            setRevokeKey(null);
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setRevoking(null);
+        }
+    };
+
+    // ── Helpers ──────────────────────────────────────────────────
+    const fmtDate = (iso) => {
+        if (!iso) return '—';
+        const d   = new Date(iso);
+        const now = new Date();
+        const diffMs  = now - d;
+        const diffMin = Math.round(diffMs / 60000);
+        if (diffMin < 1)    return 'just now';
+        if (diffMin < 60)   return diffMin + 'm ago';
+        if (diffMin < 1440) return Math.round(diffMin/60) + 'h ago';
+        if (diffMin < 2880) return 'yesterday';
+        return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    };
+
+    const keyStatus = (k) => {
+        if (k.revokedAt) return 'Revoked';
+        return 'Active';
+    };
+
+    // Filter logic
+    const visible = keys.filter(k => {
+        const s = keyStatus(k);
+        if (filter === 'Active')  return s === 'Active';
+        if (filter === 'Revoked') return s === 'Revoked';
+        return true;
+    });
+
+    const activeCount  = keys.filter(k => !k.revokedAt).length;
+    const revokedCount = keys.filter(k =>  k.revokedAt).length;
 
     return (
         <div style={{ fontFamily:T.sans }}>
-            {showModal && <NewApiKeyModal onClose={()=>setShowModal(false)}/>}
+            {/* Modals */}
+            {showCreate && (
+                <NewApiKeyModal
+                    onClose={() => setShowCreate(false)}
+                    onCreated={(newKey) => { setKeys(prev => [newKey, ...prev]); }}
+                />
+            )}
+            {revokeKey && (
+                <RevokeKeyModal
+                    k={revokeKey}
+                    onClose={() => setRevokeKey(null)}
+                    onConfirm={() => handleRevoke(revokeKey)}
+                />
+            )}
+
             <IntCrumb page="API keys" onBack={onBack}/>
-            <IntTitle title="API keys" sub="Workspace REST API credentials · 3 active keys · last edited 2 months ago by Admin"
+            <IntTitle
+                title="API keys"
+                sub={loading ? 'Loading…' : `${activeCount} active key${activeCount!==1?'s':''} · ${revokedCount} revoked`}
                 actions={[
-                    <IntBtn key="docs" label="View docs ↗"/>,
-                    <IntBtn key="new" label="+ Create key" primary onClick={()=>setShowModal(true)}/>,
+                    <a key="docs" href="https://docs.accelerep.com/api" target="_blank" rel="noopener noreferrer"
+                        style={{ textDecoration:'none' }}>
+                        <IntBtn label="View docs ↗"/>
+                    </a>,
+                    <IntBtn key="new" label="+ Create key" primary onClick={() => setShowCreate(true)}/>,
                 ]}/>
 
-            {/* Filter + table */}
+            {error && (
+                <div style={{ padding:'11px 16px', background:'rgba(156,58,46,0.08)', borderLeft:`3px solid ${T.danger}`, borderRadius:4, marginBottom:16, fontSize:12.5, color:T.danger, fontFamily:T.sans }}>{error}</div>
+            )}
+
+            {/* Keys table */}
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', marginBottom:18 }}>
                 <div style={{ padding:'12px 16px 10px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                     <div style={{ fontSize:13.5, fontWeight:700, color:T.ink }}>Keys</div>
                     <div style={{ display:'flex', gap:0, background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:2 }}>
-                        {['All','Live','Test','Stale'].map(f => (
-                            <button key={f} onClick={()=>setFilter(f)}
-                                style={{ padding:'4px 10px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer', fontFamily:T.sans, background:filter===f?T.ink:'transparent', color:filter===f?'#fbf8f3':T.inkMid }}>{f}</button>
+                        {['All','Active','Revoked'].map(f => (
+                            <button key={f} onClick={() => setFilter(f)}
+                                style={{ padding:'4px 12px', fontSize:12, fontWeight:600, border:'none', borderRadius:T.r, cursor:'pointer',
+                                    fontFamily:T.sans, background:filter===f?T.ink:'transparent', color:filter===f?'#fbf8f3':T.inkMid }}>
+                                {f}
+                            </button>
                         ))}
                     </div>
                 </div>
-                {/* Header */}
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 200px 160px 100px 120px 120px 90px 32px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                    {['NAME','KEY','SCOPES','RATE LIMIT','LAST USED','7D TRAFFIC','STATUS',''].map((h,i) => (
+
+                {/* Column headers */}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 180px 180px 120px 100px 36px', gap:8, padding:'8px 16px', background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                    {['NAME','PREFIX','SCOPES','LAST USED','STATUS',''].map((h,i) => (
                         <div key={i} style={{ fontSize:10, fontWeight:700, color:T.inkMuted, letterSpacing:0.6, textTransform:'uppercase', fontFamily:T.sans }}>{h}</div>
                     ))}
                 </div>
-                {visible.map((k,i) => {
-                    const stale = k.status==='Stale';
-                    return (
-                        <div key={k.id} style={{ display:'grid', gridTemplateColumns:'1fr 200px 160px 100px 120px 120px 90px 32px', gap:8, padding:'11px 16px', borderBottom:i<visible.length-1?`1px solid ${T.border}`:'none', alignItems:'center', opacity: stale ? 0.72 : 1 }}>
-                            {/* Name */}
-                            <div>
-                                <div style={{ fontSize:13, fontWeight:600, color:T.ink }}>{k.name}</div>
-                                <div style={{ fontSize:11, color:T.inkMuted }}>by {k.by} · {k.created}</div>
-                            </div>
-                            {/* Key */}
-                            <KeyMono prefix={k.prefix} tail={k.tail}/>
-                            {/* Scopes */}
-                            <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
-                                {k.scopes.slice(0,2).map(s => (
-                                    <span key={s} style={{ padding:'1px 5px', borderRadius:3, background:'rgba(58,90,122,0.10)', color:T.info, fontSize:10, fontFamily:'ui-monospace,Menlo,monospace' }}>{s}</span>
-                                ))}
-                                {k.scopes.length > 2 && <span style={{ fontSize:10, color:T.inkMuted }}>+{k.scopes.length-2}</span>}
-                            </div>
-                            {/* Rate limit */}
-                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>{k.rateLimit}</div>
-                            {/* Last used */}
-                            <div style={{ fontSize:12, color: stale ? T.danger : T.inkMid }}>{k.lastUsed}</div>
-                            {/* Sparkline + calls */}
-                            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                                <MiniSpark data={k.traffic} color={stale?T.border:T.ok}/>
-                            </div>
-                            {/* Status */}
-                            <span style={{ display:'inline-block', padding:'2px 7px', borderRadius:10, fontSize:11, fontWeight:700,
-                                background: k.status==='Live'?'rgba(77,107,61,0.12)':k.status==='Test'?'rgba(58,90,122,0.10)':'rgba(184,115,51,0.12)',
-                                color: k.status==='Live'?T.ok:k.status==='Test'?T.info:T.warn }}>
-                                {k.status}
-                            </span>
-                            <button style={{ background:'none', border:'none', color:T.inkMuted, fontSize:16, cursor:'pointer', padding:0 }}>⋯</button>
+
+                {loading ? (
+                    <div style={{ padding:'40px', textAlign:'center', color:T.inkMuted, fontSize:13, fontFamily:T.sans }}>Loading keys…</div>
+                ) : visible.length === 0 ? (
+                    <div style={{ padding:'40px', textAlign:'center', fontFamily:T.sans }}>
+                        <div style={{ fontSize:24, marginBottom:8, opacity:0.3 }}>🔑</div>
+                        <div style={{ fontSize:13.5, fontWeight:600, color:T.ink, marginBottom:4 }}>
+                            {filter === 'All' ? 'No API keys yet' : `No ${filter.toLowerCase()} keys`}
                         </div>
-                    );
-                })}
+                        <div style={{ fontSize:12.5, color:T.inkMuted, marginBottom:16 }}>
+                            {filter === 'All' ? 'Create a key to give programmatic access to Accelerep data.' : ''}
+                        </div>
+                        {filter === 'All' && (
+                            <button onClick={() => setShowCreate(true)}
+                                style={{ padding:'8px 20px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                                + Create first key
+                            </button>
+                        )}
+                    </div>
+                ) : (
+                    visible.map((k, i) => {
+                        const revoked = !!k.revokedAt;
+                        const status  = keyStatus(k);
+                        const isMenuOpen = activeMenu === k.id;
+                        return (
+                            <div key={k.id} style={{ display:'grid', gridTemplateColumns:'1fr 180px 180px 120px 100px 36px', gap:8,
+                                padding:'11px 16px', borderBottom:i<visible.length-1?`1px solid ${T.border}`:'none',
+                                alignItems:'center', opacity:revoked?0.65:1, position:'relative' }}>
+
+                                {/* Name + created by */}
+                                <div>
+                                    <div style={{ fontSize:13, fontWeight:600, color:T.ink, textDecoration:revoked?'line-through':'' }}>{k.name}</div>
+                                    <div style={{ fontSize:11, color:T.inkMuted }}>by {k.createdBy || '—'} · {fmtDate(k.createdAt)}</div>
+                                </div>
+
+                                {/* Key prefix */}
+                                <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:T.inkMid }}>
+                                    {k.keyPrefix}<span style={{ color:T.border }}>••••••••</span>
+                                </div>
+
+                                {/* Scopes */}
+                                <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>
+                                    {(k.scopes || []).slice(0,3).map(s => (
+                                        <span key={s} style={{ padding:'1px 5px', borderRadius:3, background:'rgba(58,90,122,0.10)',
+                                            color:T.info, fontSize:10, fontFamily:'ui-monospace,Menlo,monospace' }}>{s}</span>
+                                    ))}
+                                    {(k.scopes || []).length > 3 && (
+                                        <span style={{ fontSize:10, color:T.inkMuted }}>+{k.scopes.length-3}</span>
+                                    )}
+                                </div>
+
+                                {/* Last used */}
+                                <div style={{ fontSize:12, color:T.inkMid }}>{fmtDate(k.lastUsedAt) || 'Never'}</div>
+
+                                {/* Status */}
+                                <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:10, fontSize:11, fontWeight:700,
+                                    background: revoked ? 'rgba(156,58,46,0.10)' : 'rgba(77,107,61,0.12)',
+                                    color: revoked ? T.danger : T.ok }}>
+                                    {status}
+                                </span>
+
+                                {/* ⋯ menu */}
+                                <div style={{ position:'relative' }}>
+                                    <button ref={el => menuRefs.current[k.id] = el}
+                                        onClick={e => { e.stopPropagation(); setActiveMenu(isMenuOpen ? null : k.id); }}
+                                        disabled={revoked}
+                                        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                            width:24, height:24, borderRadius:3, fontSize:16, fontWeight:700,
+                                            border:'none', cursor:revoked?'default':'pointer', lineHeight:1,
+                                            color:isMenuOpen?T.goldInk:T.inkMuted,
+                                            background:isMenuOpen?'rgba(200,185,154,0.30)':'transparent',
+                                            opacity:revoked?0.3:1 }}>⋯</button>
+
+                                    {isMenuOpen && (
+                                        <div style={{ position:'absolute', top:'100%', right:0, marginTop:4, zIndex:100 }}>
+                                            <ApiKeyRowMenu
+                                                k={k}
+                                                onClose={() => setActiveMenu(null)}
+                                                onCopyPrefix={() => navigator.clipboard?.writeText(k.keyPrefix + '••••••••')}
+                                                onRevoke={() => { setActiveMenu(null); setRevokeKey(k); }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
             </div>
 
-            {/* Workspace defaults */}
+            {/* Security note */}
+            <div style={{ padding:'12px 16px', background:'rgba(58,90,122,0.07)', borderLeft:`3px solid ${T.info}`,
+                borderRadius:4, marginBottom:18, fontSize:12.5, color:T.inkMid, fontFamily:T.sans, lineHeight:1.6 }}>
+                <b style={{ color:T.info }}>Security:</b> Keys are hashed with SHA-256 before storage — Accelerep never stores the plaintext.
+                Each key is shown in full <b>once</b> at creation time. Store it in your secrets manager immediately.
+                API access is scoped per key and restricted to Admin-created credentials only.
+            </div>
+
+            {/* Workspace defaults — informational */}
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:18 }}>
-                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:14 }}>Workspace defaults</div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:18 }}>
+                <div style={{ fontSize:13.5, fontWeight:700, color:T.ink, marginBottom:14 }}>API reference</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:18, marginBottom:16 }}>
                     {[
-                        { label:'Default rate limit', value:'1,000 req/min' },
-                        { label:'Default expiration', value:'365 days' },
-                        { label:'Default IP allowlist', value:'0.0.0.0/0 (any)' },
+                        { label:'Base URL',          value:'https://api.accelerep.com/v1' },
+                        { label:'Authentication',    value:'Bearer <key>' },
+                        { label:'Key format',        value:'spt_live_<64 hex chars>' },
                     ].map((f,i) => (
                         <div key={i}>
-                            <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5 }}>{f.label}</div>
-                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:13, color:T.ink }}>{f.value}</div>
+                            <div style={{ fontSize:11, fontWeight:600, color:T.inkMid, marginBottom:5, fontFamily:T.sans }}>{f.label}</div>
+                            <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12.5, color:T.ink }}>{f.value}</div>
                         </div>
                     ))}
+                </div>
+                <div style={{ background:T.ink, borderRadius:6, padding:'12px 16px' }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:'rgba(200,185,154,0.7)', letterSpacing:0.6, textTransform:'uppercase', marginBottom:8 }}>Example request</div>
+                    <code style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:12, color:'#a8f0c8', display:'block', lineHeight:1.8 }}>
+                        {`curl -H "Authorization: Bearer spt_live_..." \
+  https://api.accelerep.com/v1/opportunities`}
+                    </code>
                 </div>
             </div>
         </div>
     );
 };
+
 
 // ── ③ Webhooks ────────────────────────────────────────────────
 const WebhooksDetail = ({ onBack, focusFailing=false }) => {
