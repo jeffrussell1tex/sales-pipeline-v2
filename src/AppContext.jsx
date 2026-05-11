@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch, waitForToken } from './utils/storage';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
@@ -9,7 +9,6 @@ import { useAccounts } from './hooks/useAccounts';
 import { useContacts } from './hooks/useContacts';
 import { useTasks } from './hooks/useTasks';
 import { useActivities } from './hooks/useActivities';
-import { AppProvider, useApp } from './AppContext';
 import SalesManagerTab from './Tabs/SalesManagerTab';
 import ReportsTab from './Tabs/ReportsTab';
 import ContactsTab from './Tabs/ContactsTab';
@@ -51,6 +50,24 @@ import { useQuotes } from './hooks/useQuotes';
 import QuotesTab from './Tabs/QuotesTab';
 import ErrorBoundary from './components/ErrorBoundary';
 
+// ── App Context ───────────────────────────────────────────────────────────────
+const AppContext = createContext(null);
+
+export function AppProvider({ children, value }) {
+    return (
+        <AppContext.Provider value={value}>
+            {children}
+        </AppContext.Provider>
+    );
+}
+
+export function useApp() {
+    const ctx = useContext(AppContext);
+    if (!ctx) throw new Error('useApp must be used within AppProvider');
+    return ctx;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function App() {
     // Clerk auth — powered by @clerk/clerk-react
