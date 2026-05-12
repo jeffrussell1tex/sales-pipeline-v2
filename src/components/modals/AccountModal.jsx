@@ -216,7 +216,7 @@ export default function AccountModal({
 
         {/* Overlay — transparent backdrop; click-outside closes */}
         <div style={{ ...overlayStyle }} />
-        <div style={clickCatcherStyle} onMouseDown={e => e.stopPropagation()} />
+        <div style={clickCatcherStyle} />
 
         {/* Modal — fixed-positioned, freely draggable */}
         <div

@@ -107,7 +107,7 @@ export default function ViewingContactPanel({
         <div
             style={{ ...overlayStyle }}
         />
-        <div style={clickCatcherStyle} onMouseDown={e => e.stopPropagation()} />
+        <div style={clickCatcherStyle} />
 
         {/* Floating panel */}
         <div
