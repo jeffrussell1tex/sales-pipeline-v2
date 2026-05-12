@@ -79,7 +79,7 @@ const recordLabel = (rec, importType) => {
 export default function CsvImportModal({ importType, contacts, accounts, opportunities, onClose, onImportContacts, onImportAccounts, onImportOpportunities }) {
     // steps: upload → mapping → preview → conflicts (if any) → results
     const [step, setStep] = useState('upload');
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherProps, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(800, 580, 520, 380);
     const [csvHeaders, setCsvHeaders] = useState([]);
     const [csvRows, setCsvRows] = useState([]);
@@ -443,7 +443,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         <>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div style={{ ...overlayStyle }} />
-        <div {...clickCatcherProps} />
+        <div style={clickCatcherStyle} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} />
         <div
             ref={containerRef}
             onClick={e => e.stopPropagation()}

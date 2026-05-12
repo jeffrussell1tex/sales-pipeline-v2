@@ -93,7 +93,7 @@ export default function AccountModal({
     const [customerTypeInput,    setCustomerTypeInput]    = useState('');
     const [showCustomerTypeSugg, setShowCustomerTypeSugg] = useState(false);
 
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherProps, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(800, 560, 520, 360);
 
     // ── derived lists ────────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ export default function AccountModal({
 
         {/* Overlay — transparent backdrop; click-outside closes */}
         <div style={{ ...overlayStyle }} />
-        <div {...clickCatcherProps} />
+        <div style={clickCatcherStyle} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} />
 
         {/* Modal — fixed-positioned, freely draggable */}
         <div

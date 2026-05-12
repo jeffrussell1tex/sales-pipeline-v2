@@ -29,7 +29,7 @@ export default function ViewingTaskPanel({
     const isReadOnly = userRole === 'ReadOnly';
     const canEdit = !isReadOnly;
 
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherProps, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(600, 480, 400, 320);
 
     const handleEditTask = (t) => { setEditingTask(t); setShowTaskModal(true); };
@@ -66,7 +66,7 @@ export default function ViewingTaskPanel({
         <div
             style={{ ...overlayStyle }}
         />
-        <div {...clickCatcherProps} />
+        <div style={clickCatcherStyle} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} />
 
         {/* Floating panel — fixed-positioned, draggable, resizable */}
         <div
