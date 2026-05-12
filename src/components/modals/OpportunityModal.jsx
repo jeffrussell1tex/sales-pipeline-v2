@@ -518,7 +518,10 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
             {selectedContacts !== undefined && (() => {
                 const filtered = (contacts || []).filter(c => {
                     const fullName = `${c.firstName} ${c.lastName}`;
-                    const matchesSearch = !ctSearch || fullName.toLowerCase().includes(ctSearch.toLowerCase());
+                    const searchLower = ctSearch.toLowerCase();
+                    const matchesSearch = !ctSearch
+                        || fullName.toLowerCase().includes(searchLower)
+                        || (c.company || '').toLowerCase().includes(searchLower);
                     const notAlreadyAdded = !(selectedContacts || []).some(s => s.startsWith(fullName));
                     return matchesSearch && notAlreadyAdded;
                 });
@@ -549,7 +552,11 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
                                         <Avatar name={`${contact.firstName} ${contact.lastName}`} size={28}/>
                                         <div style={{ flex: 1 }}>
                                             <div style={{ fontWeight: 600, fontSize: 13, color: T.ink, fontFamily: T.sans }}>{contact.firstName} {contact.lastName}</div>
-                                            {contact.title && <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{contact.title}</div>}
+                                            {(contact.title || contact.company) && (
+                                                <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                                    {[contact.title, contact.company].filter(Boolean).join(' · ')}
+                                                </div>
+                                            )}
                                         </div>
                                         <div style={{ fontSize: 11, color: T.info, fontWeight: 600, fontFamily: T.sans }}>+ Add</div>
                                     </div>
