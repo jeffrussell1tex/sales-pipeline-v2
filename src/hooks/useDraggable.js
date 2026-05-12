@@ -230,7 +230,7 @@ export function useDraggable({ transparent = false } = {}) {
         inset:         0,
         zIndex:        mobile ? MOBILE_Z - 1 : zIndex - 1,
         background:    'transparent',
-        pointerEvents: isDragging || transparent ? 'none' : 'auto',
+        pointerEvents: isDragging ? 'auto' : 'none',
     };
 
     const dragHandleProps = {
