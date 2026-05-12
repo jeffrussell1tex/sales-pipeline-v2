@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 import OpportunityModal from '../modals/OpportunityModal';
-import ContactModal, { NestedNewContactForm, NestedNewAccountForm } from '../modals/ContactModal';
+import ContactModal from '../modals/ContactModal';
 import AccountModal from '../modals/AccountModal';
 import TaskModal from '../modals/TaskModal';
 import UserModal from '../modals/UserModal';
@@ -70,42 +70,8 @@ export default function ModalLayer() {
         isMobile,
     } = useApp();
 
-    // Nested modal state lives locally — avoids context chain failure
-    const [nestedContactModal, setNestedContactModal] = React.useState(null);
-    const [nestedAccountModal, setNestedAccountModal] = React.useState(null);
-
     return (
         <>
-            {/* ── Nested contact/account modals — rendered here so they float above all other modals ── */}
-            {nestedContactModal && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 2147483647, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
-                    onClick={() => { nestedContactModal.onCancel && nestedContactModal.onCancel(); setNestedContactModal(null); }}>
-                    <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '2rem', maxWidth: 500, width: '90%' }}
-                        onClick={e => e.stopPropagation()}>
-                        <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 700 }}>New Contact</h2>
-                        <NestedNewContactForm
-                            firstName={nestedContactModal.firstName}
-                            lastName={nestedContactModal.lastName}
-                            onSave={(data) => { nestedContactModal.onSave && nestedContactModal.onSave(data); setNestedContactModal(null); }}
-                            onCancel={() => { nestedContactModal.onCancel && nestedContactModal.onCancel(); setNestedContactModal(null); }}
-                        />
-                    </div>
-                </div>
-            )}
-            {nestedAccountModal && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 2147483647, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
-                    onClick={() => { nestedAccountModal.onCancel && nestedAccountModal.onCancel(); setNestedAccountModal(null); }}>
-                    <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '2rem', maxWidth: 500, width: '90%' }}
-                        onClick={e => e.stopPropagation()}>
-                        <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 700 }}>New Account</h2>
-                        <NestedNewAccountForm
-                            name={nestedAccountModal.name}
-                            onSave={(data) => { nestedAccountModal.onSave && nestedAccountModal.onSave(data); setNestedAccountModal(null); }}
-                            onCancel={() => { nestedAccountModal.onCancel && nestedAccountModal.onCancel(); setNestedAccountModal(null); }}
-                        />
-                    </div>
-                </div>
-            )}
             {showModal && (
                 <OpportunityModal
                     opportunity={editingOpp}
@@ -152,7 +118,7 @@ export default function ModalLayer() {
                             return updated;
                         });
                     }}
-                    onClose={() => { if (document.activeElement) document.activeElement.blur(); setShowModal(false); setOppModalError(null); setOppModalSaving(false); }}
+                    onClose={() => { setShowModal(false); setOppModalError(null); setOppModalSaving(false); }}
                     onDismissError={() => setOppModalError(null)}
                     onSave={(formData) => handleSave(formData, editingOpp, activePipeline, currentUser, setShowModal, setLostReasonModal)}
                     errorMessage={oppModalError}
@@ -190,31 +156,6 @@ export default function ModalLayer() {
                         setShowUserModal(true);
                         setEditingUser(null);
                     }}
-                    onOpenNestedContact={(data) => {
-                        setNestedContactModal({
-                            firstName: data.firstName || '',
-                            lastName: data.lastName || '',
-                            onSave: (saved) => {
-                                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                                const nc = { ...saved, id: newId, createdAt: new Date().toISOString() };
-                                setContacts(prev => [...prev, nc]);
-                                dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nc) })
-                                    .catch(err => console.error('Failed to save inline contact:', err));
-                            },
-                        });
-                    }}
-                    onOpenNestedAccount={(data) => {
-                        setNestedAccountModal({
-                            name: data.name || '',
-                            onSave: (saved) => {
-                                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                                const na = { ...saved, id: newId };
-                                setAccounts(prev => [...prev, na]);
-                                dbFetch('/.netlify/functions/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(na) })
-                                    .catch(err => console.error('Failed to save inline account:', err));
-                            },
-                        });
-                    }}
                 />
             )}
 
@@ -240,7 +181,7 @@ export default function ModalLayer() {
                     accounts={accounts}
                     contacts={contacts}
                     settings={settings}
-                    onClose={() => { if (document.activeElement) document.activeElement.blur(); setShowTaskModal(false); setTaskModalError(null); setTaskModalSaving(false); }}
+                    onClose={() => { setShowTaskModal(false); setTaskModalError(null); setTaskModalSaving(false); }}
                     onDismissError={() => setTaskModalError(null)}
                     onSave={(taskData) => handleSaveTask(taskData, { editingTask, setShowTaskModal, opportunities })}
                     errorMessage={taskModalError}
@@ -280,31 +221,6 @@ export default function ModalLayer() {
                         setShowAccountModal(true);
                         setEditingAccount(null);
                     }}
-                    onOpenNestedContact={(data) => {
-                        setNestedContactModal({
-                            firstName: data.firstName || '',
-                            lastName: data.lastName || '',
-                            onSave: (saved) => {
-                                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                                const nc = { ...saved, id: newId, createdAt: new Date().toISOString() };
-                                setContacts(prev => [...prev, nc]);
-                                dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nc) })
-                                    .catch(err => console.error('Failed to save inline contact:', err));
-                            },
-                        });
-                    }}
-                    onOpenNestedAccount={(data) => {
-                        setNestedAccountModal({
-                            name: data.name || '',
-                            onSave: (saved) => {
-                                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-                                const na = { ...saved, id: newId };
-                                setAccounts(prev => [...prev, na]);
-                                dbFetch('/.netlify/functions/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(na) })
-                                    .catch(err => console.error('Failed to save inline account:', err));
-                            },
-                        });
-                    }}
                 />
             )}
 
@@ -322,7 +238,7 @@ export default function ModalLayer() {
                     contacts={contacts}
                     accounts={accounts}
                     settings={settings}
-                    onClose={() => { if (document.activeElement) document.activeElement.blur(); setShowContactModal(false); setContactModalError(null); setContactModalSaving(false); }}
+                    onClose={() => { setShowContactModal(false); setContactModalError(null); setContactModalSaving(false); }}
                     onDismissError={() => setContactModalError(null)}
                     onSave={(contactData) => handleSaveContact(contactData, { editingContact, setShowContactModal })}
                     errorMessage={contactModalError}
@@ -376,7 +292,7 @@ export default function ModalLayer() {
                         || parentAccountForSub?.accountTier
                         || (parentAccountForSub?.parentAccountId ? 'business_unit' : parentAccountForSub ? 'account' : null)}
                     settings={settings}
-                    onClose={() => { if (document.activeElement) document.activeElement.blur(); setShowAccountModal(false); setAccountModalError(null); setAccountModalSaving(false); }}
+                    onClose={() => { setShowAccountModal(false); setAccountModalError(null); setAccountModalSaving(false); }}
                     onDismissError={() => setAccountModalError(null)}
                     onSave={(formData) => handleSaveAccount(
                         { ...formData, _forceTier: parentAccountForSub?._forceTier },

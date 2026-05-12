@@ -230,7 +230,18 @@ export function useDraggable({ transparent = false } = {}) {
         inset:         0,
         zIndex:        mobile ? MOBILE_Z - 1 : zIndex - 1,
         background:    'transparent',
-        pointerEvents: isDragging ? 'auto' : 'none',
+        pointerEvents: isDragging || transparent ? 'none' : 'auto',
+    };
+
+    // Prevents the browser from moving focus to document.body when the user
+    // clicks anywhere outside an open modal. Without this, mousedown on the
+    // catcher (which has no tabIndex) causes focus to jump to <body>, and the
+    // browser then scrolls <body>'s scroll offset (0) into view — producing the
+    // "scroll-to-top on kebab click" bug. preventDefault on mousedown suppresses
+    // that focus movement while still letting the click event fire normally.
+    const clickCatcherProps = {
+        style:       clickCatcherStyle,
+        onMouseDown: (e) => e.preventDefault(),
     };
 
     const dragHandleProps = {
@@ -251,7 +262,8 @@ export function useDraggable({ transparent = false } = {}) {
         dragOffsetStyle,
         dragContainerStyle,
         overlayStyle,
-        clickCatcherStyle,
+        clickCatcherStyle,  // kept for backward compat — prefer clickCatcherProps
+        clickCatcherProps,  // use this: spread onto the catcher div to fix scroll-to-top bug
         isDragging,
         isMobile: mobile,
         bringToFront,

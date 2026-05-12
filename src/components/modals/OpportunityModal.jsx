@@ -1231,7 +1231,7 @@ export default function OpportunityModal({
     const activityTypeIcon = { Call: '📞', Email: '✉️', Meeting: '🤝', Demo: '🖥️', 'Proposal Sent': '📄', 'Follow-up': '🔄', Other: '📝' };
 
     // ── Drag + resize (unchanged) ─────────────────────────────
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(1100, 780, 760, 540);
 
     // ── Deal age metadata ─────────────────────────────────────
@@ -1289,7 +1289,7 @@ export default function OpportunityModal({
 
             {/* Three-div overlay pattern — UNCHANGED */}
             <div style={{ ...overlayStyle }} />
-            <div style={clickCatcherStyle} />
+            <div {...clickCatcherProps} />
 
             {/* Modal container */}
             <div
