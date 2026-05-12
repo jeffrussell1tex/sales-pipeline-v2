@@ -443,7 +443,7 @@ export default function CsvImportModal({ importType, contacts, accounts, opportu
         <>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         <div style={{ ...overlayStyle }} />
-        <div style={clickCatcherStyle} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} />
+        <div style={clickCatcherStyle} onMouseDown={e => e.stopPropagation()} />
         <div
             ref={containerRef}
             onClick={e => e.stopPropagation()}

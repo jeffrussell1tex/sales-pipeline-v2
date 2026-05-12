@@ -207,7 +207,7 @@ export default function ContactModal({
 
         {/* Overlay — transparent backdrop */}
         <div style={{ ...overlayStyle }} />
-        <div style={clickCatcherStyle} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} />
+        <div style={clickCatcherStyle} onMouseDown={e => e.stopPropagation()} />
 
         {/* Modal — fixed-positioned, freely draggable */}
         <div

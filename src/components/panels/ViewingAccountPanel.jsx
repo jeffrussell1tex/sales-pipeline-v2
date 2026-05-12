@@ -145,7 +145,7 @@ export default function ViewingAccountPanel({
         <div
             style={{ ...overlayStyle }}
         />
-        <div style={clickCatcherStyle} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} />
+        <div style={clickCatcherStyle} onMouseDown={e => e.stopPropagation()} />
 
         {/* Floating panel — fixed-positioned, draggable, resizable */}
         <div

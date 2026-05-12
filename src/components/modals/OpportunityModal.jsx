@@ -1289,7 +1289,7 @@ export default function OpportunityModal({
 
             {/* Three-div overlay pattern — UNCHANGED */}
             <div style={{ ...overlayStyle }} />
-            <div style={clickCatcherStyle} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} />
+            <div style={clickCatcherStyle} onMouseDown={e => e.stopPropagation()} />
 
             {/* Modal container */}
             <div
