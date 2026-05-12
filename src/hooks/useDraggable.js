@@ -95,15 +95,14 @@ export function useDraggable({ transparent = false } = {}) {
 
     useEffect(() => { posRef.current = pos; }, [pos]);
 
-    // When the modal unmounts, blur the active element so the browser does not
-    // restore focus to whatever was focused before the modal opened (e.g. a nav
-    // button at the top of the page), which would cause a scroll-to-top.
+    // Blur whatever element is focused when the modal mounts so the browser has
+    // no previously-focused element to restore focus to on unmount. Without this,
+    // closing the modal causes the browser to refocus the nav button that was
+    // active before the modal opened, scrolling it into view and jumping to top.
     useEffect(() => {
-        return () => {
-            if (document.activeElement && document.activeElement !== document.body) {
-                document.activeElement.blur();
-            }
-        };
+        if (document.activeElement && document.activeElement !== document.body) {
+            document.activeElement.blur();
+        }
     }, []);
 
     // Centre on first paint via rAF measurement.
