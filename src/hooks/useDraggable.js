@@ -95,6 +95,17 @@ export function useDraggable({ transparent = false } = {}) {
 
     useEffect(() => { posRef.current = pos; }, [pos]);
 
+    // When the modal unmounts, blur the active element so the browser does not
+    // restore focus to whatever was focused before the modal opened (e.g. a nav
+    // button at the top of the page), which would cause a scroll-to-top.
+    useEffect(() => {
+        return () => {
+            if (document.activeElement && document.activeElement !== document.body) {
+                document.activeElement.blur();
+            }
+        };
+    }, []);
+
     // Centre on first paint via rAF measurement.
     // On mobile, clamp initial size so panel fits within viewport.
     useEffect(() => {
@@ -237,13 +248,9 @@ export function useDraggable({ transparent = false } = {}) {
     // tabIndex=-1 makes the catcher focusable so mousedown lands focus here
     // instead of document.body (which lives at scrollY=0, causing scroll-to-top).
     // outline:none prevents any visible focus ring.
-    // No onMouseDown handler — preventDefault was causing the browser to restore
-    // focus to the previously focused element (e.g. the Tasks nav button) which
-    // then scrolled the page to its position.
     const clickCatcherProps = {
         style:    clickCatcherStyle,
         tabIndex: -1,
-        onMouseDown: (e) => { e.currentTarget.focus({ preventScroll: true }); },
     };
 
     const dragHandleProps = {
