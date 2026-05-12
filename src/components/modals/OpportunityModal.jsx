@@ -539,11 +539,14 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
                                     <div key={contact.id}
                                         onClick={() => {
                                             const display = `${contact.firstName} ${contact.lastName}${contact.title ? ` (${contact.title})` : ''}`;
-                                            const newContacts = [...(selectedContacts || []), display];
-                                            const newIds = [...(selectedContactIds || []), contact.id];
-                                            setSelectedContacts(newContacts);
-                                            setSelectedContactIds(newIds);
-                                            handleChange('contacts', newContacts.join(', '));
+                                            const contactId = contact.id;
+                                            // Use functional updates to always read latest state, not stale closure
+                                            setSelectedContacts(prev => {
+                                                const updated = [...prev, display];
+                                                handleChange('contacts', updated.join(', '));
+                                                return updated;
+                                            });
+                                            setSelectedContactIds(prev => [...prev, contactId]);
                                             setCtSearch('');
                                         }}
                                         style={{ padding: '9px 12px', cursor: 'pointer', borderTop: i === 0 ? 'none' : `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 10, background: 'transparent' }}
