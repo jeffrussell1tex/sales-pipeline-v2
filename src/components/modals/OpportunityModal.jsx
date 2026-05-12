@@ -979,6 +979,9 @@ export default function OpportunityModal({
             unionized:       base.unionized ?? 'No',
             forecastedCloseDate: base.forecastedCloseDate ?? [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
             pipelineId:      base.pipelineId ?? activePipelineId ?? 'default',
+            competitors:     base.competitors ?? [],
+            reasonWon:       base.reasonWon ?? '',
+            reasonLost:      base.reasonLost ?? '',
             arr:             parseFloat(base.arr) || 0,
             implementationCost: parseFloat(base.implementationCost) || 0,
             productRevenues: (base.productRevenues && typeof base.productRevenues === 'object') ? base.productRevenues : {},
@@ -1034,15 +1037,14 @@ export default function OpportunityModal({
     // ── Fiscal quarter helper ────────────────────────────────
     const calculateCloseQuarter = (dateString) => {
         if (!dateString) return '';
-        // Normalize to date-only + noon to avoid timezone rollback on full ISO strings
-        const date = new Date(dateString.slice(0, 10) + 'T12:00:00');
-        if (isNaN(date)) return '';
+        const date = new Date(dateString);
         const month = date.getMonth() + 1;
         const year = date.getFullYear();
-        const fiscalStart = parseInt(settings?.fiscalYearStart) || 1; // January default
-        const monthsIn = (month - fiscalStart + 12) % 12;
-        const quarter = Math.floor(monthsIn / 3) + 1;
-        const fiscalYear = fiscalStart === 1 ? year : (month >= fiscalStart ? year + 1 : year);
+        const fiscalStart = settings?.fiscalYearStart || 10;
+        let monthsFromFiscalStart = month - fiscalStart;
+        if (monthsFromFiscalStart < 0) monthsFromFiscalStart += 12;
+        const quarter = Math.floor(monthsFromFiscalStart / 3) + 1;
+        const fiscalYear = month >= fiscalStart ? year + 1 : year;
         return `FY${fiscalYear} Q${quarter}`;
     };
     const closeQuarter = calculateCloseQuarter(formData.forecastedCloseDate);
@@ -1752,6 +1754,75 @@ export default function OpportunityModal({
                                             );
                                         })()}
                                     </div>
+
+                                    {/* ── Competitors ── */}
+                                    {(() => {
+                                        const competitorList = settings?.competitors || [];
+                                        const selected = Array.isArray(formData.competitors) ? formData.competitors : [];
+                                        if (competitorList.length === 0 && selected.length === 0) return null;
+                                        return (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <label style={fieldLabelStyle}>Competitors</label>
+                                                {selected.length > 0 && (
+                                                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                                                        {selected.map((c, idx) => (
+                                                            <span key={idx} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(156,58,46,0.10)', border: '1px solid rgba(156,58,46,0.25)', borderRadius: T.r, padding: '3px 8px', fontSize: 12, color: T.danger, fontFamily: T.sans }}>
+                                                                {c}
+                                                                <button type="button" onClick={() => handleChange('competitors', selected.filter((_, i) => i !== idx))}
+                                                                    style={{ background: 'none', border: 'none', color: T.danger, cursor: 'pointer', fontSize: '0.875rem', padding: 0, lineHeight: 1 }}>×</button>
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {competitorList.length > 0 && (
+                                                    <select value="" onChange={e => {
+                                                        const val = e.target.value;
+                                                        if (val && !selected.includes(val))
+                                                            handleChange('competitors', [...selected, val]);
+                                                    }} style={{ ...inputStyle(false), cursor: 'pointer' }}>
+                                                        <option value="">Add a competitor…</option>
+                                                        {competitorList.map(c => (
+                                                            <option key={c} value={c} disabled={selected.includes(c)}>
+                                                                {c}{selected.includes(c) ? ' ✓' : ''}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* ── Reason Won (only when Closed Won) ── */}
+                                    {formData.stage === 'Closed Won' && (() => {
+                                        const reasonsWon = settings?.reasonsWon || [];
+                                        if (reasonsWon.length === 0) return null;
+                                        return (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <label style={fieldLabelStyle}>Reason Won</label>
+                                                <select value={formData.reasonWon || ''} onChange={e => handleChange('reasonWon', e.target.value)}
+                                                    style={{ ...inputStyle(false), cursor: 'pointer' }}>
+                                                    <option value="">Select a reason…</option>
+                                                    {reasonsWon.map(r => <option key={r} value={r}>{r}</option>)}
+                                                </select>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* ── Reason Lost (only when Closed Lost) ── */}
+                                    {formData.stage === 'Closed Lost' && (() => {
+                                        const reasonsLost = settings?.reasonsLost || [];
+                                        if (reasonsLost.length === 0) return null;
+                                        return (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <label style={fieldLabelStyle}>Reason Lost</label>
+                                                <select value={formData.reasonLost || ''} onChange={e => handleChange('reasonLost', e.target.value)}
+                                                    style={{ ...inputStyle(false), cursor: 'pointer' }}>
+                                                    <option value="">Select a reason…</option>
+                                                    {reasonsLost.map(r => <option key={r} value={r}>{r}</option>)}
+                                                </select>
+                                            </div>
+                                        );
+                                    })()}
 
                                     {/* ── Next steps (prominent gold accent) ── */}
                                     {canViewField('nextSteps') && (
