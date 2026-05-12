@@ -234,22 +234,16 @@ export function useDraggable({ transparent = false } = {}) {
         outline:       'none',
     };
 
-    // When mousedown hits the catcher, focus the modal container directly.
-    // This keeps focus inside the modal instead of escaping to document.body
-    // (which lives at scrollY=0 and causes instant scroll-to-top).
-    // containerRef.current gets tabIndex=-1 imperatively so it can receive focus
-    // without affecting tab order.
+    // tabIndex=-1 makes the catcher focusable so mousedown lands focus here
+    // instead of document.body (which lives at scrollY=0, causing scroll-to-top).
+    // outline:none prevents any visible focus ring.
+    // No onMouseDown handler — preventDefault was causing the browser to restore
+    // focus to the previously focused element (e.g. the Tasks nav button) which
+    // then scrolled the page to its position.
     const clickCatcherProps = {
         style:    clickCatcherStyle,
         tabIndex: -1,
-        onMouseDown: (e) => {
-            e.preventDefault();
-            const el = containerRef.current;
-            if (el) {
-                if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
-                el.focus({ preventScroll: true });
-            }
-        },
+        onMouseDown: (e) => { e.currentTarget.focus({ preventScroll: true }); },
     };
 
     const dragHandleProps = {
