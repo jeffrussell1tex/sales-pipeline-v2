@@ -515,45 +515,53 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
     return (
         <div style={{ paddingBottom: '1rem' }}>
             {/* Add contact to buying committee */}
-            {selectedContacts !== undefined && (
-                <div style={{ marginBottom: 16, position: 'relative' }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8, fontFamily: T.sans }}>Add to buying committee</div>
-                    <input type="text" value={ctSearch}
-                        onChange={e => { setCtSearch(e.target.value); setShowCtSuggestions(e.target.value.length > 0); }}
-                        onFocus={() => setShowCtSuggestions(ctSearch.length > 0)}
-                        onBlur={() => setTimeout(() => setShowCtSuggestions(false), 200)}
-                        placeholder="Search contacts to link…"
-                        autoComplete="off"
-                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, outline: 'none', boxSizing: 'border-box' }}/>
-                    {showCtSuggestions && (
-                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: `1px solid ${T.border}`, borderRadius: T.r, zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.10)', maxHeight: 200, overflowY: 'auto' }}>
-                            {(contacts || []).filter(c => {
-                                const fullName = `${c.firstName} ${c.lastName}`;
-                                return fullName.toLowerCase().includes(ctSearch.toLowerCase()) && !(selectedContacts || []).some(s => s.startsWith(fullName));
-                            }).map(contact => (
-                                <div key={contact.id}
-                                    onMouseDown={e => e.preventDefault()}
-                                    onClick={() => {
-                                        const display = `${contact.firstName} ${contact.lastName}${contact.title ? ` (${contact.title})` : ''}`;
-                                        const newContacts = [...(selectedContacts || []), display];
-                                        const newIds = [...(selectedContactIds || []), contact.id];
-                                        setSelectedContacts(newContacts);
-                                        setSelectedContactIds(newIds);
-                                        handleChange('contacts', newContacts.join(', '));
-                                        setCtSearch('');
-                                        setShowCtSuggestions(false);
-                                    }}
-                                    style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: `1px solid ${T.border}`, fontSize: 13, fontFamily: T.sans }}
-                                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                    <div style={{ fontWeight: 600, color: T.ink }}>{contact.firstName} {contact.lastName}</div>
-                                    {contact.title && <div style={{ fontSize: 11, color: T.inkMuted }}>{contact.title}</div>}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
+            {selectedContacts !== undefined && (() => {
+                const filtered = (contacts || []).filter(c => {
+                    const fullName = `${c.firstName} ${c.lastName}`;
+                    const matchesSearch = !ctSearch || fullName.toLowerCase().includes(ctSearch.toLowerCase());
+                    const notAlreadyAdded = !(selectedContacts || []).some(s => s.startsWith(fullName));
+                    return matchesSearch && notAlreadyAdded;
+                });
+                return (
+                    <div style={{ marginBottom: 16 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8, fontFamily: T.sans }}>Add to buying committee</div>
+                        <input type="text" value={ctSearch}
+                            onChange={e => setCtSearch(e.target.value)}
+                            placeholder="Search contacts…"
+                            autoComplete="off"
+                            style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, outline: 'none', boxSizing: 'border-box', marginBottom: 6 }}/>
+                        {filtered.length > 0 && (
+                            <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                                {filtered.map((contact, i) => (
+                                    <div key={contact.id}
+                                        onClick={() => {
+                                            const display = `${contact.firstName} ${contact.lastName}${contact.title ? ` (${contact.title})` : ''}`;
+                                            const newContacts = [...(selectedContacts || []), display];
+                                            const newIds = [...(selectedContactIds || []), contact.id];
+                                            setSelectedContacts(newContacts);
+                                            setSelectedContactIds(newIds);
+                                            handleChange('contacts', newContacts.join(', '));
+                                            setCtSearch('');
+                                        }}
+                                        style={{ padding: '9px 12px', cursor: 'pointer', borderTop: i === 0 ? 'none' : `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 10, background: 'transparent' }}
+                                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                        <Avatar name={`${contact.firstName} ${contact.lastName}`} size={28}/>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontWeight: 600, fontSize: 13, color: T.ink, fontFamily: T.sans }}>{contact.firstName} {contact.lastName}</div>
+                                            {contact.title && <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>{contact.title}</div>}
+                                        </div>
+                                        <div style={{ fontSize: 11, color: T.info, fontWeight: 600, fontFamily: T.sans }}>+ Add</div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {ctSearch && filtered.length === 0 && (
+                            <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>No contacts found</div>
+                        )}
+                    </div>
+                );
+            })()}
             {enriched.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2rem', color: T.inkMuted, fontSize: '0.8125rem', background: T.surface, borderRadius: T.r, border: `1px dashed ${T.border}`, fontFamily: T.sans }}>
                     No contacts linked yet.
