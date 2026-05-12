@@ -301,7 +301,7 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                                     ).length === 0 && (
                                         <div style={{ padding: '0.75rem', color: '#64748b', fontSize: '0.875rem' }}>No matches found</div>
                                     )}
-                                    <div onMouseDown={e => e.preventDefault()} onClick={() => { setShowContactSuggestions(false); onOpenNestedContact && onOpenNestedContact({ firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }} style={{ padding: '0.75rem', color: '#2563eb', cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem', borderTop: '1px solid #e2e8f0' }}
+                                    <div onMouseDown={e => e.preventDefault()} onClick={(e) => { e.stopPropagation(); setShowContactSuggestions(false); onOpenNestedContact && onOpenNestedContact({ firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }} style={{ padding: '0.75rem', color: '#2563eb', cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem', borderTop: '1px solid #e2e8f0' }}
                                     onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                         + New Contact
@@ -349,7 +349,7 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                                     ).length === 0 && (
                                         <div style={{ padding: '0.75rem', color: '#64748b', fontSize: '0.875rem' }}>No matches found</div>
                                     )}
-                                    <div onMouseDown={e => e.preventDefault()} onClick={() => { setShowAccountSuggestions(false); onOpenNestedAccount && onOpenNestedAccount({ name: accountSearch.trim() }); setAccountSearch(''); }} style={{ padding: '0.75rem', color: '#2563eb', cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem', borderTop: '1px solid #e2e8f0' }}
+                                    <div onMouseDown={e => e.preventDefault()} onClick={(e) => { e.stopPropagation(); setShowAccountSuggestions(false); onOpenNestedAccount && onOpenNestedAccount({ name: accountSearch.trim() }); setAccountSearch(''); }} style={{ padding: '0.75rem', color: '#2563eb', cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem', borderTop: '1px solid #e2e8f0' }}
                                     onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                         + New Account

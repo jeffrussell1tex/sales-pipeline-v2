@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 import OpportunityModal from '../modals/OpportunityModal';
@@ -42,8 +42,6 @@ export default function ModalLayer() {
         confirmModal, setConfirmModal,
         blockedDeleteModal, setBlockedDeleteModal,
         lostReasonModal, setLostReasonModal, completeLostSave,
-        nestedContactModal, setNestedContactModal,
-        nestedAccountModal, setNestedAccountModal,
         notesPopover, setNotesPopover,
         undoToast, setUndoToast,
         taskReminderPopup, setTaskReminderPopup,
@@ -71,6 +69,10 @@ export default function ModalLayer() {
         viewingTask, setViewingTask,
         isMobile,
     } = useApp();
+
+    // Nested modal state lives locally — avoids context chain failure
+    const [nestedContactModal, setNestedContactModal] = React.useState(null);
+    const [nestedAccountModal, setNestedAccountModal] = React.useState(null);
 
     return (
         <>

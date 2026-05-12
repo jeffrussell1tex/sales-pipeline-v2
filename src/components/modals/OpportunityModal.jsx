@@ -1762,7 +1762,7 @@ export default function OpportunityModal({
                                                     </div>
                                                 ))}
                                                 <div onMouseDown={e => e.preventDefault()}
-                                                    onClick={() => { setShowContactSuggestions(false); onOpenNestedContact ? onOpenNestedContact({ firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }) : setNestedModal({ type: 'contact', firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }}
+                                                    onClick={(e) => { e.stopPropagation(); setShowContactSuggestions(false); onOpenNestedContact ? onOpenNestedContact({ firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }) : setNestedModal({ type: 'contact', firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }}
                                                     style={{ padding: '8px 10px', cursor: 'pointer', color: T.info, fontWeight: 600, fontSize: 13, fontFamily: T.sans }}
                                                     onMouseEnter={e => e.currentTarget.style.background = T.surface2}
                                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>

@@ -33,9 +33,6 @@ export function useModalState() {
     const [confirmModal, setConfirmModal] = useState(null);
     const [blockedDeleteModal, setBlockedDeleteModal] = useState(null); // { title, message }
     const [lostReasonModal, setLostReasonModal] = useState(null);
-    // Nested modals — rendered in ModalLayer so they float above all other modals
-    const [nestedContactModal, setNestedContactModal] = useState(null); // { firstName, lastName, onSave, onCancel }
-    const [nestedAccountModal, setNestedAccountModal] = useState(null); // { name, onSave, onCancel }
     const [notesPopover, setNotesPopover] = useState(null);
     const [undoToast, setUndoToast] = useState(null);
 
@@ -79,8 +76,6 @@ export function useModalState() {
         confirmModal, setConfirmModal,
         blockedDeleteModal, setBlockedDeleteModal,
         lostReasonModal, setLostReasonModal,
-        nestedContactModal, setNestedContactModal,
-        nestedAccountModal, setNestedAccountModal,
         notesPopover, setNotesPopover,
         undoToast, setUndoToast,
         taskReminderPopup, setTaskReminderPopup,
