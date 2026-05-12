@@ -233,6 +233,16 @@ export function useDraggable({ transparent = false } = {}) {
         pointerEvents: isDragging ? 'auto' : 'none',
     };
 
+    // clickCatcherProps: spread onto the catcher div instead of just style.
+    // stopPropagation prevents clicks on the catcher from firing React onClick
+    // handlers on components rendered below it via event delegation.
+    const clickCatcherProps = {
+        style:       clickCatcherStyle,
+        clickCatcherProps,
+        onClick:     (e) => e.stopPropagation(),
+        onMouseDown: (e) => e.stopPropagation(),
+    };
+
     const dragHandleProps = {
         onMouseDown,
         onTouchStart,
