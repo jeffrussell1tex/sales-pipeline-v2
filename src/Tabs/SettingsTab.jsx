@@ -2747,8 +2747,11 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
     const handleSave = async () => {
         setSaving(true);
         setSettings(prev => ({ ...prev, [settingsKey]: items }));
-        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ [settingsKey]: items }) }); }
-        catch(e) { console.error('save ' + settingsKey, e); }
+        try {
+            const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ [settingsKey]: items }) });
+            const json = await res.json();
+            if (!json.success) console.error('save ' + settingsKey + ' failed:', json);
+        } catch(e) { console.error('save ' + settingsKey, e); }
         setSaving(false); setDirty(false);
     };
     const handleCancel = () => { setItems([...saved]); setDirty(false); };
@@ -2783,8 +2786,8 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
             rightActions={
                 <div style={{ display:'flex', gap:8 }}>
-                    <button onClick={handleCancel} disabled={!dirty} style={{ padding:'7px 14px', background:T.surface, color: dirty ? T.ink : T.inkMuted, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: dirty ? 'pointer':'default', fontFamily:T.sans }}>Cancel</button>
-                    <button onClick={handleSave} disabled={!dirty||saving} style={{ padding:'7px 14px', background: dirty ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor: dirty&&!saving?'pointer':'default', fontFamily:T.sans }}>{saving?'Saving…':'Save changes'}</button>
+                    <button type="button" onClick={handleCancel} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    <button type="button" onClick={handleSave} disabled={saving} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:saving?'default':'pointer', fontFamily:T.sans }}>{saving?'Saving…':'Save changes'}</button>
                 </div>
             }
         >
@@ -2801,7 +2804,7 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
                             placeholder={placeholder}
                             style={{ flex:1, padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none' }}
                         />
-                        <button onClick={addItem} disabled={!newItem.trim() || items.includes(newItem.trim())}
+                        <button type="button" onClick={addItem} disabled={!newItem.trim() || items.includes(newItem.trim())}
                             style={{ padding:'7px 16px', background: newItem.trim() ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:13, fontWeight:600, cursor: newItem.trim()?'pointer':'default', fontFamily:T.sans }}>
                             + Add
                         </button>
