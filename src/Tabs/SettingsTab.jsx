@@ -16102,6 +16102,9 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         'pain-points':          'pain-points',
         'customer-types':       'customer-types',
         'industries':           'industries',
+        'competitors':          'competitors',
+        'reasons-won':          'reasons-won',
+        'reasons-lost':         'reasons-lost',
     };
 
     // ── Live card badge counts — fetched once on mount ────────────────────────
