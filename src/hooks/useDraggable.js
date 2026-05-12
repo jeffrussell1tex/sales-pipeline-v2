@@ -45,6 +45,23 @@ export function useDraggable({ transparent = false } = {}) {
         return () => window.removeEventListener('resize', onResize);
     }, []);
 
+    // Lock body scroll while this modal is mounted.
+    // Without this, mousedown on the clickCatcher (a non-focusable div) moves
+    // browser focus to document.body at scrollY=0, causing an instant scroll-to-top
+    // whenever the user clicks outside an open modal.
+    // A ref-counter on body handles stacked modals gracefully.
+    useEffect(() => {
+        const prev = document.body.style.overflow;
+        document.body._modalCount = (document.body._modalCount || 0) + 1;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body._modalCount = Math.max(0, (document.body._modalCount || 1) - 1);
+            if (document.body._modalCount === 0) {
+                document.body.style.overflow = prev || '';
+            }
+        };
+    }, []);
+
     // Prevent background page scrolling when touching inside the panel.
     // Non-passive so preventDefault() is honoured on iOS/Android.
     // Allows scroll only when touch target is inside a scrollable child
@@ -233,17 +250,6 @@ export function useDraggable({ transparent = false } = {}) {
         pointerEvents: isDragging || transparent ? 'none' : 'auto',
     };
 
-    // Prevents the browser from moving focus to document.body when the user
-    // clicks anywhere outside an open modal. Without this, mousedown on the
-    // catcher (which has no tabIndex) causes focus to jump to <body>, and the
-    // browser then scrolls <body>'s scroll offset (0) into view — producing the
-    // "scroll-to-top on kebab click" bug. preventDefault on mousedown suppresses
-    // that focus movement while still letting the click event fire normally.
-    const clickCatcherProps = {
-        style:       clickCatcherStyle,
-        onMouseDown: (e) => e.preventDefault(),
-    };
-
     const dragHandleProps = {
         onMouseDown,
         onTouchStart,
@@ -262,8 +268,7 @@ export function useDraggable({ transparent = false } = {}) {
         dragOffsetStyle,
         dragContainerStyle,
         overlayStyle,
-        clickCatcherStyle,  // kept for backward compat — prefer clickCatcherProps
-        clickCatcherProps,  // use this: spread onto the catcher div to fix scroll-to-top bug
+        clickCatcherStyle,
         isDragging,
         isMobile: mobile,
         bringToFront,
