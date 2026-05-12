@@ -56,7 +56,7 @@ export default function ViewingContactPanel({
     };
     useEffect(() => { setShowActivityModal(false); }, []);
 
-        const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef, zIndex } = useDraggable({ transparent: meetingPrepOpen });
+        const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef, zIndex } = useDraggable({ transparent: meetingPrepOpen });
     const [panelActivityContext, setPanelActivityContext] = useState(null);
     const { size, getResizeHandleProps } = useResizable(760, 580, 480, 380);
 
@@ -107,7 +107,7 @@ export default function ViewingContactPanel({
         <div
             style={{ ...overlayStyle }}
         />
-        <div style={clickCatcherStyle} />
+        <div {...clickCatcherProps} />
 
         {/* Floating panel */}
         <div

@@ -45,31 +45,6 @@ export function useDraggable({ transparent = false } = {}) {
         return () => window.removeEventListener('resize', onResize);
     }, []);
 
-    // Lock scroll on the <html> element while this modal is mounted.
-    // Saves and restores scrollY so the page doesn't jump.
-    // Uses a counter so stacked modals don't prematurely unlock.
-    useEffect(() => {
-        const el = document.documentElement;
-        const scrollY = window.scrollY;
-        el._modalCount = (el._modalCount || 0) + 1;
-        if (el._modalCount === 1) {
-            el.style.overflow = 'hidden';
-            el.style.position = 'fixed';
-            el.style.top = `-${scrollY}px`;
-            el.style.width = '100%';
-        }
-        return () => {
-            el._modalCount = Math.max(0, (el._modalCount || 1) - 1);
-            if (el._modalCount === 0) {
-                el.style.overflow = '';
-                el.style.position = '';
-                el.style.top = '';
-                el.style.width = '';
-                window.scrollTo(0, scrollY);
-            }
-        };
-    }, []);
-
     // Prevent background page scrolling when touching inside the panel.
     // Non-passive so preventDefault() is honoured on iOS/Android.
     // Allows scroll only when touch target is inside a scrollable child
@@ -256,6 +231,15 @@ export function useDraggable({ transparent = false } = {}) {
         zIndex:        mobile ? MOBILE_Z - 1 : zIndex - 1,
         background:    'transparent',
         pointerEvents: isDragging || transparent ? 'none' : 'auto',
+        outline:       'none',
+    };
+
+    // tabIndex=-1 makes the catcher focusable so mousedown lands focus here
+    // instead of document.body (which lives at scrollY=0, causing scroll-to-top).
+    // outline:none prevents any visible focus ring.
+    const clickCatcherProps = {
+        style:    clickCatcherStyle,
+        tabIndex: -1,
     };
 
     const dragHandleProps = {
@@ -277,6 +261,7 @@ export function useDraggable({ transparent = false } = {}) {
         dragContainerStyle,
         overlayStyle,
         clickCatcherStyle,
+        clickCatcherProps,
         isDragging,
         isMobile: mobile,
         bringToFront,

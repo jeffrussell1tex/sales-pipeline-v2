@@ -70,7 +70,7 @@ export default function ViewingAccountPanel({
     };
 
 
-        const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef, zIndex } = useDraggable({ transparent: meetingPrepOpen });
+        const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef, zIndex } = useDraggable({ transparent: meetingPrepOpen });
     const { size, getResizeHandleProps } = useResizable(860, 600, 520, 400);
 
     const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
@@ -145,7 +145,7 @@ export default function ViewingAccountPanel({
         <div
             style={{ ...overlayStyle }}
         />
-        <div style={clickCatcherStyle} />
+        <div {...clickCatcherProps} />
 
         {/* Floating panel — fixed-positioned, draggable, resizable */}
         <div
