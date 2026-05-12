@@ -1384,7 +1384,9 @@ export default function OpportunityModal({
                                     selectedContacts={selectedContacts} selectedContactIds={selectedContactIds}
                                     setSelectedContacts={setSelectedContacts} setSelectedContactIds={setSelectedContactIds}
                                     handleChange={handleChange}
-                                    onUpdate={() => { const f = document.getElementById('opp-form'); if (f) f.requestSubmit(); }}/>
+                                    onUpdate={() => {
+                                        onSave({ ...formData, arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds });
+                                    }}/>
                             )}
                             {detailTab === 'ai-score' && (
                                 <AiScoreTab opportunity={opportunity} oppActivities={oppActivities} currentUser={currentUser}
