@@ -74,6 +74,36 @@ export default function ModalLayer() {
 
     return (
         <>
+            {/* ── Nested contact/account modals — rendered here so they float above all other modals ── */}
+            {nestedContactModal && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+                    onClick={() => { nestedContactModal.onCancel && nestedContactModal.onCancel(); setNestedContactModal(null); }}>
+                    <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '2rem', maxWidth: 500, width: '90%' }}
+                        onClick={e => e.stopPropagation()}>
+                        <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 700 }}>New Contact</h2>
+                        <NestedNewContactForm
+                            firstName={nestedContactModal.firstName}
+                            lastName={nestedContactModal.lastName}
+                            onSave={(data) => { nestedContactModal.onSave && nestedContactModal.onSave(data); setNestedContactModal(null); }}
+                            onCancel={() => { nestedContactModal.onCancel && nestedContactModal.onCancel(); setNestedContactModal(null); }}
+                        />
+                    </div>
+                </div>
+            )}
+            {nestedAccountModal && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+                    onClick={() => { nestedAccountModal.onCancel && nestedAccountModal.onCancel(); setNestedAccountModal(null); }}>
+                    <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '2rem', maxWidth: 500, width: '90%' }}
+                        onClick={e => e.stopPropagation()}>
+                        <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 700 }}>New Account</h2>
+                        <NestedNewAccountForm
+                            name={nestedAccountModal.name}
+                            onSave={(data) => { nestedAccountModal.onSave && nestedAccountModal.onSave(data); setNestedAccountModal(null); }}
+                            onCancel={() => { nestedAccountModal.onCancel && nestedAccountModal.onCancel(); setNestedAccountModal(null); }}
+                        />
+                    </div>
+                </div>
+            )}
             {showModal && (
                 <OpportunityModal
                     opportunity={editingOpp}
