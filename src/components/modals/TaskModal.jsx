@@ -2,9 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import TimePicker from '../ui/TimePicker';
 import { useDraggable, useResizable } from '../../hooks/useDraggable';
 import ResizeHandles from '../../hooks/ResizeHandles';
-import { NestedNewContactForm, NestedNewAccountForm } from './ContactModal';
 
-export default function TaskModal({ task, taskTypes, opportunities, accounts, contacts, settings, onClose, onSave, onAddTaskType, onSaveNewContact, onSaveNewAccount, onAddOpportunity, onAddContact, onAddAccount, errorMessage, onDismissError, saving }) {
+export default function TaskModal({ task, taskTypes, opportunities, accounts, contacts, settings, onClose, onSave, onAddTaskType, onSaveNewContact, onSaveNewAccount, onAddOpportunity, onAddContact, onAddAccount, errorMessage, onDismissError, saving, onOpenNestedContact, onOpenNestedAccount }) {
     const [formData, setFormData] = useState(task ? { ...task, status: task.status || (task.completed ? 'Completed' : 'Open'), assignedTo: task.assignedTo || '', priority: task.priority || 'Medium', addToCalendar: false } : {
         title: '',
         description: '',
@@ -41,7 +40,6 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
     const [showContactSuggestions, setShowContactSuggestions] = useState(false);
     const [accountSearch, setAccountSearch] = useState('');
     const [showAccountSuggestions, setShowAccountSuggestions] = useState(false);
-    const [nestedModal, setNestedModal] = useState(null);
     const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(760, 560, 480, 360);
 
@@ -303,7 +301,7 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                                     ).length === 0 && (
                                         <div style={{ padding: '0.75rem', color: '#64748b', fontSize: '0.875rem' }}>No matches found</div>
                                     )}
-                                    <div onMouseDown={e => e.preventDefault()} onClick={() => { setShowContactSuggestions(false); setNestedModal({ type: 'contact', firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }} style={{ padding: '0.75rem', color: '#2563eb', cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem', borderTop: '1px solid #e2e8f0' }}
+                                    <div onMouseDown={e => e.preventDefault()} onClick={() => { setShowContactSuggestions(false); onOpenNestedContact && onOpenNestedContact({ firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }} style={{ padding: '0.75rem', color: '#2563eb', cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem', borderTop: '1px solid #e2e8f0' }}
                                     onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                         + New Contact
@@ -351,7 +349,7 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                                     ).length === 0 && (
                                         <div style={{ padding: '0.75rem', color: '#64748b', fontSize: '0.875rem' }}>No matches found</div>
                                     )}
-                                    <div onMouseDown={e => e.preventDefault()} onClick={() => { setShowAccountSuggestions(false); setNestedModal({ type: 'account', name: accountSearch.trim() }); setAccountSearch(''); }} style={{ padding: '0.75rem', color: '#2563eb', cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem', borderTop: '1px solid #e2e8f0' }}
+                                    <div onMouseDown={e => e.preventDefault()} onClick={() => { setShowAccountSuggestions(false); onOpenNestedAccount && onOpenNestedAccount({ name: accountSearch.trim() }); setAccountSearch(''); }} style={{ padding: '0.75rem', color: '#2563eb', cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem', borderTop: '1px solid #e2e8f0' }}
                                     onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                         + New Account
@@ -414,26 +412,6 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                 </div>{/* end padding wrapper */}
             <ResizeHandles getResizeHandleProps={getResizeHandleProps} />
             </div>
-            {nestedModal && nestedModal.type === 'contact' && (
-                <div className="modal-overlay" style={{ zIndex: 2000 }} onClick={() => setNestedModal(null)}>
-                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-                        <h2 style={{ marginBottom: '1rem' }}>New Contact</h2>
-                        <NestedNewContactForm firstName={nestedModal.firstName} lastName={nestedModal.lastName}
-                            onSave={(data) => { if (onSaveNewContact) { const saved = onSaveNewContact(data); if (saved) setFormData(prev => ({ ...prev, contactId: saved.id })); } setNestedModal(null); }}
-                            onCancel={() => setNestedModal(null)} />
-                    </div>
-                </div>
-            )}
-            {nestedModal && nestedModal.type === 'account' && (
-                <div className="modal-overlay" style={{ zIndex: 2000 }} onClick={() => setNestedModal(null)}>
-                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-                        <h2 style={{ marginBottom: '1rem' }}>New Account</h2>
-                        <NestedNewAccountForm name={nestedModal.name}
-                            onSave={(data) => { if (onSaveNewAccount) { const saved = onSaveNewAccount(data); if (saved) setFormData(prev => ({ ...prev, accountId: saved.id })); } setNestedModal(null); }}
-                            onCancel={() => setNestedModal(null)} />
-                    </div>
-                </div>
-            )}
         </>
     );
 }

@@ -2,7 +2,7 @@ import React from 'react';
 import { useApp } from '../../AppContext';
 import { dbFetch } from '../../utils/storage';
 import OpportunityModal from '../modals/OpportunityModal';
-import ContactModal from '../modals/ContactModal';
+import ContactModal, { NestedNewContactForm, NestedNewAccountForm } from '../modals/ContactModal';
 import AccountModal from '../modals/AccountModal';
 import TaskModal from '../modals/TaskModal';
 import UserModal from '../modals/UserModal';
@@ -42,6 +42,8 @@ export default function ModalLayer() {
         confirmModal, setConfirmModal,
         blockedDeleteModal, setBlockedDeleteModal,
         lostReasonModal, setLostReasonModal, completeLostSave,
+        nestedContactModal, setNestedContactModal,
+        nestedAccountModal, setNestedAccountModal,
         notesPopover, setNotesPopover,
         undoToast, setUndoToast,
         taskReminderPopup, setTaskReminderPopup,
@@ -156,6 +158,31 @@ export default function ModalLayer() {
                         setShowUserModal(true);
                         setEditingUser(null);
                     }}
+                    onOpenNestedContact={(data) => {
+                        setNestedContactModal({
+                            firstName: data.firstName || '',
+                            lastName: data.lastName || '',
+                            onSave: (saved) => {
+                                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                                const nc = { ...saved, id: newId, createdAt: new Date().toISOString() };
+                                setContacts(prev => [...prev, nc]);
+                                dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nc) })
+                                    .catch(err => console.error('Failed to save inline contact:', err));
+                            },
+                        });
+                    }}
+                    onOpenNestedAccount={(data) => {
+                        setNestedAccountModal({
+                            name: data.name || '',
+                            onSave: (saved) => {
+                                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                                const na = { ...saved, id: newId };
+                                setAccounts(prev => [...prev, na]);
+                                dbFetch('/.netlify/functions/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(na) })
+                                    .catch(err => console.error('Failed to save inline account:', err));
+                            },
+                        });
+                    }}
                 />
             )}
 
@@ -220,6 +247,31 @@ export default function ModalLayer() {
                     onAddAccount={() => {
                         setShowAccountModal(true);
                         setEditingAccount(null);
+                    }}
+                    onOpenNestedContact={(data) => {
+                        setNestedContactModal({
+                            firstName: data.firstName || '',
+                            lastName: data.lastName || '',
+                            onSave: (saved) => {
+                                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                                const nc = { ...saved, id: newId, createdAt: new Date().toISOString() };
+                                setContacts(prev => [...prev, nc]);
+                                dbFetch('/.netlify/functions/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nc) })
+                                    .catch(err => console.error('Failed to save inline contact:', err));
+                            },
+                        });
+                    }}
+                    onOpenNestedAccount={(data) => {
+                        setNestedAccountModal({
+                            name: data.name || '',
+                            onSave: (saved) => {
+                                const newId = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                                const na = { ...saved, id: newId };
+                                setAccounts(prev => [...prev, na]);
+                                dbFetch('/.netlify/functions/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(na) })
+                                    .catch(err => console.error('Failed to save inline account:', err));
+                            },
+                        });
                     }}
                 />
             )}

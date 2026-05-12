@@ -998,8 +998,7 @@ export default function OpportunityModal({
     onSaveComment, onEditComment, onDeleteComment,
     onClose, onSave, onAddAccount, onSaveNewContact, onSaveNewAccount, onAddContact,
     lastCreatedAccountName, onAddRep, lastCreatedRepName,
-    errorMessage, onDismissError, saving
-}) {
+    errorMessage, onDismissError, saving, onOpenNestedContact, onOpenNestedAccount }) {
     const stages = (settings.funnelStages && settings.funnelStages.length > 0)
         ? settings.funnelStages.filter(s => s.name.trim()).map(s => s.name)
         : ['Qualification', 'Discovery', 'Evaluation (Demo)', 'Proposal', 'Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'];
@@ -1763,7 +1762,7 @@ export default function OpportunityModal({
                                                     </div>
                                                 ))}
                                                 <div onMouseDown={e => e.preventDefault()}
-                                                    onClick={() => { setShowContactSuggestions(false); setNestedModal({ type: 'contact', firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }}
+                                                    onClick={() => { setShowContactSuggestions(false); onOpenNestedContact ? onOpenNestedContact({ firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }) : setNestedModal({ type: 'contact', firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }}
                                                     style={{ padding: '8px 10px', cursor: 'pointer', color: T.info, fontWeight: 600, fontSize: 13, fontFamily: T.sans }}
                                                     onMouseEnter={e => e.currentTarget.style.background = T.surface2}
                                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -2089,31 +2088,6 @@ export default function OpportunityModal({
             </div>
 
             {/* Nested new contact modal (preserved) */}
-            {nestedModal && nestedModal.type === 'contact' && (
-                <div className="modal-overlay" style={{ zIndex: 2000 }} onClick={() => setNestedModal(null)}>
-                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px', background: T.surface, borderRadius: 8, fontFamily: T.sans }}>
-                        <h2 style={{ marginBottom: '1rem', fontSize: 16, fontWeight: 700, color: T.ink }}>New Contact</h2>
-                        <NestedNewContactForm
-                            firstName={nestedModal.firstName}
-                            lastName={nestedModal.lastName}
-                            onSave={(data) => {
-                                if (onSaveNewContact) {
-                                    const saved = onSaveNewContact(data);
-                                    if (saved) {
-                                        const display = `${saved.firstName} ${saved.lastName}${saved.title ? ` (${saved.title})` : ''}`;
-                                        const newContacts = [...selectedContacts, display];
-                                        const newIds = [...selectedContactIds, saved.id];
-                                        setSelectedContacts(newContacts);
-                                        setSelectedContactIds(newIds);
-                                        handleChange('contacts', newContacts.join(', '));
-                                    }
-                                }
-                                setNestedModal(null);
-                            }}
-                            onCancel={() => setNestedModal(null)}/>
-                    </div>
-                </div>
-            )}
         </>
     );
 }
