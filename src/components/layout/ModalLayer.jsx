@@ -217,6 +217,10 @@ export default function ModalLayer() {
                         setShowContactModal(true);
                         setEditingContact(null);
                     }}
+                    onOpenNestedContact={(prefill) => {
+                        setEditingContact(prefill || null);
+                        setShowContactModal(true);
+                    }}
                     onAddAccount={() => {
                         setShowAccountModal(true);
                         setEditingAccount(null);
