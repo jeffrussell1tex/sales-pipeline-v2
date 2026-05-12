@@ -78,7 +78,7 @@ export default function ModalLayer() {
         <>
             {/* ── Nested contact/account modals — rendered here so they float above all other modals ── */}
             {nestedContactModal && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+                <div style={{ position: 'fixed', inset: 0, zIndex: 2147483647, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
                     onClick={() => { nestedContactModal.onCancel && nestedContactModal.onCancel(); setNestedContactModal(null); }}>
                     <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '2rem', maxWidth: 500, width: '90%' }}
                         onClick={e => e.stopPropagation()}>
@@ -93,7 +93,7 @@ export default function ModalLayer() {
                 </div>
             )}
             {nestedAccountModal && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
+                <div style={{ position: 'fixed', inset: 0, zIndex: 2147483647, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.45)' }}
                     onClick={() => { nestedAccountModal.onCancel && nestedAccountModal.onCancel(); setNestedAccountModal(null); }}>
                     <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '2rem', maxWidth: 500, width: '90%' }}
                         onClick={e => e.stopPropagation()}>
@@ -152,7 +152,7 @@ export default function ModalLayer() {
                             return updated;
                         });
                     }}
-                    onClose={() => { setShowModal(false); setOppModalError(null); setOppModalSaving(false); }}
+                    onClose={() => { if (document.activeElement) document.activeElement.blur(); setShowModal(false); setOppModalError(null); setOppModalSaving(false); }}
                     onDismissError={() => setOppModalError(null)}
                     onSave={(formData) => handleSave(formData, editingOpp, activePipeline, currentUser, setShowModal, setLostReasonModal)}
                     errorMessage={oppModalError}
@@ -240,7 +240,7 @@ export default function ModalLayer() {
                     accounts={accounts}
                     contacts={contacts}
                     settings={settings}
-                    onClose={() => { setShowTaskModal(false); setTaskModalError(null); setTaskModalSaving(false); }}
+                    onClose={() => { if (document.activeElement) document.activeElement.blur(); setShowTaskModal(false); setTaskModalError(null); setTaskModalSaving(false); }}
                     onDismissError={() => setTaskModalError(null)}
                     onSave={(taskData) => handleSaveTask(taskData, { editingTask, setShowTaskModal, opportunities })}
                     errorMessage={taskModalError}
@@ -322,7 +322,7 @@ export default function ModalLayer() {
                     contacts={contacts}
                     accounts={accounts}
                     settings={settings}
-                    onClose={() => { setShowContactModal(false); setContactModalError(null); setContactModalSaving(false); }}
+                    onClose={() => { if (document.activeElement) document.activeElement.blur(); setShowContactModal(false); setContactModalError(null); setContactModalSaving(false); }}
                     onDismissError={() => setContactModalError(null)}
                     onSave={(contactData) => handleSaveContact(contactData, { editingContact, setShowContactModal })}
                     errorMessage={contactModalError}
@@ -376,7 +376,7 @@ export default function ModalLayer() {
                         || parentAccountForSub?.accountTier
                         || (parentAccountForSub?.parentAccountId ? 'business_unit' : parentAccountForSub ? 'account' : null)}
                     settings={settings}
-                    onClose={() => { setShowAccountModal(false); setAccountModalError(null); setAccountModalSaving(false); }}
+                    onClose={() => { if (document.activeElement) document.activeElement.blur(); setShowAccountModal(false); setAccountModalError(null); setAccountModalSaving(false); }}
                     onDismissError={() => setAccountModalError(null)}
                     onSave={(formData) => handleSaveAccount(
                         { ...formData, _forceTier: parentAccountForSub?._forceTier },
