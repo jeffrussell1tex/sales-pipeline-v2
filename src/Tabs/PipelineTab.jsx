@@ -115,6 +115,7 @@ function FilterPanel({
     };
 
     const handleReset = () => {
+        setDraftPipeline(allPipelines[0]?.id || null);
         setDraftTimeWindow('thisQuarter');
         setDraftStage('__allOpen__');
         setDraftRep('__me__');
