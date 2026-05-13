@@ -287,6 +287,7 @@ export default function ContactsTab() {
                 const hasMatch = sorted.some(c => ((c[sortField]||'')[0]||'').toUpperCase() === letter);
                 return (
                     <div key={letter}
+                        onMouseDown={e => e.preventDefault()}
                         onClick={() => {
                             if (!hasMatch) return;
                             const el = document.getElementById('contact-letter-' + letter);

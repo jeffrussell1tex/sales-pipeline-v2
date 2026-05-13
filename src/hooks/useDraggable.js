@@ -95,18 +95,6 @@ export function useDraggable({ transparent = false } = {}) {
 
     useEffect(() => { posRef.current = pos; }, [pos]);
 
-    // Focus the modal container when it mounts so the browser's native focus
-    // restoration on unmount returns focus to WITHIN the modal (which is being
-    // removed), rather than to the nav button that was focused before the modal
-    // opened. When the modal is removed, browser has no external element to
-    // restore to, so no scroll-into-view occurs.
-    useEffect(() => {
-        const el = containerRef.current;
-        if (!el) return;
-        if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
-        el.focus({ preventScroll: true });
-    }, []);
-
     // Centre on first paint via rAF measurement.
     // On mobile, clamp initial size so panel fits within viewport.
     useEffect(() => {
@@ -243,15 +231,6 @@ export function useDraggable({ transparent = false } = {}) {
         zIndex:        mobile ? MOBILE_Z - 1 : zIndex - 1,
         background:    'transparent',
         pointerEvents: isDragging || transparent ? 'none' : 'auto',
-        outline:       'none',
-    };
-
-    // tabIndex=-1 makes the catcher focusable so mousedown lands focus here
-    // instead of document.body (which lives at scrollY=0, causing scroll-to-top).
-    // outline:none prevents any visible focus ring.
-    const clickCatcherProps = {
-        style:    clickCatcherStyle,
-        tabIndex: -1,
     };
 
     const dragHandleProps = {
@@ -273,7 +252,6 @@ export function useDraggable({ transparent = false } = {}) {
         dragContainerStyle,
         overlayStyle,
         clickCatcherStyle,
-        clickCatcherProps,
         isDragging,
         isMobile: mobile,
         bringToFront,
