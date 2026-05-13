@@ -430,6 +430,11 @@
 
         .form-group input,
         .form-group select,
+        /* Select showing its empty/placeholder option — matches input ::placeholder colour */
+        .form-group select[data-placeholder="true"] {
+            color: var(--text-tertiary);
+        }
+
         .form-group textarea {
             background: var(--bg-primary);
             border: 1.5px solid var(--border-color);
@@ -448,6 +453,11 @@
             border-color: #1c1917;
             box-shadow: 0 0 0 3px rgba(28,25,23,0.07);
             background: #ffffff;
+        }
+
+        /* Select showing its empty/placeholder option — matches input ::placeholder colour */
+        .form-group select[data-placeholder="true"] {
+            color: var(--text-tertiary);
         }
 
         .form-group textarea {
