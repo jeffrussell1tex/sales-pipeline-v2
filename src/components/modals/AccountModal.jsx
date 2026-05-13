@@ -542,26 +542,6 @@ export default function AccountModal({
                                 <span className="field-hint">Account segment — size or revenue classification</span>
                             </div>
 
-                            {/* ── Segment ── */}
-                            <div className="form-group full">
-                                <label>Segment</label>
-                                <select
-                                    value={formData.accountSegment || ''}
-                                    onChange={e => setFormData(prev => ({ ...prev, accountSegment: e.target.value }))}
-                                    style={{ width:'100%' }}
-                                >
-                                    <option value="">— Not set —</option>
-                                    {(() => {
-                                        const tiers = settings?.customerTypeTiers;
-                                        if (Array.isArray(tiers) && tiers.length > 0 && typeof tiers[0] === 'object') {
-                                            return [...tiers].sort((a,b) => a.tier.localeCompare(b.tier)).map(t => <option key={t.tier} value={t.tier}>{t.tier}</option>);
-                                        }
-                                        return ['Enterprise','Mid-Market','Partner','SMB','Strategic'].map(t => <option key={t} value={t}>{t}</option>);
-                                    })()}
-                                </select>
-                                <span className="field-hint">Account segment — size or revenue classification</span>
-                            </div>
-
                             {/* ── Customer Types ── */}
                             <div className="form-group full" style={{ position: 'relative' }}>
                                 <label>Account Type</label>
