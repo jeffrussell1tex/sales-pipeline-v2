@@ -81,7 +81,7 @@ const dayLabel = (isoDay) => {
 };
 
 // ── Snooze picker (unchanged from original) ────────────────────
-function SnoozePicker({ task, onSnooze, onClose, openUpward }) {
+function SnoozePicker({ task, onSnooze, onClose, anchorRect }) {
     const ref = useRef(null);
 
     useEffect(() => {
@@ -89,6 +89,21 @@ function SnoozePicker({ task, onSnooze, onClose, openUpward }) {
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, [onClose]);
+
+    const POPOVER_H = 168;
+    const POPOVER_W = 200;
+    const MARGIN = 8;
+
+    // Decide whether to open above or below the button
+    const openUpward = anchorRect && (anchorRect.bottom + POPOVER_H + MARGIN > window.innerHeight);
+
+    const top  = openUpward
+        ? anchorRect.top - POPOVER_H - MARGIN
+        : anchorRect.bottom + MARGIN;
+    const left = Math.min(
+        anchorRect.right - POPOVER_W,
+        window.innerWidth - POPOVER_W - MARGIN
+    );
 
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const addDays = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; };
@@ -99,7 +114,7 @@ function SnoozePicker({ task, onSnooze, onClose, openUpward }) {
         { label: 'In 2 weeks', sublabel: new Date(addDays(14)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}), days: 14 },
     ];
     return (
-        <div ref={ref} style={{ position: 'absolute', right: 0, ...(openUpward ? { bottom: '110%' } : { top: '110%' }), zIndex: 50, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, boxShadow: '0 8px 24px rgba(42,38,34,0.15)', width: 200, overflow: 'hidden', fontFamily: T.sans }}>
+        <div ref={ref} style={{ position: 'fixed', top, left, zIndex: 9999, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, boxShadow: '0 8px 24px rgba(42,38,34,0.15)', width: POPOVER_W, overflow: 'hidden', fontFamily: T.sans }}>
             <div style={{ padding: '8px 12px 6px', borderBottom: `1px solid ${T.border}` }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase' }}>Snooze until</div>
             </div>
@@ -191,7 +206,7 @@ function SubGroupHeader({ label, count, accent, subtle }) {
 function OpenTaskRow({ task, isOverdue, opportunities, contacts, getStageColor, canEdit, handleCompleteTask, handleSaveTask, setViewingTask, setEditingTask, setShowTaskModal }) {
     const [hov,        setHov]        = useState(false);
     const [snoozeOpen, setSnoozeOpen] = useState(false);
-    const [snoozeUpward, setSnoozeUpward] = useState(false);
+    const [snoozeAnchorRect, setSnoozeAnchorRect] = useState(null);
     const [completing, setCompleting] = useState(false);
     const snoozeButtonRef = useRef(null);
 
@@ -267,10 +282,8 @@ function OpenTaskRow({ task, isOverdue, opportunities, contacts, getStageColor, 
                         <div ref={snoozeButtonRef} style={{ position: 'relative' }}>
                             <button onClick={e => {
                                     e.stopPropagation();
-                                    if (!snoozeOpen && snoozeButtonRef.current) {
-                                        const rect = snoozeButtonRef.current.getBoundingClientRect();
-                                        // Popover is ~160px tall; flip up if not enough room below
-                                        setSnoozeUpward(rect.bottom + 168 > window.innerHeight);
+                                    if (snoozeButtonRef.current) {
+                                        setSnoozeAnchorRect(snoozeButtonRef.current.getBoundingClientRect());
                                     }
                                     setSnoozeOpen(o => !o);
                                 }} title="Snooze"
@@ -278,7 +291,7 @@ function OpenTaskRow({ task, isOverdue, opportunities, contacts, getStageColor, 
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9h6l-4 5h4"/></svg>
                                 Snooze
                             </button>
-                            {snoozeOpen && <SnoozePicker task={task} onSnooze={handleSnooze} onClose={() => setSnoozeOpen(false)} openUpward={snoozeUpward}/>}
+                            {snoozeOpen && <SnoozePicker task={task} onSnooze={handleSnooze} onClose={() => setSnoozeOpen(false)} anchorRect={snoozeAnchorRect}/>}
                         </div>
                         <button onClick={e => { e.stopPropagation(); setEditingTask(task); setShowTaskModal(true); }}
                             style={{ padding: '3px 8px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 11, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
