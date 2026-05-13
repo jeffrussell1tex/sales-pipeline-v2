@@ -528,9 +528,9 @@ export default function AccountModal({
                                 <select
                                     value={formData.accountSegment || ''}
                                     onChange={e => setFormData(prev => ({ ...prev, accountSegment: e.target.value }))}
-                                    style={{ width:'100%' }}
+                                    style={{ width:'100%', color: formData.accountSegment ? undefined : '#94a3b8' }}
                                 >
-                                    <option value="">— Not set —</option>
+                                    <option value="" style={{ color: "#94a3b8" }}>— Not set —</option>
                                     {(() => {
                                         const tiers = settings?.customerTypeTiers;
                                         if (Array.isArray(tiers) && tiers.length > 0 && typeof tiers[0] === 'object') {
