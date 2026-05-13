@@ -211,9 +211,9 @@ export default function SalesManagerTab() {
     const SubTabs = () => (
         <div style={{ display:'flex', alignItems:'center', borderBottom:`1px solid ${T.border}`, marginBottom:16 }}>
             {[
+                { id:'audit',      label:'Today'          },
                 { id:'forecast',   label:'Forecast'       },
                 { id:'team',       label:'Team'           },
-                { id:'audit',      label:'Pipeline Audit' },
                 { id:'admin',      label:'Administration' },
             ].map(t => {
                 const active = subTab === t.id;
