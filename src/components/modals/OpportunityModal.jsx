@@ -1343,6 +1343,16 @@ export default function OpportunityModal({
                         {/* Detail tab pills (only for existing opps) */}
                         {opportunity && (
                             <div style={{ display: 'flex', gap: 2 }}>
+                                {/* Opp — always visible, navigates back to main deal view */}
+                                <button type="button" onClick={() => setDetailTab(null)}
+                                    style={{ padding: '3px 10px', fontSize: 11, fontWeight: !detailTab ? 700 : 500, fontFamily: T.sans,
+                                        cursor: 'pointer', border: 'none',
+                                        borderBottom: !detailTab ? `2px solid ${T.gold}` : '2px solid transparent',
+                                        background: 'transparent',
+                                        color: !detailTab ? T.gold : 'rgba(230,221,208,0.55)',
+                                        transition: 'all 0.15s' }}>
+                                    Opp
+                                </button>
                                 {[
                                     { id: 'history',   label: 'History'   },
                                     { id: 'contacts',  label: 'Contacts'  },
