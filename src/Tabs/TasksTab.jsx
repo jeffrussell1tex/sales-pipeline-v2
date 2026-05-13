@@ -81,22 +81,14 @@ const dayLabel = (isoDay) => {
 };
 
 // ── Snooze picker (unchanged from original) ────────────────────
-function SnoozePicker({ task, onSnooze, onClose }) {
+function SnoozePicker({ task, onSnooze, onClose, openUpward }) {
     const ref = useRef(null);
-    const [openUpward, setOpenUpward] = useState(false);
 
     useEffect(() => {
         const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, [onClose]);
-
-    // On mount, check if the popover clips the viewport bottom and flip upward if so
-    useEffect(() => {
-        if (!ref.current) return;
-        const rect = ref.current.getBoundingClientRect();
-        if (rect.bottom > window.innerHeight - 8) setOpenUpward(true);
-    }, []);
 
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const addDays = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; };
@@ -199,7 +191,9 @@ function SubGroupHeader({ label, count, accent, subtle }) {
 function OpenTaskRow({ task, isOverdue, opportunities, contacts, getStageColor, canEdit, handleCompleteTask, handleSaveTask, setViewingTask, setEditingTask, setShowTaskModal }) {
     const [hov,        setHov]        = useState(false);
     const [snoozeOpen, setSnoozeOpen] = useState(false);
+    const [snoozeUpward, setSnoozeUpward] = useState(false);
     const [completing, setCompleting] = useState(false);
+    const snoozeButtonRef = useRef(null);
 
     const opp     = task.opportunityId ? opportunities.find(o => o.id === task.opportunityId) : null;
     const contact = task.contactId     ? contacts.find(c => c.id === task.contactId)          : null;
@@ -270,13 +264,21 @@ function OpenTaskRow({ task, isOverdue, opportunities, contacts, getStageColor, 
                 {/* Hover actions */}
                 {hov && canEdit && (
                     <>
-                        <div style={{ position: 'relative' }}>
-                            <button onClick={e => { e.stopPropagation(); setSnoozeOpen(o => !o); }} title="Snooze"
+                        <div ref={snoozeButtonRef} style={{ position: 'relative' }}>
+                            <button onClick={e => {
+                                    e.stopPropagation();
+                                    if (!snoozeOpen && snoozeButtonRef.current) {
+                                        const rect = snoozeButtonRef.current.getBoundingClientRect();
+                                        // Popover is ~160px tall; flip up if not enough room below
+                                        setSnoozeUpward(rect.bottom + 168 > window.innerHeight);
+                                    }
+                                    setSnoozeOpen(o => !o);
+                                }} title="Snooze"
                                 style={{ padding: '3px 8px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 11, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans, display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9h6l-4 5h4"/></svg>
                                 Snooze
                             </button>
-                            {snoozeOpen && <SnoozePicker task={task} onSnooze={handleSnooze} onClose={() => setSnoozeOpen(false)}/>}
+                            {snoozeOpen && <SnoozePicker task={task} onSnooze={handleSnooze} onClose={() => setSnoozeOpen(false)} openUpward={snoozeUpward}/>}
                         </div>
                         <button onClick={e => { e.stopPropagation(); setEditingTask(task); setShowTaskModal(true); }}
                             style={{ padding: '3px 8px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 11, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
