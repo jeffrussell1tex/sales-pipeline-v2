@@ -95,14 +95,16 @@ export function useDraggable({ transparent = false } = {}) {
 
     useEffect(() => { posRef.current = pos; }, [pos]);
 
-    // Blur whatever element is focused when the modal mounts so the browser has
-    // no previously-focused element to restore focus to on unmount. Without this,
-    // closing the modal causes the browser to refocus the nav button that was
-    // active before the modal opened, scrolling it into view and jumping to top.
+    // Focus the modal container when it mounts so the browser's native focus
+    // restoration on unmount returns focus to WITHIN the modal (which is being
+    // removed), rather than to the nav button that was focused before the modal
+    // opened. When the modal is removed, browser has no external element to
+    // restore to, so no scroll-into-view occurs.
     useEffect(() => {
-        if (document.activeElement && document.activeElement !== document.body) {
-            document.activeElement.blur();
-        }
+        const el = containerRef.current;
+        if (!el) return;
+        if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+        el.focus({ preventScroll: true });
     }, []);
 
     // Centre on first paint via rAF measurement.
