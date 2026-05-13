@@ -430,11 +430,6 @@
 
         .form-group input,
         .form-group select,
-        /* Select showing its empty/placeholder option — matches input ::placeholder colour */
-        .form-group select[data-placeholder="true"] {
-            color: var(--text-tertiary);
-        }
-
         .form-group textarea {
             background: var(--bg-primary);
             border: 1.5px solid var(--border-color);
@@ -455,14 +450,14 @@
             background: #ffffff;
         }
 
-        /* Select showing its empty/placeholder option — matches input ::placeholder colour */
-        .form-group select[data-placeholder="true"] {
-            color: var(--text-tertiary);
-        }
-
         .form-group textarea {
             resize: vertical;
             min-height: 80px;
+        }
+
+        /* Select in placeholder state — matches input ::placeholder colour */
+        .form-group select[data-placeholder="true"] {
+            color: var(--text-tertiary);
         }
 
         .modal-actions {
