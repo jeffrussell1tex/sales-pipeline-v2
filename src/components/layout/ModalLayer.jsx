@@ -87,7 +87,7 @@ export default function ModalLayer() {
                         setActivities(prev => [...prev, { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' }]);
                     }}
                     onDeleteActivity={(activityId) => {
-                        setActivities(prev => prev.filter(a => a.id !== activityId));
+                        handleDeleteActivity(activityId);
                     }}
                     onSaveComment={(oppId, comment) => {
                         setOpportunities(prev => {

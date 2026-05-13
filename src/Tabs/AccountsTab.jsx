@@ -561,7 +561,7 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
         opportunities, contacts, activities, settings,
         currentUser, userRole, canSeeAll,
         exportToCSV, exportingCSV,
-        showConfirm,
+        showConfirm, softDelete,
         getSubAccounts, getAccountRollup,
         visibleAccounts,
         handleDeleteAccount,
@@ -712,14 +712,37 @@ export default function AccountsTab({ initialAccountSegmentFilter = '__all__', i
 
     const handleDeleteSelected = () => {
         if (!selectedIds.length) return;
-        showConfirm(`Delete ${selectedIds.length} account${selectedIds.length > 1 ? 's' : ''}? This cannot be undone.`, async () => {
+        const count = selectedIds.length;
+        showConfirm(`Delete ${count} account${count > 1 ? 's' : ''}? This cannot be undone.`, async () => {
             const toDelete = [...selectedIds];
-            setAccounts(prev => prev.filter(a => !toDelete.includes(a.id)));
+            let snapshot;
+            setAccounts(prev => {
+                snapshot = prev.slice();
+                return prev.filter(a => !toDelete.includes(a.id));
+            });
             setSelectedIds([]);
             setSelectMode(false);
+
+            const deletedAccounts = snapshot.filter(a => toDelete.includes(a.id));
+
             for (const id of toDelete) {
                 await dbFetch(`/.netlify/functions/accounts?id=${id}`, { method: 'DELETE' }).catch(console.error);
             }
+
+            softDelete(
+                `${count} account${count > 1 ? 's' : ''}`,
+                () => {},
+                () => {
+                    setAccounts(snapshot);
+                    deletedAccounts.forEach(a => {
+                        dbFetch('/.netlify/functions/accounts', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(a),
+                        }).catch(err => console.error('Failed to restore account to DB:', err));
+                    });
+                }
+            );
         });
     };
 
