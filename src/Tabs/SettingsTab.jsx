@@ -138,6 +138,7 @@ const SETTINGS_ITEMS = [
     { id:'lead-conv-benchmarks', scope:'workspace', category:'Sales process', name:'Lead conversion benchmarks', desc:'Good / average / poor conversion rate targets by lead source', status:'ok', statusDetail:'8 sources configured', updatedBy:'Admin', updatedAt:'today' },
     { id:'pain-points',      scope:'workspace', category:'Sales process', name:'Pain points library', desc:'Reusable customer pain point templates',                  status:'ok',      statusDetail:'23 pain points',              updatedBy:'Admin', updatedAt:'2 weeks ago' },
     { id:'customer-types',   scope:'workspace', category:'Sales process', name:'Customer types',  desc:'Account classification tags (SMB, Mid-market, Enterprise…)', status:'ok',      statusDetail:'5 tiers',                     updatedBy:'Admin', updatedAt:'6 months ago' },
+    { id:'buyer-personas',    scope:'workspace', category:'Sales process', name:'Buyer personas',  desc:'Contact persona tags used in the contact form (e.g. Champion, Economic Buyer, End User)', status:'ok', statusDetail:'0 personas', updatedBy:'Admin', updatedAt:'never' },
     { id:'competitors',      scope:'workspace', category:'Sales process', name:'Competitors',     desc:'Competitor names shown in the opportunity form for win/loss tracking', status:'ok', statusDetail:'0 competitors',              updatedBy:'Admin', updatedAt:'never' },
     { id:'reasons-won',      scope:'workspace', category:'Sales process', name:'Reasons won',     desc:'Win reason options shown when a deal is marked Closed Won',    status:'ok',      statusDetail:'0 reasons',                   updatedBy:'Admin', updatedAt:'never' },
     { id:'reasons-lost',     scope:'workspace', category:'Sales process', name:'Reasons lost',    desc:'Loss reason options shown when a deal is marked Closed Lost',  status:'ok',      statusDetail:'0 reasons',                   updatedBy:'Admin', updatedAt:'never' },
@@ -2847,6 +2848,7 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
 }
 
 const CompetitorsDetail  = (p) => <FlatListDetail {...p} title="Competitors"  settingsKey="competitors" placeholder="e.g. Salesforce, HubSpot…"      description="Competitor names shown in the opportunity form for win/loss tracking." />;
+const BuyerPersonasDetail = (p) => <FlatListDetail {...p} title="Buyer personas" settingsKey="buyerPersonas" placeholder="e.g. Champion, Economic Buyer, End User…" description="Persona tags available in the contact form to classify buyer roles." />;
 const ReasonsWonDetail   = (p) => <FlatListDetail {...p} title="Reasons won"  settingsKey="reasonsWon"  placeholder="e.g. Best price, Strong support…" description="Win reason options shown when a deal is marked Closed Won." />;
 const ReasonsLostDetail  = (p) => <FlatListDetail {...p} title="Reasons lost" settingsKey="reasonsLost" placeholder="e.g. Lost to competitor, Budget…"  description="Loss reason options shown when a deal is marked Closed Lost." />;
 
@@ -16248,6 +16250,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'reasons-won')     return <ReasonsWonDetail      settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'reasons-lost')    return <ReasonsLostDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
+        if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
 
         // Generic wrapper for all other panels

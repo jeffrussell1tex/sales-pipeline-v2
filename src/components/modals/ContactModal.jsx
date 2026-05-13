@@ -15,6 +15,7 @@ export default function ContactModal({
         city: '', state: '', zip: '', country: '',
         managers: [], directReports: [], assistantName: '',
         homeAddress: '', notes: '', doNotContact: false,
+        buyerPersona: '',
     });
 
     const [activeContactTab,       setActiveContactTab]       = useState('primary');
@@ -26,6 +27,8 @@ export default function ContactModal({
     const [showReportSuggestions,  setShowReportSuggestions]  = useState(false);
     const [contactRepSearch,       setContactRepSearch]       = useState(contact?.assignedRep || '');
     const [showContactRepSugg,     setShowContactRepSugg]     = useState(false);
+    const [personaSearch,          setPersonaSearch]          = useState(contact?.buyerPersona || '');
+    const [showPersonaSugg,        setShowPersonaSugg]        = useState(false);
     const [nestedModal,            setNestedModal]            = useState(null);
     const [duplicateContactWarning, setDuplicateContactWarning] = useState(null);
 
@@ -350,6 +353,46 @@ export default function ContactModal({
                                     </div>
                                 )}
                             </div>
+
+                            {/* Buyer Persona */}
+                            {(settings?.buyerPersonas || []).length > 0 && (
+                                <div className="form-group" style={{ position: 'relative' }}>
+                                    <label>Buyer Persona</label>
+                                    <input
+                                        type="text"
+                                        value={personaSearch}
+                                        onChange={e => {
+                                            setPersonaSearch(e.target.value);
+                                            handleChange('buyerPersona', e.target.value);
+                                            setShowPersonaSugg(e.target.value.trim().length > 0);
+                                        }}
+                                        onFocus={() => setShowPersonaSugg(true)}
+                                        onBlur={() => setTimeout(() => setShowPersonaSugg(false), 200)}
+                                        placeholder="Type to search personas…"
+                                        autoComplete="off"
+                                    />
+                                    {showPersonaSugg && (
+                                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                            {(settings.buyerPersonas || [])
+                                                .filter(p => p.toLowerCase().includes(personaSearch.toLowerCase()))
+                                                .map((p, i) => (
+                                                    <div key={i}
+                                                        onMouseDown={e => e.preventDefault()}
+                                                        onClick={() => { setPersonaSearch(p); handleChange('buyerPersona', p); setShowPersonaSugg(false); }}
+                                                        style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', fontSize: '0.875rem', fontWeight: '600' }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                        {p}
+                                                    </div>
+                                                ))
+                                            }
+                                            {(settings.buyerPersonas || []).filter(p => p.toLowerCase().includes(personaSearch.toLowerCase())).length === 0 && (
+                                                <div style={{ padding: '0.625rem 0.75rem', color: '#94a3b8', fontSize: '0.8125rem' }}>No personas match — add in Settings</div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Do Not Contact */}
                             <div className="form-group full">
