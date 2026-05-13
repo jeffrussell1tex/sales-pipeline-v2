@@ -87,7 +87,7 @@ export default function ModalLayer() {
                         setActivities(prev => [...prev, { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' }]);
                     }}
                     onDeleteActivity={(activityId) => {
-                        setActivities(prev => prev.filter(a => a.id !== activityId));
+                        handleDeleteActivity(activityId);
                     }}
                     onSaveComment={(oppId, comment) => {
                         setOpportunities(prev => {
@@ -118,7 +118,7 @@ export default function ModalLayer() {
                             return updated;
                         });
                     }}
-                    onClose={() => { setShowModal(false); setOppModalError(null); setOppModalSaving(false); }}
+                    onClose={() => { document.activeElement?.blur(); setShowModal(false); setOppModalError(null); setOppModalSaving(false); }}
                     onDismissError={() => setOppModalError(null)}
                     onSave={(formData) => handleSave(formData, editingOpp, activePipeline, currentUser, setShowModal, setLostReasonModal)}
                     errorMessage={oppModalError}
@@ -165,7 +165,7 @@ export default function ModalLayer() {
                 <UserModal
                     user={editingUser}
                     settings={settings}
-                    onClose={() => { setShowUserModal(false); setUserModalError(null); setUserModalSaving(false); }}
+                    onClose={() => { document.activeElement?.blur(); setShowUserModal(false); setUserModalError(null); setUserModalSaving(false); }}
                     onDismissError={() => setUserModalError(null)}
                     onSave={handleSaveUser}
                     errorMessage={userModalError}
@@ -181,7 +181,7 @@ export default function ModalLayer() {
                     accounts={accounts}
                     contacts={contacts}
                     settings={settings}
-                    onClose={() => { setShowTaskModal(false); setTaskModalError(null); setTaskModalSaving(false); }}
+                    onClose={() => { document.activeElement?.blur(); setShowTaskModal(false); setTaskModalError(null); setTaskModalSaving(false); }}
                     onDismissError={() => setTaskModalError(null)}
                     onSave={(taskData) => handleSaveTask(taskData, { editingTask, setShowTaskModal, opportunities })}
                     errorMessage={taskModalError}
@@ -217,6 +217,11 @@ export default function ModalLayer() {
                         setShowContactModal(true);
                         setEditingContact(null);
                     }}
+                    onOpenNestedContact={(prefill) => {
+                        document.activeElement?.blur();
+                        setEditingContact(prefill || null);
+                        setShowContactModal(true);
+                    }}
                     onAddAccount={() => {
                         setShowAccountModal(true);
                         setEditingAccount(null);
@@ -238,7 +243,7 @@ export default function ModalLayer() {
                     contacts={contacts}
                     accounts={accounts}
                     settings={settings}
-                    onClose={() => { setShowContactModal(false); setContactModalError(null); setContactModalSaving(false); }}
+                    onClose={() => { document.activeElement?.blur(); setShowContactModal(false); setContactModalError(null); setContactModalSaving(false); }}
                     onDismissError={() => setContactModalError(null)}
                     onSave={(contactData) => handleSaveContact(contactData, { editingContact, setShowContactModal })}
                     errorMessage={contactModalError}
@@ -292,7 +297,7 @@ export default function ModalLayer() {
                         || parentAccountForSub?.accountTier
                         || (parentAccountForSub?.parentAccountId ? 'business_unit' : parentAccountForSub ? 'account' : null)}
                     settings={settings}
-                    onClose={() => { setShowAccountModal(false); setAccountModalError(null); setAccountModalSaving(false); }}
+                    onClose={() => { document.activeElement?.blur(); setShowAccountModal(false); setAccountModalError(null); setAccountModalSaving(false); }}
                     onDismissError={() => setAccountModalError(null)}
                     onSave={(formData) => handleSaveAccount(
                         { ...formData, _forceTier: parentAccountForSub?._forceTier },
@@ -453,7 +458,7 @@ export default function ModalLayer() {
                     opportunities={opportunities}
                     contacts={contacts}
                     accounts={accounts}
-                    onClose={() => { setShowActivityModal(false); setActivityModalError(null); setActivityModalSaving(false); }}
+                    onClose={() => { document.activeElement?.blur(); setShowActivityModal(false); setActivityModalError(null); setActivityModalSaving(false); }}
                     onDismissError={() => setActivityModalError(null)}
                     onSave={(activityData) => handleSaveActivity(activityData, { editingActivity, currentUser, opportunities, setShowActivityModal, setFollowUpPrompt, setQuickLogOpen, setQuickLogForm, setQuickLogContactResults })}
                     errorMessage={activityModalError}
@@ -504,7 +509,7 @@ export default function ModalLayer() {
                     contacts={contacts}
                     accounts={accounts}
                     opportunities={opportunities}
-                    onClose={() => setShowCsvImportModal(false)}
+                    onClose={() => { document.activeElement?.blur(); setShowCsvImportModal(false); }}
                     onImportContacts={async (newContacts, overwrites = []) => {
                         // Lower concurrency to avoid Neon connection limits with large imports
                         const CONCURRENCY = 3;   // max simultaneous DB calls
@@ -737,7 +742,7 @@ export default function ModalLayer() {
                     contacts={contacts}
                     opportunities={opportunities}
                     activities={activities}
-                    onClose={() => setShowOutlookImportModal(false)}
+                    onClose={() => { document.activeElement?.blur(); setShowOutlookImportModal(false); }}
                     onImport={async (newActivities) => {
                         const startId = Date.now();
                         const activitiesWithIds = newActivities.map((a, i) => ({
@@ -768,7 +773,7 @@ export default function ModalLayer() {
             {showLeadImportModal && (
                 <LeadImportModal
                     existingLeads={leads}
-                    onClose={() => setShowLeadImportModal(false)}
+                    onClose={() => { document.activeElement?.blur(); setShowLeadImportModal(false); }}
                     onImport={async (newLeads) => {
                         const resp = await dbFetch('/.netlify/functions/leads', {
                             method: 'POST',

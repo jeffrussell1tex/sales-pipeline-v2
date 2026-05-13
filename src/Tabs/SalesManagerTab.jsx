@@ -211,9 +211,9 @@ export default function SalesManagerTab() {
     const SubTabs = () => (
         <div style={{ display:'flex', alignItems:'center', borderBottom:`1px solid ${T.border}`, marginBottom:16 }}>
             {[
+                { id:'audit',      label:'Today'          },
                 { id:'forecast',   label:'Forecast'       },
                 { id:'team',       label:'Team'           },
-                { id:'audit',      label:'Pipeline Audit' },
                 { id:'admin',      label:'Administration' },
             ].map(t => {
                 const active = subTab === t.id;
@@ -616,6 +616,8 @@ export default function SalesManagerTab() {
     const AuditTab = () => {
         const firstName = (currentUser||'').split(' ')[0];
         const today     = new Date();
+        const hour      = today.getHours();
+        const greeting  = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
         const dayName   = today.toLocaleDateString('en-US',{weekday:'long'});
         const dateFmt   = today.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}).toUpperCase();
 
@@ -644,7 +646,7 @@ export default function SalesManagerTab() {
                     {dayName} · {dateFmt} · Morning Brief
                 </div>
                 <div style={{ fontSize:24, fontFamily:T.serif, fontStyle:'italic', fontWeight:300, color:T.ink, lineHeight:1.2, marginBottom:4 }}>
-                    Good morning, {firstName}.{' '}
+                    {greeting}, {firstName}.{' '}
                     <span style={{ color:T.inkMid }}>Here's what needs you today.</span>
                 </div>
             </div>

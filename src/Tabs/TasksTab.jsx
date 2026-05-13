@@ -83,11 +83,20 @@ const dayLabel = (isoDay) => {
 // ── Snooze picker (unchanged from original) ────────────────────
 function SnoozePicker({ task, onSnooze, onClose }) {
     const ref = useRef(null);
+    const [openUpward, setOpenUpward] = useState(false);
+
     useEffect(() => {
         const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, [onClose]);
+
+    // On mount, check if the popover clips the viewport bottom and flip upward if so
+    useEffect(() => {
+        if (!ref.current) return;
+        const rect = ref.current.getBoundingClientRect();
+        if (rect.bottom > window.innerHeight - 8) setOpenUpward(true);
+    }, []);
 
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const addDays = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; };
@@ -98,7 +107,7 @@ function SnoozePicker({ task, onSnooze, onClose }) {
         { label: 'In 2 weeks', sublabel: new Date(addDays(14)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}), days: 14 },
     ];
     return (
-        <div ref={ref} style={{ position: 'absolute', right: 0, top: '110%', zIndex: 50, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, boxShadow: '0 8px 24px rgba(42,38,34,0.15)', width: 200, overflow: 'hidden', fontFamily: T.sans }}>
+        <div ref={ref} style={{ position: 'absolute', right: 0, ...(openUpward ? { bottom: '110%' } : { top: '110%' }), zIndex: 50, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, boxShadow: '0 8px 24px rgba(42,38,34,0.15)', width: 200, overflow: 'hidden', fontFamily: T.sans }}>
             <div style={{ padding: '8px 12px 6px', borderBottom: `1px solid ${T.border}` }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase' }}>Snooze until</div>
             </div>

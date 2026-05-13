@@ -533,6 +533,9 @@ dbFetch('/.netlify/functions/users?me=true')
         ? settings.pipelines
         : [{ id: 'default', name: 'New Business', color: '#2563eb' }];
     const activePipeline = allPipelines.find(p => p.id === activePipelineId) || allPipelines[0];
+    // The ID of whichever pipeline is flagged as default (or the first one).
+    // Used to resolve legacy pipelineId: 'default' on opps created before pipelines were renamed.
+    const defaultPipelineId = (allPipelines.find(p => p.isDefault) || allPipelines[0])?.id || 'default';
 
     // Shared Viewing bar helpers — build option lists for Rep/Team/Territory
     const allRepNames = [...new Set((settings.users || []).filter(u => u.userType !== 'Manager' && u.userType !== 'Admin').map(u => u.name).filter(Boolean))].sort();
@@ -557,7 +560,11 @@ dbFetch('/.netlify/functions/users?me=true')
     const visibleOpportunities = applyViewingFilter(
         (opportunities || [])
         .filter(opp => isRepVisible(opp.salesRep))
-        .filter(opp => (opp.pipelineId || 'default') === activePipeline.id)
+        .filter(opp => {
+            // Resolve legacy 'default' pipelineId to the current default pipeline
+            const pid = (!opp.pipelineId || opp.pipelineId === 'default') ? defaultPipelineId : opp.pipelineId;
+            return pid === activePipeline.id;
+        })
     );
     const visibleAccounts = (accounts || [])
         .filter(acc => isRepVisible(acc.accountOwner))

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
@@ -128,7 +128,7 @@ const SETTINGS_ITEMS = [
     { id:'my-api',           scope:'personal', category:'Profile & Account', name:'My API tokens',              desc:'Personal access tokens for API calls',                         status:'none',      statusDetail:'No tokens', updatedBy:'—', updatedAt:'—',                     isNew:false },
     // Company
     { id:'company-profile',  scope:'workspace', category:'Company', name:'Company profile',        desc:'Logo, address, phone, and default quote header',              status:'ok',      statusDetail:'Complete',                    updatedBy:'Admin', updatedAt:'2 months ago' },
-    { id:'fiscal-year',      scope:'workspace', category:'Company', name:'Fiscal year',            desc:'Quarter starts and fiscal year alignment',                    status:'ok',      statusDetail:'Q1 starts Jan 1',             updatedBy:'Admin', updatedAt:'11 months ago' },
+    { id:'fiscal-year',      scope:'workspace', category:'Company', name:'Fiscal year',            desc:'Quarter starts and fiscal year alignment',                    status:'ok',      statusDetail:'Q1 starts Feb 1',             updatedBy:'Admin', updatedAt:'11 months ago' },
     { id:'company-calendar', scope:'workspace', category:'Company', name:'Company calendar',       desc:'Shared org-wide holidays and events',                         status:'ok',      statusDetail:'12 holidays · 2026',          updatedBy:'Admin', updatedAt:'2 months ago' },
     // Sales process
     { id:'pipelines',        scope:'workspace', category:'Sales process', name:'Pipelines',       desc:'Manage multiple pipelines and their stages',                  status:'ok',      statusDetail:'3 pipelines · 28 stages',     updatedBy:'Admin', updatedAt:'3 weeks ago' },
@@ -138,6 +138,10 @@ const SETTINGS_ITEMS = [
     { id:'lead-conv-benchmarks', scope:'workspace', category:'Sales process', name:'Lead conversion benchmarks', desc:'Good / average / poor conversion rate targets by lead source', status:'ok', statusDetail:'8 sources configured', updatedBy:'Admin', updatedAt:'today' },
     { id:'pain-points',      scope:'workspace', category:'Sales process', name:'Pain points library', desc:'Reusable customer pain point templates',                  status:'ok',      statusDetail:'23 pain points',              updatedBy:'Admin', updatedAt:'2 weeks ago' },
     { id:'customer-types',   scope:'workspace', category:'Sales process', name:'Customer types',  desc:'Account classification tags (SMB, Mid-market, Enterprise…)', status:'ok',      statusDetail:'5 tiers',                     updatedBy:'Admin', updatedAt:'6 months ago' },
+    { id:'buyer-personas',    scope:'workspace', category:'Sales process', name:'Buyer personas',  desc:'Contact persona tags used in the contact form (e.g. Champion, Economic Buyer, End User)', status:'ok', statusDetail:'0 personas', updatedBy:'Admin', updatedAt:'never' },
+    { id:'competitors',      scope:'workspace', category:'Sales process', name:'Competitors',     desc:'Competitor names shown in the opportunity form for win/loss tracking', status:'ok', statusDetail:'0 competitors',              updatedBy:'Admin', updatedAt:'never' },
+    { id:'reasons-won',      scope:'workspace', category:'Sales process', name:'Reasons won',     desc:'Win reason options shown when a deal is marked Closed Won',    status:'ok',      statusDetail:'0 reasons',                   updatedBy:'Admin', updatedAt:'never' },
+    { id:'reasons-lost',     scope:'workspace', category:'Sales process', name:'Reasons lost',    desc:'Loss reason options shown when a deal is marked Closed Lost',  status:'ok',      statusDetail:'0 reasons',                   updatedBy:'Admin', updatedAt:'never' },
     { id:'industries',       scope:'workspace', category:'Sales process', name:'Industries',      desc:'Primary and sub-industry taxonomy',                           status:'ok',      statusDetail:'14 industries · 47 sub-types', updatedBy:'Admin', updatedAt:'4 months ago' },
     // Quoting
     { id:'price-book',       scope:'workspace', category:'Quoting', name:'Price book',            desc:'Product catalog for quotes — edit in Quotes tab',             status:'linked',  statusDetail:'15 products · 3 bundles',     updatedBy:'Admin', updatedAt:'1 week ago',   link:true },
@@ -516,17 +520,17 @@ const V2Card = ({ item, onOpen, settings, liveCounts = {} }) => {
         statusDetail = count > 0 ? `${count} custom field${count!==1?'s':''}` : null;
     }
 
-    // ── Company — fiscal year live label ───────────────────────────────────────
-    if (item.id === 'fiscal-year') {
-        const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-        const fyStart = parseInt(settings?.fiscalYearStart);
-        if (fyStart >= 1 && fyStart <= 12) {
-            const monthName = MONTH_NAMES[fyStart - 1];
-            const day = fyStart === 1 ? 'Jan 1' : monthName.slice(0, 3) + ' 1';
-            statusDetail = `Q1 starts ${day}`;
-        } else {
-            statusDetail = null;
-        }
+    if (item.id === 'competitors') {
+        const count = (settings?.competitors || []).length;
+        statusDetail = `${count} competitor${count !== 1 ? 's' : ''}`;
+    }
+    if (item.id === 'reasons-won') {
+        const count = (settings?.reasonsWon || []).length;
+        statusDetail = `${count} reason${count !== 1 ? 's' : ''}`;
+    }
+    if (item.id === 'reasons-lost') {
+        const count = (settings?.reasonsLost || []).length;
+        statusDetail = `${count} reason${count !== 1 ? 's' : ''}`;
     }
 
     // ── Quoting ───────────────────────────────────────────────────────────────
@@ -2730,6 +2734,123 @@ const MOST_USED_PAIN_POINTS = [
     { k:'Reps hopping between 5+ apps',     n:24 },
     { k:'Pipeline hygiene is poor',         n:19 },
 ];
+
+
+// ── Generic flat-list settings panel (competitors / reasons won / reasons lost) ──
+function FlatListDetail({ title, description, placeholder, settingsKey, settings, setSettings, onBack }) {
+    const saved   = settings?.[settingsKey] || [];
+    const [items, setItems]   = useState(() => [...saved]);
+    const [dirty, setDirty]   = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [newItem, setNewItem] = useState('');
+    const inputRef = useRef(null);
+
+    const handleSave = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, [settingsKey]: items }));
+        try {
+            const res = await dbFetch('/.netlify/functions/settings', { method:'PUT', body:JSON.stringify({ [settingsKey]: items }) });
+            const json = await res.json();
+            if (!json.success) console.error('save ' + settingsKey + ' failed:', json);
+        } catch(e) { console.error('save ' + settingsKey, e); }
+        setSaving(false); setDirty(false);
+    };
+    const handleCancel = () => { setItems([...saved]); setDirty(false); };
+
+    const addItem = () => {
+        const val = newItem.trim();
+        if (!val || items.includes(val)) return;
+        setItems(prev => [...prev, val]);
+        setNewItem('');
+        setDirty(true);
+        inputRef.current?.focus();
+    };
+    const removeItem = (idx) => {
+        setItems(prev => prev.filter((_, i) => i !== idx));
+        setDirty(true);
+    };
+    const moveItem = (idx, dir) => {
+        const next = [...items];
+        const swap = idx + dir;
+        if (swap < 0 || swap >= next.length) return;
+        [next[idx], next[swap]] = [next[swap], next[idx]];
+        setItems(next);
+        setDirty(true);
+    };
+
+    return (
+        <SPDetailPageChrome
+            crumb={title} title={title} subtitle={description}
+            statusDetail={`${items.length} ${items.length === 1 ? title.toLowerCase().replace(/s$/, '') : title.toLowerCase()}`}
+            updatedBy="Admin" updatedAt="now"
+            onBack={onBack} dirty={dirty} onCancel={handleCancel}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+            rightActions={
+                <div style={{ display:'flex', gap:8 }}>
+                    <button type="button" onClick={handleCancel} style={{ padding:'7px 14px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    <button type="button" onClick={handleSave} disabled={saving} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:saving?'default':'pointer', fontFamily:T.sans }}>{saving?'Saving…':'Save changes'}</button>
+                </div>
+            }
+        >
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:20 }}>
+                {/* Left — list */}
+                <CSectionCard title={`${title} · ${items.length}`} description={description}>
+                    {/* Add row */}
+                    <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+                        <input
+                            ref={inputRef}
+                            value={newItem}
+                            onChange={e => setNewItem(e.target.value)}
+                            onKeyDown={e => { if (e.key==='Enter') addItem(); if (e.key==='Escape') setNewItem(''); }}
+                            placeholder={placeholder}
+                            style={{ flex:1, padding:'7px 10px', border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:13, color:T.ink, fontFamily:T.sans, outline:'none' }}
+                        />
+                        <button type="button" onClick={addItem} disabled={!newItem.trim() || items.includes(newItem.trim())}
+                            style={{ padding:'7px 16px', background: newItem.trim() ? T.ink : T.borderStrong, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:13, fontWeight:600, cursor: newItem.trim()?'pointer':'default', fontFamily:T.sans }}>
+                            + Add
+                        </button>
+                    </div>
+                    {items.length === 0 && (
+                        <div style={{ padding:'24px 0', textAlign:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                            No {title.toLowerCase()} yet. Add one above.
+                        </div>
+                    )}
+                    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                        {items.map((item, idx) => (
+                            <div key={idx} style={{ display:'flex', alignItems:'center', gap:8, padding:'9px 12px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r+2 }}>
+                                {/* Reorder arrows */}
+                                <div style={{ display:'flex', flexDirection:'column', gap:1 }}>
+                                    <button onClick={() => moveItem(idx, -1)} disabled={idx===0}
+                                        style={{ background:'none', border:'none', cursor:idx===0?'default':'pointer', color:idx===0?T.inkMuted:T.inkMid, padding:'1px 3px', fontSize:10, lineHeight:1 }}>▲</button>
+                                    <button onClick={() => moveItem(idx, 1)} disabled={idx===items.length-1}
+                                        style={{ background:'none', border:'none', cursor:idx===items.length-1?'default':'pointer', color:idx===items.length-1?T.inkMuted:T.inkMid, padding:'1px 3px', fontSize:10, lineHeight:1 }}>▼</button>
+                                </div>
+                                <span style={{ flex:1, fontSize:13, color:T.ink, fontFamily:T.sans }}>{item}</span>
+                                <button onClick={() => removeItem(idx)}
+                                    style={{ background:'none', border:'none', color:T.danger, cursor:'pointer', fontSize:16, lineHeight:1, padding:'0 4px', fontFamily:T.sans }}>×</button>
+                            </div>
+                        ))}
+                    </div>
+                </CSectionCard>
+                {/* Right — tips */}
+                <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                    <CSectionCard title="Tips">
+                        <ul style={{ margin:0, paddingLeft:16, fontSize:12.5, color:T.inkMid, lineHeight:1.7, fontFamily:T.sans }}>
+                            <li>Items appear as options in the opportunity form.</li>
+                            <li>Use the arrows to set display order.</li>
+                            <li>Deleting an item won't affect existing opportunity records.</li>
+                        </ul>
+                    </CSectionCard>
+                </div>
+            </div>
+        </SPDetailPageChrome>
+    );
+}
+
+const CompetitorsDetail  = (p) => <FlatListDetail {...p} title="Competitors"  settingsKey="competitors" placeholder="e.g. Salesforce, HubSpot…"      description="Competitor names shown in the opportunity form for win/loss tracking." />;
+const BuyerPersonasDetail = (p) => <FlatListDetail {...p} title="Buyer personas" settingsKey="buyerPersonas" placeholder="e.g. Champion, Economic Buyer, End User…" description="Persona tags available in the contact form to classify buyer roles." />;
+const ReasonsWonDetail   = (p) => <FlatListDetail {...p} title="Reasons won"  settingsKey="reasonsWon"  placeholder="e.g. Best price, Strong support…" description="Win reason options shown when a deal is marked Closed Won." />;
+const ReasonsLostDetail  = (p) => <FlatListDetail {...p} title="Reasons lost" settingsKey="reasonsLost" placeholder="e.g. Lost to competitor, Budget…"  description="Loss reason options shown when a deal is marked Closed Lost." />;
 
 const PainPointsDetail = ({ settings, setSettings, onBack }) => {
     const saved    = settings?.painPoints?.length ? settings.painPoints : DEFAULT_PAIN_POINTS;
@@ -15986,6 +16107,9 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         'pain-points':          'pain-points',
         'customer-types':       'customer-types',
         'industries':           'industries',
+        'competitors':          'competitors',
+        'reasons-won':          'reasons-won',
+        'reasons-lost':         'reasons-lost',
     };
 
     // ── Live card badge counts — fetched once on mount ────────────────────────
@@ -16122,7 +16246,11 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         // Sales process Group 2 detail pages
         if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'pain-points')     return <PainPointsDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'competitors')     return <CompetitorsDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'reasons-won')     return <ReasonsWonDetail      settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'reasons-lost')    return <ReasonsLostDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
+        if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
 
         // Generic wrapper for all other panels

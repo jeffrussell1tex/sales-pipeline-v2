@@ -21,7 +21,11 @@ export function useActivities(deps) {
         if (!activity) return;
 
         showConfirm('Are you sure you want to delete this activity?', () => {
-            setActivities(prev => prev.filter(a => a.id !== activityId));
+            let snapshot;
+            setActivities(prev => {
+                snapshot = prev.slice();
+                return prev.filter(a => a.id !== activityId);
+            });
 
             dbFetch(`/.netlify/functions/activities?id=${activityId}`, { method: 'DELETE' })
                 .then(res => {
@@ -29,7 +33,7 @@ export function useActivities(deps) {
                         console.error('Failed to delete activity on server, restoring. Status:', res.status);
                         setActivities(prev => {
                             if (prev.some(a => a.id === activityId)) return prev;
-                            return [...prev, activity].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+                            return snapshot;
                         });
                     }
                 })
@@ -37,9 +41,23 @@ export function useActivities(deps) {
                     console.error('Failed to delete activity (network error), restoring:', err);
                     setActivities(prev => {
                         if (prev.some(a => a.id === activityId)) return prev;
-                        return [...prev, activity].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+                        return snapshot;
                     });
                 });
+
+            softDelete(
+                `Activity "${activity.type || 'Activity'}"`,
+                () => {},
+                () => {
+                    setActivities(snapshot);
+                    setUndoToast(null);
+                    dbFetch('/.netlify/functions/activities', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(activity),
+                    }).catch(err => console.error('Failed to restore activity to DB:', err));
+                }
+            );
         });
     };
 

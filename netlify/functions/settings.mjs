@@ -28,6 +28,9 @@ export const handler = async (event) => {
                 companyLogo:      row.companyLogo     || '',
                 fiscalYearStart:  row.fiscalYearStart || '',
                 funnelStages:     row.extra?.funnelStages || row.stages || [],
+                competitors:      row.extra?.competitors      || [],
+                reasonsWon:       row.extra?.reasonsWon       || [],
+                reasonsLost:      row.extra?.reasonsLost      || [],
                 products:         row.extra?.products        || [],
                 taskTypes:        row.taskTypes       || ['Call', 'Meeting', 'Email'],
                 painPoints:       row.extra?.painPoints || row.painPoints || [],
@@ -148,6 +151,9 @@ export const handler = async (event) => {
                 customerTypeTiers:    'customerTypeTiers'    in data ? (data.customerTypeTiers    || null) : existingExtra.customerTypeTiers    || null,
                 industries:           'industries'           in data ? (data.industries           || null) : existingExtra.industries           || null,
                 painPoints:           'painPoints'           in data ? (data.painPoints           || [])   : existingExtra.painPoints           || [],
+                competitors:          'competitors'          in data ? (data.competitors          || [])   : existingExtra.competitors          || [],
+                reasonsWon:           'reasonsWon'           in data ? (data.reasonsWon           || [])   : existingExtra.reasonsWon           || [],
+                reasonsLost:          'reasonsLost'          in data ? (data.reasonsLost          || [])   : existingExtra.reasonsLost          || [],
                 // Store encrypted ciphertext — never the plaintext key
                 anthropicApiKey:  encryptedApiKey,
             };

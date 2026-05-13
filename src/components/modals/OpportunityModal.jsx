@@ -487,8 +487,11 @@ function DealHistoryTab({ opportunity, oppActivities, stages, settings, contacts
 // ─────────────────────────────────────────────────────────────
 //  Contact Engagement Tab (preserved)
 // ─────────────────────────────────────────────────────────────
-function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, onUpdate, saving }) {
+function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, onUpdate, saving,
+    selectedContacts, selectedContactIds, setSelectedContacts, setSelectedContactIds, handleChange }) {
     const fmtDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+    const [ctSearch, setCtSearch] = useState('');
+    const [showCtSuggestions, setShowCtSuggestions] = useState(false);
 
     const contactEngagement = {};
     oppActivities.forEach(a => {
@@ -511,6 +514,64 @@ function ContactEngagementTab({ opportunity, oppActivities, contacts, onClose, o
 
     return (
         <div style={{ paddingBottom: '1rem' }}>
+            {/* Add contact to buying committee */}
+            {selectedContacts !== undefined && (() => {
+                const filtered = (contacts || []).filter(c => {
+                    const fullName = `${c.firstName} ${c.lastName}`;
+                    const searchLower = ctSearch.toLowerCase();
+                    const matchesSearch = !ctSearch
+                        || fullName.toLowerCase().includes(searchLower)
+                        || (c.company || '').toLowerCase().includes(searchLower);
+                    const notAlreadyAdded = !(selectedContacts || []).some(s => s.startsWith(fullName));
+                    return matchesSearch && notAlreadyAdded;
+                });
+                return (
+                    <div style={{ marginBottom: 16 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMid, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8, fontFamily: T.sans }}>Add to buying committee</div>
+                        <input type="text" value={ctSearch}
+                            onChange={e => setCtSearch(e.target.value)}
+                            placeholder="Search contacts…"
+                            autoComplete="off"
+                            style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, outline: 'none', boxSizing: 'border-box', marginBottom: 6 }}/>
+                        {filtered.length > 0 && (
+                            <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                                {filtered.map((contact, i) => (
+                                    <div key={contact.id}
+                                        onClick={() => {
+                                            const display = `${contact.firstName} ${contact.lastName}${contact.title ? ` (${contact.title})` : ''}`;
+                                            const contactId = contact.id;
+                                            // Use functional updates to always read latest state, not stale closure
+                                            setSelectedContacts(prev => {
+                                                const updated = [...prev, display];
+                                                handleChange('contacts', updated.join(', '));
+                                                return updated;
+                                            });
+                                            setSelectedContactIds(prev => [...prev, contactId]);
+                                            setCtSearch('');
+                                        }}
+                                        style={{ padding: '9px 12px', cursor: 'pointer', borderTop: i === 0 ? 'none' : `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 10, background: 'transparent' }}
+                                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                        <Avatar name={`${contact.firstName} ${contact.lastName}`} size={28}/>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontWeight: 600, fontSize: 13, color: T.ink, fontFamily: T.sans }}>{contact.firstName} {contact.lastName}</div>
+                                            {(contact.title || contact.company) && (
+                                                <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans }}>
+                                                    {[contact.title, contact.company].filter(Boolean).join(' · ')}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div style={{ fontSize: 11, color: T.info, fontWeight: 600, fontFamily: T.sans }}>+ Add</div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {ctSearch && filtered.length === 0 && (
+                            <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>No contacts found</div>
+                        )}
+                    </div>
+                );
+            })()}
             {enriched.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2rem', color: T.inkMuted, fontSize: '0.8125rem', background: T.surface, borderRadius: T.r, border: `1px dashed ${T.border}`, fontFamily: T.sans }}>
                     No contacts linked yet.
@@ -937,8 +998,7 @@ export default function OpportunityModal({
     onSaveComment, onEditComment, onDeleteComment,
     onClose, onSave, onAddAccount, onSaveNewContact, onSaveNewAccount, onAddContact,
     lastCreatedAccountName, onAddRep, lastCreatedRepName,
-    errorMessage, onDismissError, saving
-}) {
+    errorMessage, onDismissError, saving, onOpenNestedContact, onOpenNestedAccount }) {
     const stages = (settings.funnelStages && settings.funnelStages.length > 0)
         ? settings.funnelStages.filter(s => s.name.trim()).map(s => s.name)
         : ['Qualification', 'Discovery', 'Evaluation (Demo)', 'Proposal', 'Negotiation/Review', 'Contracts', 'Closed Won', 'Closed Lost'];
@@ -979,6 +1039,9 @@ export default function OpportunityModal({
             unionized:       base.unionized ?? 'No',
             forecastedCloseDate: base.forecastedCloseDate ?? [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0'), String(new Date().getDate()).padStart(2,'0')].join('-'),
             pipelineId:      base.pipelineId ?? activePipelineId ?? 'default',
+            competitors:     base.competitors ?? [],
+            reasonWon:       base.reasonWon ?? '',
+            reasonLost:      base.reasonLost ?? '',
             arr:             parseFloat(base.arr) || 0,
             implementationCost: parseFloat(base.implementationCost) || 0,
             productRevenues: (base.productRevenues && typeof base.productRevenues === 'object') ? base.productRevenues : {},
@@ -1034,15 +1097,14 @@ export default function OpportunityModal({
     // ── Fiscal quarter helper ────────────────────────────────
     const calculateCloseQuarter = (dateString) => {
         if (!dateString) return '';
-        // Normalize to date-only + noon to avoid timezone rollback on full ISO strings
-        const date = new Date(dateString.slice(0, 10) + 'T12:00:00');
-        if (isNaN(date)) return '';
+        const date = new Date(dateString);
         const month = date.getMonth() + 1;
         const year = date.getFullYear();
-        const fiscalStart = parseInt(settings?.fiscalYearStart) || 1; // January default
-        const monthsIn = (month - fiscalStart + 12) % 12;
-        const quarter = Math.floor(monthsIn / 3) + 1;
-        const fiscalYear = fiscalStart === 1 ? year : (month >= fiscalStart ? year + 1 : year);
+        const fiscalStart = settings?.fiscalYearStart || 10;
+        let monthsFromFiscalStart = month - fiscalStart;
+        if (monthsFromFiscalStart < 0) monthsFromFiscalStart += 12;
+        const quarter = Math.floor(monthsFromFiscalStart / 3) + 1;
+        const fiscalYear = month >= fiscalStart ? year + 1 : year;
         return `FY${fiscalYear} Q${quarter}`;
     };
     const closeQuarter = calculateCloseQuarter(formData.forecastedCloseDate);
@@ -1169,7 +1231,7 @@ export default function OpportunityModal({
     const activityTypeIcon = { Call: '📞', Email: '✉️', Meeting: '🤝', Demo: '🖥️', 'Proposal Sent': '📄', 'Follow-up': '🔄', Other: '📝' };
 
     // ── Drag + resize (unchanged) ─────────────────────────────
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(1100, 780, 760, 540);
 
     // ── Deal age metadata ─────────────────────────────────────
@@ -1227,7 +1289,7 @@ export default function OpportunityModal({
 
             {/* Three-div overlay pattern — UNCHANGED */}
             <div style={{ ...overlayStyle }} />
-            <div style={clickCatcherStyle} />
+            <div {...clickCatcherProps} />
 
             {/* Modal container */}
             <div
@@ -1281,6 +1343,16 @@ export default function OpportunityModal({
                         {/* Detail tab pills (only for existing opps) */}
                         {opportunity && (
                             <div style={{ display: 'flex', gap: 2 }}>
+                                {/* Opp — always visible, navigates back to main deal view */}
+                                <button type="button" onClick={() => setDetailTab(null)}
+                                    style={{ padding: '3px 10px', fontSize: 11, fontWeight: !detailTab ? 700 : 500, fontFamily: T.sans,
+                                        cursor: 'pointer', border: 'none',
+                                        borderBottom: !detailTab ? `2px solid ${T.gold}` : '2px solid transparent',
+                                        background: 'transparent',
+                                        color: !detailTab ? T.gold : 'rgba(230,221,208,0.55)',
+                                        transition: 'all 0.15s' }}>
+                                    Opp
+                                </button>
                                 {[
                                     { id: 'history',   label: 'History'   },
                                     { id: 'contacts',  label: 'Contacts'  },
@@ -1321,7 +1393,12 @@ export default function OpportunityModal({
                             {detailTab === 'contacts' && (
                                 <ContactEngagementTab opportunity={opportunity} oppActivities={oppActivities} contacts={contacts}
                                     onClose={onClose} saving={saving}
-                                    onUpdate={() => { const f = document.getElementById('opp-form'); if (f) f.requestSubmit(); }}/>
+                                    selectedContacts={selectedContacts} selectedContactIds={selectedContactIds}
+                                    setSelectedContacts={setSelectedContacts} setSelectedContactIds={setSelectedContactIds}
+                                    handleChange={handleChange}
+                                    onUpdate={() => {
+                                        onSave({ ...formData, arr: parseFloat(formData.arr) || 0, probability: (formData.probability !== null && formData.probability !== undefined && !isNaN(formData.probability)) ? formData.probability : null, closeQuarter, contactIds: selectedContactIds });
+                                    }}/>
                             )}
                             {detailTab === 'ai-score' && (
                                 <AiScoreTab opportunity={opportunity} oppActivities={oppActivities} currentUser={currentUser}
@@ -1695,7 +1772,7 @@ export default function OpportunityModal({
                                                     </div>
                                                 ))}
                                                 <div onMouseDown={e => e.preventDefault()}
-                                                    onClick={() => { setShowContactSuggestions(false); setNestedModal({ type: 'contact', firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }}
+                                                    onClick={(e) => { e.stopPropagation(); setShowContactSuggestions(false); onOpenNestedContact ? onOpenNestedContact({ firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }) : setNestedModal({ type: 'contact', firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }}
                                                     style={{ padding: '8px 10px', cursor: 'pointer', color: T.info, fontWeight: 600, fontSize: 13, fontFamily: T.sans }}
                                                     onMouseEnter={e => e.currentTarget.style.background = T.surface2}
                                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
@@ -1752,6 +1829,75 @@ export default function OpportunityModal({
                                             );
                                         })()}
                                     </div>
+
+                                    {/* ── Competitors ── */}
+                                    {(() => {
+                                        const competitorList = settings?.competitors || [];
+                                        const selected = Array.isArray(formData.competitors) ? formData.competitors : [];
+                                        if (competitorList.length === 0 && selected.length === 0) return null;
+                                        return (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <label style={fieldLabelStyle}>Competitors</label>
+                                                {selected.length > 0 && (
+                                                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                                                        {selected.map((c, idx) => (
+                                                            <span key={idx} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(156,58,46,0.10)', border: '1px solid rgba(156,58,46,0.25)', borderRadius: T.r, padding: '3px 8px', fontSize: 12, color: T.danger, fontFamily: T.sans }}>
+                                                                {c}
+                                                                <button type="button" onClick={() => handleChange('competitors', selected.filter((_, i) => i !== idx))}
+                                                                    style={{ background: 'none', border: 'none', color: T.danger, cursor: 'pointer', fontSize: '0.875rem', padding: 0, lineHeight: 1 }}>×</button>
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {competitorList.length > 0 && (
+                                                    <select value="" onChange={e => {
+                                                        const val = e.target.value;
+                                                        if (val && !selected.includes(val))
+                                                            handleChange('competitors', [...selected, val]);
+                                                    }} style={{ ...inputStyle(false), cursor: 'pointer' }}>
+                                                        <option value="">Add a competitor…</option>
+                                                        {competitorList.map(c => (
+                                                            <option key={c} value={c} disabled={selected.includes(c)}>
+                                                                {c}{selected.includes(c) ? ' ✓' : ''}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* ── Reason Won (only when Closed Won) ── */}
+                                    {formData.stage === 'Closed Won' && (() => {
+                                        const reasonsWon = settings?.reasonsWon || [];
+                                        if (reasonsWon.length === 0) return null;
+                                        return (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <label style={fieldLabelStyle}>Reason Won</label>
+                                                <select value={formData.reasonWon || ''} onChange={e => handleChange('reasonWon', e.target.value)}
+                                                    style={{ ...inputStyle(false), cursor: 'pointer' }}>
+                                                    <option value="">Select a reason…</option>
+                                                    {reasonsWon.map(r => <option key={r} value={r}>{r}</option>)}
+                                                </select>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* ── Reason Lost (only when Closed Lost) ── */}
+                                    {formData.stage === 'Closed Lost' && (() => {
+                                        const reasonsLost = settings?.reasonsLost || [];
+                                        if (reasonsLost.length === 0) return null;
+                                        return (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <label style={fieldLabelStyle}>Reason Lost</label>
+                                                <select value={formData.reasonLost || ''} onChange={e => handleChange('reasonLost', e.target.value)}
+                                                    style={{ ...inputStyle(false), cursor: 'pointer' }}>
+                                                    <option value="">Select a reason…</option>
+                                                    {reasonsLost.map(r => <option key={r} value={r}>{r}</option>)}
+                                                </select>
+                                            </div>
+                                        );
+                                    })()}
 
                                     {/* ── Next steps (prominent gold accent) ── */}
                                     {canViewField('nextSteps') && (
@@ -1952,31 +2098,6 @@ export default function OpportunityModal({
             </div>
 
             {/* Nested new contact modal (preserved) */}
-            {nestedModal && nestedModal.type === 'contact' && (
-                <div className="modal-overlay" style={{ zIndex: 2000 }} onClick={() => setNestedModal(null)}>
-                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px', background: T.surface, borderRadius: 8, fontFamily: T.sans }}>
-                        <h2 style={{ marginBottom: '1rem', fontSize: 16, fontWeight: 700, color: T.ink }}>New Contact</h2>
-                        <NestedNewContactForm
-                            firstName={nestedModal.firstName}
-                            lastName={nestedModal.lastName}
-                            onSave={(data) => {
-                                if (onSaveNewContact) {
-                                    const saved = onSaveNewContact(data);
-                                    if (saved) {
-                                        const display = `${saved.firstName} ${saved.lastName}${saved.title ? ` (${saved.title})` : ''}`;
-                                        const newContacts = [...selectedContacts, display];
-                                        const newIds = [...selectedContactIds, saved.id];
-                                        setSelectedContacts(newContacts);
-                                        setSelectedContactIds(newIds);
-                                        handleChange('contacts', newContacts.join(', '));
-                                    }
-                                }
-                                setNestedModal(null);
-                            }}
-                            onCancel={() => setNestedModal(null)}/>
-                    </div>
-                </div>
-            )}
         </>
     );
 }

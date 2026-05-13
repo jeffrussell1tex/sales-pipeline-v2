@@ -93,7 +93,7 @@ export default function AccountModal({
     const [customerTypeInput,    setCustomerTypeInput]    = useState('');
     const [showCustomerTypeSugg, setShowCustomerTypeSugg] = useState(false);
 
-    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, containerRef } = useDraggable();
+    const { dragHandleProps, dragOffsetStyle, overlayStyle, clickCatcherStyle, clickCatcherProps, containerRef } = useDraggable();
     const { size, getResizeHandleProps } = useResizable(800, 560, 520, 360);
 
     // ── derived lists ────────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ export default function AccountModal({
 
         {/* Overlay — transparent backdrop; click-outside closes */}
         <div style={{ ...overlayStyle }} />
-        <div style={clickCatcherStyle} />
+        <div {...clickCatcherProps} />
 
         {/* Modal — fixed-positioned, freely draggable */}
         <div
@@ -528,7 +528,7 @@ export default function AccountModal({
                                 <select
                                     value={formData.accountSegment || ''}
                                     onChange={e => setFormData(prev => ({ ...prev, accountSegment: e.target.value }))}
-                                    style={{ width:'100%' }}
+                                    style={{ width:'100%' }} data-placeholder={!formData.accountSegment ? 'true' : undefined}
                                 >
                                     <option value="">— Not set —</option>
                                     {(() => {
@@ -539,27 +539,7 @@ export default function AccountModal({
                                         return ['Enterprise','Mid-Market','Partner','SMB','Strategic'].map(t => <option key={t} value={t}>{t}</option>);
                                     })()}
                                 </select>
-                                <span className="field-hint">Account segment — size or revenue classification</span>
-                            </div>
-
-                            {/* ── Segment ── */}
-                            <div className="form-group full">
-                                <label>Segment</label>
-                                <select
-                                    value={formData.accountSegment || ''}
-                                    onChange={e => setFormData(prev => ({ ...prev, accountSegment: e.target.value }))}
-                                    style={{ width:'100%' }}
-                                >
-                                    <option value="">— Not set —</option>
-                                    {(() => {
-                                        const tiers = settings?.customerTypeTiers;
-                                        if (Array.isArray(tiers) && tiers.length > 0 && typeof tiers[0] === 'object') {
-                                            return [...tiers].sort((a,b) => a.tier.localeCompare(b.tier)).map(t => <option key={t.tier} value={t.tier}>{t.tier}</option>);
-                                        }
-                                        return ['Enterprise','Mid-Market','Partner','SMB','Strategic'].map(t => <option key={t} value={t}>{t}</option>);
-                                    })()}
-                                </select>
-                                <span className="field-hint">Account segment — size or revenue classification</span>
+                                <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>Account segment — size or revenue classification</span>
                             </div>
 
                             {/* ── Customer Types ── */}
