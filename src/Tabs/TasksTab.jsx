@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../AppContext';
+import { dbFetch } from '../utils/storage';
 
 // ── Design tokens ──────────────────────────────────────────────
 const T = {
@@ -108,10 +109,11 @@ function SnoozePicker({ task, onSnooze, onClose, anchorRect }) {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const addDays = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; };
     const options = [
-        { label: 'Tomorrow',   sublabel: new Date(addDays(1)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}), days: 1 },
-        { label: 'In 3 days',  sublabel: new Date(addDays(3)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}), days: 3 },
-        { label: 'Next week',  sublabel: new Date(addDays(7)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}), days: 7 },
-        { label: 'In 2 weeks', sublabel: new Date(addDays(14)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}), days: 14 },
+        { label: 'Tomorrow',  sublabel: new Date(addDays(1)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),  days: 1  },
+        { label: '2 Days',    sublabel: new Date(addDays(2)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),  days: 2  },
+        { label: '3 Days',    sublabel: new Date(addDays(3)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),  days: 3  },
+        { label: '1 Week',    sublabel: new Date(addDays(7)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),  days: 7  },
+        { label: '2 Weeks',   sublabel: new Date(addDays(14)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}), days: 14 },
     ];
     return (
         <div ref={ref} style={{ position: 'fixed', top, left, zIndex: 9999, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, boxShadow: '0 8px 24px rgba(42,38,34,0.15)', width: POPOVER_W, overflow: 'hidden', fontFamily: T.sans }}>
@@ -203,7 +205,7 @@ function SubGroupHeader({ label, count, accent, subtle }) {
 }
 
 // ── Open task row ──────────────────────────────────────────────
-function OpenTaskRow({ task, isOverdue, opportunities, contacts, getStageColor, canEdit, handleCompleteTask, handleSaveTask, setViewingTask, setEditingTask, setShowTaskModal }) {
+function OpenTaskRow({ task, isOverdue, opportunities, contacts, getStageColor, canEdit, handleCompleteTask, handleSaveTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal }) {
     const [hov,        setHov]        = useState(false);
     const [snoozeOpen, setSnoozeOpen] = useState(false);
     const [snoozeAnchorRect, setSnoozeAnchorRect] = useState(null);
@@ -227,7 +229,27 @@ function OpenTaskRow({ task, isOverdue, opportunities, contacts, getStageColor, 
     const handleSnooze = async (newDate) => {
         setSnoozeOpen(false);
         if (!canEdit) return;
-        await handleSaveTask({ ...task, dueDate: newDate, status: 'Open', completed: false });
+        const updated = { ...task, dueDate: newDate, status: 'Open', completed: false };
+        // Optimistic update — no modal
+        setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+        try {
+            const res = await dbFetch('/.netlify/functions/tasks', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updated),
+            });
+            const data = await res.json();
+            if (res.ok && data.task) {
+                setTasks(prev => prev.map(t => t.id === task.id ? data.task : t));
+            } else if (!res.ok) {
+                // Revert on failure
+                setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+                console.error('Snooze save failed:', data);
+            }
+        } catch (err) {
+            setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+            console.error('Snooze network error:', err);
+        }
     };
 
     return (
@@ -625,7 +647,7 @@ export default function TasksTab() {
         showConfirm,
         getStageColor, calculateDealHealth,
         visibleTasks,
-        handleDeleteTask, handleCompleteTask, handleSaveTask,
+        handleDeleteTask, handleCompleteTask, handleSaveTask, setTasks,
         handleAddTaskToCalendar,
         calendarEvents, calendarConnected, calendarLoading,
         allPipelines, activePipeline,
@@ -784,7 +806,7 @@ export default function TasksTab() {
     const handleAddTask = () => { setEditingTask(null); setShowTaskModal(true); };
 
     // Row props bundle for OpenTaskRow
-    const rowProps = { opportunities, contacts, getStageColor, canEdit, handleCompleteTask, handleSaveTask, setViewingTask, setEditingTask, setShowTaskModal };
+    const rowProps = { opportunities, contacts, getStageColor, canEdit, handleCompleteTask, handleSaveTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal };
 
     // ── Sub-tab views config ───────────────────────────────────
     const views = [
