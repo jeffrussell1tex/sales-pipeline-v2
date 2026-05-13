@@ -539,7 +539,7 @@ export default function AccountModal({
                                         return ['Enterprise','Mid-Market','Partner','SMB','Strategic'].map(t => <option key={t} value={t}>{t}</option>);
                                     })()}
                                 </select>
-                                <span className="field-hint">Account segment — size or revenue classification</span>
+                                <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '400' }}>Account segment — size or revenue classification</span>
                             </div>
 
                             {/* ── Customer Types ── */}
