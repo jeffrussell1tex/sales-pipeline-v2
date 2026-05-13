@@ -61,6 +61,502 @@ const Icon = ({ name, size=13, color='currentColor' }) => {
     }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-components defined OUTSIDE ContactsTab so React sees stable references
+// across re-renders. Defining components inline inside a parent function causes
+// React to treat them as new component types on every render, which forces a
+// full unmount+remount of the entire row list — triggering the browser's focus
+// restoration and scroll-to-top behaviour after any modal closes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Sort tabs ─────────────────────────────────────────────────
+function SortTabs({ contactsSortBy, setContactsSortBy, sorted, companyList }) {
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, marginBottom: contactsSortBy === 'company' ? 0 : 2 }}>
+            {[
+                { key: 'lastName',  label: 'Last Name'  },
+                { key: 'firstName', label: 'First Name' },
+                { key: 'company',   label: 'Company'    },
+            ].map(opt => {
+                const active = contactsSortBy === opt.key;
+                return (
+                    <button key={opt.key} onClick={() => setContactsSortBy(opt.key)} style={{
+                        padding: '8px 16px', border: 'none',
+                        borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent',
+                        background: 'transparent',
+                        color: active ? T.ink : T.inkMuted,
+                        fontSize: 12, fontWeight: active ? 600 : 400,
+                        cursor: 'pointer', fontFamily: T.sans,
+                        transition: 'color 120ms, border-color 120ms',
+                        whiteSpace: 'nowrap', marginBottom: -1,
+                    }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.color = T.inkMid; }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.color = T.inkMuted; }}>
+                        {opt.label}
+                    </button>
+                );
+            })}
+            <div style={{ flex: 1 }} />
+            <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans, paddingBottom: 4, paddingRight: 4 }}>
+                {sorted.length} contact{sorted.length !== 1 ? 's' : ''}
+                {contactsSortBy === 'company' && companyList.length > 0 && ` · ${companyList.length} companies`}
+            </div>
+        </div>
+    );
+}
+
+// ── Letter jump bar (flat modes only) ─────────────────────────
+function LetterBar({ sorted, sortField }) {
+    return (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 1, padding: '6px 12px', borderBottom: `1px solid ${T.border}`, background: T.surface2 }}>
+            {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => {
+                const hasMatch = sorted.some(c => ((c[sortField]||'')[0]||'').toUpperCase() === letter);
+                return (
+                    <div key={letter}
+                        onClick={() => {
+                            if (!hasMatch) return;
+                            const el = document.getElementById('contact-letter-' + letter);
+                            if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                        }}
+                        style={{
+                            fontSize: 10, fontWeight: 700, width: 20, height: 18,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: hasMatch ? T.info : T.border,
+                            cursor: hasMatch ? 'pointer' : 'default',
+                            borderRadius: T.r, userSelect: 'none', transition: 'all 80ms',
+                            fontFamily: T.sans,
+                        }}
+                        onMouseEnter={e => { if (hasMatch) { e.currentTarget.style.background = T.surface2; e.currentTarget.style.color = T.ink; } }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = hasMatch ? T.info : T.border; }}>
+                        {letter}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+// ── Table column header (flat modes) ──────────────────────────
+function TableHeader({ selectMode, selectedIds, sorted, toggleSelectAll }) {
+    return (
+        <div style={{
+            display: 'grid',
+            gridTemplateColumns: selectMode ? '36px 1.8fr 1.4fr 1fr 1fr 1.6fr 28px' : '1.8fr 1.4fr 1fr 1fr 1.6fr 28px',
+            alignItems: 'center', height: 34, padding: '0 14px',
+            background: T.surface2, borderBottom: `1px solid ${T.border}`,
+            fontSize: 10, fontWeight: 700, color: T.inkMuted,
+            letterSpacing: 0.6, textTransform: 'uppercase', fontFamily: T.sans,
+            position: 'sticky', top: 0, zIndex: 1,
+        }}>
+            {selectMode && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={toggleSelectAll}>
+                    <div style={{ width: 14, height: 14, borderRadius: T.r, border: `1.5px solid ${selectedIds.length === sorted.length && sorted.length > 0 ? T.ink : T.borderStrong}`, background: selectedIds.length === sorted.length && sorted.length > 0 ? T.ink : 'transparent', cursor: 'pointer' }} />
+                </div>
+            )}
+            <div style={{ paddingLeft: 2 }}>Name</div>
+            <div>Company</div>
+            <div>Title</div>
+            <div>Phone</div>
+            <div>Email</div>
+            <div />
+        </div>
+    );
+}
+
+// ── Contact row (flat modes) ───────────────────────────────────
+function ContactRow({ contact, isEven, anchorId, selectMode, selectedIds, oppCount, openRowMenu, setOpenRowMenu, toggleSelect, setViewingContact, handleEditContact, handleDeleteOne }) {
+    const [hov, setHov] = useState(false);
+    const isSelected = selectedIds.includes(contact.id);
+    const initials   = ((contact.firstName||'')[0]||'') + ((contact.lastName||'')[0]||'');
+    const opps       = oppCount[contact.id] || 0;
+
+    return (
+        <div
+            id={anchorId || undefined}
+            onMouseEnter={() => setHov(true)}
+            onMouseLeave={() => setHov(false)}
+            onClick={() => selectMode ? toggleSelect(contact.id) : setViewingContact(contact)}
+            style={{
+                display: 'grid',
+                gridTemplateColumns: selectMode ? '36px 1.8fr 1.4fr 1fr 1fr 1.6fr 28px' : '1.8fr 1.4fr 1fr 1fr 1.6fr 28px',
+                alignItems: 'center', height: 48, padding: '0 14px',
+                borderBottom: `1px solid ${T.border}`,
+                background: isSelected ? 'rgba(42,38,34,0.04)' : hov ? T.surface2 : isEven ? T.surface : T.bg,
+                cursor: 'pointer', fontFamily: T.sans, transition: 'background 80ms',
+            }}>
+
+            {/* Checkbox */}
+            {selectMode && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onClick={e => { e.stopPropagation(); toggleSelect(contact.id); }}>
+                    <div style={{ width: 16, height: 16, borderRadius: T.r, border: `1.5px solid ${isSelected ? T.ink : T.borderStrong}`, background: isSelected ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
+                        {isSelected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fbf8f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
+                    </div>
+                </div>
+            )}
+
+            {/* Name + avatar + badges */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                <div style={{ width: 24, height: 24, borderRadius: '50%', background: avatarBg(contact.firstName + contact.lastName), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, flexShrink: 0, textTransform: 'uppercase' }}>
+                    {initials || '?'}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'nowrap' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {contact.firstName} {contact.lastName}
+                        </span>
+                        {contact.isVip && <span style={{ fontSize: 8, fontWeight: 700, color: T.goldInk, background: 'rgba(200,185,154,0.2)', padding: '1px 5px', borderRadius: 2, border: `1px solid ${T.gold}`, letterSpacing: 0.5, flexShrink: 0 }}>VIP</span>}
+                        {contact.isDnc && <span style={{ fontSize: 8, fontWeight: 700, color: T.danger, background: 'rgba(156,58,46,0.1)', padding: '1px 5px', borderRadius: 2, border: `1px solid rgba(156,58,46,0.3)`, letterSpacing: 0.5, flexShrink: 0 }}>DNC</span>}
+                        {opps > 0 && <span style={{ fontSize: 9, fontWeight: 700, color: T.info, background: `${T.info}18`, padding: '1px 5px', borderRadius: 999, flexShrink: 0, border: `1px solid ${T.info}30` }}>{opps} opp{opps > 1 ? 's' : ''}</span>}
+                    </div>
+                    {contact.role && (
+                        <div style={{ fontSize: 10, color: T.inkMuted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.role}</div>
+                    )}
+                </div>
+            </div>
+
+            {/* Company */}
+            <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                {contact.company || '—'}
+            </div>
+
+            {/* Title */}
+            <div style={{ fontSize: 12, color: T.inkMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                {contact.title || '—'}
+            </div>
+
+            {/* Phone */}
+            <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                {contact.phone || '—'}
+            </div>
+
+            {/* Email */}
+            <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
+                {contact.email
+                    ? <a href={`mailto:${contact.email}`} onClick={e => e.stopPropagation()}
+                        style={{ color: T.info, textDecoration: 'none', fontFamily: T.sans }}
+                        onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                        onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}>
+                        {contact.email}
+                      </a>
+                    : <span style={{ color: T.inkMuted }}>—</span>
+                }
+            </div>
+
+            {/* Actions ⋯ */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+                onClick={e => e.stopPropagation()}>
+                <button
+                    id={'contact-row-btn-' + contact.id}
+                    onClick={e => { e.stopPropagation(); setOpenRowMenu(openRowMenu === contact.id ? null : contact.id); }}
+                    style={{ background: openRowMenu === contact.id ? 'rgba(200,185,154,0.25)' : 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 3 }}>
+                    <Icon name="dots" size={14} color={openRowMenu === contact.id ? T.goldInk : hov ? T.inkMid : T.border} />
+                </button>
+                {openRowMenu === contact.id && (
+                    <div id={'contact-row-menu-' + contact.id} onClick={e => e.stopPropagation()}
+                        style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 200,
+                            width: 180, background: T.surface, border: `1px solid ${T.borderStrong}`,
+                            borderRadius: 4, padding: 4, boxShadow: '0 8px 24px rgba(42,38,34,0.12)', fontFamily: T.sans }}>
+                        <div style={{ position: 'absolute', top: -6, right: 10, width: 12, height: 12,
+                            background: T.surface, border: `1px solid ${T.borderStrong}`,
+                            borderRight: 'none', borderBottom: 'none', transform: 'rotate(45deg)' }}/>
+                        {[
+                            { icon: '✎', label: 'Edit contact', fn: () => { handleEditContact(contact); setOpenRowMenu(null); } },
+                            { icon: '👁', label: 'View profile',  fn: () => { setViewingContact(contact); setOpenRowMenu(null); } },
+                            null,
+                            { icon: '🗑', label: 'Delete',        fn: () => { handleDeleteOne(contact); setOpenRowMenu(null); }, danger: true },
+                        ].map((item, idx) => item === null ? (
+                            <div key={idx} style={{ height: 1, background: T.border, margin: '2px 6px' }}/>
+                        ) : (
+                            <div key={idx} onClick={item.fn}
+                                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                                    borderRadius: 3, cursor: 'pointer', color: item.danger ? T.danger : T.ink }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                <span style={{ fontSize: 12, width: 14, textAlign: 'center' }}>{item.icon}</span>
+                                <span style={{ fontSize: 12.5, fontWeight: 500 }}>{item.label}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ── Empty state ────────────────────────────────────────────────
+function EmptyState({ search, canEdit, handleAddContact }) {
+    return (
+        <div style={{ padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
+            {search ? `No contacts matching "${search}".` : 'No contacts yet.'}
+            {canEdit && !search && (
+                <div style={{ marginTop: 12 }}>
+                    <button onClick={handleAddContact} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', background: T.ink, border: 'none', color: T.surface, fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
+                        <Icon name="plus" size={12} color={T.surface} /> New contact
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ── Company two-pane (Company sort mode) ──────────────────────
+function CompanyTwoPane({
+    companyList, selectedCompany, setSelectedCompany,
+    accounts, opportunities, activities, oppCount,
+    getAccountRollup, canEdit,
+    setViewingContact, setViewingAccount,
+    setEditingContact, setShowContactModal,
+    handleEditContact,
+}) {
+    const [coSearch, setCoSearch] = useState('');
+
+    const filteredCompanies = useMemo(() => {
+        if (!coSearch.trim()) return companyList;
+        const q = coSearch.toLowerCase();
+        return companyList.filter(c => c.name.toLowerCase().includes(q));
+    }, [companyList, coSearch]);
+
+    const activeCompany = selectedCompany
+        ? companyList.find(c => c.name === selectedCompany) || companyList[0]
+        : companyList[0];
+
+    // Find matching account record for rollup
+    const matchedAccount = useMemo(() => {
+        if (!activeCompany) return null;
+        return (accounts || []).find(a => a.name?.toLowerCase() === activeCompany.name.toLowerCase());
+    }, [activeCompany, accounts]);
+
+    // Use getAccountRollup if we found an account, else compute from contacts
+    const rollup = useMemo(() => {
+        if (matchedAccount) return getAccountRollup(matchedAccount);
+        // Fallback: compute from opportunities directly
+        const coName = (activeCompany?.name || '').toLowerCase();
+        const openOpps = (opportunities || []).filter(o =>
+            (o.account||'').toLowerCase() === coName &&
+            o.stage !== 'Closed Won' && o.stage !== 'Closed Lost'
+        );
+        const pipeline = openOpps.reduce((s, o) => s + (parseFloat(o.arr)||0), 0);
+        return { pipeline, openOpps, allContacts: activeCompany?.contacts || [] };
+    }, [matchedAccount, activeCompany, opportunities]);
+
+    // Last touch — most recent activity linked to any opp at this company
+    const lastTouch = useMemo(() => {
+        if (!activeCompany) return null;
+        const coName = activeCompany.name.toLowerCase();
+        const coOpps = (opportunities || []).filter(o => (o.account||'').toLowerCase() === coName);
+        const oppIds = new Set(coOpps.map(o => o.id));
+        const acts   = (activities || []).filter(a =>
+            (a.company||'').toLowerCase() === coName ||
+            (a.opportunityId && oppIds.has(a.opportunityId))
+        ).sort((a, b) => (b.date||'').localeCompare(a.date||''));
+        return acts[0]?.date || null;
+    }, [activeCompany, opportunities, activities]);
+
+    const initials = (activeCompany?.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
+    if (!activeCompany) return (
+        <div style={{ padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
+            No companies match.
+        </div>
+    );
+
+    return (
+        <div style={{ display: 'flex', gap: 14, flex: 1, minHeight: 0, overflow: 'hidden' }}>
+
+            {/* LEFT — Company list */}
+            <div style={{ width: 280, flexShrink: 0, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                {/* Search */}
+                <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}`, background: T.surface2 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '5px 10px' }}>
+                        <Icon name="search" size={12} color={T.inkMuted} />
+                        <input
+                            value={coSearch}
+                            onChange={e => setCoSearch(e.target.value)}
+                            placeholder="Search companies…"
+                            style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: T.ink, width: '100%', fontFamily: T.sans }}
+                        />
+                        {coSearch && (
+                            <button onClick={() => setCoSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                        )}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 10, color: T.inkMuted, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans }}>
+                        <span>Companies</span>
+                        <span>{filteredCompanies.length}</span>
+                    </div>
+                </div>
+
+                {/* Company list */}
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                    {filteredCompanies.map(co => {
+                        const active = co.name === (activeCompany?.name);
+                        return (
+                            <div key={co.name}
+                                onClick={() => setSelectedCompany(co.name)}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: 10,
+                                    padding: '10px 14px',
+                                    borderBottom: `1px solid ${T.border}`,
+                                    background: active ? T.surface2 : 'transparent',
+                                    borderLeft: `3px solid ${active ? T.ink : 'transparent'}`,
+                                    cursor: 'pointer', transition: 'background 80ms',
+                                }}
+                                onMouseEnter={e => { if (!active) e.currentTarget.style.background = T.bg; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = active ? T.surface2 : 'transparent'; }}>
+                                <div style={{ width: 32, height: 32, borderRadius: T.r, background: avatarBg(co.name), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                                    {co.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 12, fontWeight: active ? 700 : 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{co.name}</div>
+                                    <div style={{ fontSize: 10, color: T.inkMuted, marginTop: 1 }}>{co.contacts.length} contact{co.contacts.length !== 1 ? 's' : ''}</div>
+                                </div>
+                                {active && <Icon name="chevron" size={12} color={T.inkMuted} />}
+                            </div>
+                        );
+                    })}
+                    {filteredCompanies.length === 0 && (
+                        <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 12, fontFamily: T.sans }}>No companies match.</div>
+                    )}
+                </div>
+            </div>
+
+            {/* RIGHT — Company detail + contacts */}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                {/* Company header card */}
+                <div style={{
+                    background: T.surface, border: `1px solid ${T.border}`,
+                    borderLeft: `3px solid ${T.gold}`,
+                    borderRadius: `0 ${T.r+1}px ${T.r+1}px 0`,
+                    padding: '14px 20px',
+                    display: 'flex', alignItems: 'center', gap: 16,
+                    marginBottom: 12, flexShrink: 0,
+                }}>
+                    {/* Company monogram */}
+                    <div style={{
+                        width: 48, height: 48, borderRadius: T.r,
+                        background: T.ink, color: T.gold,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: T.serif, fontStyle: 'italic', fontSize: 20, letterSpacing: -0.5,
+                        flexShrink: 0,
+                    }}>{initials}</div>
+
+                    {/* Name + meta */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 22, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300, color: T.ink, letterSpacing: -0.5, lineHeight: 1, marginBottom: 4 }}>
+                            {activeCompany.name}
+                        </div>
+                        {matchedAccount && (
+                            <div style={{ fontSize: 12, color: T.inkMuted }}>
+                                {matchedAccount.verticalMarket || matchedAccount.industry || ''}
+                                {matchedAccount.employeeCount ? ` · ${matchedAccount.employeeCount} employees` : ''}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Stats */}
+                    <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexShrink: 0 }}>
+                        <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: T.sans }}>Contacts</div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: T.ink, fontFamily: T.sans, lineHeight: 1.2 }}>{activeCompany.contacts.length}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: T.sans }}>Open pipe</div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: rollup.pipeline > 0 ? T.ink : T.inkMuted, fontFamily: T.sans, lineHeight: 1.2 }}>{rollup.pipeline > 0 ? fmtArr(rollup.pipeline) : '—'}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: 9, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: T.sans }}>Last touch</div>
+                            <div style={{ fontSize: 14, color: T.inkMid, fontWeight: 500, fontFamily: T.sans, lineHeight: 1.4 }}>{relDate(lastTouch)}</div>
+                        </div>
+                        {/* Divider */}
+                        <div style={{ width: 1, height: 36, background: T.border }} />
+                        {/* Open account button */}
+                        {matchedAccount && (
+                            <button
+                                onClick={() => setViewingAccount(matchedAccount)}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, color: T.inkMid, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}
+                                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                <Icon name="building" size={12} color={T.inkMid} />
+                                Open account
+                            </button>
+                        )}
+                        {canEdit && (
+                            <button
+                                onClick={() => { setEditingContact(null); setShowContactModal(true); }}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: T.ink, border: 'none', borderRadius: T.r, color: T.surface, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
+                                <Icon name="plus" size={12} color={T.surface} />
+                                Add contact
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Section label */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexShrink: 0 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: T.sans }}>
+                        People at {activeCompany.name}
+                    </div>
+                    <div style={{ flex: 1, height: 1, background: T.border }} />
+                </div>
+
+                {/* Contact cards for selected company */}
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
+                        {activeCompany.contacts.length === 0 ? (
+                            <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>No contacts at this company.</div>
+                        ) : (
+                            activeCompany.contacts.map((c, i) => {
+                                const cInitials = ((c.firstName||'')[0]||'') + ((c.lastName||'')[0]||'');
+                                const opps = oppCount[c.id] || 0;
+                                return (
+                                    <div key={c.id}
+                                        onClick={() => setViewingContact(c)}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: 12,
+                                            padding: '12px 16px',
+                                            borderBottom: i < activeCompany.contacts.length - 1 ? `1px solid ${T.border}` : 'none',
+                                            cursor: 'pointer', transition: 'background 80ms',
+                                            background: 'transparent',
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                        {/* Avatar */}
+                                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: avatarBg(c.firstName + c.lastName), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0, textTransform: 'uppercase' }}>
+                                            {cInitials || '?'}
+                                        </div>
+                                        {/* Name + title */}
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <span style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>{c.firstName} {c.lastName}</span>
+                                                {c.isVip && <span style={{ fontSize: 8, fontWeight: 700, color: T.goldInk, background: 'rgba(200,185,154,0.2)', padding: '1px 5px', borderRadius: 2, border: `1px solid ${T.gold}`, letterSpacing: 0.5 }}>VIP</span>}
+                                                {c.isDnc && <span style={{ fontSize: 8, fontWeight: 700, color: T.danger, background: 'rgba(156,58,46,0.1)', padding: '1px 5px', borderRadius: 2, letterSpacing: 0.5 }}>DNC</span>}
+                                                {opps > 0 && <span style={{ fontSize: 9, fontWeight: 700, color: T.info, background: `${T.info}18`, padding: '1px 5px', borderRadius: 999, border: `1px solid ${T.info}30` }}>{opps} opp{opps > 1 ? 's' : ''}</span>}
+                                            </div>
+                                            <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2 }}>{c.title || c.role || '—'}</div>
+                                        </div>
+                                        {/* Email + phone */}
+                                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                            {c.email && <div style={{ fontSize: 11, color: T.info, marginBottom: 2 }}>{c.email}</div>}
+                                            {c.phone && <div style={{ fontSize: 11, color: T.inkMuted }}>{c.phone}</div>}
+                                        </div>
+                                        {/* Edit */}
+                                        <div onClick={e => { e.stopPropagation(); handleEditContact(c); }} style={{ color: T.border, cursor: 'pointer' }}>
+                                            <Icon name="dots" size={14} color={T.inkMuted} />
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main tab component
+// ─────────────────────────────────────────────────────────────────────────────
 export default function ContactsTab() {
     const {
         contacts, setContacts,
@@ -84,10 +580,11 @@ export default function ContactsTab() {
     const canEdit    = !isReadOnly;
 
     // ── State ─────────────────────────────────────────────────
-    const [search,         setSearch]         = useState('');
-    const [selectMode,     setSelectMode]      = useState(false);
-    const [selectedIds,    setSelectedIds]     = useState([]);
-    const [selectedCompany, setSelectedCompany] = useState(null); // for company two-pane
+    const [search,          setSearch]          = useState('');
+    const [selectMode,      setSelectMode]      = useState(false);
+    const [selectedIds,     setSelectedIds]     = useState([]);
+    const [selectedCompany, setSelectedCompany] = useState(null);
+    const [openRowMenu,     setOpenRowMenu]     = useState(null);
 
     // ── Sort field mapping ────────────────────────────────────
     const sortField = contactsSortBy === 'firstName' ? 'firstName'
@@ -129,7 +626,6 @@ export default function ContactsTab() {
     }, [visibleContacts, opportunities]);
 
     // ── Company list for two-pane (Company sort mode) ─────────
-    // Build unique company list from visible contacts + match to accounts
     const companyList = useMemo(() => {
         if (contactsSortBy !== 'company') return [];
         const coMap = {};
@@ -147,22 +643,16 @@ export default function ContactsTab() {
             setSelectedCompany(companyList[0].name);
         }
         if (contactsSortBy === 'company' && companyList.length > 0 && selectedCompany) {
-            // Ensure selected company is still valid
             if (!companyList.find(c => c.name === selectedCompany)) {
                 setSelectedCompany(companyList[0].name);
             }
         }
     }, [companyList, contactsSortBy]);
 
-    // ── Handlers ─────────────────────────────────────────────
-    const handleAddContact  = () => { setEditingContact(null); setShowContactModal(true); };
-    const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
-    const [openRowMenu, setOpenRowMenu] = React.useState(null);
-
+    // ── Kebab close-on-outside-click ─────────────────────────
     React.useEffect(() => {
         if (!openRowMenu) return;
         const close = (e) => {
-            // Only close if click is outside the menu container
             const menu = document.getElementById('contact-row-menu-' + openRowMenu);
             const btn  = document.getElementById('contact-row-btn-'  + openRowMenu);
             if (menu && menu.contains(e.target)) return;
@@ -172,6 +662,10 @@ export default function ContactsTab() {
         document.addEventListener('mousedown', close);
         return () => document.removeEventListener('mousedown', close);
     }, [openRowMenu]);
+
+    // ── Handlers ─────────────────────────────────────────────
+    const handleAddContact  = () => { setEditingContact(null); setShowContactModal(true); };
+    const handleEditContact = (c) => { setEditingContact(c); setShowContactModal(true); };
 
     const handleDeleteOne = (contact) => {
         const snapshot = [...(contacts || [])];
@@ -228,13 +722,13 @@ export default function ContactsTab() {
 
     const handleExport = () => {
         const headers = ['First Name', 'Last Name', 'Company', 'Title', 'Email', 'Phone', 'Role'];
-        const rows = sorted.map(c => [c.firstName||'', c.lastName||'', c.company||'', c.title||'', c.email||'', c.phone||'', c.role||'']);
-        exportToCSV(`contacts-${new Date().toISOString().slice(0,10)}.csv`, headers, rows, 'contacts');
+        const csvRows = sorted.map(c => [c.firstName||'', c.lastName||'', c.company||'', c.title||'', c.email||'', c.phone||'', c.role||'']);
+        exportToCSV(`contacts-${new Date().toISOString().slice(0,10)}.csv`, headers, csvRows, 'contacts');
     };
 
-    // ── Rows with letter anchors / company headers (flat modes) ──
+    // ── Rows with letter anchors (flat modes) ─────────────────
     const rows = useMemo(() => {
-        if (contactsSortBy === 'company') return []; // handled separately in two-pane
+        if (contactsSortBy === 'company') return [];
         const result = [];
         let lastLetter = '';
         sorted.forEach((contact, i) => {
@@ -245,476 +739,6 @@ export default function ContactsTab() {
         });
         return result;
     }, [sorted, contactsSortBy, sortField]);
-
-    // ── Sort tabs ─────────────────────────────────────────────
-    const SortTabs = () => (
-        <div style={{ display: 'flex', alignItems: 'center', borderBottom: `1px solid ${T.border}`, marginBottom: contactsSortBy === 'company' ? 0 : 2 }}>
-            {[
-                { key: 'lastName',  label: 'Last Name'  },
-                { key: 'firstName', label: 'First Name' },
-                { key: 'company',   label: 'Company'    },
-            ].map(opt => {
-                const active = contactsSortBy === opt.key;
-                return (
-                    <button key={opt.key} onClick={() => setContactsSortBy(opt.key)} style={{
-                        padding: '8px 16px', border: 'none',
-                        borderBottom: active ? `2px solid ${T.ink}` : '2px solid transparent',
-                        background: 'transparent',
-                        color: active ? T.ink : T.inkMuted,
-                        fontSize: 12, fontWeight: active ? 600 : 400,
-                        cursor: 'pointer', fontFamily: T.sans,
-                        transition: 'color 120ms, border-color 120ms',
-                        whiteSpace: 'nowrap', marginBottom: -1,
-                    }}
-                    onMouseEnter={e => { if (!active) e.currentTarget.style.color = T.inkMid; }}
-                    onMouseLeave={e => { if (!active) e.currentTarget.style.color = T.inkMuted; }}>
-                        {opt.label}
-                    </button>
-                );
-            })}
-            <div style={{ flex: 1 }} />
-            <div style={{ fontSize: 11, color: T.inkMuted, fontFamily: T.sans, paddingBottom: 4, paddingRight: 4 }}>
-                {sorted.length} contact{sorted.length !== 1 ? 's' : ''}
-                {contactsSortBy === 'company' && companyList.length > 0 && ` · ${companyList.length} companies`}
-            </div>
-        </div>
-    );
-
-    // ── Letter jump bar (flat modes only) ─────────────────────
-    const LetterBar = () => (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 1, padding: '6px 12px', borderBottom: `1px solid ${T.border}`, background: T.surface2 }}>
-            {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => {
-                const hasMatch = sorted.some(c => ((c[sortField]||'')[0]||'').toUpperCase() === letter);
-                return (
-                    <div key={letter}
-                        onClick={() => {
-                            if (!hasMatch) return;
-                            const el = document.getElementById('contact-letter-' + letter);
-                            if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-                        }}
-                        style={{
-                            fontSize: 10, fontWeight: 700, width: 20, height: 18,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: hasMatch ? T.info : T.border,
-                            cursor: hasMatch ? 'pointer' : 'default',
-                            borderRadius: T.r, userSelect: 'none', transition: 'all 80ms',
-                            fontFamily: T.sans,
-                        }}
-                        onMouseEnter={e => { if (hasMatch) { e.currentTarget.style.background = T.surface2; e.currentTarget.style.color = T.ink; } }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = hasMatch ? T.info : T.border; }}>
-                        {letter}
-                    </div>
-                );
-            })}
-        </div>
-    );
-
-    // ── Table column header (flat modes) ─────────────────────
-    const TableHeader = () => (
-        <div style={{
-            display: 'grid',
-            gridTemplateColumns: selectMode ? '36px 1.8fr 1.4fr 1fr 1fr 1.6fr 28px' : '1.8fr 1.4fr 1fr 1fr 1.6fr 28px',
-            alignItems: 'center', height: 34, padding: '0 14px',
-            background: T.surface2, borderBottom: `1px solid ${T.border}`,
-            fontSize: 10, fontWeight: 700, color: T.inkMuted,
-            letterSpacing: 0.6, textTransform: 'uppercase', fontFamily: T.sans,
-            position: 'sticky', top: 0, zIndex: 1,
-        }}>
-            {selectMode && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={toggleSelectAll}>
-                    <div style={{ width: 14, height: 14, borderRadius: T.r, border: `1.5px solid ${selectedIds.length === sorted.length && sorted.length > 0 ? T.ink : T.borderStrong}`, background: selectedIds.length === sorted.length && sorted.length > 0 ? T.ink : 'transparent', cursor: 'pointer' }} />
-                </div>
-            )}
-            <div style={{ paddingLeft: 2 }}>Name</div>
-            <div>Company</div>
-            <div>Title</div>
-            <div>Phone</div>
-            <div>Email</div>
-            <div />
-        </div>
-    );
-
-    // ── Contact row (flat modes) ──────────────────────────────
-    const ContactRow = ({ contact, isEven, anchorId }) => {
-        const [hov, setHov] = useState(false);
-        const isSelected = selectedIds.includes(contact.id);
-        const initials   = ((contact.firstName||'')[0]||'') + ((contact.lastName||'')[0]||'');
-        const opps       = oppCount[contact.id] || 0;
-
-        return (
-            <div
-                id={anchorId || undefined}
-                onMouseEnter={() => setHov(true)}
-                onMouseLeave={() => setHov(false)}
-                onClick={() => selectMode ? toggleSelect(contact.id) : setViewingContact(contact)}
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: selectMode ? '36px 1.8fr 1.4fr 1fr 1fr 1.6fr 28px' : '1.8fr 1.4fr 1fr 1fr 1.6fr 28px',
-                    alignItems: 'center', height: 48, padding: '0 14px',
-                    borderBottom: `1px solid ${T.border}`,
-                    background: isSelected ? 'rgba(42,38,34,0.04)' : hov ? T.surface2 : isEven ? T.surface : T.bg,
-                    cursor: 'pointer', fontFamily: T.sans, transition: 'background 80ms',
-                }}>
-
-                {/* Checkbox */}
-                {selectMode && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                        onClick={e => { e.stopPropagation(); toggleSelect(contact.id); }}>
-                        <div style={{ width: 16, height: 16, borderRadius: T.r, border: `1.5px solid ${isSelected ? T.ink : T.borderStrong}`, background: isSelected ? T.ink : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
-                            {isSelected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fbf8f3" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l5 5L20 6"/></svg>}
-                        </div>
-                    </div>
-                )}
-
-                {/* Name + avatar + badges */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: avatarBg(contact.firstName + contact.lastName), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, flexShrink: 0, textTransform: 'uppercase' }}>
-                        {initials || '?'}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'nowrap' }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {contact.firstName} {contact.lastName}
-                            </span>
-                            {contact.isVip && <span style={{ fontSize: 8, fontWeight: 700, color: T.goldInk, background: 'rgba(200,185,154,0.2)', padding: '1px 5px', borderRadius: 2, border: `1px solid ${T.gold}`, letterSpacing: 0.5, flexShrink: 0 }}>VIP</span>}
-                            {contact.isDnc && <span style={{ fontSize: 8, fontWeight: 700, color: T.danger, background: 'rgba(156,58,46,0.1)', padding: '1px 5px', borderRadius: 2, border: `1px solid rgba(156,58,46,0.3)`, letterSpacing: 0.5, flexShrink: 0 }}>DNC</span>}
-                            {opps > 0 && <span style={{ fontSize: 9, fontWeight: 700, color: T.info, background: `${T.info}18`, padding: '1px 5px', borderRadius: 999, flexShrink: 0, border: `1px solid ${T.info}30` }}>{opps} opp{opps > 1 ? 's' : ''}</span>}
-                        </div>
-                        {contact.role && (
-                            <div style={{ fontSize: 10, color: T.inkMuted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.role}</div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Company */}
-                <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
-                    {contact.company || '—'}
-                </div>
-
-                {/* Title */}
-                <div style={{ fontSize: 12, color: T.inkMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
-                    {contact.title || '—'}
-                </div>
-
-                {/* Phone */}
-                <div style={{ fontSize: 12, color: T.inkMid, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
-                    {contact.phone || '—'}
-                </div>
-
-                {/* Email */}
-                <div style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>
-                    {contact.email
-                        ? <a href={`mailto:${contact.email}`} onClick={e => e.stopPropagation()}
-                            style={{ color: T.info, textDecoration: 'none', fontFamily: T.sans }}
-                            onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
-                            onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}>
-                            {contact.email}
-                          </a>
-                        : <span style={{ color: T.inkMuted }}>—</span>
-                    }
-                </div>
-
-                {/* Actions ⋯ */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-                    onClick={e => e.stopPropagation()}>
-                    <button
-                        id={'contact-row-btn-' + contact.id}
-                        onClick={e => { e.stopPropagation(); setOpenRowMenu(openRowMenu === contact.id ? null : contact.id); }}
-                        style={{ background: openRowMenu === contact.id ? 'rgba(200,185,154,0.25)' : 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 3 }}>
-                        <Icon name="dots" size={14} color={openRowMenu === contact.id ? T.goldInk : hov ? T.inkMid : T.border} />
-                    </button>
-                    {openRowMenu === contact.id && (
-                        <div id={'contact-row-menu-' + contact.id} onClick={e => e.stopPropagation()}
-                            style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 200,
-                                width: 180, background: T.surface, border: `1px solid ${T.borderStrong}`,
-                                borderRadius: 4, padding: 4, boxShadow: '0 8px 24px rgba(42,38,34,0.12)', fontFamily: T.sans }}>
-                            <div style={{ position: 'absolute', top: -6, right: 10, width: 12, height: 12,
-                                background: T.surface, border: `1px solid ${T.borderStrong}`,
-                                borderRight: 'none', borderBottom: 'none', transform: 'rotate(45deg)' }}/>
-                            {[
-                                { icon: '✎', label: 'Edit contact', fn: () => { handleEditContact(contact); setOpenRowMenu(null); } },
-                                { icon: '👁', label: 'View profile',  fn: () => { setViewingContact(contact); setOpenRowMenu(null); } },
-                                null,
-                                { icon: '🗑', label: 'Delete',        fn: () => { handleDeleteOne(contact); setOpenRowMenu(null); }, danger: true },
-                            ].map((item, idx) => item === null ? (
-                                <div key={idx} style={{ height: 1, background: T.border, margin: '2px 6px' }}/>
-                            ) : (
-                                <div key={idx} onClick={item.fn}
-                                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-                                        borderRadius: 3, cursor: 'pointer', color: item.danger ? T.danger : T.ink }}
-                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(200,185,154,0.10)'}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                    <span style={{ fontSize: 12, width: 14, textAlign: 'center' }}>{item.icon}</span>
-                                    <span style={{ fontSize: 12.5, fontWeight: 500 }}>{item.label}</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-        );
-    };
-
-    // ── Company two-pane (Company sort mode) ──────────────────
-    const CompanyTwoPane = () => {
-        const [coSearch, setCoSearch] = useState('');
-
-        const filteredCompanies = useMemo(() => {
-            if (!coSearch.trim()) return companyList;
-            const q = coSearch.toLowerCase();
-            return companyList.filter(c => c.name.toLowerCase().includes(q));
-        }, [companyList, coSearch]);
-
-        const activeCompany = selectedCompany
-            ? companyList.find(c => c.name === selectedCompany) || companyList[0]
-            : companyList[0];
-
-        // Find matching account record for rollup
-        const matchedAccount = useMemo(() => {
-            if (!activeCompany) return null;
-            return (accounts || []).find(a => a.name?.toLowerCase() === activeCompany.name.toLowerCase());
-        }, [activeCompany, accounts]);
-
-        // Use getAccountRollup if we found an account, else compute from contacts
-        const rollup = useMemo(() => {
-            if (matchedAccount) return getAccountRollup(matchedAccount);
-            // Fallback: compute from opportunities directly
-            const coName = (activeCompany?.name || '').toLowerCase();
-            const openOpps = (opportunities || []).filter(o =>
-                (o.account||'').toLowerCase() === coName &&
-                o.stage !== 'Closed Won' && o.stage !== 'Closed Lost'
-            );
-            const pipeline = openOpps.reduce((s, o) => s + (parseFloat(o.arr)||0), 0);
-            return { pipeline, openOpps, allContacts: activeCompany?.contacts || [] };
-        }, [matchedAccount, activeCompany]);
-
-        // Last touch — most recent activity linked to any opp at this company
-        const lastTouch = useMemo(() => {
-            if (!activeCompany) return null;
-            const coName = activeCompany.name.toLowerCase();
-            const coOpps = (opportunities || []).filter(o => (o.account||'').toLowerCase() === coName);
-            const oppIds = new Set(coOpps.map(o => o.id));
-            const acts   = (activities || []).filter(a =>
-                (a.company||'').toLowerCase() === coName ||
-                (a.opportunityId && oppIds.has(a.opportunityId))
-            ).sort((a, b) => (b.date||'').localeCompare(a.date||''));
-            return acts[0]?.date || null;
-        }, [activeCompany]);
-
-        const initials = (activeCompany?.name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-
-        if (!activeCompany) return (
-            <div style={{ padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
-                No companies match.
-            </div>
-        );
-
-        return (
-            <div style={{ display: 'flex', gap: 14, flex: 1, minHeight: 0, overflow: 'hidden' }}>
-
-                {/* LEFT — Company list */}
-                <div style={{ width: 280, flexShrink: 0, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    {/* Search */}
-                    <div style={{ padding: '10px 12px', borderBottom: `1px solid ${T.border}`, background: T.surface2 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '5px 10px' }}>
-                            <Icon name="search" size={12} color={T.inkMuted} />
-                            <input
-                                value={coSearch}
-                                onChange={e => setCoSearch(e.target.value)}
-                                placeholder="Search companies…"
-                                style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: T.ink, width: '100%', fontFamily: T.sans }}
-                            />
-                            {coSearch && (
-                                <button onClick={() => setCoSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
-                            )}
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 10, color: T.inkMuted, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', fontFamily: T.sans }}>
-                            <span>Companies</span>
-                            <span>{filteredCompanies.length}</span>
-                        </div>
-                    </div>
-
-                    {/* Company list */}
-                    <div style={{ flex: 1, overflowY: 'auto' }}>
-                        {filteredCompanies.map(co => {
-                            const active = co.name === (activeCompany?.name);
-                            return (
-                                <div key={co.name}
-                                    onClick={() => setSelectedCompany(co.name)}
-                                    style={{
-                                        display: 'flex', alignItems: 'center', gap: 10,
-                                        padding: '10px 14px',
-                                        borderBottom: `1px solid ${T.border}`,
-                                        background: active ? T.surface2 : 'transparent',
-                                        borderLeft: `3px solid ${active ? T.ink : 'transparent'}`,
-                                        cursor: 'pointer', transition: 'background 80ms',
-                                    }}
-                                    onMouseEnter={e => { if (!active) e.currentTarget.style.background = T.bg; }}
-                                    onMouseLeave={e => { e.currentTarget.style.background = active ? T.surface2 : 'transparent'; }}>
-                                    <div style={{ width: 32, height: 32, borderRadius: T.r, background: avatarBg(co.name), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
-                                        {co.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
-                                    </div>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontSize: 12, fontWeight: active ? 700 : 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{co.name}</div>
-                                        <div style={{ fontSize: 10, color: T.inkMuted, marginTop: 1 }}>{co.contacts.length} contact{co.contacts.length !== 1 ? 's' : ''}</div>
-                                    </div>
-                                    {active && <Icon name="chevron" size={12} color={T.inkMuted} />}
-                                </div>
-                            );
-                        })}
-                        {filteredCompanies.length === 0 && (
-                            <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 12, fontFamily: T.sans }}>No companies match.</div>
-                        )}
-                    </div>
-                </div>
-
-                {/* RIGHT — Company detail + contacts */}
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    {/* Company header card */}
-                    <div style={{
-                        background: T.surface, border: `1px solid ${T.border}`,
-                        borderLeft: `3px solid ${T.gold}`,
-                        borderRadius: `0 ${T.r+1}px ${T.r+1}px 0`,
-                        padding: '14px 20px',
-                        display: 'flex', alignItems: 'center', gap: 16,
-                        marginBottom: 12, flexShrink: 0,
-                    }}>
-                        {/* Company monogram */}
-                        <div style={{
-                            width: 48, height: 48, borderRadius: T.r,
-                            background: T.ink, color: T.gold,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontFamily: T.serif, fontStyle: 'italic', fontSize: 20, letterSpacing: -0.5,
-                            flexShrink: 0,
-                        }}>{initials}</div>
-
-                        {/* Name + meta */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 22, fontFamily: T.serif, fontStyle: 'italic', fontWeight: 300, color: T.ink, letterSpacing: -0.5, lineHeight: 1, marginBottom: 4 }}>
-                                {activeCompany.name}
-                            </div>
-                            {matchedAccount && (
-                                <div style={{ fontSize: 12, color: T.inkMuted }}>
-                                    {matchedAccount.verticalMarket || matchedAccount.industry || ''}
-                                    {matchedAccount.employeeCount ? ` · ${matchedAccount.employeeCount} employees` : ''}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Stats */}
-                        <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexShrink: 0 }}>
-                            <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: 9, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: T.sans }}>Contacts</div>
-                                <div style={{ fontSize: 18, fontWeight: 700, color: T.ink, fontFamily: T.sans, lineHeight: 1.2 }}>{activeCompany.contacts.length}</div>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: 9, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: T.sans }}>Open pipe</div>
-                                <div style={{ fontSize: 18, fontWeight: 700, color: rollup.pipeline > 0 ? T.ink : T.inkMuted, fontFamily: T.sans, lineHeight: 1.2 }}>{rollup.pipeline > 0 ? fmtArr(rollup.pipeline) : '—'}</div>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: 9, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: T.sans }}>Last touch</div>
-                                <div style={{ fontSize: 14, color: T.inkMid, fontWeight: 500, fontFamily: T.sans, lineHeight: 1.4 }}>{relDate(lastTouch)}</div>
-                            </div>
-                            {/* Divider */}
-                            <div style={{ width: 1, height: 36, background: T.border }} />
-                            {/* Open account button */}
-                            {matchedAccount && (
-                                <button
-                                    onClick={() => setViewingAccount(matchedAccount)}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, color: T.inkMid, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}
-                                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                    <Icon name="building" size={12} color={T.inkMid} />
-                                    Open account
-                                </button>
-                            )}
-                            {canEdit && (
-                                <button
-                                    onClick={() => { setEditingContact(null); setShowContactModal(true); }}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', background: T.ink, border: 'none', borderRadius: T.r, color: T.surface, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans, whiteSpace: 'nowrap' }}>
-                                    <Icon name="plus" size={12} color={T.surface} />
-                                    Add contact
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Section label */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexShrink: 0 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.8, fontFamily: T.sans }}>
-                            People at {activeCompany.name}
-                        </div>
-                        <div style={{ flex: 1, height: 1, background: T.border }} />
-                    </div>
-
-                    {/* Contact cards for selected company */}
-                    <div style={{ flex: 1, overflowY: 'auto' }}>
-                        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
-                            {activeCompany.contacts.length === 0 ? (
-                                <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>No contacts at this company.</div>
-                            ) : (
-                                activeCompany.contacts.map((c, i) => {
-                                    const initials = ((c.firstName||'')[0]||'') + ((c.lastName||'')[0]||'');
-                                    const opps = oppCount[c.id] || 0;
-                                    return (
-                                        <div key={c.id}
-                                            onClick={() => setViewingContact(c)}
-                                            style={{
-                                                display: 'flex', alignItems: 'center', gap: 12,
-                                                padding: '12px 16px',
-                                                borderBottom: i < activeCompany.contacts.length - 1 ? `1px solid ${T.border}` : 'none',
-                                                cursor: 'pointer', transition: 'background 80ms',
-                                                background: 'transparent',
-                                            }}
-                                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                            {/* Avatar */}
-                                            <div style={{ width: 32, height: 32, borderRadius: '50%', background: avatarBg(c.firstName + c.lastName), color: '#fef4e6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0, textTransform: 'uppercase' }}>
-                                                {initials || '?'}
-                                            </div>
-                                            {/* Name + title */}
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                    <span style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>{c.firstName} {c.lastName}</span>
-                                                    {c.isVip && <span style={{ fontSize: 8, fontWeight: 700, color: T.goldInk, background: 'rgba(200,185,154,0.2)', padding: '1px 5px', borderRadius: 2, border: `1px solid ${T.gold}`, letterSpacing: 0.5 }}>VIP</span>}
-                                                    {c.isDnc && <span style={{ fontSize: 8, fontWeight: 700, color: T.danger, background: 'rgba(156,58,46,0.1)', padding: '1px 5px', borderRadius: 2, letterSpacing: 0.5 }}>DNC</span>}
-                                                    {opps > 0 && <span style={{ fontSize: 9, fontWeight: 700, color: T.info, background: `${T.info}18`, padding: '1px 5px', borderRadius: 999, border: `1px solid ${T.info}30` }}>{opps} opp{opps > 1 ? 's' : ''}</span>}
-                                                </div>
-                                                <div style={{ fontSize: 11, color: T.inkMuted, marginTop: 2 }}>{c.title || c.role || '—'}</div>
-                                            </div>
-                                            {/* Email + phone */}
-                                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                                                {c.email && <div style={{ fontSize: 11, color: T.info, marginBottom: 2 }}>{c.email}</div>}
-                                                {c.phone && <div style={{ fontSize: 11, color: T.inkMuted }}>{c.phone}</div>}
-                                            </div>
-                                            {/* Edit */}
-                                            <div onClick={e => { e.stopPropagation(); handleEditContact(c); }} style={{ color: T.border, cursor: 'pointer' }}>
-                                                <Icon name="dots" size={14} color={T.inkMuted} />
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
-    // ── Empty state ───────────────────────────────────────────
-    const EmptyState = () => (
-        <div style={{ padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>
-            {search ? `No contacts matching "${search}".` : 'No contacts yet.'}
-            {canEdit && !search && (
-                <div style={{ marginTop: 12 }}>
-                    <button onClick={handleAddContact} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', background: T.ink, border: 'none', color: T.surface, fontSize: 12, fontWeight: 600, borderRadius: T.r, cursor: 'pointer', fontFamily: T.sans }}>
-                        <Icon name="plus" size={12} color={T.surface} /> New contact
-                    </button>
-                </div>
-            )}
-        </div>
-    );
 
     return (
         <div className="tab-page" style={{ fontFamily: T.sans, display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -796,15 +820,35 @@ export default function ContactsTab() {
 
             {/* ── Sort tabs ── */}
             <div style={{ flexShrink: 0 }}>
-                <SortTabs />
+                <SortTabs
+                    contactsSortBy={contactsSortBy}
+                    setContactsSortBy={setContactsSortBy}
+                    sorted={sorted}
+                    companyList={companyList}
+                />
             </div>
 
             {/* ── Company two-pane (Company mode) ── */}
             {contactsSortBy === 'company' && (
                 <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', paddingTop: 12 }}>
                     {sorted.length === 0
-                        ? <EmptyState />
-                        : <CompanyTwoPane />
+                        ? <EmptyState search={search} canEdit={canEdit} handleAddContact={handleAddContact} />
+                        : <CompanyTwoPane
+                            companyList={companyList}
+                            selectedCompany={selectedCompany}
+                            setSelectedCompany={setSelectedCompany}
+                            accounts={accounts}
+                            opportunities={opportunities}
+                            activities={activities}
+                            oppCount={oppCount}
+                            getAccountRollup={getAccountRollup}
+                            canEdit={canEdit}
+                            setViewingContact={setViewingContact}
+                            setViewingAccount={setViewingAccount}
+                            setEditingContact={setEditingContact}
+                            setShowContactModal={setShowContactModal}
+                            handleEditContact={handleEditContact}
+                          />
                     }
                 </div>
             )}
@@ -814,17 +858,31 @@ export default function ContactsTab() {
                 <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
                         {sorted.length === 0 ? (
-                            <EmptyState />
+                            <EmptyState search={search} canEdit={canEdit} handleAddContact={handleAddContact} />
                         ) : (
                             <>
-                                <LetterBar />
-                                <TableHeader />
+                                <LetterBar sorted={sorted} sortField={sortField} />
+                                <TableHeader
+                                    selectMode={selectMode}
+                                    selectedIds={selectedIds}
+                                    sorted={sorted}
+                                    toggleSelectAll={toggleSelectAll}
+                                />
                                 {rows.map(r => (
                                     <ContactRow
                                         key={r.key}
                                         contact={r.contact}
                                         isEven={r.isEven}
                                         anchorId={r.anchorId}
+                                        selectMode={selectMode}
+                                        selectedIds={selectedIds}
+                                        oppCount={oppCount}
+                                        openRowMenu={openRowMenu}
+                                        setOpenRowMenu={setOpenRowMenu}
+                                        toggleSelect={toggleSelect}
+                                        setViewingContact={setViewingContact}
+                                        handleEditContact={handleEditContact}
+                                        handleDeleteOne={handleDeleteOne}
                                     />
                                 ))}
                             </>
