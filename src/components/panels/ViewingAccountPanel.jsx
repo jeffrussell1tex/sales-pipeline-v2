@@ -514,6 +514,31 @@ export default function ViewingAccountPanel({
                                 </div>
                             </div>
 
+                            {/* ── Custom fields ── */}
+                            {(() => {
+                                const customFields = (settings?.customFieldsByObject?.Accounts || []).filter(f => (f.visibility||'').includes('Detail'));
+                                if (customFields.length === 0) return null;
+                                return (<>
+                                    <div style={{ gridColumn: '1 / -1', borderTop: '1px solid #e6ddd0', paddingTop: '1.25rem', marginTop: '0.25rem' }}>
+                                        <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#c8b99a', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.875rem' }}>Custom Fields</div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                            {customFields.map(f => {
+                                                const apiKey = f.api.replace(/^[^.]+\./, '');
+                                                const val = acc[apiKey] ?? acc[f.api] ?? null;
+                                                return (
+                                                    <div key={f.api}>
+                                                        <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.25rem' }}>{f.label}</div>
+                                                        <div style={{ fontSize: '0.875rem', color: '#2a2622' }}>
+                                                            {val !== null && val !== undefined && val !== '' ? String(val) : <span style={{ color: '#8a8378' }}>—</span>}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </>);
+                            })()}
+
                         </div>
                     </div>
                 )}

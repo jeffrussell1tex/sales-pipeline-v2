@@ -372,21 +372,38 @@ export default function ContactModal({
                                         autoComplete="off"
                                     />
                                     {showPersonaSugg && (
-                                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                             {(settings.buyerPersonas || [])
-                                                .filter(p => p.toLowerCase().includes(personaSearch.toLowerCase()))
-                                                .map((p, i) => (
-                                                    <div key={i}
-                                                        onMouseDown={e => e.preventDefault()}
-                                                        onClick={() => { setPersonaSearch(p); handleChange('buyerPersona', p); setShowPersonaSugg(false); }}
-                                                        style={{ padding: '0.625rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', fontSize: '0.875rem', fontWeight: '600' }}
-                                                        onMouseEnter={e => e.currentTarget.style.background = '#f1f3f5'}
-                                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                                        {p}
-                                                    </div>
-                                                ))
+                                                .filter(p => {
+                                                    // Support both legacy strings and rich objects
+                                                    const name = typeof p === 'string' ? p : p.name;
+                                                    return (p.active !== false) && name.toLowerCase().includes(personaSearch.toLowerCase());
+                                                })
+                                                .map((p, i) => {
+                                                    const isRich = typeof p === 'object';
+                                                    const name = isRich ? p.name : p;
+                                                    return (
+                                                        <div key={i}
+                                                            onMouseDown={e => e.preventDefault()}
+                                                            onClick={() => { setPersonaSearch(name); handleChange('buyerPersona', name); setShowPersonaSugg(false); }}
+                                                            style={{ padding: '0.5rem 0.75rem', cursor: 'pointer', borderBottom: '1px solid #f1f3f5', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                                                            onMouseEnter={e => e.currentTarget.style.background = '#f8f6f2'}
+                                                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                            {isRich && (
+                                                                <span style={{ width: 20, height: 20, borderRadius: 3, background: `${p.color}22`, border: `1px solid ${p.color}55`, color: p.color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                                                                    {p.icon}
+                                                                </span>
+                                                            )}
+                                                            <span style={{ fontSize: '0.875rem', fontWeight: '600', color: isRich ? p.color : 'inherit' }}>{name}</span>
+                                                            {isRich && p.desc && <span style={{ fontSize: '0.75rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.desc}</span>}
+                                                        </div>
+                                                    );
+                                                })
                                             }
-                                            {(settings.buyerPersonas || []).filter(p => p.toLowerCase().includes(personaSearch.toLowerCase())).length === 0 && (
+                                            {(settings.buyerPersonas || []).filter(p => {
+                                                const name = typeof p === 'string' ? p : p.name;
+                                                return (p.active !== false) && name.toLowerCase().includes(personaSearch.toLowerCase());
+                                            }).length === 0 && (
                                                 <div style={{ padding: '0.625rem 0.75rem', color: '#94a3b8', fontSize: '0.8125rem' }}>No personas match — add in Settings</div>
                                             )}
                                         </div>
@@ -449,6 +466,39 @@ export default function ContactModal({
                                     style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }}
                                 />
                             </div>
+
+                            {/* ── Custom fields ── */}
+                            {(settings?.customFieldsByObject?.Contacts || []).filter(f => (f.visibility||'').includes('Detail')).length > 0 && (
+                                <>
+                                    <div className="form-group full" style={{ borderTop: '1px solid #e5e2db', paddingTop: '1rem', marginTop: '0.25rem' }}>
+                                        <label style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#c8b99a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Custom Fields</label>
+                                    </div>
+                                    {(settings?.customFieldsByObject?.Contacts || []).filter(f => (f.visibility||'').includes('Detail')).map(f => {
+                                        const apiKey = f.api.replace(/^[^.]+\./, '');
+                                        const val = formData[apiKey] ?? formData[f.api] ?? '';
+                                        return (
+                                            <div key={f.api} className="form-group">
+                                                <label>{f.label}{f.required && <span style={{ color: '#ef4444', marginLeft: 3 }}>*</span>}</label>
+                                                {f.type === 'Toggle' ? (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6 }}>
+                                                        <input type="checkbox" checked={!!val} onChange={e => handleChange(apiKey, e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }}/>
+                                                        <span style={{ fontSize: 13 }}>{val ? 'Yes' : 'No'}</span>
+                                                    </div>
+                                                ) : f.type === 'Date' ? (
+                                                    <input type="date" value={val} onChange={e => handleChange(apiKey, e.target.value)}/>
+                                                ) : (
+                                                    <input
+                                                        type={f.type === 'Number' ? 'number' : f.type === 'Email' ? 'email' : f.type === 'Phone' ? 'tel' : f.type === 'URL' ? 'url' : 'text'}
+                                                        value={val}
+                                                        onChange={e => handleChange(apiKey, e.target.value)}
+                                                        placeholder={f.label}
+                                                    />
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </>
+                            )}
                         </div>
                     )}
 

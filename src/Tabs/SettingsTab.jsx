@@ -2595,6 +2595,33 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
     const reqFields    = allFields.filter(f => f.required).length;
 
     const FIELD_TYPES = ['Text','Number','Date','Picklist','Toggle','URL','Month','Email','Phone'];
+    const [openFieldKebab, setOpenFieldKebab] = useState(null); // api key of open kebab
+    const [fieldKebabRect, setFieldKebabRect] = useState(null); // {top,left,right} for fixed positioning
+    const [editingFieldIdx, setEditingFieldIdx] = useState(null); // index in activeObj array
+    const [editLabel, setEditLabel] = useState('');
+    const [editType, setEditType]   = useState('Text');
+    const [editReq, setEditReq]     = useState(false);
+
+    const startEdit = (f, realIdx) => {
+        setEditingFieldIdx(realIdx);
+        setEditLabel(f.label);
+        setEditType(f.type);
+        setEditReq(f.required || false);
+        setOpenFieldKebab(null);
+    };
+
+    const saveEdit = () => {
+        if (!editLabel.trim()) return;
+        setFields(prev => {
+            const updated = [...(prev[activeObj]||[])];
+            updated[editingFieldIdx] = { ...updated[editingFieldIdx], label: editLabel.trim(), type: editType, required: editReq };
+            return { ...prev, [activeObj]: updated };
+        });
+        setEditingFieldIdx(null);
+        setDirty(true);
+    };
+
+    const cancelEdit = () => setEditingFieldIdx(null);
 
     return (
         <SPDetailPageChrome
@@ -2609,7 +2636,7 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
             <div style={{ display:'flex', alignItems:'center', gap:4, borderBottom:`1px solid ${T.border}`, marginBottom:18 }}>
                 {FIELD_OBJECTS.map((obj,i) => {
                     const cnt = (fields[obj]||[]).length;
-                    const isNew = obj === 'Accounts' || obj === 'Opportunities';
+                    const isNew = false; // NEW badges removed
                     return (
                         <div key={obj} onClick={() => { setActiveObj(obj); setShowAdd(false); setSearch(''); }}
                             style={{ padding:'10px 18px', fontSize:13, fontWeight:600, cursor:'pointer', color: obj===activeObj ? T.ink : T.inkMuted, borderBottom: obj===activeObj ? `2px solid ${T.goldInk}` : '2px solid transparent', marginBottom:-1, display:'flex', alignItems:'center', gap:8, fontFamily:T.sans }}>
@@ -2677,26 +2704,120 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
                             { key:'type',  label:'Type',       w:'110px' },
                             { key:'req',   label:'Required',   w:'90px' },
                             { key:'where', label:'Visible on', w:'150px' },
-                            { key:'del',   label:'',           w:'28px' },
+                            { key:'kebab', label:'',           w:'36px' },
                         ]}
-                        rows={activeFields.map((f,i) => ({
-                            drag:  <SPDrag/>,
-                            label: <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontFamily:T.sans }}>
-                                       <b>{f.label}</b>
-                                       {f.isNew && <span style={{ fontSize:9, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.25)', padding:'1px 5px', borderRadius:2, letterSpacing:0.4, fontFamily:T.sans }}>NEW</span>}
-                                   </span>,
-                            api:   <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{f.api}</span>,
-                            type:  <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{f.type}</span>,
-                            req:   <span style={{ fontSize:12, color: f.required ? T.warn : T.inkMuted, fontWeight: f.required ? 600 : 400, fontFamily:T.sans }}>{f.required ? 'Yes' : 'No'}</span>,
-                            where: <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>{f.visibility}</span>,
-                            del:   <button onClick={() => removeField((fields[activeObj]||[]).findIndex(ff => ff.api === f.api))}
-                                       style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:15, padding:0, lineHeight:1 }}
-                                       onMouseEnter={e => e.currentTarget.style.color = T.danger}
-                                       onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>×</button>,
-                        }))}
+                        rows={activeFields.map((f,i) => {
+                            const realIdx = (fields[activeObj]||[]).findIndex(ff => ff.api === f.api);
+                            const isEditing = editingFieldIdx === realIdx;
+                            return {
+                                drag:  <SPDrag/>,
+                                label: isEditing ? (
+                                    <input
+                                        value={editLabel}
+                                        onChange={e => setEditLabel(e.target.value)}
+                                        onKeyDown={e => { if (e.key==='Enter') saveEdit(); if (e.key==='Escape') cancelEdit(); }}
+                                        autoFocus
+                                        style={{ padding:'4px 8px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' }}
+                                    />
+                                ) : (
+                                    <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontFamily:T.sans }}>
+                                        <b>{f.label}</b>
+                                        {f.isNew && <span style={{ fontSize:9, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.25)', padding:'1px 5px', borderRadius:2, letterSpacing:0.4, fontFamily:T.sans }}>NEW</span>}
+                                    </span>
+                                ),
+                                api:   isEditing ? (
+                                    <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{f.api}</span>
+                                ) : (
+                                    <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{f.api}</span>
+                                ),
+                                type:  isEditing ? (
+                                    <select value={editType} onChange={e => setEditType(e.target.value)}
+                                        style={{ padding:'4px 8px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', cursor:'pointer' }}>
+                                        {FIELD_TYPES.map(t => <option key={t}>{t}</option>)}
+                                    </select>
+                                ) : (
+                                    <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{f.type}</span>
+                                ),
+                                req:   isEditing ? (
+                                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                        <input type="checkbox" checked={editReq} onChange={e => setEditReq(e.target.checked)} style={{ cursor:'pointer' }}/>
+                                        <span style={{ fontSize:12, color:T.ink, fontFamily:T.sans }}>{editReq ? 'Yes' : 'No'}</span>
+                                    </div>
+                                ) : (
+                                    <span style={{ fontSize:12, color: f.required ? T.warn : T.inkMuted, fontWeight: f.required ? 600 : 400, fontFamily:T.sans }}>{f.required ? 'Yes' : 'No'}</span>
+                                ),
+                                where: isEditing ? (
+                                    <div style={{ display:'flex', gap:6 }}>
+                                        <button onClick={saveEdit} style={{ padding:'4px 10px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Save</button>
+                                        <button onClick={cancelEdit} style={{ padding:'4px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11.5, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                                    </div>
+                                ) : (
+                                    <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>{f.visibility}</span>
+                                ),
+                                kebab: (
+                                    <div style={{ position:'relative' }} onClick={e => e.stopPropagation()}>
+                                        <button
+                                            onClick={e => {
+                                                e.stopPropagation();
+                                                if (openFieldKebab === f.api) {
+                                                    setOpenFieldKebab(null);
+                                                    setFieldKebabRect(null);
+                                                } else {
+                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                    setFieldKebabRect({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                                    setOpenFieldKebab(f.api);
+                                                }
+                                            }}
+                                            style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:'0 2px', lineHeight:1 }}>⋯</button>
+                                    </div>
+                                ),
+                            };
+                        })}
                     />
                 )}
             </CSectionCard>
+
+            {/* ── Field kebab dropdown — fixed-positioned to escape overflow:hidden ── */}
+            {openFieldKebab && fieldKebabRect && (() => {
+                const f = activeFields.find(f => f.api === openFieldKebab);
+                const realIdx = f ? (fields[activeObj]||[]).findIndex(ff => ff.api === f.api) : -1;
+                if (!f || realIdx === -1) return null;
+                return (
+                    <>
+                        <div
+                            style={{ position:'fixed', inset:0, zIndex:9998 }}
+                            onClick={() => { setOpenFieldKebab(null); setFieldKebabRect(null); }}
+                        />
+                        <div style={{
+                            position:'fixed',
+                            top: fieldKebabRect.top,
+                            right: fieldKebabRect.right,
+                            zIndex:9999,
+                            background:T.surface,
+                            border:`1px solid ${T.border}`,
+                            borderRadius:T.r+2,
+                            boxShadow:'0 4px 16px rgba(42,38,34,0.12)',
+                            minWidth:140,
+                            overflow:'hidden',
+                        }}>
+                            <button
+                                onClick={() => { startEdit(f, realIdx); setOpenFieldKebab(null); setFieldKebabRect(null); }}
+                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', textAlign:'left', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                Edit field
+                            </button>
+                            <button
+                                onClick={() => { removeField(realIdx); setOpenFieldKebab(null); setFieldKebabRect(null); }}
+                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', fontSize:13, color:T.danger, cursor:'pointer', fontFamily:T.sans }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(156,58,46,0.06)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                Delete field
+                            </button>
+                        </div>
+                    </>
+                );
+            })()}
 
             {/* Stats strip */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginTop:4 }}>
@@ -2848,7 +2969,371 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
 }
 
 const CompetitorsDetail  = (p) => <FlatListDetail {...p} title="Competitors"  settingsKey="competitors" placeholder="e.g. Salesforce, HubSpot…"      description="Competitor names shown in the opportunity form for win/loss tracking." />;
-const BuyerPersonasDetail = (p) => <FlatListDetail {...p} title="Buyer personas" settingsKey="buyerPersonas" placeholder="e.g. Champion, Economic Buyer, End User…" description="Persona tags available in the contact form to classify buyer roles." />;
+// ─────────────────────────────────────────────────────────────
+// Buyer Personas — full rich-object panel
+// Data shape: settings.buyerPersonas = [{ id, name, color, icon, desc, titles, cares, objections, active }]
+// ─────────────────────────────────────────────────────────────
+
+const DEFAULT_PERSONAS = [
+    { id: 'champion',   name: 'Champion',          color: '#4d6b3d', icon: '★', desc: 'Internal advocate who sells the deal on your behalf.',   titles: ['Director of Operations', 'VP Sales', 'Head of RevOps'], cares: ['Quick wins for the team', 'Looking great to leadership'], objections: ["My team won't adopt another tool"],  active: true },
+    { id: 'eb',         name: 'Economic Buyer',    color: '#7a5a3c', icon: '$',      desc: 'Controls the budget and signs the order. Final yes/no.', titles: ['CFO', 'VP Finance', 'COO'],                             cares: ['ROI', 'Total cost of ownership', 'Risk of vendor lock-in'], objections: ["What's the payback period?"],   active: true },
+    { id: 'dm',         name: 'Decision Maker',    color: '#b87333', icon: '✓', desc: 'Owns the business outcome the purchase solves.',          titles: ['VP Sales', 'Chief Revenue Officer', 'Head of GTM'],    cares: ['Hitting the number', 'Forecast accuracy'],              objections: ["Will it move the metric they're accountable for?"], active: true },
+    { id: 'influencer', name: 'Influencer',        color: '#3a5a7a', icon: '~',      desc: "Provides input but doesn't hold the decision.",           titles: ['Sales Manager', 'RevOps Manager', 'Senior AE'],        cares: ['Daily UX', 'Reports and dashboards', 'Field credibility'], objections: ["How does this fit with our existing stack?"], active: true },
+    { id: 'end-user',   name: 'End User',          color: '#9c3a2e', icon: '▣', desc: 'Will live in the product day-to-day. Vetoes happen here.',titles: ['Account Executive', 'SDR', 'Customer Success Manager'], cares: ['Speed of common tasks', 'Mobile experience'],           objections: ["This is going to slow me down"],                 active: true },
+    { id: 'gatekeeper', name: 'Gatekeeper',        color: '#8a8378', icon: '⌗', desc: "Procurement, legal, security. Doesn't say yes — says no.", titles: ['IT Security', 'Procurement', 'General Counsel'],       cares: ['SOC 2', 'MSA terms', 'Data residency'],                objections: ["We need vendor security review first"],          active: true },
+    { id: 'tech',       name: 'Technical Evaluator', color: '#5a544c', icon: '◧', desc: 'Vets the technical fit and integration risk.',           titles: ['VP Engineering', 'Solutions Architect', 'IT Director'],cares: ['API quality', 'Existing system fit', 'Migration cost'], objections: ["How does the data sync work?"],                  active: true },
+];
+
+const PersonaSwatch = ({ p, size = 26 }) => (
+    <span style={{
+        width: size, height: size, borderRadius: 4,
+        background: `${p.color}22`, border: `1px solid ${p.color}55`,
+        color: p.color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        fontWeight: 700, fontSize: size * 0.52, flexShrink: 0, userSelect: 'none',
+    }}>{p.icon || '?'}</span>
+);
+
+// TagsField — defined at module scope so React sees a stable reference.
+// Fully controlled: parent owns the comma-string value.
+const TagsField = ({ label, value, onChange }) => (
+    <div style={{ marginBottom: 10 }}>
+        <label style={{ fontSize: 11, fontWeight: 600, color: T.inkMid, display: 'block', marginBottom: 3, fontFamily: T.sans }}>{label}</label>
+        <input
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Comma-separated…"
+            style={{ width: '100%', padding: '6px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, color: T.ink, fontFamily: T.sans, outline: 'none', boxSizing: 'border-box' }}
+        />
+    </div>
+);
+
+const BuyerPersonasDetail = ({ settings, setSettings, onBack }) => {
+    const { contacts } = useApp();
+
+    const saved = React.useMemo(() => {
+        const raw = settings?.buyerPersonas;
+        if (!Array.isArray(raw) || raw.length === 0) return DEFAULT_PERSONAS;
+        // Support both legacy string array and new rich object array
+        if (typeof raw[0] === 'string') return raw.map((name, i) => ({
+            id: 'p_' + i, name, color: '#8a8378', icon: '●', desc: '', titles: [], cares: [], objections: [], active: true,
+        }));
+        return raw;
+    }, [settings?.buyerPersonas]);
+
+    const [personas, setPersonas] = React.useState(() => JSON.parse(JSON.stringify(saved)));
+    const [dirty,   setDirty]    = React.useState(false);
+    const [saving,  setSaving]   = React.useState(false);
+
+    // ── Kebab menu state ──
+    const [openKebab, setOpenKebab] = React.useState(null);
+    React.useEffect(() => {
+        if (openKebab === null) return;
+        const handler = (e) => {
+            const el = document.getElementById('persona-menu-' + openKebab);
+            if (el && el.contains(e.target)) return;
+            setOpenKebab(null);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [openKebab]);
+
+    // ── Edit modal state ──
+    const BLANK_PERSONA = { id: '', name: '', color: '#7a6a48', icon: '●', desc: '', titles: [], cares: [], objections: [], active: true };
+    const [editModal, setEditModal] = React.useState(null); // null | { isNew, data }
+    const [editErr,   setEditErr]   = React.useState('');
+
+    // ── Contact counts per persona name ──
+    const contactCounts = React.useMemo(() => {
+        const map = {};
+        (contacts || []).forEach(c => {
+            if (c.buyerPersona) map[c.buyerPersona] = (map[c.buyerPersona] || 0) + 1;
+        });
+        return map;
+    }, [contacts]);
+
+    const totalContacts = Object.values(contactCounts).reduce((a, b) => a + b, 0);
+
+    // ── Handlers ──
+    const handleSave = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, buyerPersonas: personas }));
+        try {
+            await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ buyerPersonas: personas }),
+            });
+        } catch (e) { console.error('save buyer personas', e); }
+        setSaving(false);
+        setDirty(false);
+    };
+
+    const handleCancel = () => { setPersonas(JSON.parse(JSON.stringify(saved))); setDirty(false); };
+
+    const mutate = (fn) => { setPersonas(prev => { const next = fn([...prev]); return next; }); setDirty(true); };
+
+    const handleDelete = (id, count) => {
+        if (count > 0) return;
+        mutate(list => list.filter(p => p.id !== id));
+        setOpenKebab(null);
+    };
+
+    const handleDuplicate = (p) => {
+        const clone = { ...p, id: 'p_' + Date.now(), name: p.name + ' (copy)' };
+        mutate(list => [...list, clone]);
+        setOpenKebab(null);
+    };
+
+    const handleArchive = (id) => {
+        mutate(list => list.map(p => p.id === id ? { ...p, active: !p.active } : p));
+        setOpenKebab(null);
+    };
+
+    const openEdit = (p) => {
+        setEditModal({ isNew: false, data: {
+            ...p,
+            titles:     (p.titles     || []).join(', '),
+            cares:      (p.cares      || []).join(', '),
+            objections: (p.objections || []).join(', '),
+        }});
+        setEditErr('');
+        setOpenKebab(null);
+    };
+
+    const openNew = () => {
+        setEditModal({ isNew: true, data: { ...BLANK_PERSONA, id: 'p_' + Date.now(), titles: '', cares: '', objections: '' } });
+        setEditErr('');
+    };
+
+    const saveEdit = () => {
+        if (!editModal.data.name.trim()) { setEditErr('Name is required.'); return; }
+        const toArr = (str) => (str || '').split(',').map(s => s.trim()).filter(Boolean);
+        const finalData = {
+            ...editModal.data,
+            titles:     toArr(editModal.data.titles),
+            cares:      toArr(editModal.data.cares),
+            objections: toArr(editModal.data.objections),
+        };
+        if (editModal.isNew) {
+            mutate(list => [...list, finalData]);
+        } else {
+            mutate(list => list.map(p => p.id === finalData.id ? finalData : p));
+        }
+        setEditModal(null);
+    };
+
+    // ── Tags field helper (comma-split inline) ──
+    const COLS = '24px 1.6fr 2fr 80px 90px 28px';
+
+    return (
+        <SPDetailPageChrome
+            crumb="Buyer personas" title="Buyer personas"
+            subtitle="Contact persona tags used in the contact form"
+            statusDetail={`${personas.filter(p => p.active !== false).length} active personas`}
+            updatedBy="Admin" updatedAt="now"
+            onBack={onBack} dirty={dirty} onCancel={handleCancel}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+            rightActions={
+                <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={handleCancel} disabled={!dirty} style={{ padding: '7px 14px', background: T.surface, color: dirty ? T.ink : T.inkMuted, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: dirty ? 'pointer' : 'default', fontFamily: T.sans }}>Cancel</button>
+                    <button onClick={openNew} style={{ padding: '7px 14px', background: T.surface, color: T.ink, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>+ New persona</button>
+                    <button onClick={handleSave} disabled={!dirty || saving} style={{ padding: '7px 14px', background: dirty ? T.ink : T.borderStrong, color: '#fbf8f3', border: 'none', borderRadius: T.r, fontSize: 12.5, fontWeight: 600, cursor: dirty && !saving ? 'pointer' : 'default', fontFamily: T.sans }}>{saving ? 'Saving…' : 'Save changes'}</button>
+                </div>
+            }
+        >
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>
+
+                {/* ── LEFT ── */}
+                <div>
+                    <CSectionCard title="Personas" description="Drag to reorder. Order here is shown in the type-ahead on the Contact form.">
+                        {/* Table header */}
+                        <div style={{ display: 'grid', gridTemplateColumns: COLS, gap: 10, padding: '7px 12px', background: T.surface2, borderRadius: T.r, marginBottom: 4, fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.6, textTransform: 'uppercase', fontFamily: T.sans }}>
+                            <div/>
+                            <div>Persona</div>
+                            <div>Description</div>
+                            <div style={{ textAlign: 'right' }}>Contacts</div>
+                            <div>Status</div>
+                            <div/>
+                        </div>
+
+                        {/* Rows */}
+                        {personas.map((p) => {
+                            const count = contactCounts[p.name] || 0;
+                            const isOpen = openKebab === p.id;
+                            const isArchived = p.active === false;
+                            return (
+                                <div key={p.id} style={{ display: 'grid', gridTemplateColumns: COLS, gap: 10, padding: '10px 12px', alignItems: 'center', borderBottom: `1px solid ${T.border}`, background: isOpen ? 'rgba(200,185,154,0.10)' : 'transparent', position: 'relative', opacity: isArchived ? 0.5 : 1 }}>
+                                    {/* Drag handle */}
+                                    <div style={{ color: T.border, fontSize: 14, cursor: 'grab', textAlign: 'center', userSelect: 'none' }}>⠿</div>
+                                    {/* Name + swatch */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <PersonaSwatch p={p} size={24}/>
+                                        <span style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{p.name}</span>
+                                    </div>
+                                    {/* Desc */}
+                                    <div style={{ fontSize: 12, color: T.inkMid, fontFamily: T.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.desc || '—'}</div>
+                                    {/* Count */}
+                                    <div style={{ fontSize: 12, color: count > 0 ? T.ink : T.inkMuted, textAlign: 'right', fontFamily: 'ui-monospace, Menlo, monospace' }}>{count}</div>
+                                    {/* Status */}
+                                    <QPill tone={isArchived ? 'neutral' : 'rep'}>{isArchived ? 'Archived' : 'Active'}</QPill>
+                                    {/* Kebab */}
+                                    <div style={{ position: 'relative' }}>
+                                        <button onClick={e => { e.stopPropagation(); setOpenKebab(isOpen ? null : p.id); }}
+                                            style={{ background: isOpen ? 'rgba(200,185,154,0.25)' : 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', borderRadius: 3, fontSize: 15, color: isOpen ? T.goldInk : T.inkMuted, lineHeight: 1 }}>⋯</button>
+                                        {isOpen && (
+                                            <div id={'persona-menu-' + p.id} onClick={e => e.stopPropagation()} style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 200, width: 210, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: 5, padding: 4, boxShadow: '0 8px 24px rgba(42,38,34,0.13)', fontFamily: T.sans }}>
+                                                <div style={{ position: 'absolute', top: -6, right: 8, width: 12, height: 12, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRight: 'none', borderBottom: 'none', transform: 'rotate(45deg)' }}/>
+                                                {[
+                                                    { icon: '✎', label: 'Edit persona',     sub: 'Name, description, color, icon', fn: () => openEdit(p) },
+                                                    { icon: '⊕', label: 'Duplicate',        sub: 'Clone with a new name', fn: () => handleDuplicate(p) },
+                                                    null,
+                                                    { icon: '◑', label: isArchived ? 'Unarchive' : 'Archive', sub: isArchived ? 'Show in type-ahead' : 'Hide from type-ahead', fn: () => handleArchive(p.id) },
+                                                    { icon: '🗑', label: 'Delete', danger: true, disabled: count > 0, sub: count > 0 ? `${count} contact${count !== 1 ? 's' : ''} still use this` : 'No contacts use this persona', fn: () => handleDelete(p.id, count) },
+                                                ].map((item, idx) => item === null ? (
+                                                    <div key={idx} style={{ height: 1, background: T.border, margin: '3px 8px' }}/>
+                                                ) : (
+                                                    <div key={idx} onClick={item.disabled ? undefined : item.fn}
+                                                        style={{ padding: '7px 10px', borderRadius: 3, cursor: item.disabled ? 'default' : 'pointer', opacity: item.disabled ? 0.4 : 1 }}
+                                                        onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background = 'rgba(200,185,154,0.10)'; }}
+                                                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                            <span style={{ width: 14, textAlign: 'center', fontSize: 12 }}>{item.icon}</span>
+                                                            <span style={{ fontSize: 12.5, fontWeight: 600, color: item.danger ? T.danger : T.ink }}>{item.label}</span>
+                                                        </div>
+                                                        {item.sub && <div style={{ fontSize: 11, color: T.inkMuted, marginLeft: 22, marginTop: 1 }}>{item.sub}</div>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+
+                        {personas.length === 0 && (
+                            <div style={{ padding: '24px', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontStyle: 'italic', fontFamily: T.sans }}>No personas yet. Click + New persona to add one.</div>
+                        )}
+                    </CSectionCard>
+                </div>
+
+                {/* ── RIGHT RAIL ── */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {/* Contact form preview */}
+                    <CSectionCard title="Preview — Contact form" description="What reps see when they assign a persona.">
+                        <div style={{ padding: 12, background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r+1 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: T.inkMid, marginBottom: 5, fontFamily: T.sans }}>Persona</div>
+                            <div style={{ padding: '6px 8px', background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 6 }}>
+                                {personas.filter(p => p.active !== false).slice(0, 2).map(p => (
+                                    <span key={p.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px 2px 6px', borderRadius: 10, fontSize: 11.5, background: `${p.color}14`, border: `1px solid ${p.color}40`, color: p.color, fontWeight: 600 }}>
+                                        <span style={{ fontSize: 10 }}>{p.icon}</span>{p.name}
+                                    </span>
+                                ))}
+                                <span style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>Type to search…</span>
+                            </div>
+                            <div style={{ padding: '5px 8px', background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r }}>
+                                <div style={{ fontSize: 9.5, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.7, textTransform: 'uppercase', marginBottom: 5, fontFamily: T.sans }}>Suggestions</div>
+                                {personas.filter(p => p.active !== false).slice(0, 4).map(p => (
+                                    <div key={p.id} style={{ padding: '4px 3px', display: 'flex', alignItems: 'center', gap: 7 }}>
+                                        <PersonaSwatch p={p} size={17}/>
+                                        <span style={{ fontSize: 12, color: T.ink, flex: 1, fontFamily: T.sans }}>{p.name}</span>
+                                        <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: 'ui-monospace, Menlo, monospace' }}>{contactCounts[p.name] || 0}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </CSectionCard>
+
+                    {/* Distribution */}
+                    {totalContacts > 0 && (
+                        <CSectionCard title="Distribution" description="Contacts assigned to each persona.">
+                            <div style={{ display: 'flex', gap: 2, height: 10, borderRadius: 2, overflow: 'hidden', border: `1px solid ${T.border}`, marginBottom: 10 }}>
+                                {personas.filter(p => (contactCounts[p.name] || 0) > 0).map(p => (
+                                    <div key={p.id} style={{ flex: contactCounts[p.name] || 0, background: p.color }} title={`${p.name} · ${contactCounts[p.name] || 0}`}/>
+                                ))}
+                            </div>
+                            {personas.map(p => {
+                                const count = contactCounts[p.name] || 0;
+                                if (count === 0) return null;
+                                const pct = Math.round((count / totalContacts) * 100);
+                                return (
+                                    <div key={p.id} style={{ padding: '4px 0', display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontFamily: T.sans }}>
+                                        <span style={{ width: 8, height: 8, background: p.color, borderRadius: 2, flexShrink: 0 }}/>
+                                        <span style={{ flex: 1, color: T.ink }}>{p.name}</span>
+                                        <span style={{ color: T.inkMid, fontFamily: 'ui-monospace, Menlo, monospace' }}>{count}</span>
+                                        <span style={{ width: 32, textAlign: 'right', fontSize: 11, color: T.inkMuted }}>{pct}%</span>
+                                    </div>
+                                );
+                            })}
+                        </CSectionCard>
+                    )}
+                </div>
+            </div>
+
+            {/* ── Edit / New Persona Modal ── */}
+            {editModal && (
+                <div onClick={() => setEditModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div onClick={e => e.stopPropagation()} style={{ background: T.surface, borderRadius: 8, width: 480, maxWidth: '95vw', boxShadow: '0 16px 48px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
+                        {/* Header */}
+                        <div style={{ background: '#1c1917', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: '#f5f1eb', fontFamily: T.sans }}>{editModal.isNew ? 'New persona' : 'Edit persona'}</div>
+                            <button onClick={() => setEditModal(null)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#f5f1eb', cursor: 'pointer', borderRadius: 4, width: 26, height: 26, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                        </div>
+                        {/* Body */}
+                        <div style={{ padding: 20 }}>
+                            {/* Name + Icon + Color row */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px', gap: 12, marginBottom: 12 }}>
+                                <div>
+                                    <label style={{ fontSize: 11, fontWeight: 600, color: T.inkMid, display: 'block', marginBottom: 3, fontFamily: T.sans }}>Name *</label>
+                                    <input value={editModal.data.name} onChange={e => setEditModal(m => ({ ...m, data: { ...m.data, name: e.target.value } }))}
+                                        placeholder="e.g. Champion"
+                                        style={{ width: '100%', padding: '7px 10px', border: `1px solid ${editErr ? T.danger : T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, outline: 'none', boxSizing: 'border-box' }}/>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: 11, fontWeight: 600, color: T.inkMid, display: 'block', marginBottom: 3, fontFamily: T.sans }}>Icon</label>
+                                    <input value={editModal.data.icon} onChange={e => setEditModal(m => ({ ...m, data: { ...m.data, icon: e.target.value.slice(0,2) } }))}
+                                        placeholder="★"
+                                        style={{ width: '100%', padding: '7px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 18, color: T.ink, fontFamily: T.sans, outline: 'none', textAlign: 'center', boxSizing: 'border-box' }}/>
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: 11, fontWeight: 600, color: T.inkMid, display: 'block', marginBottom: 3, fontFamily: T.sans }}>Color</label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, cursor: 'pointer' }}>
+                                        <input type="color" value={editModal.data.color}
+                                            onChange={e => setEditModal(m => ({ ...m, data: { ...m.data, color: e.target.value } }))}
+                                            style={{ width: 32, height: 28, border: 'none', padding: 0, cursor: 'pointer', background: 'none', flexShrink: 0 }}/>
+                                        <PersonaSwatch p={editModal.data} size={20}/>
+                                        <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace' }}>{editModal.data.color}</span>
+                                    </label>
+                                </div>
+                            </div>
+                            {/* Description */}
+                            <div style={{ marginBottom: 12 }}>
+                                <label style={{ fontSize: 11, fontWeight: 600, color: T.inkMid, display: 'block', marginBottom: 3, fontFamily: T.sans }}>Description</label>
+                                <input value={editModal.data.desc || ''} onChange={e => setEditModal(m => ({ ...m, data: { ...m.data, desc: e.target.value } }))}
+                                    placeholder="One-line description shown in the type-ahead…"
+                                    style={{ width: '100%', padding: '7px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, outline: 'none', boxSizing: 'border-box' }}/>
+                            </div>
+                            {/* Coaching attributes */}
+                            <TagsField label="Typical titles (comma-separated)"
+                                value={editModal.data.titles || ''}
+                                onChange={v => setEditModal(m => ({ ...m, data: { ...m.data, titles: v } }))}/>
+                            <TagsField label="Cares about (comma-separated)"
+                                value={editModal.data.cares || ''}
+                                onChange={v => setEditModal(m => ({ ...m, data: { ...m.data, cares: v } }))}/>
+                            <TagsField label="Common objections (comma-separated)"
+                                value={editModal.data.objections || ''}
+                                onChange={v => setEditModal(m => ({ ...m, data: { ...m.data, objections: v } }))}/>
+                            {editErr && <div style={{ fontSize: 12, color: T.danger, marginTop: 4, fontFamily: T.sans }}>{editErr}</div>}
+                        </div>
+                        {/* Footer */}
+                        <div style={{ padding: '12px 20px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'flex-end', gap: 8, background: T.surface2 }}>
+                            <button onClick={() => setEditModal(null)} style={{ padding: '7px 16px', background: T.surface, color: T.ink, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
+                            <button onClick={saveEdit} style={{ padding: '7px 16px', background: T.ink, color: '#fbf8f3', border: 'none', borderRadius: T.r, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>{editModal.isNew ? 'Add persona' : 'Save changes'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </SPDetailPageChrome>
+    );
+};
 const ReasonsWonDetail   = (p) => <FlatListDetail {...p} title="Reasons won"  settingsKey="reasonsWon"  placeholder="e.g. Best price, Strong support…" description="Win reason options shown when a deal is marked Closed Won." />;
 const ReasonsLostDetail  = (p) => <FlatListDetail {...p} title="Reasons lost" settingsKey="reasonsLost" placeholder="e.g. Lost to competitor, Budget…"  description="Loss reason options shown when a deal is marked Closed Lost." />;
 
@@ -15689,8 +16174,9 @@ const BackupDetail = ({ onBack }) => {
 };
 
 // ── ④ Features & AI Detail ────────────────────────────────────
-const FeaturesDetail = ({ onBack }) => {
+const FeaturesDetail = ({ settings, setSettings, onBack }) => {
     const [flags,      setFlags]      = React.useState({});      // { [flagId]: boolean }
+    const [tabViz,     setTabViz]     = React.useState({ leadsEnabled: true, quotesEnabled: true });
     const [aiSettings, setAiSettings] = React.useState({});
     const [loading,    setLoading]    = React.useState(true);
     const [saving,     setSaving]     = React.useState(false);
@@ -15699,75 +16185,72 @@ const FeaturesDetail = ({ onBack }) => {
     const [error,      setError]      = React.useState(null);
     const [filterCat,  setFilterCat]  = React.useState('All');
 
-    // ── Load current flag + AI state from settings ────────────
-    React.useEffect(() => {
-        let cancelled = false;
-        const load = async () => {
-            try {
-                const res  = await dbFetch('/.netlify/functions/settings');
-                const data = await res.json();
-                if (cancelled) return;
-                if (!res.ok) throw new Error(data.error || 'Failed to load settings');
-                setFlags(data.settings?.featureFlags || {});
-                setAiSettings(data.settings?.aiSettings || {
-                    model: 'claude-sonnet-4-6',
-                    fallback: 'claude-haiku-4-5-20251001',
-                    region: 'US · us-east-2',
-                    tokenBudget: 25000000,
-                    trainingOptIn: false,
-                    zeroRetention: true,
-                    piiRedaction: true,
-                    byok: false,
-                    byokProvider: '',
-                    dpaSignedAt: '',
-                    auditLogging: 'All AI requests · 13mo retention',
-                    blockList: '',
-                    budgetExceed: 'Throttle to 1 req/s',
-                    availableTo: 'All roles',
-                });
-            } catch (e) {
-                if (!cancelled) setError(e.message);
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        };
-        load();
-        return () => { cancelled = true; };
-    }, []);
 
-    // ── Toggle a flag — saves immediately ─────────────────────
-    const handleToggle = async (flagId, isLive) => {
+    // ── Initialise from settings prop (same pattern as all other panels) ───────
+    const AI_DEFAULTS = {
+        model: 'claude-sonnet-4-6',
+        fallback: 'claude-haiku-4-5-20251001',
+        region: 'US · us-east-2',
+        tokenBudget: 25000000,
+        trainingOptIn: false,
+        zeroRetention: true,
+        piiRedaction: true,
+        byok: false,
+        byokProvider: '',
+        dpaSignedAt: '',
+        auditLogging: 'All AI requests · 13mo retention',
+        blockList: '',
+        budgetExceed: 'Throttle to 1 req/s',
+        availableTo: 'All roles',
+    };
+    React.useEffect(() => {
+        if (!settings) return;
+        setFlags(settings.featureFlags || {});
+        setTabViz({
+            leadsEnabled:  settings.leadsEnabled  !== false,
+            quotesEnabled: settings.quotesEnabled !== false,
+        });
+        setAiSettings(settings.aiSettings || AI_DEFAULTS);
+        setLoading(false);
+    }, [settings]);
+
+    // ── Toggle a flag — marks dirty, saved via Save changes button ──────────────
+    const handleToggle = (flagId, isLive) => {
         if (!isLive) return; // coming-soon flags are not togglable
-        const next = { ...flags, [flagId]: !(flags[flagId] !== false) };
-        setFlags(next);
-        try {
-            const res = await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify({ featureFlags: next }),
-            });
-            if (!res.ok) {
-                const d = await res.json();
-                throw new Error(d.error);
-            }
-        } catch (e) {
-            // Revert on error
-            setFlags(flags);
-            setError('Failed to save flag: ' + e.message);
-        }
+        setFlags(prev => ({ ...prev, [flagId]: !(prev[flagId] !== false) }));
+        setDirty(true);
     };
 
-    // ── Save AI settings ──────────────────────────────────────
+    // ── Toggle tab visibility — marks dirty, saved via Save changes button ──────
+    const handleTabVizToggle = (key) => {
+        setTabViz(prev => ({ ...prev, [key]: !prev[key] }));
+        setDirty(true);
+    };
+
+    // ── Save all — AI settings + feature flags + tab visibility ─────────────────
     const handleSaveAi = async () => {
         setSaving(true);
         try {
             const res = await dbFetch('/.netlify/functions/settings', {
                 method: 'PUT',
-                body: JSON.stringify({ aiSettings }),
+                body: JSON.stringify({
+                    aiSettings,
+                    featureFlags: flags,
+                    leadsEnabled:  tabViz.leadsEnabled,
+                    quotesEnabled: tabViz.quotesEnabled,
+                }),
             });
             if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            setSettings(prev => ({
+                ...prev,
+                aiSettings,
+                featureFlags: flags,
+                leadsEnabled:  tabViz.leadsEnabled,
+                quotesEnabled: tabViz.quotesEnabled,
+            }));
             setDirty(false);
         } catch (e) {
-            setError('Failed to save AI settings: ' + e.message);
+            setError('Failed to save: ' + e.message);
         } finally {
             setSaving(false);
         }
@@ -15820,7 +16303,7 @@ const FeaturesDetail = ({ onBack }) => {
                 dirty={dirty}
                 actions={[
                     <DataBtn key="exp" label="Export config" onClick={handleExportConfig}/>,
-                    <DataBtn key="sav" label={saving ? 'Saving…' : 'Save AI changes'} primary disabled={saving || !dirty} onClick={handleSaveAi}/>,
+                    <DataBtn key="sav" label={saving ? 'Saving…' : 'Save changes'} primary disabled={saving || !dirty} onClick={handleSaveAi}/>,
                 ]}
             />
 
@@ -15833,6 +16316,34 @@ const FeaturesDetail = ({ onBack }) => {
                     <b style={{ color:T.info }}>Beta features active.</b> Workspace has {betaOn} beta flag{betaOn>1?'s':''} enabled. Behavior may change between releases.
                 </div>
             )}
+
+            {/* ── Tab visibility ── */}
+            <DataCard title="Tab visibility" desc="Show or hide top-level navigation tabs for all users in this workspace.">
+                {[
+                    { key: 'leadsEnabled',  name: 'Leads tab',  desc: 'Show the Leads tab in the top navigation bar.' },
+                    { key: 'quotesEnabled', name: 'Quotes tab', desc: 'Show the Quotes tab in the top navigation bar.' },
+                ].map((item, i, arr) => {
+                    const on = tabViz[item.key];
+                    return (
+                        <div key={item.key} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 0', borderBottom: i < arr.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                            <div onClick={() => handleTabVizToggle(item.key)}
+                                style={{ width:30, height:18, borderRadius:9, background: on ? T.ok : T.border, position:'relative', flexShrink:0, cursor:'pointer', transition:'background 120ms' }}>
+                                <span style={{ position:'absolute', top:2, left: on ? 14 : 2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+                            </div>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, display:'flex', alignItems:'center', gap:6 }}>
+                                    {item.name}
+                                    <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(77,107,61,0.12)', color:T.ok, fontSize:10.5, fontWeight:700 }}>Live</span>
+                                </div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>{item.desc}</div>
+                            </div>
+                            <div style={{ fontSize:11, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', textAlign:'right', minWidth:80 }}>
+                                {on ? 'Visible' : 'Hidden'}
+                            </div>
+                        </div>
+                    );
+                })}
+            </DataCard>
 
             {/* ── Feature flags ── */}
             <DataCard title={`Feature flags (${onCount} / ${FLAG_DEFS.length} on)`} desc="Toggle workspace-wide features. Live flags take effect immediately. Coming soon flags are stored but not yet active.">
@@ -16110,6 +16621,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         'competitors':          'competitors',
         'reasons-won':          'reasons-won',
         'reasons-lost':         'reasons-lost',
+        'buyer-personas':       'buyer-personas',
     };
 
     // ── Live card badge counts — fetched once on mount ────────────────────────
@@ -16222,7 +16734,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'import')   return <ImportDetail   onBack={onBack}/>;
         if (id === 'export')   return <ExportDetail   onBack={onBack}/>;
         if (id === 'backup')   return <BackupDetail   onBack={onBack}/>;
-        if (id === 'features') return <FeaturesDetail onBack={onBack}/>;
+        if (id === 'features') return <FeaturesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Security detail pages
         if (id === 'sso')              return <SsoDetail       onBack={onBack}/>;

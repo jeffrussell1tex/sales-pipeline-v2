@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../AppContext';
+import { dbFetch } from '../utils/storage';
 
 // ── Design tokens ──────────────────────────────────────────────
 const T = {
@@ -81,9 +82,8 @@ const dayLabel = (isoDay) => {
 };
 
 // ── Snooze picker (unchanged from original) ────────────────────
-function SnoozePicker({ task, onSnooze, onClose }) {
+function SnoozePicker({ task, onSnooze, onClose, anchorRect }) {
     const ref = useRef(null);
-    const [openUpward, setOpenUpward] = useState(false);
 
     useEffect(() => {
         const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
@@ -91,23 +91,32 @@ function SnoozePicker({ task, onSnooze, onClose }) {
         return () => document.removeEventListener('mousedown', handler);
     }, [onClose]);
 
-    // On mount, check if the popover clips the viewport bottom and flip upward if so
-    useEffect(() => {
-        if (!ref.current) return;
-        const rect = ref.current.getBoundingClientRect();
-        if (rect.bottom > window.innerHeight - 8) setOpenUpward(true);
-    }, []);
+    const POPOVER_H = 168;
+    const POPOVER_W = 200;
+    const MARGIN = 8;
+
+    // Decide whether to open above or below the button
+    const openUpward = anchorRect && (anchorRect.bottom + POPOVER_H + MARGIN > window.innerHeight);
+
+    const top  = openUpward
+        ? anchorRect.top - POPOVER_H - MARGIN
+        : anchorRect.bottom + MARGIN;
+    const left = Math.min(
+        anchorRect.right - POPOVER_W,
+        window.innerWidth - POPOVER_W - MARGIN
+    );
 
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const addDays = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; };
     const options = [
-        { label: 'Tomorrow',   sublabel: new Date(addDays(1)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}), days: 1 },
-        { label: 'In 3 days',  sublabel: new Date(addDays(3)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}), days: 3 },
-        { label: 'Next week',  sublabel: new Date(addDays(7)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}), days: 7 },
-        { label: 'In 2 weeks', sublabel: new Date(addDays(14)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}), days: 14 },
+        { label: 'Tomorrow',  sublabel: new Date(addDays(1)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),  days: 1  },
+        { label: '2 Days',    sublabel: new Date(addDays(2)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),  days: 2  },
+        { label: '3 Days',    sublabel: new Date(addDays(3)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),  days: 3  },
+        { label: '1 Week',    sublabel: new Date(addDays(7)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),  days: 7  },
+        { label: '2 Weeks',   sublabel: new Date(addDays(14)+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}), days: 14 },
     ];
     return (
-        <div ref={ref} style={{ position: 'absolute', right: 0, ...(openUpward ? { bottom: '110%' } : { top: '110%' }), zIndex: 50, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, boxShadow: '0 8px 24px rgba(42,38,34,0.15)', width: 200, overflow: 'hidden', fontFamily: T.sans }}>
+        <div ref={ref} style={{ position: 'fixed', top, left, zIndex: 9999, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, boxShadow: '0 8px 24px rgba(42,38,34,0.15)', width: POPOVER_W, overflow: 'hidden', fontFamily: T.sans }}>
             <div style={{ padding: '8px 12px 6px', borderBottom: `1px solid ${T.border}` }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: T.inkMuted, letterSpacing: 0.8, textTransform: 'uppercase' }}>Snooze until</div>
             </div>
@@ -196,10 +205,12 @@ function SubGroupHeader({ label, count, accent, subtle }) {
 }
 
 // ── Open task row ──────────────────────────────────────────────
-function OpenTaskRow({ task, isOverdue, opportunities, contacts, getStageColor, canEdit, handleCompleteTask, handleSaveTask, setViewingTask, setEditingTask, setShowTaskModal }) {
+function OpenTaskRow({ task, isOverdue, opportunities, contacts, getStageColor, canEdit, handleCompleteTask, handleSaveTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal }) {
     const [hov,        setHov]        = useState(false);
     const [snoozeOpen, setSnoozeOpen] = useState(false);
+    const [snoozeAnchorRect, setSnoozeAnchorRect] = useState(null);
     const [completing, setCompleting] = useState(false);
+    const snoozeButtonRef = useRef(null);
 
     const opp     = task.opportunityId ? opportunities.find(o => o.id === task.opportunityId) : null;
     const contact = task.contactId     ? contacts.find(c => c.id === task.contactId)          : null;
@@ -218,7 +229,27 @@ function OpenTaskRow({ task, isOverdue, opportunities, contacts, getStageColor, 
     const handleSnooze = async (newDate) => {
         setSnoozeOpen(false);
         if (!canEdit) return;
-        await handleSaveTask({ ...task, dueDate: newDate, status: 'Open', completed: false });
+        const updated = { ...task, dueDate: newDate, status: 'Open', completed: false };
+        // Optimistic update — no modal
+        setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+        try {
+            const res = await dbFetch('/.netlify/functions/tasks', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updated),
+            });
+            const data = await res.json();
+            if (res.ok && data.task) {
+                setTasks(prev => prev.map(t => t.id === task.id ? data.task : t));
+            } else if (!res.ok) {
+                // Revert on failure
+                setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+                console.error('Snooze save failed:', data);
+            }
+        } catch (err) {
+            setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+            console.error('Snooze network error:', err);
+        }
     };
 
     return (
@@ -270,13 +301,19 @@ function OpenTaskRow({ task, isOverdue, opportunities, contacts, getStageColor, 
                 {/* Hover actions */}
                 {hov && canEdit && (
                     <>
-                        <div style={{ position: 'relative' }}>
-                            <button onClick={e => { e.stopPropagation(); setSnoozeOpen(o => !o); }} title="Snooze"
+                        <div ref={snoozeButtonRef} style={{ position: 'relative' }}>
+                            <button onClick={e => {
+                                    e.stopPropagation();
+                                    if (snoozeButtonRef.current) {
+                                        setSnoozeAnchorRect(snoozeButtonRef.current.getBoundingClientRect());
+                                    }
+                                    setSnoozeOpen(o => !o);
+                                }} title="Snooze"
                                 style={{ padding: '3px 8px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 11, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans, display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9h6l-4 5h4"/></svg>
                                 Snooze
                             </button>
-                            {snoozeOpen && <SnoozePicker task={task} onSnooze={handleSnooze} onClose={() => setSnoozeOpen(false)}/>}
+                            {snoozeOpen && <SnoozePicker task={task} onSnooze={handleSnooze} onClose={() => setSnoozeOpen(false)} anchorRect={snoozeAnchorRect}/>}
                         </div>
                         <button onClick={e => { e.stopPropagation(); setEditingTask(task); setShowTaskModal(true); }}
                             style={{ padding: '3px 8px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 11, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
@@ -610,7 +647,7 @@ export default function TasksTab() {
         showConfirm,
         getStageColor, calculateDealHealth,
         visibleTasks,
-        handleDeleteTask, handleCompleteTask, handleSaveTask,
+        handleDeleteTask, handleCompleteTask, handleSaveTask, setTasks,
         handleAddTaskToCalendar,
         calendarEvents, calendarConnected, calendarLoading,
         allPipelines, activePipeline,
@@ -769,7 +806,7 @@ export default function TasksTab() {
     const handleAddTask = () => { setEditingTask(null); setShowTaskModal(true); };
 
     // Row props bundle for OpenTaskRow
-    const rowProps = { opportunities, contacts, getStageColor, canEdit, handleCompleteTask, handleSaveTask, setViewingTask, setEditingTask, setShowTaskModal };
+    const rowProps = { opportunities, contacts, getStageColor, canEdit, handleCompleteTask, handleSaveTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal };
 
     // ── Sub-tab views config ───────────────────────────────────
     const views = [

@@ -25,6 +25,7 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
 
     const [showNewTypeInput, setShowNewTypeInput] = useState(false);
     const [newType, setNewType] = useState('');
+    const [modalTab, setModalTab] = useState('task');
     
     // Search states
     const [opportunitySearch, setOpportunitySearch] = useState(() => {
@@ -95,9 +96,28 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                     </h2>
                     <span style={{ fontSize: '0.6875rem', color: 'rgba(245,241,235,0.35)', fontWeight: '500', letterSpacing: '0.03em' }}>⠿ drag</span>
                 </div>
+                {/* ── Tab strip ── */}
+                {(() => {
+                    const customFields = (settings?.customFieldsByObject?.Tasks || []).filter(f => (f.visibility||'').includes('Detail'));
+                    if (customFields.length === 0) return null;
+                    const tabStyle = (t) => ({
+                        padding: '8px 18px', border: 'none', background: 'transparent',
+                        borderBottom: modalTab === t ? '2px solid #c8b99a' : '2px solid transparent',
+                        color: modalTab === t ? '#2a2622' : '#8a8378',
+                        fontWeight: modalTab === t ? 700 : 500,
+                        fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+                        marginBottom: -1, transition: 'color 120ms, border-color 120ms',
+                    });
+                    return (
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e6ddd0', paddingLeft: 8 }}>
+                            <button type="button" style={tabStyle('task')} onClick={() => setModalTab('task')}>Task</button>
+                            <button type="button" style={tabStyle('details')} onClick={() => setModalTab('details')}>Task Details</button>
+                        </div>
+                    );
+                })()}
                 <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1, minHeight: 0 }}>
                 <form onSubmit={handleSubmit}>
-                    <div className="form-grid">
+                    {modalTab === 'task' && <div className="form-grid">
                         <div className="form-group">
                             <label>Assign To</label>
                             <div style={{ position: 'relative' }}>
@@ -382,9 +402,9 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                             <label>Reminder Time</label>
                             <TimePicker value={formData.reminderTime} onChange={val => handleChange('reminderTime', val)} />
                         </div>
-                    </div>
+                    </div>}
                     {/* ── Add to Google Calendar checkbox ── */}
-                    {formData.dueDate && (
+                    {modalTab === 'task' && formData.dueDate && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.75rem 0', borderTop: '1px solid #f1f5f9', marginTop: '0.25rem' }}>
                             <input
                                 type="checkbox"
@@ -399,6 +419,49 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                             <span style={{ fontSize: '0.6875rem', color: '#94a3b8' }}>Creates an all-day event on the due date</span>
                         </div>
                     )}
+                    {modalTab === 'details' && (() => {
+                        const customFields = (settings?.customFieldsByObject?.Tasks || []).filter(f => (f.visibility||'').includes('Detail'));
+                        if (customFields.length === 0) return (
+                            <div style={{ padding: '2rem', textAlign: 'center', color: '#8a8378', fontSize: 13, fontStyle: 'italic' }}>
+                                No custom fields configured for Tasks yet.<br/>
+                                <span style={{ fontSize: 12 }}>Go to Settings → Sales process → Custom fields to add them.</span>
+                            </div>
+                        );
+                        return (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, padding: '4px 0' }}>
+                                {customFields.map(f => {
+                                    const apiKey = f.api.replace(/^[^.]+\./, '');
+                                    const val = formData[apiKey] ?? formData[f.api] ?? '';
+                                    return (
+                                        <div key={f.api} className="form-group">
+                                            <label>
+                                                {f.label}{f.required && <span style={{ color: '#9c3a2e', marginLeft: 3 }}>*</span>}
+                                            </label>
+                                            {f.type === 'Toggle' ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6 }}>
+                                                    <input type="checkbox" checked={!!val}
+                                                        onChange={e => handleChange(apiKey, e.target.checked)}
+                                                        style={{ width: 16, height: 16, cursor: 'pointer' }}/>
+                                                    <span style={{ fontSize: 13, color: '#2a2622' }}>{val ? 'Yes' : 'No'}</span>
+                                                </div>
+                                            ) : f.type === 'Date' ? (
+                                                <input type="date" value={val}
+                                                    onChange={e => handleChange(apiKey, e.target.value)}
+                                                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #e6ddd0', borderRadius: 4, fontSize: 13, color: '#2a2622', background: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}/>
+                                            ) : (
+                                                <input
+                                                    type={f.type === 'Number' ? 'number' : f.type === 'Email' ? 'email' : f.type === 'Phone' ? 'tel' : f.type === 'URL' ? 'url' : 'text'}
+                                                    value={val}
+                                                    onChange={e => handleChange(apiKey, e.target.value)}
+                                                    placeholder={f.label}
+                                                    style={{ width: '100%', padding: '8px 10px', border: '1px solid #e6ddd0', borderRadius: 4, fontSize: 13, color: '#2a2622', background: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}/>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })()}
                     <div className="modal-actions">
                         <button type="button" className="btn btn-secondary" onClick={onClose} disabled={saving}>
                             Cancel

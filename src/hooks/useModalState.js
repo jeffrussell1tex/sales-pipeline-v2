@@ -12,6 +12,7 @@ export function useModalState() {
     const [showShortcuts, setShowShortcuts] = useState(false);
     const [showCsvImportModal, setShowCsvImportModal] = useState(false);
     const [showLeadImportModal, setShowLeadImportModal] = useState(false);
+    const [showLeadModal, setShowLeadModal] = useState(false);
     const [showOutlookImportModal, setShowOutlookImportModal] = useState(false);
     const [csvImportType, setCsvImportType] = useState('contacts');
 
@@ -58,6 +59,7 @@ export function useModalState() {
         showShortcuts, setShowShortcuts,
         showCsvImportModal, setShowCsvImportModal,
         showLeadImportModal, setShowLeadImportModal,
+        showLeadModal, setShowLeadModal,
         showOutlookImportModal, setShowOutlookImportModal,
         csvImportType, setCsvImportType,
         editingOpp, setEditingOpp,

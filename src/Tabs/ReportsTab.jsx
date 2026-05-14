@@ -54,6 +54,16 @@ export default function ReportsTab({ leadsEnabled = true }) {
     const [reportsTerritory, setReportsTerritory] = useState(null);
     const [actPeriod, setActPeriod] = useState('Last 30 Days');
     const [commissionReportFilter, setCommissionReportFilter] = useState('Annual');
+    const [savedReportsList, setSavedReportsList] = useState([]);
+
+    // Load saved reports once at ReportsTab level so ActivityHistory saves are visible in Saved tab
+    React.useEffect(() => {
+        let cancelled = false;
+        dbFetch('/.netlify/functions/saved-reports')
+            .then(data => { if (!cancelled) setSavedReportsList(data?.reports || []); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
 
 
                 const currentYear = new Date().getFullYear();
@@ -694,6 +704,7 @@ ${bodyHtml}
                               { key:'pipeline',    label:'Pipeline & Forecast', sub:'Is the quarter on track?' },
                               { key:'performance', label:'Performance',          sub:'Quota, win rate, velocity' },
                               { key:'activity',    label:'Activity',             sub:'What are reps doing?' },
+                              { key:'history',     label:'Activity History',      sub:'Account & contact timelines' },
                               ...(leadsEnabled ? [{ key:'leads', label:'Leads', sub:'Top of funnel' }] : []),
                               { key:'custom',      label:'Saved reports',        sub:'Your custom views' },
                             ].map(({ key, label, sub }) => (
@@ -2424,6 +2435,24 @@ ${bodyHtml}
                         )}
 
                         {/* ════════════════════════════════════════════
+                             TAB: ACTIVITY HISTORY
+                            ════════════════════════════════════════════ */}
+                        {reportSubTab === 'history' && (
+                            <ActivityHistoryTab
+                                accounts={accounts}
+                                contacts={contacts}
+                                activities={activities}
+                                opportunities={opportunities}
+                                tasks={tasks}
+                                currentUser={currentUser}
+                                userRole={userRole}
+                                settings={settings}
+                                canSeeAll={canSeeAll}
+                                onSaveReport={(report) => setSavedReportsList(prev => [report, ...prev.filter(r => r.id !== report.id)])}
+                            />
+                        )}
+
+                        {/* ════════════════════════════════════════════
                              TAB: SAVED REPORTS
                             ════════════════════════════════════════════ */}
                         {reportSubTab === 'custom' && (
@@ -2433,6 +2462,8 @@ ${bodyHtml}
                                 activities={activities}
                                 settings={settings}
                                 currentUser={currentUser}
+                                savedReportsList={savedReportsList}
+                                setSavedReportsList={setSavedReportsList}
                             />
                         )}
                         </div>
@@ -2444,7 +2475,7 @@ ${bodyHtml}
 // ─────────────────────────────────────────────────────────────
 //  Saved Reports Tab — proper React component (hooks-safe)
 // ─────────────────────────────────────────────────────────────
-function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, settings, currentUser }) {
+function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp }) {
     const [srchQ, setSrchQ] = React.useState('');
     const [activeTemplate, setActiveTemplate] = React.useState(null);
     const [selectedRepSC, setSelectedRepSC] = React.useState(currentUser||'');
@@ -2462,18 +2493,11 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
     const [builderChart, setBuilderChart] = React.useState('stacked');
     const [builderAdvanced, setBuilderAdvanced] = React.useState(false);
     // Saved reports library state
-    const [savedReportsList, setSavedReportsList] = React.useState([]);
+    // Use shared state from ReportsTab so ActivityHistory saves appear here immediately
+    const savedReportsList = savedReportsListProp ?? [];
+    const setSavedReportsList = setSavedReportsListProp ?? (() => {});
     const [saveState, setSaveState] = React.useState('idle'); // 'idle'|'saving'|'saved'|'error'
     const [saveError, setSaveError] = React.useState(null);
-
-    // Load saved reports on mount
-    React.useEffect(() => {
-        let cancelled = false;
-        dbFetch('/.netlify/functions/saved-reports')
-            .then(data => { if (!cancelled) setSavedReportsList(data?.reports || []); })
-            .catch(() => {}); // silent — library just shows empty
-        return () => { cancelled = true; };
-    }, []);
 
     // Save report handler — used by both blank and AI builder Save to library buttons
     const handleSaveReport = React.useCallback(async ({ name, source, dims, metrics, chartType, description }) => {
@@ -4904,6 +4928,774 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
                     </div>
                 )}
                 </>
+            )}
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Activity History Tab — Account History + Contact History
+// ─────────────────────────────────────────────────────────────
+function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, onSaveReport }) {
+
+    const T = {
+        bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
+        border: '#e6ddd0', borderStrong: '#d4c8b4',
+        ink: '#2a2622', inkMid: '#5a544c', inkMuted: '#8a8378',
+        gold: '#c8b99a', goldInk: '#7a6a48',
+        danger: '#9c3a2e', warn: '#b87333', ok: '#4d6b3d', info: '#3a5a7a',
+        sans: '"Plus Jakarta Sans", system-ui, sans-serif',
+        serif: 'Georgia, serif',
+        r: 3,
+    };
+
+    const [historySubTab, setHistorySubTab] = React.useState('account');
+    const [selectedAccountId, setSelectedAccountId] = React.useState('');
+    const [selectedContactId, setSelectedContactId] = React.useState('');
+    const [period, setPeriod] = React.useState('6months');
+    const [showFilter, setShowFilter] = React.useState('all');
+    const [accSearch, setAccSearch] = React.useState('');
+    const [conSearch, setConSearch] = React.useState('');
+    const [accOpen, setAccOpen] = React.useState(false);
+    const [conOpen, setConOpen] = React.useState(false);
+    const accRef = React.useRef(null);
+    const conRef = React.useRef(null);
+
+    const currentUserName = currentUser?.name || currentUser || '';
+    const isAdmin = userRole === 'Admin';
+    const isManager = userRole === 'Manager';
+
+    // ── Close dropdowns on outside click ──────────────────────
+    React.useEffect(() => {
+        const handler = (e) => {
+            if (accRef.current && !accRef.current.contains(e.target)) setAccOpen(false);
+            if (conRef.current && !conRef.current.contains(e.target)) setConOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    // ── Period cutoff ──────────────────────────────────────────
+    const periodCutoff = React.useMemo(() => {
+        const now = new Date();
+        if (period === '1month')  { const d = new Date(now); d.setMonth(d.getMonth()-1); return d; }
+        if (period === '6months') { const d = new Date(now); d.setMonth(d.getMonth()-6); return d; }
+        if (period === '1year')   { const d = new Date(now); d.setFullYear(d.getFullYear()-1); return d; }
+        return null; // all time
+    }, [period]);
+
+    const inPeriod = (dateStr) => {
+        if (!periodCutoff || !dateStr) return true;
+        return new Date(dateStr) >= periodCutoff;
+    };
+
+    // ── Access-controlled account list ────────────────────────
+    const visibleAccounts = React.useMemo(() => {
+        const all = accounts || [];
+        if (isAdmin || isManager) return all;
+        // Rep: only accounts they own or are on the team for
+        const myTeam = (() => {
+            const me = (settings?.users || []).find(u => u.name === currentUserName);
+            if (!me?.team) return new Set([currentUserName]);
+            const members = (settings?.users || []).filter(u => u.team === me.team).map(u => u.name);
+            return new Set(members);
+        })();
+        return all.filter(a => {
+            const owner = a.accountOwner || a.assignedRep || '';
+            return myTeam.has(owner);
+        });
+    }, [accounts, isAdmin, isManager, currentUserName, settings]);
+
+    // ── Access-controlled contact list ────────────────────────
+    const visibleContacts = React.useMemo(() => {
+        const all = contacts || [];
+        if (isAdmin || isManager) return all;
+        const myTeam = (() => {
+            const me = (settings?.users || []).find(u => u.name === currentUserName);
+            if (!me?.team) return new Set([currentUserName]);
+            const members = (settings?.users || []).filter(u => u.team === me.team).map(u => u.name);
+            return new Set(members);
+        })();
+        return all.filter(c => {
+            const owner = c.assignedRep || c.accountOwner || '';
+            return myTeam.has(owner) || !owner;
+        });
+    }, [contacts, isAdmin, isManager, currentUserName, settings]);
+
+    // No auto-select — user must choose an account/contact
+
+    const selectedAccount = visibleAccounts.find(a => a.id === selectedAccountId) || null;
+    const selectedContact = visibleContacts.find(c => c.id === selectedContactId) || null;
+
+    // ── Filtered account/contact lists for search ──────────────
+    const filteredAccounts = React.useMemo(() => {
+        if (!accSearch.trim()) return visibleAccounts;
+        const q = accSearch.toLowerCase();
+        return visibleAccounts.filter(a => (a.name||'').toLowerCase().includes(q));
+    }, [visibleAccounts, accSearch]);
+
+    const filteredContacts = React.useMemo(() => {
+        if (!conSearch.trim()) return visibleContacts;
+        const q = conSearch.toLowerCase();
+        return visibleContacts.filter(c => ((c.firstName||'')+' '+(c.lastName||'')+' '+(c.company||'')).toLowerCase().includes(q));
+    }, [visibleContacts, conSearch]);
+
+    // ── Build event feed for selected account ─────────────────
+    const accountEvents = React.useMemo(() => {
+        if (!selectedAccount) return [];
+        const accName = (selectedAccount.name || '').toLowerCase();
+        const events = [];
+
+        // Build set of opp IDs for this account (activities/tasks link via opportunityId)
+        const accOppsAll = (opportunities || []).filter(o =>
+            (o.account || o.accountName || '').toLowerCase() === accName
+        );
+        const accOppIds = new Set(accOppsAll.map(o => o.id));
+
+        // Activities linked via opportunityId → account, or directly by companyName (no opp)
+        (activities || []).forEach(a => {
+            const linkedByOpp = a.opportunityId && accOppIds.has(a.opportunityId);
+            const linkedByName = (a.companyName || a.account || a.accountName || '').toLowerCase() === accName;
+            if (!linkedByOpp && !linkedByName) return;
+            const opp = linkedByOpp ? accOppsAll.find(o => o.id === a.opportunityId) : null;
+            events.push({
+                id: 'act_' + a.id,
+                date: a.date || a.createdAt || '',
+                type: 'activity',
+                actType: a.type || 'Activity',
+                label: a.subject || a.description || a.type || 'Activity',
+                sub: a.notes || a.outcome || (opp ? opp.opportunityName || opp.name : '') || '',
+                rep: a.rep || a.salesRep || a.assignedTo || a.author || '',
+                amount: null,
+            });
+        });
+
+        // Tasks linked via opportunityId → account, or directly by account name
+        (tasks || []).forEach(t => {
+            const linkedByOpp = t.opportunityId && accOppIds.has(t.opportunityId);
+            const linkedByName = (t.companyName || t.account || t.accountName || '').toLowerCase() === accName;
+            if (!linkedByOpp && !linkedByName) return;
+            events.push({
+                id: 'task_' + t.id,
+                date: t.completedAt || t.dueDate || t.createdAt || '',
+                type: 'task',
+                actType: t.completed ? 'Task Done' : 'Task',
+                label: t.title || t.subject || 'Task',
+                sub: t.notes || '',
+                rep: t.assignedTo || t.salesRep || '',
+                amount: null,
+                done: !!t.completed,
+            });
+        });
+
+        // Opportunities linked to this account
+        accOppsAll.forEach(o => {
+            if (o.stage === 'Closed Won') {
+                events.push({
+                    id: 'opp_won_' + o.id,
+                    date: o.closedAt || o.closeDate || o.updatedAt || '',
+                    type: 'won', actType: 'Won',
+                    label: o.opportunityName || o.name || 'Deal',
+                    sub: o.stage, rep: o.salesRep || o.assignedTo || '',
+                    amount: parseFloat(o.arr||o.revenue||0)||0,
+                });
+            } else if (o.stage === 'Closed Lost') {
+                events.push({
+                    id: 'opp_lost_' + o.id,
+                    date: o.closedAt || o.closeDate || o.updatedAt || '',
+                    type: 'lost', actType: 'Lost',
+                    label: o.opportunityName || o.name || 'Deal',
+                    sub: o.lostReason || '', rep: o.salesRep || o.assignedTo || '',
+                    amount: parseFloat(o.arr||o.revenue||0)||0,
+                });
+            } else {
+                events.push({
+                    id: 'opp_open_' + o.id,
+                    date: o.createdAt || o.closeDate || '',
+                    type: 'deal', actType: 'Deal',
+                    label: o.opportunityName || o.name || 'Deal',
+                    sub: o.stage, rep: o.salesRep || o.assignedTo || '',
+                    amount: parseFloat(o.arr||o.revenue||0)||0,
+                });
+            }
+        });
+
+        return events
+            .filter(e => inPeriod(e.date))
+            .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    }, [selectedAccount, activities, tasks, opportunities, period, periodCutoff]);
+
+    // ── Build event feed for selected contact ─────────────────
+    const contactEvents = React.useMemo(() => {
+        if (!selectedContact) return [];
+        const cName = ((selectedContact.firstName||'')+' '+(selectedContact.lastName||'')).trim().toLowerCase();
+        const cId = selectedContact.id;
+        const events = [];
+
+        // Opps this contact is linked to
+        const conOppsAll = (opportunities || []).filter(o => {
+            const ids = Array.isArray(o.contactIds) ? o.contactIds : [];
+            return ids.includes(cId);
+        });
+        const conOppIds = new Set(conOppsAll.map(o => o.id));
+
+        // Activities: linked via opportunityId on a contact opp, or directly by contactId/name/contactSearch
+        (activities || []).forEach(a => {
+            const linkedByOpp  = a.opportunityId && conOppIds.has(a.opportunityId);
+            const linkedDirect = (a.contactId === cId) ||
+                (a.contact||a.contactName||a.contactSearch||'').toLowerCase() === cName;
+            if (!linkedByOpp && !linkedDirect) return;
+            const opp = linkedByOpp ? conOppsAll.find(o => o.id === a.opportunityId) : null;
+            events.push({
+                id: 'act_' + a.id,
+                date: a.date || a.createdAt || '',
+                type: 'activity', actType: a.type || 'Activity',
+                label: a.subject || a.description || a.type || 'Activity',
+                sub: a.notes || a.outcome || (opp ? opp.opportunityName || opp.name : '') || '',
+                rep: a.rep || a.salesRep || a.assignedTo || a.author || '',
+                amount: null,
+            });
+        });
+
+        // Tasks: linked via opportunityId on a contact opp, or directly
+        (tasks || []).forEach(t => {
+            const linkedByOpp  = t.opportunityId && conOppIds.has(t.opportunityId);
+            const linkedDirect = (t.contactId === cId) ||
+                (t.contact||t.contactName||t.contactSearch||'').toLowerCase() === cName;
+            if (!linkedByOpp && !linkedDirect) return;
+            events.push({
+                id: 'task_' + t.id,
+                date: t.completedAt || t.dueDate || t.createdAt || '',
+                type: 'task', actType: t.completed ? 'Task Done' : 'Task',
+                label: t.title || t.subject || 'Task',
+                sub: t.notes || '',
+                rep: t.assignedTo || '',
+                amount: null, done: !!t.completed,
+            });
+        });
+
+        // Opportunities
+        conOppsAll.forEach(o => {
+            if (o.stage === 'Closed Won') {
+                events.push({ id:'opp_won_'+o.id, date:o.closedAt||o.closeDate||o.updatedAt||'', type:'won', actType:'Won', label:o.opportunityName||o.name||'Deal', sub:o.stage, rep:o.salesRep||o.assignedTo||'', amount:parseFloat(o.arr||o.revenue||0)||0 });
+            } else if (o.stage === 'Closed Lost') {
+                events.push({ id:'opp_lost_'+o.id, date:o.closedAt||o.closeDate||o.updatedAt||'', type:'lost', actType:'Lost', label:o.opportunityName||o.name||'Deal', sub:o.lostReason||'', rep:o.salesRep||o.assignedTo||'', amount:parseFloat(o.arr||o.revenue||0)||0 });
+            } else {
+                events.push({ id:'opp_open_'+o.id, date:o.createdAt||o.closeDate||'', type:'deal', actType:'Deal', label:o.opportunityName||o.name||'Deal', sub:o.stage, rep:o.salesRep||o.assignedTo||'', amount:parseFloat(o.arr||o.revenue||0)||0 });
+            }
+        });
+
+        return events
+            .filter(e => inPeriod(e.date))
+            .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    }, [selectedContact, activities, tasks, opportunities, period, periodCutoff]);
+
+    // ── KPIs ───────────────────────────────────────────────────
+    const buildKpis = (events, oppsForEntity) => {
+        const acts   = events.filter(e => e.type === 'activity');
+        const tasksDone = events.filter(e => e.type === 'task' && e.done);
+        const won    = oppsForEntity.filter(o => o.stage === 'Closed Won');
+        const lost   = oppsForEntity.filter(o => o.stage === 'Closed Lost');
+        const open   = oppsForEntity.filter(o => o.stage !== 'Closed Won' && o.stage !== 'Closed Lost');
+        const wonVal = won.reduce((s, o) => s + (parseFloat(o.arr||o.revenue||0)||0), 0);
+        const lostVal= lost.reduce((s, o) => s + (parseFloat(o.arr||o.revenue||0)||0), 0);
+        const openVal= open.reduce((s, o) => s + (parseFloat(o.arr||o.revenue||0)||0), 0);
+        return { acts: acts.length, tasksDone: tasksDone.length, won: won.length, wonVal, lost: lost.length, lostVal, open: open.length, openVal };
+    };
+
+    const fmtMoney = (n) => n >= 1e6 ? '$'+(n/1e6).toFixed(1)+'M' : n >= 1e3 ? '$'+Math.round(n/1e3)+'K' : n > 0 ? '$'+Math.round(n) : '$0';
+
+    const accOpps = React.useMemo(() => {
+        if (!selectedAccount) return [];
+        const name = selectedAccount.name || '';
+        return (opportunities||[]).filter(o => (o.account||o.accountName||'').toLowerCase() === name.toLowerCase() && inPeriod(o.createdAt||o.closeDate||''));
+    }, [selectedAccount, opportunities, period, periodCutoff]);
+
+    const conOpps = React.useMemo(() => {
+        if (!selectedContact) return [];
+        const cId = selectedContact.id;
+        return (opportunities||[]).filter(o => (Array.isArray(o.contactIds) ? o.contactIds.includes(cId) : false) && inPeriod(o.createdAt||o.closeDate||''));
+    }, [selectedContact, opportunities, period, periodCutoff]);
+
+    // ── Filter events by showFilter ────────────────────────────
+    const filterEvents = (events) => {
+        if (showFilter === 'all') return events;
+        if (showFilter === 'activities') return events.filter(e => e.type === 'activity');
+        if (showFilter === 'tasks')      return events.filter(e => e.type === 'task');
+        if (showFilter === 'deals')      return events.filter(e => ['won','lost','deal'].includes(e.type));
+        if (showFilter === 'notes')      return events.filter(e => e.actType === 'Note');
+        return events;
+    };
+
+    // ── Group events by date bucket ────────────────────────────
+    const groupByDate = (events) => {
+        const today = new Date(); today.setHours(0,0,0,0);
+        const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+        const weekAgo = new Date(today); weekAgo.setDate(today.getDate()-7);
+        const monthAgo = new Date(today); monthAgo.setMonth(today.getMonth()-1);
+        const groups = {};
+        const order = [];
+        events.forEach(e => {
+            const d = e.date ? new Date(e.date) : null;
+            let bucket = 'Older';
+            if (d) {
+                const day = new Date(d); day.setHours(0,0,0,0);
+                if (day.getTime() === today.getTime())     bucket = 'Today';
+                else if (day.getTime() === yesterday.getTime()) bucket = 'Yesterday';
+                else if (day >= weekAgo)  bucket = 'This week';
+                else if (day >= monthAgo) bucket = 'Last month';
+            }
+            if (!groups[bucket]) { groups[bucket] = []; order.push(bucket); }
+            groups[bucket].push(e);
+        });
+        return order.filter((v,i,a) => a.indexOf(v) === i).map(k => ({ bucket: k, events: groups[k] }));
+    };
+
+    // ── Event type display config ──────────────────────────────
+    const typeConfig = {
+        activity: { bg: '#f0ece4', ink: '#5a544c' },
+        task:     { bg: '#f5efe3', ink: '#7a6a48' },
+        won:      { bg: 'rgba(77,107,61,0.12)', ink: '#4d6b3d' },
+        lost:     { bg: 'rgba(156,58,46,0.10)', ink: '#9c3a2e' },
+        deal:     { bg: 'rgba(58,90,122,0.10)', ink: '#3a5a7a' },
+    };
+    const typeLabels = { Call:'CALL', Email:'EMAIL', Meeting:'MEETING', Task:'TASK', Won:'WON', Lost:'LOST', Deal:'DEAL', Note:'NOTE', Activity:'ACTIVITY', Quote:'QUOTE' };
+
+    const EventRow = ({ event }) => {
+        const cfg = typeConfig[event.type] || typeConfig.activity;
+        const label = typeLabels[event.actType] || (event.actType||'').toUpperCase().slice(0,8);
+        const timeStr = event.date ? new Date(event.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}).toLowerCase() : '';
+        return (
+            <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 0', borderBottom:`1px solid ${T.border}` }}>
+                <div style={{ width:42, fontSize:11, color:T.inkMuted, fontFamily:T.sans, flexShrink:0, paddingTop:2, textAlign:'right' }}>{timeStr}</div>
+                <div style={{ width:36, height:36, borderRadius:'50%', background:cfg.bg, border:`1.5px solid ${T.borderStrong}`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    <span style={{ fontSize:11, color:cfg.ink }}>
+                        {event.type==='won'?'★':event.type==='lost'?'✕':event.type==='task'?'✓':event.type==='deal'?'◈':'●'}
+                    </span>
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                        <span style={{ display:'inline-block', padding:'2px 7px', background:cfg.bg, color:cfg.ink, fontSize:10, fontWeight:700, borderRadius:3, letterSpacing:0.5, fontFamily:T.sans }}>{label}</span>
+                        <span style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{event.label}</span>
+                        {event.amount > 0 && <span style={{ fontSize:12, fontWeight:700, color: event.type==='won' ? T.ok : event.type==='lost' ? T.danger : T.inkMid, fontFamily:T.sans, marginLeft:'auto' }}>{fmtMoney(event.amount)}</span>}
+                    </div>
+                    {event.sub && <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{event.sub}</div>}
+                    {event.rep && <div style={{ fontSize:11, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>by {event.rep}</div>}
+                </div>
+            </div>
+        );
+    };
+
+    // ── Activity mix ───────────────────────────────────────────
+    const buildMix = (events) => {
+        const calls    = events.filter(e => (e.actType||'').toLowerCase().includes('call')).length;
+        const emails   = events.filter(e => (e.actType||'').toLowerCase().includes('email')).length;
+        const meetings = events.filter(e => (e.actType||'').toLowerCase().includes('meeting')).length;
+        const max = Math.max(calls, emails, meetings, 1);
+        return [
+            { label:'Calls',    count:calls,    pct:Math.round(calls/max*100),    color:'#7a6a48' },
+            { label:'Emails',   count:emails,   pct:Math.round(emails/max*100),   color:'#5a7a8a' },
+            { label:'Meetings', count:meetings, pct:Math.round(meetings/max*100), color:'#4d6b3d' },
+        ];
+    };
+
+    // ── Period pills ───────────────────────────────────────────
+    const PeriodPill = ({ value, label }) => (
+        <button onClick={() => setPeriod(value)} style={{ padding:'4px 12px', border:'none', borderRadius:999, background: period===value ? T.ink : T.surface, color: period===value ? T.surface : T.inkMid, fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:T.sans, border:`1px solid ${period===value ? T.ink : T.border}` }}>
+            {label}
+        </button>
+    );
+
+    // ── Selector dropdown ──────────────────────────────────────
+    const EntitySelector = ({ label, selected, filtered, search, setSearch, open, setOpen, onSelect, refEl, nameOf }) => (
+        <div ref={refEl} style={{ position:'relative', minWidth:260 }}>
+            <div onClick={() => setOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, cursor:'pointer', fontSize:13, color:T.ink, fontFamily:T.sans }}>
+                <span style={{ flex:1, fontWeight: selected ? 500 : 400, color: selected ? T.ink : T.inkMuted }}>{selected ? nameOf(selected) : `Type to search ${label}s…`}</span>
+                <span style={{ fontSize:9, color:T.inkMuted }}>▾</span>
+            </div>
+            {open && (
+                <div style={{ position:'absolute', top:'100%', left:0, right:0, marginTop:3, zIndex:200, background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, boxShadow:'0 8px 24px rgba(42,38,34,0.12)', overflow:'hidden', maxHeight:260, display:'flex', flexDirection:'column' }}>
+                    <div style={{ padding:'8px 10px', borderBottom:`1px solid ${T.border}` }}>
+                        <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder={`Search ${label}s…`} style={{ width:'100%', border:'none', outline:'none', fontSize:12, color:T.ink, background:'transparent', fontFamily:T.sans }} />
+                    </div>
+                    <div style={{ overflowY:'auto', flex:1 }}>
+                        {filtered.length === 0 ? (
+                            <div style={{ padding:'12px', fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>No results.</div>
+                        ) : filtered.map(item => (
+                            <div key={item.id} onClick={() => { onSelect(item.id); setOpen(false); setSearch(''); }}
+                                style={{ padding:'8px 12px', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans, background: item.id === (selected?.id) ? T.surface2 : 'transparent', fontWeight: item.id === (selected?.id) ? 600 : 400 }}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                                onMouseLeave={e=>e.currentTarget.style.background=item.id===(selected?.id)?T.surface2:'transparent'}>
+                                {nameOf(item)}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
+    // ── KPI card ───────────────────────────────────────────────
+    const KpiCard = ({ label, value, sub, danger }) => (
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'14px 16px', flex:1, minWidth:0 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, fontFamily:T.sans }}>{label}</div>
+            <div style={{ fontSize:24, fontWeight:700, color: danger ? T.danger : T.ink, fontFamily:T.sans, lineHeight:1.1, marginTop:4 }}>{value}</div>
+            {sub && <div style={{ fontSize:11, color:T.inkMuted, marginTop:3, fontFamily:T.sans }}>{sub}</div>}
+        </div>
+    );
+
+    // ── Shared toolbar ─────────────────────────────────────────
+    const Toolbar = ({ selector }) => (
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
+            {selector}
+            <div style={{ flex:1 }}/>
+            <div style={{ display:'flex', gap:4 }}>
+                {[{v:'1month',l:'1 month'},{v:'6months',l:'6 months'},{v:'1year',l:'1 year'},{v:'all',l:'All time'}].map(p => (
+                    <PeriodPill key={p.v} value={p.v} label={p.l}/>
+                ))}
+            </div>
+        </div>
+    );
+
+    // ── Show filter bar ────────────────────────────────────────
+    const FilterBar = ({ totalCount }) => (
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:12, flexWrap:'wrap' }}>
+            {[{v:'all',l:'All'},{v:'activities',l:'Activities'},{v:'tasks',l:'Tasks'},{v:'deals',l:'Deals'},{v:'notes',l:'Notes'}].map(f => (
+                <button key={f.v} onClick={() => setShowFilter(f.v)} style={{ padding:'4px 12px', border:`1px solid ${showFilter===f.v ? T.ink : T.border}`, borderRadius:T.r, background: showFilter===f.v ? T.ink : T.surface, color: showFilter===f.v ? T.surface : T.inkMid, fontSize:11.5, fontWeight:500, cursor:'pointer', fontFamily:T.sans }}>
+                    {f.l}
+                </button>
+            ))}
+            <span style={{ marginLeft:'auto', fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>Showing {totalCount} of {totalCount} events</span>
+        </div>
+    );
+
+    // ── Grouped event feed ─────────────────────────────────────
+    const EventFeed = ({ events }) => {
+        const filtered = filterEvents(events);
+        const grouped = groupByDate(filtered);
+        if (filtered.length === 0) return (
+            <div style={{ textAlign:'center', padding:'3rem', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                No events in this period.
+            </div>
+        );
+        return (
+            <div>
+                <FilterBar totalCount={filtered.length}/>
+                {grouped.map(g => (
+                    <div key={g.bucket} style={{ marginBottom:20 }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.8, marginBottom:6, fontFamily:T.sans, display:'flex', alignItems:'center', gap:8 }}>
+                            {g.bucket}
+                            <span style={{ background:T.surface2, padding:'1px 7px', borderRadius:8, fontSize:10, fontWeight:600, color:T.inkMuted }}>{g.events.length}</span>
+                        </div>
+                        {g.events.map(e => <EventRow key={e.id} event={e}/>)}
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    // ── Right rail: Account at a glance ───────────────────────
+    const AccountGlance = ({ account, kpis, mix }) => {
+        if (!account) return null;
+        const owner = account.accountOwner || account.assignedRep || '—';
+        const status = account.warmthStatus || account.status || 'Active';
+        const statusColor = status === 'Active customer' || status === 'Active' ? T.ok : T.inkMuted;
+        return (
+            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'14px 16px' }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:10, fontFamily:T.sans }}>Account at a glance</div>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.ink, fontFamily:T.sans, marginBottom:2 }}>{account.name}</div>
+                    {account.industry && <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans, marginBottom:10 }}>{account.industry}{account.employees ? ` · ${account.employees} employees` : ''}</div>}
+                    {[
+                        { label:'Status', value: <span style={{ background:'rgba(77,107,61,0.12)', color:statusColor, fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:999 }}>{status}</span> },
+                        { label:'Owner', value: owner },
+                        { label:'Lifetime value', value: fmtMoney(kpis.wonVal), bold:true },
+                        { label:'Open pipeline', value: fmtMoney(kpis.openVal), color:T.warn },
+                    ].map(r => (
+                        <div key={r.label} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'5px 0', borderBottom:`1px solid ${T.border}` }}>
+                            <span style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>{r.label}</span>
+                            {typeof r.value === 'string'
+                                ? <span style={{ fontSize:12.5, fontWeight: r.bold ? 700 : 500, color: r.color || T.ink, fontFamily:T.sans }}>{r.value}</span>
+                                : r.value}
+                        </div>
+                    ))}
+                </div>
+                <ActivityMixPanel mix={mix}/>
+                <InsightPanel events={accountEvents} kpis={kpis}/>
+            </div>
+        );
+    };
+
+    // ── Right rail: Contact at a glance ───────────────────────
+    const ContactGlance = ({ contact, kpis, mix }) => {
+        if (!contact) return null;
+        const name = ((contact.firstName||'')+' '+(contact.lastName||'')).trim();
+        const engagement = kpis.acts >= 10 ? 'HOT' : kpis.acts >= 4 ? 'WARM' : 'COOL';
+        const engColor = engagement==='HOT' ? T.danger : engagement==='WARM' ? T.warn : T.inkMuted;
+        return (
+            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'14px 16px' }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:10, fontFamily:T.sans }}>Contact at a glance</div>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+                        <div style={{ width:36, height:36, borderRadius:'50%', background:'#7a5a3c', color:'#fef4e6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, flexShrink:0 }}>
+                            {(contact.firstName||'?')[0]}{(contact.lastName||'')[0]}
+                        </div>
+                        <div>
+                            <div style={{ fontSize:14, fontWeight:700, color:T.ink, fontFamily:T.sans }}>{name}</div>
+                            <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>{contact.title || contact.jobTitle || ''}</div>
+                        </div>
+                    </div>
+                    {[
+                        { label:'Company', value: contact.company || contact.accountName || '—' },
+                        { label:'Engagement', value: <span style={{ background: engagement==='HOT'?'rgba(156,58,46,0.12)':engagement==='WARM'?'rgba(184,115,51,0.12)':'rgba(138,131,120,0.12)', color:engColor, fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:999 }}>{engagement}</span> },
+                        { label:'Email', value: contact.email || '—' },
+                        { label:'Phone', value: contact.phone || '—' },
+                        { label:'Influenced rev.', value: fmtMoney(kpis.wonVal), bold:true },
+                        { label:'Open pipeline', value: fmtMoney(kpis.openVal), color:T.warn },
+                    ].map(r => (
+                        <div key={r.label} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'5px 0', borderBottom:`1px solid ${T.border}` }}>
+                            <span style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>{r.label}</span>
+                            {typeof r.value === 'string'
+                                ? <span style={{ fontSize:12, fontWeight: r.bold ? 700 : 500, color: r.color || T.ink, fontFamily:T.sans, maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.value}</span>
+                                : r.value}
+                        </div>
+                    ))}
+                </div>
+                <ActivityMixPanel mix={mix}/>
+                <InsightPanel events={contactEvents} kpis={kpis}/>
+            </div>
+        );
+    };
+
+    const ActivityMixPanel = ({ mix }) => (
+        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'14px 16px' }}>
+            <div style={{ fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:10, fontFamily:T.sans }}>Activity Mix (Period)</div>
+            {mix.map(m => (
+                <div key={m.label} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:7 }}>
+                    <div style={{ fontSize:12, color:T.inkMid, width:56, fontFamily:T.sans }}>{m.label}</div>
+                    <div style={{ flex:1, height:6, background:T.surface2, borderRadius:3, overflow:'hidden' }}>
+                        <div style={{ width:m.pct+'%', height:'100%', background:m.color, borderRadius:3 }}/>
+                    </div>
+                    <div style={{ fontSize:12, fontWeight:600, color:T.ink, width:20, textAlign:'right', fontFamily:T.sans }}>{m.count}</div>
+                </div>
+            ))}
+        </div>
+    );
+
+    const InsightPanel = ({ events, kpis }) => {
+        const actTrend = kpis.acts >= 5 ? `+${kpis.acts} activities logged in this period.` : kpis.acts === 0 ? 'No activities logged in this period.' : `${kpis.acts} activities logged in this period.`;
+        const dealNote = kpis.open > 0 ? ` ${kpis.open} open deal${kpis.open!==1?'s':''} worth ${fmtMoney(kpis.openVal)}.` : '';
+        return (
+            <div style={{ background:'rgba(200,185,154,0.12)', border:`1px solid ${T.gold}`, borderRadius:T.r, padding:'12px 14px' }}>
+                <div style={{ fontSize:10, fontWeight:700, color:T.goldInk, textTransform:'uppercase', letterSpacing:0.7, marginBottom:6, fontFamily:T.sans }}>Insight</div>
+                <div style={{ fontSize:12, color:T.inkMid, lineHeight:1.55, fontFamily:T.sans }}>{actTrend}{dealNote}</div>
+            </div>
+        );
+    };
+
+    // ── Sub-tab strip ──────────────────────────────────────────
+    const SubTabBtn = ({ value, label }) => (
+        <button onClick={() => setHistorySubTab(value)} style={{ padding:'8px 18px 10px', border:'none', borderBottom: historySubTab===value ? `2px solid ${T.ink}` : '2px solid transparent', background:'transparent', cursor:'pointer', fontFamily:T.sans, marginBottom:-1, transition:'border-color 120ms' }}>
+            <div style={{ fontSize:13.5, fontWeight: historySubTab===value ? 700 : 500, color: historySubTab===value ? T.ink : T.inkMuted }}>{label}</div>
+        </button>
+    );
+
+    // ── Action buttons ─────────────────────────────────────────
+    const [saveReportState, setSaveReportState] = React.useState('idle'); // idle | saving | saved | error
+
+    const handleSaveAsReport = React.useCallback(async (entityName, entityType) => {
+        setSaveReportState('saving');
+        const id = 'rpt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        const name = entityName ? `${entityType} history — ${entityName}` : `${entityType} history report`;
+        const payload = {
+            id, name, source: entityType === 'Account' ? 'Accounts' : 'Contacts',
+            dims: [{id:'date',label:'Date',kind:'dim'},{id:'type',label:'Type',kind:'dim'}],
+            metrics: [{id:'count',label:'Events',kind:'metric'}],
+            chartType: 'table', description: `Activity history for ${entityName || entityType}`,
+            ownerId: currentUser, ownerName: currentUser,
+        };
+        try {
+            const data = await dbFetch('/.netlify/functions/saved-reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            // Update shared savedReportsList in parent so it shows in Saved Reports tab immediately
+            if (onSaveReport) onSaveReport(data?.report || payload);
+            setSaveReportState('saved');
+            setTimeout(() => setSaveReportState('idle'), 3000);
+        } catch {
+            setSaveReportState('error');
+            setTimeout(() => setSaveReportState('idle'), 3000);
+        }
+    }, [currentUser, onSaveReport]);
+
+    const handleExportPDF = React.useCallback((entityName, entityType, events) => {
+        const win = window.open('', '_blank', 'width=900,height=700');
+        if (!win) return;
+        const printDate = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+        const title = entityName ? `${entityType} History — ${entityName}` : `${entityType} History Report`;
+        const typeLabelsP = { Call:'CALL', Email:'EMAIL', Meeting:'MEETING', Task:'TASK', 'Task Done':'TASK DONE', Won:'WON', Lost:'LOST', Deal:'DEAL', Note:'NOTE', Activity:'ACTIVITY', Quote:'QUOTE' };
+        const rowsHtml = events.map(e => {
+            const lbl = typeLabelsP[e.actType] || (e.actType||'').toUpperCase().slice(0,10);
+            const date = e.date ? new Date(e.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+            const amt = e.amount > 0 ? '$' + (e.amount >= 1e6 ? (e.amount/1e6).toFixed(1)+'M' : e.amount >= 1e3 ? Math.round(e.amount/1e3)+'K' : Math.round(e.amount)) : '';
+            return `<tr><td>${date}</td><td><span style="background:#f5efe3;color:#5a544c;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;letter-spacing:0.5px">${lbl}</span></td><td>${e.label||'—'}</td><td style="color:#8a8378;font-size:11px">${e.sub||''}</td><td style="color:#8a8378">${e.rep||''}</td><td style="text-align:right;font-weight:${e.amount>0?700:400};color:${e.type==='won'?'#4d6b3d':e.type==='lost'?'#9c3a2e':'#2a2622'}">${amt}</td></tr>`;
+        }).join('');
+        win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#2a2622}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #7a6a48;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#8a8378}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#fbf8f3;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#8a8378;border-bottom:2px solid #e6ddd0;text-align:left}td{padding:6px 10px;border-bottom:1px solid #f5efe3}.footer{margin-top:20px;font-size:9px;color:#8a8378;border-top:1px solid #e6ddd0;padding-top:8px;display:flex;justify-content:space-between}</style></head><body><div class="hdr"><h1>${title}</h1><div class="meta">Generated ${printDate}<br>Accelerep · Confidential</div></div><table><thead><tr><th>Date</th><th>Type</th><th>Event</th><th>Detail</th><th>Rep</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rowsHtml}</tbody></table><div class="footer"><span>Accelerep · Confidential</span><span>Generated ${printDate}</span></div><script>window.onload=function(){window.print()}<\/script></body></html>`);
+        win.document.close();
+    }, []);
+
+    const ActionButtons = ({ entityName, entityType, events }) => (
+        <div style={{ display:'flex', gap:8 }}>
+            <button
+                onClick={() => handleSaveAsReport(entityName, entityType)}
+                disabled={saveReportState === 'saving'}
+                style={{ padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontWeight:500, color: saveReportState==='saved' ? T.ok : saveReportState==='error' ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans, opacity: saveReportState==='saving' ? 0.6 : 1 }}>
+                {saveReportState==='saving' ? 'Saving…' : saveReportState==='saved' ? '✓ Saved' : saveReportState==='error' ? 'Error — retry' : 'Save as report'}
+            </button>
+            <button
+                onClick={() => handleExportPDF(entityName, entityType, events||[])}
+                style={{ padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontWeight:500, color:T.ink, cursor:'pointer', fontFamily:T.sans }}>
+                Export PDF
+            </button>
+        </div>
+    );
+
+    const accKpis = buildKpis(accountEvents, accOpps);
+    const conKpis = buildKpis(contactEvents, conOpps);
+    const accMix  = buildMix(accountEvents);
+    const conMix  = buildMix(contactEvents);
+
+    return (
+        <div style={{ padding:'1rem 1.25rem 1.5rem', display:'flex', flexDirection:'column', gap:0 }}>
+            {/* Sub-tab strip */}
+            <div style={{ display:'flex', borderBottom:`1px solid ${T.border}`, marginBottom:16 }}>
+                <SubTabBtn value="account" label="Account history"/>
+                <SubTabBtn value="contact" label="Contact history"/>
+            </div>
+
+            {/* ── ACCOUNT HISTORY ── */}
+            {historySubTab === 'account' && (
+                <div>
+                    {/* Toolbar */}
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
+                        <EntitySelector
+                            label="account"
+                            selected={selectedAccount}
+                            filtered={filteredAccounts}
+                            search={accSearch}
+                            setSearch={setAccSearch}
+                            open={accOpen}
+                            setOpen={setAccOpen}
+                            onSelect={setSelectedAccountId}
+                            refEl={accRef}
+                            nameOf={a => a.name || ''}
+                        />
+                        <div style={{ flex:1 }}/>
+                        <ActionButtons entityName={selectedAccount?.name} entityType="Account" events={accountEvents}/>
+                    </div>
+                    <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+                        {[{v:'1month',l:'1 month'},{v:'6months',l:'6 months'},{v:'1year',l:'1 year'},{v:'all',l:'All time'}].map(p => (
+                            <PeriodPill key={p.v} value={p.v} label={p.l}/>
+                        ))}
+                    </div>
+
+                    {selectedAccount ? (
+                        <>
+                            {/* Owner/CSM line */}
+                            <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans, marginBottom:12 }}>
+                                Owner <strong style={{ color:T.ink }}>{selectedAccount.accountOwner || selectedAccount.assignedRep || '—'}</strong>
+                                {selectedAccount.csm && <> &nbsp;·&nbsp; CSM <strong style={{ color:T.ink }}>{selectedAccount.csm}</strong></>}
+                                {selectedAccount.createdAt && <> &nbsp;·&nbsp; Customer since {selectedAccount.createdAt.slice(0,10)}</>}
+                            </div>
+
+                            {/* KPI strip */}
+                            <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap' }}>
+                                <KpiCard label="Activities" value={accKpis.acts} sub={`${Math.round(accKpis.acts/Math.max((period==='1month'?1:period==='6months'?6:period==='1year'?12:12),1))} / mo avg`}/>
+                                <KpiCard label="Tasks Done" value={accKpis.tasksDone} sub={accKpis.tasksDone > 0 ? 'still open' : ''}/>
+                                <KpiCard label="Deals Won" value={accKpis.won} sub={accKpis.wonVal > 0 ? fmtMoney(accKpis.wonVal)+' closed' : ''}/>
+                                <KpiCard label="Deals Lost" value={accKpis.lost} sub={accKpis.lostVal > 0 ? fmtMoney(accKpis.lostVal)+' value' : ''} danger={accKpis.lost > 0}/>
+                                <KpiCard label="Open Deals" value={accKpis.open} sub={accKpis.openVal > 0 ? fmtMoney(accKpis.openVal)+' pipeline' : ''}/>
+                            </div>
+
+                            {/* Main layout: feed + right rail */}
+                            <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                    <EventFeed events={accountEvents}/>
+                                </div>
+                                <div style={{ width:220, flexShrink:0 }}>
+                                    <AccountGlance account={selectedAccount} kpis={accKpis} mix={accMix}/>
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div style={{ textAlign:'center', padding:'3rem', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                            {visibleAccounts.length === 0 ? 'No accounts available.' : 'Select an account to view its history.'}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ── CONTACT HISTORY ── */}
+            {historySubTab === 'contact' && (
+                <div>
+                    {/* Toolbar */}
+                    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
+                        <EntitySelector
+                            label="contact"
+                            selected={selectedContact}
+                            filtered={filteredContacts}
+                            search={conSearch}
+                            setSearch={setConSearch}
+                            open={conOpen}
+                            setOpen={setConOpen}
+                            onSelect={setSelectedContactId}
+                            refEl={conRef}
+                            nameOf={c => ((c.firstName||'')+' '+(c.lastName||'')).trim() + (c.company ? ' — '+c.company : '')}
+                        />
+                        <div style={{ flex:1 }}/>
+                        <ActionButtons entityName={selectedContact ? ((selectedContact.firstName||'')+' '+(selectedContact.lastName||'')).trim() : ''} entityType="Contact" events={contactEvents}/>
+                    </div>
+                    <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+                        {[{v:'1month',l:'1 month'},{v:'6months',l:'6 months'},{v:'1year',l:'1 year'},{v:'all',l:'All time'}].map(p => (
+                            <PeriodPill key={p.v} value={p.v} label={p.l}/>
+                        ))}
+                    </div>
+
+                    {selectedContact ? (
+                        <>
+                            {/* First touch line */}
+                            <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans, marginBottom:12 }}>
+                                Owner <strong style={{ color:T.ink }}>{selectedContact.assignedRep || selectedContact.accountOwner || '—'}</strong>
+                                {selectedContact.createdAt && <> &nbsp;·&nbsp; First touch {selectedContact.createdAt.slice(0,10)}</>}
+                            </div>
+
+                            {/* KPI strip */}
+                            <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap' }}>
+                                <KpiCard label="Activities" value={conKpis.acts} sub="logged"/>
+                                <KpiCard label="Tasks Done" value={conKpis.tasksDone}/>
+                                <KpiCard label="Deals Won" value={conKpis.won} sub={conKpis.wonVal > 0 ? fmtMoney(conKpis.wonVal)+' influenced' : ''}/>
+                                <KpiCard label="Deals Lost" value={conKpis.lost} danger={conKpis.lost > 0}/>
+                                <KpiCard label="Open Deals" value={conKpis.open} sub={conKpis.openVal > 0 ? fmtMoney(conKpis.openVal)+' pipeline' : ''}/>
+                            </div>
+
+                            {/* Main layout: feed + right rail */}
+                            <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
+                                <div style={{ flex:1, minWidth:0 }}>
+                                    <EventFeed events={contactEvents}/>
+                                </div>
+                                <div style={{ width:220, flexShrink:0 }}>
+                                    <ContactGlance contact={selectedContact} kpis={conKpis} mix={conMix}/>
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <div style={{ textAlign:'center', padding:'3rem', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
+                            {visibleContacts.length === 0 ? 'No contacts available.' : 'Select a contact to view their history.'}
+                        </div>
+                    )}
+                </div>
             )}
         </div>
     );
