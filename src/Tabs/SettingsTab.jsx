@@ -16152,6 +16152,7 @@ const FeaturesDetail = ({ onBack }) => {
         try {
             const res = await dbFetch('/.netlify/functions/settings', {
                 method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ aiSettings }),
             });
             if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
@@ -16210,7 +16211,7 @@ const FeaturesDetail = ({ onBack }) => {
                 dirty={dirty}
                 actions={[
                     <DataBtn key="exp" label="Export config" onClick={handleExportConfig}/>,
-                    <DataBtn key="sav" label={saving ? 'Saving…' : 'Save AI changes'} primary disabled={saving || !dirty} onClick={handleSaveAi}/>,
+                    <DataBtn key="sav" label={saving ? 'Saving…' : 'Save changes'} primary disabled={saving || !dirty} onClick={handleSaveAi}/>,
                 ]}
             />
 
