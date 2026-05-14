@@ -2872,6 +2872,20 @@ const PersonaSwatch = ({ p, size = 26 }) => (
     }}>{p.icon || '?'}</span>
 );
 
+// TagsField — defined at module scope so React sees a stable reference.
+// Fully controlled: parent owns the comma-string value.
+const TagsField = ({ label, value, onChange }) => (
+    <div style={{ marginBottom: 10 }}>
+        <label style={{ fontSize: 11, fontWeight: 600, color: T.inkMid, display: 'block', marginBottom: 3, fontFamily: T.sans }}>{label}</label>
+        <input
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Comma-separated…"
+            style={{ width: '100%', padding: '6px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, color: T.ink, fontFamily: T.sans, outline: 'none', boxSizing: 'border-box' }}
+        />
+    </div>
+);
+
 const BuyerPersonasDetail = ({ settings, setSettings, onBack }) => {
     const { contacts } = useApp();
 
@@ -2954,42 +2968,39 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack }) => {
     };
 
     const openEdit = (p) => {
-        setEditModal({ isNew: false, data: { ...p, titles: [...(p.titles||[])], cares: [...(p.cares||[])], objections: [...(p.objections||[])] } });
+        setEditModal({ isNew: false, data: {
+            ...p,
+            titles:     (p.titles     || []).join(', '),
+            cares:      (p.cares      || []).join(', '),
+            objections: (p.objections || []).join(', '),
+        }});
         setEditErr('');
         setOpenKebab(null);
     };
 
     const openNew = () => {
-        setEditModal({ isNew: true, data: { ...BLANK_PERSONA, id: 'p_' + Date.now() } });
+        setEditModal({ isNew: true, data: { ...BLANK_PERSONA, id: 'p_' + Date.now(), titles: '', cares: '', objections: '' } });
         setEditErr('');
     };
 
     const saveEdit = () => {
         if (!editModal.data.name.trim()) { setEditErr('Name is required.'); return; }
+        const toArr = (str) => (str || '').split(',').map(s => s.trim()).filter(Boolean);
+        const finalData = {
+            ...editModal.data,
+            titles:     toArr(editModal.data.titles),
+            cares:      toArr(editModal.data.cares),
+            objections: toArr(editModal.data.objections),
+        };
         if (editModal.isNew) {
-            mutate(list => [...list, editModal.data]);
+            mutate(list => [...list, finalData]);
         } else {
-            mutate(list => list.map(p => p.id === editModal.data.id ? editModal.data : p));
+            mutate(list => list.map(p => p.id === finalData.id ? finalData : p));
         }
         setEditModal(null);
     };
 
     // ── Tags field helper (comma-split inline) ──
-    const TagsField = ({ label, items, onChange }) => {
-        const [val, setVal] = React.useState(items.join(', '));
-        return (
-            <div style={{ marginBottom: 10 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: T.inkMid, display: 'block', marginBottom: 3, fontFamily: T.sans }}>{label}</label>
-                <input
-                    value={val}
-                    onChange={e => { setVal(e.target.value); onChange(e.target.value.split(',').map(s => s.trim()).filter(Boolean)); }}
-                    placeholder="Comma-separated…"
-                    style={{ width: '100%', padding: '6px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12.5, color: T.ink, fontFamily: T.sans, outline: 'none', boxSizing: 'border-box' }}
-                />
-            </div>
-        );
-    };
-
     const COLS = '24px 1.6fr 2fr 80px 90px 28px';
 
     return (
@@ -3178,11 +3189,14 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack }) => {
                                     style={{ width: '100%', padding: '7px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: T.ink, fontFamily: T.sans, outline: 'none', boxSizing: 'border-box' }}/>
                             </div>
                             {/* Coaching attributes */}
-                            <TagsField label="Typical titles (comma-separated)" items={editModal.data.titles || []}
+                            <TagsField label="Typical titles (comma-separated)"
+                                value={editModal.data.titles || ''}
                                 onChange={v => setEditModal(m => ({ ...m, data: { ...m.data, titles: v } }))}/>
-                            <TagsField label="Cares about (comma-separated)" items={editModal.data.cares || []}
+                            <TagsField label="Cares about (comma-separated)"
+                                value={editModal.data.cares || ''}
                                 onChange={v => setEditModal(m => ({ ...m, data: { ...m.data, cares: v } }))}/>
-                            <TagsField label="Common objections (comma-separated)" items={editModal.data.objections || []}
+                            <TagsField label="Common objections (comma-separated)"
+                                value={editModal.data.objections || ''}
                                 onChange={v => setEditModal(m => ({ ...m, data: { ...m.data, objections: v } }))}/>
                             {editErr && <div style={{ fontSize: 12, color: T.danger, marginTop: 4, fontFamily: T.sans }}>{editErr}</div>}
                         </div>
