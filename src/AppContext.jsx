@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { useUser, useClerk, useAuth, useOrganization, useOrganizationList, OrganizationSwitcher, SignIn } from '@clerk/clerk-react';
 import { safeStorage, dbFetch, waitForToken } from './utils/storage';
 import { initialOpportunities, stages, productOptions } from './utils/constants';
@@ -9,7 +9,6 @@ import { useAccounts } from './hooks/useAccounts';
 import { useContacts } from './hooks/useContacts';
 import { useTasks } from './hooks/useTasks';
 import { useActivities } from './hooks/useActivities';
-import { AppProvider, useApp } from './AppContext';
 import SalesManagerTab from './Tabs/SalesManagerTab';
 import ReportsTab from './Tabs/ReportsTab';
 import ContactsTab from './Tabs/ContactsTab';
@@ -51,6 +50,24 @@ import { useQuotes } from './hooks/useQuotes';
 import QuotesTab from './Tabs/QuotesTab';
 import ErrorBoundary from './components/ErrorBoundary';
 
+// ── App Context ───────────────────────────────────────────────────────────────
+const AppContext = createContext(null);
+
+export function AppProvider({ children, value }) {
+    return (
+        <AppContext.Provider value={value}>
+            {children}
+        </AppContext.Provider>
+    );
+}
+
+export function useApp() {
+    const ctx = useContext(AppContext);
+    if (!ctx) throw new Error('useApp must be used within AppProvider');
+    return ctx;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function App() {
     // Clerk auth — powered by @clerk/clerk-react
@@ -145,7 +162,6 @@ function App() {
         showTaskModal, setShowTaskModal, showContactModal, setShowContactModal,
         showActivityModal, setShowActivityModal, showShortcuts, setShowShortcuts,
         showCsvImportModal, setShowCsvImportModal, showLeadImportModal, setShowLeadImportModal,
-        showLeadModal, setShowLeadModal,
         showOutlookImportModal, setShowOutlookImportModal, csvImportType, setCsvImportType,
         editingOpp, setEditingOpp, editingAccount, setEditingAccount, editingSubAccount, setEditingSubAccount,
         editingUser, setEditingUser, editingTask, setEditingTask, editingContact, setEditingContact,
@@ -517,6 +533,9 @@ dbFetch('/.netlify/functions/users?me=true')
         ? settings.pipelines
         : [{ id: 'default', name: 'New Business', color: '#2563eb' }];
     const activePipeline = allPipelines.find(p => p.id === activePipelineId) || allPipelines[0];
+    // The ID of whichever pipeline is flagged as default (or the first one).
+    // Used to resolve legacy pipelineId: 'default' on opps created before pipelines were renamed.
+    const defaultPipelineId = (allPipelines.find(p => p.isDefault) || allPipelines[0])?.id || 'default';
 
     // Shared Viewing bar helpers — build option lists for Rep/Team/Territory
     const allRepNames = [...new Set((settings.users || []).filter(u => u.userType !== 'Manager' && u.userType !== 'Admin').map(u => u.name).filter(Boolean))].sort();
@@ -541,7 +560,11 @@ dbFetch('/.netlify/functions/users?me=true')
     const visibleOpportunities = applyViewingFilter(
         (opportunities || [])
         .filter(opp => isRepVisible(opp.salesRep))
-        .filter(opp => (opp.pipelineId || 'default') === activePipeline.id)
+        .filter(opp => {
+            // Resolve legacy 'default' pipelineId to the current default pipeline
+            const pid = (!opp.pipelineId || opp.pipelineId === 'default') ? defaultPipelineId : opp.pipelineId;
+            return pid === activePipeline.id;
+        })
     );
     const visibleAccounts = (accounts || [])
         .filter(acc => isRepVisible(acc.accountOwner))
@@ -573,7 +596,7 @@ dbFetch('/.netlify/functions/users?me=true')
     const getQuarter = (dateString) => {
         const date = new Date(dateString);
         const month = date.getMonth() + 1; // 1-12
-        const fiscalStart = parseInt(settings.fiscalYearStart) || 10;
+        const fiscalStart = parseInt(settings.fiscalYearStart) || 1;
         // How many months into the fiscal year is this date?
         // monthsIn = 0 means first month of FY, 1 = second, etc.
         const monthsIn = ((month - fiscalStart + 12) % 12);
@@ -587,7 +610,7 @@ dbFetch('/.netlify/functions/users?me=true')
         const date = new Date(dateString);
         const month = date.getMonth() + 1;
         const year = date.getFullYear();
-        const fiscalStart = parseInt(settings.fiscalYearStart) || 10;
+        const fiscalStart = parseInt(settings.fiscalYearStart) || 1;
         // Fiscal year number = calendar year of the fiscal year END
         // If fiscal starts Oct, then Oct 2025 → FY2026, Jan 2026 → FY2026
         // monthsIn tells how far into the FY we are
@@ -1395,7 +1418,6 @@ dbFetch('/.netlify/functions/users?me=true')
         activityModalSaving, setActivityModalSaving,
         showCsvImportModal, setShowCsvImportModal,
         showLeadImportModal, setShowLeadImportModal,
-        showLeadModal, setShowLeadModal,
         showOutlookImportModal, setShowOutlookImportModal,
         showSpiffClaimModal, setShowSpiffClaimModal,
         spiffClaimContext, setSpiffClaimContext,
