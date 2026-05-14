@@ -16063,6 +16063,7 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
     const [showReset,  setShowReset]  = React.useState(false);
     const [error,      setError]      = React.useState(null);
     const [filterCat,  setFilterCat]  = React.useState('All');
+    const [toggleSaved, setToggleSaved] = React.useState(false); // flash "Saved" on instant-save toggles
 
     // ── Initialise from settings prop (same pattern as all other panels) ───────
     const AI_DEFAULTS = {
@@ -16108,6 +16109,8 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
                 throw new Error(d.error);
             }
             setSettings(p => ({ ...p, featureFlags: next }));
+            setToggleSaved(true);
+            setTimeout(() => setToggleSaved(false), 2000);
         } catch (e) {
             setFlags(prev);
             setError('Failed to save flag: ' + e.message);
@@ -16129,6 +16132,8 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
                 setTabViz(prev);
                 throw new Error(d.error);
             }
+            setToggleSaved(true);
+            setTimeout(() => setToggleSaved(false), 2000);
         } catch (e) {
             setTabViz(prev);
             setError('Failed to save: ' + e.message);
@@ -16199,9 +16204,10 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
                 badge={`${onCount} of ${FLAG_DEFS.length} on · AI · ${aiRegion}`}
                 dirty={dirty}
                 actions={[
+                    toggleSaved && <span key="flash" style={{ fontSize:12, color:T.ok, fontWeight:600, fontFamily:T.sans, display:'flex', alignItems:'center', gap:4 }}>✓ Saved</span>,
                     <DataBtn key="exp" label="Export config" onClick={handleExportConfig}/>,
                     <DataBtn key="sav" label={saving ? 'Saving…' : 'Save changes'} primary disabled={saving || !dirty} onClick={handleSaveAi}/>,
-                ]}
+                ].filter(Boolean)}
             />
 
             {error && (
