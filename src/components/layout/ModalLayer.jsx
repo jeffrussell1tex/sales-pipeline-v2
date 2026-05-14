@@ -10,6 +10,7 @@ import ActivityModal from '../modals/ActivityModal';
 import CsvImportModal from '../modals/CsvImportModal';
 import OutlookImportModal from '../modals/OutlookImportModal';
 import LeadImportModal from '../modals/LeadImportModal';
+import LeadModal from '../modals/LeadModal';
 import LostReasonModal from '../modals/LostReasonModal';
 import ViewingContactPanel from '../panels/ViewingContactPanel';
 import ViewingAccountPanel from '../panels/ViewingAccountPanel';
@@ -37,6 +38,7 @@ export default function ModalLayer() {
         activityModalError, setActivityModalError, activityModalSaving, setActivityModalSaving,
         showCsvImportModal, setShowCsvImportModal, csvImportType,
         showLeadImportModal, setShowLeadImportModal,
+        showLeadModal, setShowLeadModal,
         showOutlookImportModal, setShowOutlookImportModal,
         showSpiffClaimModal, setShowSpiffClaimModal, spiffClaimContext, setSpiffClaimContext,
         confirmModal, setConfirmModal,
@@ -87,7 +89,7 @@ export default function ModalLayer() {
                         setActivities(prev => [...prev, { ...activityData, id: newId, createdAt: new Date().toISOString(), author: currentUser || '' }]);
                     }}
                     onDeleteActivity={(activityId) => {
-                        handleDeleteActivity(activityId);
+                        setActivities(prev => prev.filter(a => a.id !== activityId));
                     }}
                     onSaveComment={(oppId, comment) => {
                         setOpportunities(prev => {
@@ -770,6 +772,20 @@ export default function ModalLayer() {
                 />
             )}
 
+            {showLeadModal && (
+                <LeadModal
+                    onClose={() => setShowLeadModal(false)}
+                    onSaved={(lead) => {
+                        setLeads(prev => [...(prev||[]), lead]);
+                    }}
+                    onSavedOpenCockpit={(id) => {
+                        setShowLeadModal(false);
+                        // Switch leads tab to cockpit with this lead selected
+                        try { localStorage.setItem('tab:leads:subTab', 'cockpit'); } catch {}
+                        try { localStorage.setItem('tab:leads:cockpitLead', id); } catch {}
+                    }}
+                />
+            )}
             {showLeadImportModal && (
                 <LeadImportModal
                     existingLeads={leads}

@@ -639,6 +639,8 @@ export default function LeadsTab() {
         setEditingOpp, setShowModal,
         setEditingActivity, setShowActivityModal, setActivityInitialContext,
         setActiveTab,
+        setShowLeadImportModal,
+        showLeadModal, setShowLeadModal,
     } = useApp();
 
     const [tab, setTab] = useState(() => {
@@ -720,8 +722,8 @@ export default function LeadsTab() {
                     <div style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>{subtitle}</div>
                 </div>
                 <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>↗ Import</button>
-                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>+ New lead</button>
+                    <button onClick={() => setShowLeadImportModal(true)} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>↗ Import</button>
+                    <button onClick={() => setShowLeadModal(true)} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>+ New lead</button>
                 </div>
             </div>
 
