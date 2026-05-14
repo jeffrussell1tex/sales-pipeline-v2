@@ -54,6 +54,16 @@ export default function ReportsTab({ leadsEnabled = true }) {
     const [reportsTerritory, setReportsTerritory] = useState(null);
     const [actPeriod, setActPeriod] = useState('Last 30 Days');
     const [commissionReportFilter, setCommissionReportFilter] = useState('Annual');
+    const [savedReportsList, setSavedReportsList] = useState([]);
+
+    // Load saved reports once at ReportsTab level so ActivityHistory saves are visible in Saved tab
+    React.useEffect(() => {
+        let cancelled = false;
+        dbFetch('/.netlify/functions/saved-reports')
+            .then(data => { if (!cancelled) setSavedReportsList(data?.reports || []); })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
 
 
                 const currentYear = new Date().getFullYear();
@@ -2438,6 +2448,7 @@ ${bodyHtml}
                                 userRole={userRole}
                                 settings={settings}
                                 canSeeAll={canSeeAll}
+                                onSaveReport={(report) => setSavedReportsList(prev => [report, ...prev.filter(r => r.id !== report.id)])}
                             />
                         )}
 
@@ -2451,6 +2462,8 @@ ${bodyHtml}
                                 activities={activities}
                                 settings={settings}
                                 currentUser={currentUser}
+                                savedReportsList={savedReportsList}
+                                setSavedReportsList={setSavedReportsList}
                             />
                         )}
                         </div>
@@ -2462,7 +2475,7 @@ ${bodyHtml}
 // ─────────────────────────────────────────────────────────────
 //  Saved Reports Tab — proper React component (hooks-safe)
 // ─────────────────────────────────────────────────────────────
-function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, settings, currentUser }) {
+function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, settings, currentUser, savedReportsList: savedReportsListProp, setSavedReportsList: setSavedReportsListProp }) {
     const [srchQ, setSrchQ] = React.useState('');
     const [activeTemplate, setActiveTemplate] = React.useState(null);
     const [selectedRepSC, setSelectedRepSC] = React.useState(currentUser||'');
@@ -2480,18 +2493,11 @@ function SavedReportsTab({ reportsOpps, reportsTimedActivities, activities, sett
     const [builderChart, setBuilderChart] = React.useState('stacked');
     const [builderAdvanced, setBuilderAdvanced] = React.useState(false);
     // Saved reports library state
-    const [savedReportsList, setSavedReportsList] = React.useState([]);
+    // Use shared state from ReportsTab so ActivityHistory saves appear here immediately
+    const savedReportsList = savedReportsListProp ?? [];
+    const setSavedReportsList = setSavedReportsListProp ?? (() => {});
     const [saveState, setSaveState] = React.useState('idle'); // 'idle'|'saving'|'saved'|'error'
     const [saveError, setSaveError] = React.useState(null);
-
-    // Load saved reports on mount
-    React.useEffect(() => {
-        let cancelled = false;
-        dbFetch('/.netlify/functions/saved-reports')
-            .then(data => { if (!cancelled) setSavedReportsList(data?.reports || []); })
-            .catch(() => {}); // silent — library just shows empty
-        return () => { cancelled = true; };
-    }, []);
 
     // Save report handler — used by both blank and AI builder Save to library buttons
     const handleSaveReport = React.useCallback(async ({ name, source, dims, metrics, chartType, description }) => {
@@ -4930,7 +4936,7 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
 // ─────────────────────────────────────────────────────────────
 //  Activity History Tab — Account History + Contact History
 // ─────────────────────────────────────────────────────────────
-function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll }) {
+function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, onSaveReport }) {
 
     const T = {
         bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
@@ -5509,18 +5515,20 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             ownerId: currentUser, ownerName: currentUser,
         };
         try {
-            await dbFetch('/.netlify/functions/saved-reports', {
+            const data = await dbFetch('/.netlify/functions/saved-reports', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
+            // Update shared savedReportsList in parent so it shows in Saved Reports tab immediately
+            if (onSaveReport) onSaveReport(data?.report || payload);
             setSaveReportState('saved');
             setTimeout(() => setSaveReportState('idle'), 3000);
         } catch {
             setSaveReportState('error');
             setTimeout(() => setSaveReportState('idle'), 3000);
         }
-    }, [currentUser]);
+    }, [currentUser, onSaveReport]);
 
     const handleExportPDF = React.useCallback((entityName, entityType, events) => {
         const win = window.open('', '_blank', 'width=900,height=700');

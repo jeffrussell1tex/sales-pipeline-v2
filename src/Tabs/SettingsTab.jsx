@@ -2595,6 +2595,32 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
     const reqFields    = allFields.filter(f => f.required).length;
 
     const FIELD_TYPES = ['Text','Number','Date','Picklist','Toggle','URL','Month','Email','Phone'];
+    const [openFieldKebab, setOpenFieldKebab] = useState(null); // api key of open kebab
+    const [editingFieldIdx, setEditingFieldIdx] = useState(null); // index in activeObj array
+    const [editLabel, setEditLabel] = useState('');
+    const [editType, setEditType]   = useState('Text');
+    const [editReq, setEditReq]     = useState(false);
+
+    const startEdit = (f, realIdx) => {
+        setEditingFieldIdx(realIdx);
+        setEditLabel(f.label);
+        setEditType(f.type);
+        setEditReq(f.required || false);
+        setOpenFieldKebab(null);
+    };
+
+    const saveEdit = () => {
+        if (!editLabel.trim()) return;
+        setFields(prev => {
+            const updated = [...(prev[activeObj]||[])];
+            updated[editingFieldIdx] = { ...updated[editingFieldIdx], label: editLabel.trim(), type: editType, required: editReq };
+            return { ...prev, [activeObj]: updated };
+        });
+        setEditingFieldIdx(null);
+        setDirty(true);
+    };
+
+    const cancelEdit = () => setEditingFieldIdx(null);
 
     return (
         <SPDetailPageChrome
@@ -2609,7 +2635,7 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
             <div style={{ display:'flex', alignItems:'center', gap:4, borderBottom:`1px solid ${T.border}`, marginBottom:18 }}>
                 {FIELD_OBJECTS.map((obj,i) => {
                     const cnt = (fields[obj]||[]).length;
-                    const isNew = obj === 'Accounts' || obj === 'Opportunities';
+                    const isNew = obj === 'Accounts'; // NEW badge only on Accounts
                     return (
                         <div key={obj} onClick={() => { setActiveObj(obj); setShowAdd(false); setSearch(''); }}
                             style={{ padding:'10px 18px', fontSize:13, fontWeight:600, cursor:'pointer', color: obj===activeObj ? T.ink : T.inkMuted, borderBottom: obj===activeObj ? `2px solid ${T.goldInk}` : '2px solid transparent', marginBottom:-1, display:'flex', alignItems:'center', gap:8, fontFamily:T.sans }}>
@@ -2677,23 +2703,83 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
                             { key:'type',  label:'Type',       w:'110px' },
                             { key:'req',   label:'Required',   w:'90px' },
                             { key:'where', label:'Visible on', w:'150px' },
-                            { key:'del',   label:'',           w:'28px' },
+                            { key:'kebab', label:'',           w:'36px' },
                         ]}
-                        rows={activeFields.map((f,i) => ({
-                            drag:  <SPDrag/>,
-                            label: <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontFamily:T.sans }}>
-                                       <b>{f.label}</b>
-                                       {f.isNew && <span style={{ fontSize:9, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.25)', padding:'1px 5px', borderRadius:2, letterSpacing:0.4, fontFamily:T.sans }}>NEW</span>}
-                                   </span>,
-                            api:   <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{f.api}</span>,
-                            type:  <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{f.type}</span>,
-                            req:   <span style={{ fontSize:12, color: f.required ? T.warn : T.inkMuted, fontWeight: f.required ? 600 : 400, fontFamily:T.sans }}>{f.required ? 'Yes' : 'No'}</span>,
-                            where: <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>{f.visibility}</span>,
-                            del:   <button onClick={() => removeField((fields[activeObj]||[]).findIndex(ff => ff.api === f.api))}
-                                       style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:15, padding:0, lineHeight:1 }}
-                                       onMouseEnter={e => e.currentTarget.style.color = T.danger}
-                                       onMouseLeave={e => e.currentTarget.style.color = T.inkMuted}>×</button>,
-                        }))}
+                        rows={activeFields.map((f,i) => {
+                            const realIdx = (fields[activeObj]||[]).findIndex(ff => ff.api === f.api);
+                            const isEditing = editingFieldIdx === realIdx;
+                            return {
+                                drag:  <SPDrag/>,
+                                label: isEditing ? (
+                                    <input
+                                        value={editLabel}
+                                        onChange={e => setEditLabel(e.target.value)}
+                                        onKeyDown={e => { if (e.key==='Enter') saveEdit(); if (e.key==='Escape') cancelEdit(); }}
+                                        autoFocus
+                                        style={{ padding:'4px 8px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.ink, fontFamily:T.sans, outline:'none', width:'100%', boxSizing:'border-box' }}
+                                    />
+                                ) : (
+                                    <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontFamily:T.sans }}>
+                                        <b>{f.label}</b>
+                                        {f.isNew && <span style={{ fontSize:9, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.25)', padding:'1px 5px', borderRadius:2, letterSpacing:0.4, fontFamily:T.sans }}>NEW</span>}
+                                    </span>
+                                ),
+                                api:   isEditing ? (
+                                    <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{f.api}</span>
+                                ) : (
+                                    <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{f.api}</span>
+                                ),
+                                type:  isEditing ? (
+                                    <select value={editType} onChange={e => setEditType(e.target.value)}
+                                        style={{ padding:'4px 8px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, color:T.ink, fontFamily:T.sans, outline:'none', cursor:'pointer' }}>
+                                        {FIELD_TYPES.map(t => <option key={t}>{t}</option>)}
+                                    </select>
+                                ) : (
+                                    <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{f.type}</span>
+                                ),
+                                req:   isEditing ? (
+                                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                                        <input type="checkbox" checked={editReq} onChange={e => setEditReq(e.target.checked)} style={{ cursor:'pointer' }}/>
+                                        <span style={{ fontSize:12, color:T.ink, fontFamily:T.sans }}>{editReq ? 'Yes' : 'No'}</span>
+                                    </div>
+                                ) : (
+                                    <span style={{ fontSize:12, color: f.required ? T.warn : T.inkMuted, fontWeight: f.required ? 600 : 400, fontFamily:T.sans }}>{f.required ? 'Yes' : 'No'}</span>
+                                ),
+                                where: isEditing ? (
+                                    <div style={{ display:'flex', gap:6 }}>
+                                        <button onClick={saveEdit} style={{ padding:'4px 10px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:11.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Save</button>
+                                        <button onClick={cancelEdit} style={{ padding:'4px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11.5, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                                    </div>
+                                ) : (
+                                    <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>{f.visibility}</span>
+                                ),
+                                kebab: (
+                                    <div style={{ position:'relative' }} onClick={e => e.stopPropagation()}>
+                                        <button
+                                            onClick={() => setOpenFieldKebab(openFieldKebab === f.api ? null : f.api)}
+                                            style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:'0 2px', lineHeight:1 }}>⋯</button>
+                                        {openFieldKebab === f.api && (
+                                            <div style={{ position:'absolute', right:0, top:'100%', zIndex:300, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:140, overflow:'hidden' }}>
+                                                <button
+                                                    onClick={() => startEdit(f, realIdx)}
+                                                    style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', textAlign:'left', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                    Edit field
+                                                </button>
+                                                <button
+                                                    onClick={() => { removeField(realIdx); setOpenFieldKebab(null); }}
+                                                    style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', fontSize:13, color:T.danger, cursor:'pointer', fontFamily:T.sans }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(156,58,46,0.06)'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                                    Delete field
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                ),
+                            };
+                        })}
                     />
                 )}
             </CSectionCard>
