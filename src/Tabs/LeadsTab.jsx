@@ -117,7 +117,7 @@ const LeadAssignee = ({ name, onClick }) => {
 };
 
 // ── Right rail panels ─────────────────────────────────────────
-const DistributePanel = ({ leads, repNames }) => {
+const DistributePanel = ({ leads, repNames, onSaveLead }) => {
     const unassigned = leads.filter(l => !l.assignee).length;
     const loadByRep = repNames.map(name => ({ name, count: leads.filter(l => l.assignee === name).length }))
         .sort((a,b) => a.count - b.count).slice(0, 8);
@@ -138,7 +138,15 @@ const DistributePanel = ({ leads, repNames }) => {
                     <div style={{ fontSize:11, color:T.inkMid, fontWeight:600, width:12, textAlign:'right', fontFamily:T.sans }}>{r.count}</div>
                 </div>
             ))}
-            <button style={{ marginTop:10, width:'100%', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+            <button onClick={() => {
+                const unassigned = leads.filter(l => !l.assignee);
+                if (unassigned.length === 0 || repNames.length === 0) return;
+                unassigned.forEach((l, i) => {
+                    const rep = repNames[i % repNames.length];
+                    // Auto-assign via parent saveLead passed through props
+                    if (onSaveLead) onSaveLead(l.raw?.id || l.id, { assignedTo: rep, assignee: rep });
+                });
+            }} style={{ marginTop:10, width:'100%', background:T.ink, color:T.surface, border:'none', borderRadius:T.r, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans, display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6 }}>
                 Auto-assign all
             </button>
         </div>
@@ -227,7 +235,7 @@ const TriageLane = ({ title, subtitle, leads, accent, icon, onOpenLead }) => {
     );
 };
 
-const TriageView = ({ leads, repNames, onOpenLead, setLeads, showConfirm }) => {
+const TriageView = ({ leads, repNames, onOpenLead, setLeads, showConfirm, saveLead, convertLead, logActivity }) => {
     const [statusFilter, setStatusFilter] = useState('all');
     const [selected,     setSelected    ] = useState({});
     const [search,       setSearch      ] = useState('');
@@ -316,11 +324,30 @@ const TriageView = ({ leads, repNames, onOpenLead, setLeads, showConfirm }) => {
                             <div style={{ marginBottom:8, padding:'8px 14px', background:T.ink, color:T.surface, borderRadius:T.r, display:'flex', alignItems:'center', gap:12, fontSize:12, fontFamily:T.sans }}>
                                 <span style={{ fontWeight:600 }}>{selCount} selected</span>
                                 <span style={{ opacity:0.5 }}>·</span>
-                                <span style={{ cursor:'pointer' }}>Assign</span>
+                                <span style={{ cursor:'pointer' }} onClick={() => {
+                                    const rep = window.prompt('Assign to rep (enter name):');
+                                    if (!rep) return;
+                                    Object.keys(selected).filter(id => selected[id]).forEach(id => {
+                                        const lead = leads.find(l => l.id === id);
+                                        if (lead) saveLead(id, { assignedTo: rep, assignee: rep });
+                                    });
+                                    setSelected({});
+                                }}>Assign</span>
                                 <span style={{ opacity:0.5 }}>·</span>
-                                <span style={{ cursor:'pointer' }}>Change status</span>
+                                <span style={{ cursor:'pointer' }} onClick={() => {
+                                    const status = window.prompt('New status (New / Contacted / Working / Qualified / Converted / Dead):');
+                                    if (!status) return;
+                                    Object.keys(selected).filter(id => selected[id]).forEach(id => saveLead(id, { status }));
+                                    setSelected({});
+                                }}>Change status</span>
                                 <span style={{ opacity:0.5 }}>·</span>
-                                <span style={{ cursor:'pointer' }}>Convert to opportunity</span>
+                                <span style={{ cursor:'pointer' }} onClick={() => {
+                                    Object.keys(selected).filter(id => selected[id]).forEach(id => {
+                                        const lead = leads.find(l => l.id === id);
+                                        if (lead) convertLead(lead);
+                                    });
+                                    setSelected({});
+                                }}>Convert to opportunity</span>
                                 <div style={{ flex:1 }}/>
                                 <span style={{ opacity:0.6, cursor:'pointer', fontSize:11 }} onClick={() => setSelected({})}>Clear</span>
                             </div>
@@ -355,11 +382,14 @@ const TriageView = ({ leads, repNames, onOpenLead, setLeads, showConfirm }) => {
                                         </div>
                                         <LeadSourceChip source={l.source}/>
                                         <LeadStatusPill status={l.status}/>
-                                        <LeadAssignee name={l.assignee}/>
+                                        <LeadAssignee name={l.assignee} onClick={() => {
+                                            const rep = window.prompt('Assign to rep (enter name):');
+                                            if (rep) saveLead(l.id, { assignedTo: rep, assignee: rep });
+                                        }}/>
                                         <div style={{ textAlign:'right', fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{fmtRev(l.rev)}</div>
                                         <div style={{ display:'flex', gap:4, justifyContent:'flex-end' }}>
-                                            <button onClick={e => { e.stopPropagation(); }} title="Convert to opportunity" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:26, height:26, background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMid, cursor:'pointer', fontFamily:T.sans, fontSize:11 }}>↗</button>
-                                            <button onClick={e => { e.stopPropagation(); }} title="More" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:26, height:26, background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMid, cursor:'pointer' }}>···</button>
+                                            <button onClick={e => { e.stopPropagation(); convertLead(l); }} title="Convert to opportunity" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:26, height:26, background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMid, cursor:'pointer', fontFamily:T.sans, fontSize:11 }}>↗</button>
+                                            <button onClick={e => { e.stopPropagation(); showConfirm(`Delete lead "${l.first} ${l.last}"?`, () => setLeads(prev => prev.filter(x => x.id !== l.id))); }} title="Delete" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:26, height:26, background:'transparent', border:`1px solid ${T.border}`, borderRadius:T.r, color:T.inkMid, cursor:'pointer' }}>🗑</button>
                                         </div>
                                     </div>
                                 );
@@ -370,7 +400,7 @@ const TriageView = ({ leads, repNames, onOpenLead, setLeads, showConfirm }) => {
 
                 {/* Right rail */}
                 <div style={{ width:260, flexShrink:0, display:'flex', flexDirection:'column', gap:12, overflow:'auto' }}>
-                    <DistributePanel leads={leads} repNames={repNames}/>
+                    <DistributePanel leads={leads} repNames={repNames} onSaveLead={saveLead}/>
                     <LeadSourcesPanel leads={leads}/>
                 </div>
             </div>
@@ -395,7 +425,7 @@ const CockpitListRow = ({ lead, active, onClick }) => (
     </div>
 );
 
-const CockpitDetail = ({ lead, onSave, saving }) => {
+const CockpitDetail = ({ lead, saveLead, convertLead, logActivity, showConfirm }) => {
     if (!lead) return (
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r, height:'100%', display:'flex', alignItems:'center', justifyContent:'center', color:T.inkMuted, fontSize:13, fontStyle:'italic', fontFamily:T.sans }}>
             Select a lead from the list
@@ -450,9 +480,9 @@ const CockpitDetail = ({ lead, onSave, saving }) => {
                     </div>
                 </div>
                 <div style={{ display:'flex', gap:6, marginTop:12, flexWrap:'wrap' }}>
-                    <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>↗ Convert to opportunity</button>
+                    <button onClick={() => convertLead && convertLead(lead)} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>↗ Convert to opportunity</button>
                     {['Email','Call','Schedule'].map(a => (
-                        <button key={a} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>{a}</button>
+                        <button key={a} onClick={() => logActivity && logActivity(lead, a)} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>{a}</button>
                     ))}
                     <div style={{ flex:1 }}/>
                     <button style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>···</button>
@@ -464,7 +494,19 @@ const CockpitDetail = ({ lead, onSave, saving }) => {
                 <div style={{ fontSize:11, fontWeight:700, color:T.goldInk, textTransform:'uppercase', letterSpacing:0.8, marginBottom:6, fontFamily:T.sans }}>Recommended next action</div>
                 <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'rgba(200,185,154,0.15)', border:`1px solid ${T.gold}`, borderRadius:T.r }}>
                     <div style={{ flex:1, fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{nextAction}</div>
-                    <button style={{ background:T.ink, color:T.surface, border:'none', borderRadius:T.r, padding:'5px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Do it</button>
+                    <button onClick={() => {
+                        if (!lead) return;
+                        if (lead.status === 'New' && !lead.assignee) {
+                            const rep = window.prompt('Assign to rep (enter name):');
+                            if (rep && saveLead) saveLead(lead.id, { assignedTo: rep, assignee: rep });
+                        } else if (lead.status === 'New' || lead.status === 'Contacted') {
+                            if (logActivity) logActivity(lead, 'Email');
+                        } else if (lead.status === 'Working') {
+                            if (logActivity) logActivity(lead, 'Call');
+                        } else if (lead.status === 'Qualified') {
+                            if (convertLead) convertLead(lead);
+                        }
+                    }} style={{ background:T.ink, color:T.surface, border:'none', borderRadius:T.r, padding:'5px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Do it</button>
                 </div>
             </div>
 
@@ -478,13 +520,19 @@ const CockpitDetail = ({ lead, onSave, saving }) => {
                             <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{lead.assignee}</div>
                             <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>AE · owner{lead.createdAt ? ' since '+relAge(lead.createdAt)+' ago' : ''}</div>
                         </div>
-                        <button style={{ padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Reassign</button>
+                        <button onClick={() => {
+                            const rep = window.prompt('Reassign to (enter name):');
+                            if (rep && saveLead) saveLead(lead.id, { assignedTo: rep, assignee: rep });
+                        }} style={{ padding:'5px 10px', background:'transparent', border:`1px solid ${T.border}`, color:T.ink, fontSize:12, fontWeight:500, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Reassign</button>
                     </div>
                 ) : (
                     <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                         <div style={{ width:32, height:32, borderRadius:'50%', border:`1px dashed ${T.borderStrong}`, color:T.goldInk, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>+</div>
                         <div style={{ flex:1, fontSize:13, color:T.inkMid, fontFamily:T.sans }}>Not yet assigned</div>
-                        <button style={{ padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Assign now</button>
+                        <button onClick={() => {
+                            const rep = window.prompt('Assign to rep (enter name):');
+                            if (rep && saveLead) saveLead(lead.id, { assignedTo: rep, assignee: rep });
+                        }} style={{ padding:'6px 12px', background:T.ink, border:'none', color:T.surface, fontSize:12, fontWeight:600, borderRadius:T.r, cursor:'pointer', fontFamily:T.sans }}>Assign now</button>
                     </div>
                 )}
             </div>
@@ -520,7 +568,7 @@ const CockpitDetail = ({ lead, onSave, saving }) => {
     );
 };
 
-const CockpitView = ({ leads, onClose }) => {
+const CockpitView = ({ leads, repNames, saveLead, convertLead, logActivity, showConfirm }) => {
     const sorted = useMemo(() => [...leads].sort((a,b) => b.score - a.score), [leads]);
     const [filter,     setFilter    ] = useState('all');
     const [selectedId, setSelectedId] = useState(() => sorted[0]?.id || null);
@@ -574,7 +622,7 @@ const CockpitView = ({ leads, onClose }) => {
 
             {/* Detail pane */}
             <div style={{ flex:1, minWidth:0 }}>
-                <CockpitDetail lead={selected}/>
+                <CockpitDetail lead={selected} saveLead={saveLead} convertLead={convertLead} logActivity={logActivity} showConfirm={showConfirm}/>
             </div>
         </div>
     );
@@ -588,6 +636,9 @@ export default function LeadsTab() {
         leads: rawLeads, setLeads,
         settings, currentUser, userRole,
         showConfirm, exportToCSV,
+        setEditingOpp, setShowModal,
+        setEditingActivity, setShowActivityModal, setActivityInitialContext,
+        setActiveTab,
     } = useApp();
 
     const [tab, setTab] = useState(() => {
@@ -607,9 +658,49 @@ export default function LeadsTab() {
         (settings?.users || []).filter(u => u.name && u.userType !== 'ReadOnly').map(u => u.name).sort(),
     [settings]);
 
+    // ── Persist a lead field change to DB + local state ────────
+    const saveLead = useCallback(async (id, patch) => {
+        setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
+        try {
+            await dbFetch(`/.netlify/functions/leads?id=${id}`, {
+                method: 'PUT',
+                body: JSON.stringify({ id, ...patch }),
+            });
+        } catch (err) {
+            console.error('saveLead failed', err);
+        }
+    }, [setLeads]);
+
+    // ── Convert a lead to an opportunity ─────────────────────
+    const convertLead = useCallback((lead) => {
+        const normalized = typeof lead.raw === 'object' ? lead : lead;
+        const oppSeed = {
+            opportunityName: [normalized.first, normalized.last].filter(Boolean).join(' ') + (normalized.company ? ' — ' + normalized.company : ''),
+            account:         normalized.company || '',
+            salesRep:        normalized.assignee || currentUser || '',
+            arr:             normalized.rev || 0,
+        };
+        setEditingOpp(null);
+        setShowModal(true);
+        // Pre-fill opp form after modal mounts
+        setTimeout(() => setEditingOpp(oppSeed), 50);
+        // Mark lead as converted
+        saveLead(normalized.id, { status: 'Converted' });
+    }, [setEditingOpp, setShowModal, currentUser, saveLead]);
+
+    // ── Open activity modal pre-filled for a lead ─────────────
+    const logActivity = useCallback((lead, type) => {
+        setActivityInitialContext({
+            type,
+            contactSearch: [lead.first, lead.last].filter(Boolean).join(' '),
+            company: lead.company || '',
+        });
+        setEditingActivity(null);
+        setShowActivityModal(true);
+    }, [setActivityInitialContext, setEditingActivity, setShowActivityModal]);
+
     const openInCockpit = useCallback((id) => {
         setTabPersist('cockpit');
-        // cockpit will auto-select the passed id via its own state management
     }, [setTabPersist]);
 
     const totalRev = leads.reduce((s,l) => s + l.rev, 0);
@@ -659,10 +750,20 @@ export default function LeadsTab() {
                         onOpenLead={openInCockpit}
                         setLeads={setLeads}
                         showConfirm={showConfirm}
+                        saveLead={saveLead}
+                        convertLead={convertLead}
+                        logActivity={logActivity}
                     />
                 )}
                 {tab === 'cockpit' && (
-                    <CockpitView leads={leads}/>
+                    <CockpitView
+                        leads={leads}
+                        repNames={repNames}
+                        saveLead={saveLead}
+                        convertLead={convertLead}
+                        logActivity={logActivity}
+                        showConfirm={showConfirm}
+                    />
                 )}
             </div>
         </div>
