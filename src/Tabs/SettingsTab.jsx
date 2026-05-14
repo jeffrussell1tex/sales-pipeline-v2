@@ -16063,7 +16063,7 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
     const [showReset,  setShowReset]  = React.useState(false);
     const [error,      setError]      = React.useState(null);
     const [filterCat,  setFilterCat]  = React.useState('All');
-    const [toggleSaved, setToggleSaved] = React.useState(false); // flash "Saved" on instant-save toggles
+
 
     // ── Initialise from settings prop (same pattern as all other panels) ───────
     const AI_DEFAULTS = {
@@ -16093,66 +16093,43 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
         setLoading(false);
     }, [settings]);
 
-    // ── Toggle a flag — saves immediately ─────────────────────
-    const handleToggle = async (flagId, isLive) => {
+    // ── Toggle a flag — marks dirty, saved via Save changes button ──────────────
+    const handleToggle = (flagId, isLive) => {
         if (!isLive) return; // coming-soon flags are not togglable
-        const prev = flags;
-        const next = { ...flags, [flagId]: !(flags[flagId] !== false) };
-        setFlags(next);
-        try {
-            const res = await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify({ featureFlags: next }),
-            });
-            if (!res.ok) {
-                const d = await res.json();
-                throw new Error(d.error);
-            }
-            setSettings(p => ({ ...p, featureFlags: next }));
-            setToggleSaved(true);
-            setTimeout(() => setToggleSaved(false), 2000);
-        } catch (e) {
-            setFlags(prev);
-            setError('Failed to save flag: ' + e.message);
-        }
+        setFlags(prev => ({ ...prev, [flagId]: !(prev[flagId] !== false) }));
+        setDirty(true);
     };
 
-    // ── Toggle tab visibility (leadsEnabled / quotesEnabled) ──
-    const handleTabVizToggle = async (key) => {
-        const prev = tabViz;
-        const next = { ...tabViz, [key]: !tabViz[key] };
-        setTabViz(next);
-        try {
-            const res = await dbFetch('/.netlify/functions/settings', {
-                method: 'PUT',
-                body: JSON.stringify({ [key]: next[key] }),
-            });
-            if (!res.ok) {
-                const d = await res.json();
-                setTabViz(prev);
-                throw new Error(d.error);
-            }
-            setToggleSaved(true);
-            setTimeout(() => setToggleSaved(false), 2000);
-        } catch (e) {
-            setTabViz(prev);
-            setError('Failed to save: ' + e.message);
-        }
+    // ── Toggle tab visibility — marks dirty, saved via Save changes button ──────
+    const handleTabVizToggle = (key) => {
+        setTabViz(prev => ({ ...prev, [key]: !prev[key] }));
+        setDirty(true);
     };
 
-    // ── Save AI settings ──────────────────────────────────────
+    // ── Save all — AI settings + feature flags + tab visibility ─────────────────
     const handleSaveAi = async () => {
         setSaving(true);
         try {
             const res = await dbFetch('/.netlify/functions/settings', {
                 method: 'PUT',
-                body: JSON.stringify({ aiSettings }),
+                body: JSON.stringify({
+                    aiSettings,
+                    featureFlags: flags,
+                    leadsEnabled:  tabViz.leadsEnabled,
+                    quotesEnabled: tabViz.quotesEnabled,
+                }),
             });
             if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-            setSettings(prev => ({ ...prev, aiSettings }));
+            setSettings(prev => ({
+                ...prev,
+                aiSettings,
+                featureFlags: flags,
+                leadsEnabled:  tabViz.leadsEnabled,
+                quotesEnabled: tabViz.quotesEnabled,
+            }));
             setDirty(false);
         } catch (e) {
-            setError('Failed to save AI settings: ' + e.message);
+            setError('Failed to save: ' + e.message);
         } finally {
             setSaving(false);
         }
@@ -16204,10 +16181,9 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
                 badge={`${onCount} of ${FLAG_DEFS.length} on · AI · ${aiRegion}`}
                 dirty={dirty}
                 actions={[
-                    toggleSaved && <span key="flash" style={{ fontSize:12, color:T.ok, fontWeight:600, fontFamily:T.sans, display:'flex', alignItems:'center', gap:4 }}>✓ Saved</span>,
                     <DataBtn key="exp" label="Export config" onClick={handleExportConfig}/>,
                     <DataBtn key="sav" label={saving ? 'Saving…' : 'Save changes'} primary disabled={saving || !dirty} onClick={handleSaveAi}/>,
-                ].filter(Boolean)}
+                ]}
             />
 
             {error && (
