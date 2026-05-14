@@ -16458,6 +16458,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         'competitors':          'competitors',
         'reasons-won':          'reasons-won',
         'reasons-lost':         'reasons-lost',
+        'buyer-personas':       'buyer-personas',
     };
 
     // ── Live card badge counts — fetched once on mount ────────────────────────
