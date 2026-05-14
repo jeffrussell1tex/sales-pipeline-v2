@@ -16064,45 +16064,33 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
     const [error,      setError]      = React.useState(null);
     const [filterCat,  setFilterCat]  = React.useState('All');
 
-    // ── Load current flag + AI state from settings ────────────
+    // ── Initialise from settings prop (same pattern as all other panels) ───────
+    const AI_DEFAULTS = {
+        model: 'claude-sonnet-4-6',
+        fallback: 'claude-haiku-4-5-20251001',
+        region: 'US · us-east-2',
+        tokenBudget: 25000000,
+        trainingOptIn: false,
+        zeroRetention: true,
+        piiRedaction: true,
+        byok: false,
+        byokProvider: '',
+        dpaSignedAt: '',
+        auditLogging: 'All AI requests · 13mo retention',
+        blockList: '',
+        budgetExceed: 'Throttle to 1 req/s',
+        availableTo: 'All roles',
+    };
     React.useEffect(() => {
-        let cancelled = false;
-        const load = async () => {
-            try {
-                const res  = await dbFetch('/.netlify/functions/settings');
-                const data = await res.json();
-                if (cancelled) return;
-                if (!res.ok) throw new Error(data.error || 'Failed to load settings');
-                setFlags(data.settings?.featureFlags || {});
-                setTabViz({
-                    leadsEnabled:  data.settings?.leadsEnabled  !== false,
-                    quotesEnabled: data.settings?.quotesEnabled !== false,
-                });
-                setAiSettings(data.settings?.aiSettings || {
-                    model: 'claude-sonnet-4-6',
-                    fallback: 'claude-haiku-4-5-20251001',
-                    region: 'US · us-east-2',
-                    tokenBudget: 25000000,
-                    trainingOptIn: false,
-                    zeroRetention: true,
-                    piiRedaction: true,
-                    byok: false,
-                    byokProvider: '',
-                    dpaSignedAt: '',
-                    auditLogging: 'All AI requests · 13mo retention',
-                    blockList: '',
-                    budgetExceed: 'Throttle to 1 req/s',
-                    availableTo: 'All roles',
-                });
-            } catch (e) {
-                if (!cancelled) setError(e.message);
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        };
-        load();
-        return () => { cancelled = true; };
-    }, []);
+        if (!settings) return;
+        setFlags(settings.featureFlags || {});
+        setTabViz({
+            leadsEnabled:  settings.leadsEnabled  !== false,
+            quotesEnabled: settings.quotesEnabled !== false,
+        });
+        setAiSettings(settings.aiSettings || AI_DEFAULTS);
+        setLoading(false);
+    }, [settings]);
 
     // ── Toggle a flag — saves immediately ─────────────────────
     const handleToggle = async (flagId, isLive) => {
