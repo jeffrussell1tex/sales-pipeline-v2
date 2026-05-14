@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useApp } from '../AppContext';
-import { dbFetch } from '../utils/storage';
+import { useApp } from '../../AppContext';
+import { dbFetch } from '../../utils/storage';
 
 // ── Design tokens ─────────────────────────────────────────────
 const T = {
