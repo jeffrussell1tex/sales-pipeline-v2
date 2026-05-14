@@ -2635,7 +2635,7 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
             <div style={{ display:'flex', alignItems:'center', gap:4, borderBottom:`1px solid ${T.border}`, marginBottom:18 }}>
                 {FIELD_OBJECTS.map((obj,i) => {
                     const cnt = (fields[obj]||[]).length;
-                    const isNew = obj === 'Accounts'; // NEW badge only on Accounts
+                    const isNew = false; // NEW badges removed
                     return (
                         <div key={obj} onClick={() => { setActiveObj(obj); setShowAdd(false); setSearch(''); }}
                             style={{ padding:'10px 18px', fontSize:13, fontWeight:600, cursor:'pointer', color: obj===activeObj ? T.ink : T.inkMuted, borderBottom: obj===activeObj ? `2px solid ${T.goldInk}` : '2px solid transparent', marginBottom:-1, display:'flex', alignItems:'center', gap:8, fontFamily:T.sans }}>
@@ -2759,7 +2759,7 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
                                             onClick={() => setOpenFieldKebab(openFieldKebab === f.api ? null : f.api)}
                                             style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:'0 2px', lineHeight:1 }}>⋯</button>
                                         {openFieldKebab === f.api && (
-                                            <div style={{ position:'absolute', right:0, top:'100%', zIndex:300, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:140, overflow:'hidden' }}>
+                                            <div style={{ position:'absolute', right:0, ...(i >= activeFields.length - 2 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:2 }), zIndex:300, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:140, overflow:'hidden' }}>
                                                 <button
                                                     onClick={() => startEdit(f, realIdx)}
                                                     style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', textAlign:'left', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans }}
