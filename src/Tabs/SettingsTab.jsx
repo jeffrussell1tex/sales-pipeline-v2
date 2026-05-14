@@ -2596,6 +2596,7 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
 
     const FIELD_TYPES = ['Text','Number','Date','Picklist','Toggle','URL','Month','Email','Phone'];
     const [openFieldKebab, setOpenFieldKebab] = useState(null); // api key of open kebab
+    const [fieldKebabRect, setFieldKebabRect] = useState(null); // {top,left,right} for fixed positioning
     const [editingFieldIdx, setEditingFieldIdx] = useState(null); // index in activeObj array
     const [editLabel, setEditLabel] = useState('');
     const [editType, setEditType]   = useState('Text');
@@ -2756,26 +2757,18 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
                                 kebab: (
                                     <div style={{ position:'relative' }} onClick={e => e.stopPropagation()}>
                                         <button
-                                            onClick={() => setOpenFieldKebab(openFieldKebab === f.api ? null : f.api)}
+                                            onClick={e => {
+                                                e.stopPropagation();
+                                                if (openFieldKebab === f.api) {
+                                                    setOpenFieldKebab(null);
+                                                    setFieldKebabRect(null);
+                                                } else {
+                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                    setFieldKebabRect({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                                    setOpenFieldKebab(f.api);
+                                                }
+                                            }}
                                             style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, padding:'0 2px', lineHeight:1 }}>⋯</button>
-                                        {openFieldKebab === f.api && (
-                                            <div style={{ position:'absolute', right:0, ...(i >= activeFields.length - 2 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:2 }), zIndex:300, background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:140, overflow:'hidden' }}>
-                                                <button
-                                                    onClick={() => startEdit(f, realIdx)}
-                                                    style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', textAlign:'left', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans }}
-                                                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                                                    Edit field
-                                                </button>
-                                                <button
-                                                    onClick={() => { removeField(realIdx); setOpenFieldKebab(null); }}
-                                                    style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', fontSize:13, color:T.danger, cursor:'pointer', fontFamily:T.sans }}
-                                                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(156,58,46,0.06)'}
-                                                    onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-                                                    Delete field
-                                                </button>
-                                            </div>
-                                        )}
                                     </div>
                                 ),
                             };
@@ -2783,6 +2776,48 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
                     />
                 )}
             </CSectionCard>
+
+            {/* ── Field kebab dropdown — fixed-positioned to escape overflow:hidden ── */}
+            {openFieldKebab && fieldKebabRect && (() => {
+                const f = activeFields.find(f => f.api === openFieldKebab);
+                const realIdx = f ? (fields[activeObj]||[]).findIndex(ff => ff.api === f.api) : -1;
+                if (!f || realIdx === -1) return null;
+                return (
+                    <>
+                        <div
+                            style={{ position:'fixed', inset:0, zIndex:9998 }}
+                            onClick={() => { setOpenFieldKebab(null); setFieldKebabRect(null); }}
+                        />
+                        <div style={{
+                            position:'fixed',
+                            top: fieldKebabRect.top,
+                            right: fieldKebabRect.right,
+                            zIndex:9999,
+                            background:T.surface,
+                            border:`1px solid ${T.border}`,
+                            borderRadius:T.r+2,
+                            boxShadow:'0 4px 16px rgba(42,38,34,0.12)',
+                            minWidth:140,
+                            overflow:'hidden',
+                        }}>
+                            <button
+                                onClick={() => { startEdit(f, realIdx); setOpenFieldKebab(null); setFieldKebabRect(null); }}
+                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', textAlign:'left', fontSize:13, color:T.ink, cursor:'pointer', fontFamily:T.sans }}
+                                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                Edit field
+                            </button>
+                            <button
+                                onClick={() => { removeField(realIdx); setOpenFieldKebab(null); setFieldKebabRect(null); }}
+                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', borderTop:`1px solid ${T.border}`, textAlign:'left', fontSize:13, color:T.danger, cursor:'pointer', fontFamily:T.sans }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(156,58,46,0.06)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                                Delete field
+                            </button>
+                        </div>
+                    </>
+                );
+            })()}
 
             {/* Stats strip */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginTop:4 }}>
