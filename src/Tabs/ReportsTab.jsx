@@ -5495,11 +5495,62 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     );
 
     // ── Action buttons ─────────────────────────────────────────
-    const ActionButtons = ({ entityName }) => (
+    const [saveReportState, setSaveReportState] = React.useState('idle'); // idle | saving | saved | error
+
+    const handleSaveAsReport = React.useCallback(async (entityName, entityType) => {
+        setSaveReportState('saving');
+        const id = 'rpt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        const name = entityName ? `${entityType} history — ${entityName}` : `${entityType} history report`;
+        const payload = {
+            id, name, source: entityType === 'Account' ? 'Accounts' : 'Contacts',
+            dims: [{id:'date',label:'Date',kind:'dim'},{id:'type',label:'Type',kind:'dim'}],
+            metrics: [{id:'count',label:'Events',kind:'metric'}],
+            chartType: 'table', description: `Activity history for ${entityName || entityType}`,
+            ownerId: currentUser, ownerName: currentUser,
+        };
+        try {
+            await dbFetch('/.netlify/functions/saved-reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            setSaveReportState('saved');
+            setTimeout(() => setSaveReportState('idle'), 3000);
+        } catch {
+            setSaveReportState('error');
+            setTimeout(() => setSaveReportState('idle'), 3000);
+        }
+    }, [currentUser]);
+
+    const handleExportPDF = React.useCallback((entityName, entityType, events) => {
+        const win = window.open('', '_blank', 'width=900,height=700');
+        if (!win) return;
+        const printDate = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+        const title = entityName ? `${entityType} History — ${entityName}` : `${entityType} History Report`;
+        const typeLabelsP = { Call:'CALL', Email:'EMAIL', Meeting:'MEETING', Task:'TASK', 'Task Done':'TASK DONE', Won:'WON', Lost:'LOST', Deal:'DEAL', Note:'NOTE', Activity:'ACTIVITY', Quote:'QUOTE' };
+        const rowsHtml = events.map(e => {
+            const lbl = typeLabelsP[e.actType] || (e.actType||'').toUpperCase().slice(0,10);
+            const date = e.date ? new Date(e.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+            const amt = e.amount > 0 ? '$' + (e.amount >= 1e6 ? (e.amount/1e6).toFixed(1)+'M' : e.amount >= 1e3 ? Math.round(e.amount/1e3)+'K' : Math.round(e.amount)) : '';
+            return `<tr><td>${date}</td><td><span style="background:#f5efe3;color:#5a544c;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;letter-spacing:0.5px">${lbl}</span></td><td>${e.label||'—'}</td><td style="color:#8a8378;font-size:11px">${e.sub||''}</td><td style="color:#8a8378">${e.rep||''}</td><td style="text-align:right;font-weight:${e.amount>0?700:400};color:${e.type==='won'?'#4d6b3d':e.type==='lost'?'#9c3a2e':'#2a2622'}">${amt}</td></tr>`;
+        }).join('');
+        win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>@page{margin:0.625in;size:letter}*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;font-size:12px;color:#2a2622}.hdr{display:flex;justify-content:space-between;padding-bottom:12px;border-bottom:3px solid #7a6a48;margin-bottom:20px}.hdr h1{font-size:18px;font-weight:800}.meta{font-size:9px;color:#8a8378}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#fbf8f3;padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#8a8378;border-bottom:2px solid #e6ddd0;text-align:left}td{padding:6px 10px;border-bottom:1px solid #f5efe3}.footer{margin-top:20px;font-size:9px;color:#8a8378;border-top:1px solid #e6ddd0;padding-top:8px;display:flex;justify-content:space-between}</style></head><body><div class="hdr"><h1>${title}</h1><div class="meta">Generated ${printDate}<br>Accelerep · Confidential</div></div><table><thead><tr><th>Date</th><th>Type</th><th>Event</th><th>Detail</th><th>Rep</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rowsHtml}</tbody></table><div class="footer"><span>Accelerep · Confidential</span><span>Generated ${printDate}</span></div><script>window.onload=function(){window.print()}<\/script></body></html>`);
+        win.document.close();
+    }, []);
+
+    const ActionButtons = ({ entityName, entityType, events }) => (
         <div style={{ display:'flex', gap:8 }}>
-            <button style={{ padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontWeight:500, color:T.ink, cursor:'pointer', fontFamily:T.sans }}>Save as report</button>
-            <button style={{ padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontWeight:500, color:T.ink, cursor:'pointer', fontFamily:T.sans }}>Export PDF</button>
-            <button style={{ padding:'6px 14px', background:T.ink, border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, color:T.surface, cursor:'pointer', fontFamily:T.sans }}>Email to owner</button>
+            <button
+                onClick={() => handleSaveAsReport(entityName, entityType)}
+                disabled={saveReportState === 'saving'}
+                style={{ padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontWeight:500, color: saveReportState==='saved' ? T.ok : saveReportState==='error' ? T.danger : T.ink, cursor:'pointer', fontFamily:T.sans, opacity: saveReportState==='saving' ? 0.6 : 1 }}>
+                {saveReportState==='saving' ? 'Saving…' : saveReportState==='saved' ? '✓ Saved' : saveReportState==='error' ? 'Error — retry' : 'Save as report'}
+            </button>
+            <button
+                onClick={() => handleExportPDF(entityName, entityType, events||[])}
+                style={{ padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontWeight:500, color:T.ink, cursor:'pointer', fontFamily:T.sans }}>
+                Export PDF
+            </button>
         </div>
     );
 
@@ -5534,7 +5585,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                             nameOf={a => a.name || ''}
                         />
                         <div style={{ flex:1 }}/>
-                        <ActionButtons entityName={selectedAccount?.name}/>
+                        <ActionButtons entityName={selectedAccount?.name} entityType="Account" events={accountEvents}/>
                     </div>
                     <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
                         {[{v:'1month',l:'1 month'},{v:'6months',l:'6 months'},{v:'1year',l:'1 year'},{v:'all',l:'All time'}].map(p => (
@@ -5596,7 +5647,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                             nameOf={c => ((c.firstName||'')+' '+(c.lastName||'')).trim() + (c.company ? ' — '+c.company : '')}
                         />
                         <div style={{ flex:1 }}/>
-                        <ActionButtons entityName={selectedContact ? ((selectedContact.firstName||'')+' '+(selectedContact.lastName||'')).trim() : ''}/>
+                        <ActionButtons entityName={selectedContact ? ((selectedContact.firstName||'')+' '+(selectedContact.lastName||'')).trim() : ''} entityType="Contact" events={contactEvents}/>
                     </div>
                     <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
                         {[{v:'1month',l:'1 month'},{v:'6months',l:'6 months'},{v:'1year',l:'1 year'},{v:'all',l:'All time'}].map(p => (
