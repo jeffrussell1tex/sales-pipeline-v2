@@ -466,6 +466,39 @@ export default function ContactModal({
                                     style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #e5e2db', borderRadius: '8px', fontSize: '0.875rem', fontFamily: 'inherit', background: '#f0ece4', color: '#1c1917', outline: 'none', boxSizing: 'border-box', resize: 'vertical' }}
                                 />
                             </div>
+
+                            {/* ── Custom fields ── */}
+                            {(settings?.customFieldsByObject?.Contacts || []).filter(f => (f.visibility||'').includes('Detail')).length > 0 && (
+                                <>
+                                    <div className="form-group full" style={{ borderTop: '1px solid #e5e2db', paddingTop: '1rem', marginTop: '0.25rem' }}>
+                                        <label style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#c8b99a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Custom Fields</label>
+                                    </div>
+                                    {(settings?.customFieldsByObject?.Contacts || []).filter(f => (f.visibility||'').includes('Detail')).map(f => {
+                                        const apiKey = f.api.replace(/^[^.]+\./, '');
+                                        const val = formData[apiKey] ?? formData[f.api] ?? '';
+                                        return (
+                                            <div key={f.api} className="form-group">
+                                                <label>{f.label}{f.required && <span style={{ color: '#ef4444', marginLeft: 3 }}>*</span>}</label>
+                                                {f.type === 'Toggle' ? (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6 }}>
+                                                        <input type="checkbox" checked={!!val} onChange={e => handleChange(apiKey, e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }}/>
+                                                        <span style={{ fontSize: 13 }}>{val ? 'Yes' : 'No'}</span>
+                                                    </div>
+                                                ) : f.type === 'Date' ? (
+                                                    <input type="date" value={val} onChange={e => handleChange(apiKey, e.target.value)}/>
+                                                ) : (
+                                                    <input
+                                                        type={f.type === 'Number' ? 'number' : f.type === 'Email' ? 'email' : f.type === 'Phone' ? 'tel' : f.type === 'URL' ? 'url' : 'text'}
+                                                        value={val}
+                                                        onChange={e => handleChange(apiKey, e.target.value)}
+                                                        placeholder={f.label}
+                                                    />
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </>
+                            )}
                         </div>
                     )}
 
