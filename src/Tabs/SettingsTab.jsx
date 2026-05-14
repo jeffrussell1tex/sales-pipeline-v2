@@ -16053,7 +16053,7 @@ const BackupDetail = ({ onBack }) => {
 };
 
 // ── ④ Features & AI Detail ────────────────────────────────────
-const FeaturesDetail = ({ onBack }) => {
+const FeaturesDetail = ({ settings, setSettings, onBack }) => {
     const [flags,      setFlags]      = React.useState({});      // { [flagId]: boolean }
     const [tabViz,     setTabViz]     = React.useState({ leadsEnabled: true, quotesEnabled: true });
     const [aiSettings, setAiSettings] = React.useState({});
@@ -16107,6 +16107,7 @@ const FeaturesDetail = ({ onBack }) => {
     // ── Toggle a flag — saves immediately ─────────────────────
     const handleToggle = async (flagId, isLive) => {
         if (!isLive) return; // coming-soon flags are not togglable
+        const prev = flags;
         const next = { ...flags, [flagId]: !(flags[flagId] !== false) };
         setFlags(next);
         try {
@@ -16118,9 +16119,9 @@ const FeaturesDetail = ({ onBack }) => {
                 const d = await res.json();
                 throw new Error(d.error);
             }
+            setSettings(p => ({ ...p, featureFlags: next }));
         } catch (e) {
-            // Revert on error
-            setFlags(flags);
+            setFlags(prev);
             setError('Failed to save flag: ' + e.message);
         }
     };
@@ -16152,10 +16153,10 @@ const FeaturesDetail = ({ onBack }) => {
         try {
             const res = await dbFetch('/.netlify/functions/settings', {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ aiSettings }),
             });
             if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+            setSettings(prev => ({ ...prev, aiSettings }));
             setDirty(false);
         } catch (e) {
             setError('Failed to save AI settings: ' + e.message);
@@ -16642,7 +16643,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'import')   return <ImportDetail   onBack={onBack}/>;
         if (id === 'export')   return <ExportDetail   onBack={onBack}/>;
         if (id === 'backup')   return <BackupDetail   onBack={onBack}/>;
-        if (id === 'features') return <FeaturesDetail onBack={onBack}/>;
+        if (id === 'features') return <FeaturesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Security detail pages
         if (id === 'sso')              return <SsoDetail       onBack={onBack}/>;
