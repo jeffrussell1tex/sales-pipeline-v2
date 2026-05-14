@@ -1923,6 +1923,45 @@ export default function OpportunityModal({
                                         </div>
                                     )}
 
+                                    {/* ── Custom fields ── */}
+                                    {(() => {
+                                        const customFields = (settings?.customFieldsByObject?.Opportunities || []).filter(f => (f.visibility||'').includes('Detail'));
+                                        if (customFields.length === 0) return null;
+                                        return (
+                                            <div style={{ marginBottom: 16 }}>
+                                                <div style={{ fontSize: '0.6875rem', fontWeight: '700', color: '#c8b99a', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.875rem', paddingBottom: '0.5rem', borderTop: `1px solid ${T.border}`, paddingTop: '1rem' }}>Custom Fields</div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                                    {customFields.map(f => {
+                                                        const apiKey = f.api.replace(/^[^.]+\./, '');
+                                                        const val = formData[apiKey] ?? formData[f.api] ?? '';
+                                                        return (
+                                                            <div key={f.api}>
+                                                                <label style={{ display: 'block', fontSize: '0.6875rem', fontWeight: '700', color: '#8a8378', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
+                                                                    {f.label}{f.required && <span style={{ color: '#9c3a2e', marginLeft: 3 }}>*</span>}
+                                                                </label>
+                                                                {f.type === 'Toggle' ? (
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                                        <input type="checkbox" checked={!!val} onChange={e => handleChange(apiKey, e.target.checked)}
+                                                                            style={{ cursor: 'pointer', width: 16, height: 16 }}/>
+                                                                        <span style={{ fontSize: 13, color: '#2a2622', fontFamily: 'inherit' }}>{val ? 'Yes' : 'No'}</span>
+                                                                    </div>
+                                                                ) : f.type === 'Date' ? (
+                                                                    <input type="date" value={val} onChange={e => handleChange(apiKey, e.target.value)}
+                                                                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: '#2a2622', background: T.surface, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}/>
+                                                                ) : (
+                                                                    <input type={f.type === 'Number' ? 'number' : f.type === 'Email' ? 'email' : f.type === 'Phone' ? 'tel' : f.type === 'URL' ? 'url' : 'text'}
+                                                                        value={val} onChange={e => handleChange(apiKey, e.target.value)}
+                                                                        placeholder={f.label}
+                                                                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 13, color: '#2a2622', background: T.surface, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}/>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
                                     {/* ── Comments thread ── */}
                                     {opportunity && (
                                         <div style={{ borderTop: `1px solid ${T.border}`, marginTop: 8, paddingTop: 20 }}>
