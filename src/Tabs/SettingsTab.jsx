@@ -3174,11 +3174,13 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack }) => {
                                 </div>
                                 <div>
                                     <label style={{ fontSize: 11, fontWeight: 600, color: T.inkMid, display: 'block', marginBottom: 3, fontFamily: T.sans }}>Color</label>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface }}>
-                                        <input type="color" value={editModal.data.color} onChange={e => setEditModal(m => ({ ...m, data: { ...m.data, color: e.target.value } }))}
-                                            style={{ width: 28, height: 26, border: 'none', padding: 0, cursor: 'pointer', background: 'none' }}/>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', border: `1px solid ${T.border}`, borderRadius: T.r, background: T.surface, cursor: 'pointer' }}>
+                                        <input type="color" value={editModal.data.color}
+                                            onChange={e => setEditModal(m => ({ ...m, data: { ...m.data, color: e.target.value } }))}
+                                            style={{ width: 32, height: 28, border: 'none', padding: 0, cursor: 'pointer', background: 'none', flexShrink: 0 }}/>
                                         <PersonaSwatch p={editModal.data} size={20}/>
-                                    </div>
+                                        <span style={{ fontSize: 11, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace' }}>{editModal.data.color}</span>
+                                    </label>
                                 </div>
                             </div>
                             {/* Description */}
@@ -16053,6 +16055,7 @@ const BackupDetail = ({ onBack }) => {
 // ── ④ Features & AI Detail ────────────────────────────────────
 const FeaturesDetail = ({ onBack }) => {
     const [flags,      setFlags]      = React.useState({});      // { [flagId]: boolean }
+    const [tabViz,     setTabViz]     = React.useState({ leadsEnabled: true, quotesEnabled: true });
     const [aiSettings, setAiSettings] = React.useState({});
     const [loading,    setLoading]    = React.useState(true);
     const [saving,     setSaving]     = React.useState(false);
@@ -16071,6 +16074,10 @@ const FeaturesDetail = ({ onBack }) => {
                 if (cancelled) return;
                 if (!res.ok) throw new Error(data.error || 'Failed to load settings');
                 setFlags(data.settings?.featureFlags || {});
+                setTabViz({
+                    leadsEnabled:  data.settings?.leadsEnabled  !== false,
+                    quotesEnabled: data.settings?.quotesEnabled !== false,
+                });
                 setAiSettings(data.settings?.aiSettings || {
                     model: 'claude-sonnet-4-6',
                     fallback: 'claude-haiku-4-5-20251001',
@@ -16115,6 +16122,27 @@ const FeaturesDetail = ({ onBack }) => {
             // Revert on error
             setFlags(flags);
             setError('Failed to save flag: ' + e.message);
+        }
+    };
+
+    // ── Toggle tab visibility (leadsEnabled / quotesEnabled) ──
+    const handleTabVizToggle = async (key) => {
+        const prev = tabViz;
+        const next = { ...tabViz, [key]: !tabViz[key] };
+        setTabViz(next);
+        try {
+            const res = await dbFetch('/.netlify/functions/settings', {
+                method: 'PUT',
+                body: JSON.stringify({ [key]: next[key] }),
+            });
+            if (!res.ok) {
+                const d = await res.json();
+                setTabViz(prev);
+                throw new Error(d.error);
+            }
+        } catch (e) {
+            setTabViz(prev);
+            setError('Failed to save: ' + e.message);
         }
     };
 
@@ -16195,6 +16223,34 @@ const FeaturesDetail = ({ onBack }) => {
                     <b style={{ color:T.info }}>Beta features active.</b> Workspace has {betaOn} beta flag{betaOn>1?'s':''} enabled. Behavior may change between releases.
                 </div>
             )}
+
+            {/* ── Tab visibility ── */}
+            <DataCard title="Tab visibility" desc="Show or hide top-level navigation tabs for all users in this workspace.">
+                {[
+                    { key: 'leadsEnabled',  name: 'Leads tab',  desc: 'Show the Leads tab in the top navigation bar.' },
+                    { key: 'quotesEnabled', name: 'Quotes tab', desc: 'Show the Quotes tab in the top navigation bar.' },
+                ].map((item, i, arr) => {
+                    const on = tabViz[item.key];
+                    return (
+                        <div key={item.key} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 0', borderBottom: i < arr.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                            <div onClick={() => handleTabVizToggle(item.key)}
+                                style={{ width:30, height:18, borderRadius:9, background: on ? T.ok : T.border, position:'relative', flexShrink:0, cursor:'pointer', transition:'background 120ms' }}>
+                                <span style={{ position:'absolute', top:2, left: on ? 14 : 2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+                            </div>
+                            <div style={{ flex:1 }}>
+                                <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, display:'flex', alignItems:'center', gap:6 }}>
+                                    {item.name}
+                                    <span style={{ padding:'1px 6px', borderRadius:10, background:'rgba(77,107,61,0.12)', color:T.ok, fontSize:10.5, fontWeight:700 }}>Live</span>
+                                </div>
+                                <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:2, fontFamily:T.sans }}>{item.desc}</div>
+                            </div>
+                            <div style={{ fontSize:11, color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', textAlign:'right', minWidth:80 }}>
+                                {on ? 'Visible' : 'Hidden'}
+                            </div>
+                        </div>
+                    );
+                })}
+            </DataCard>
 
             {/* ── Feature flags ── */}
             <DataCard title={`Feature flags (${onCount} / ${FLAG_DEFS.length} on)`} desc="Toggle workspace-wide features. Live flags take effect immediately. Coming soon flags are stored but not yet active.">
