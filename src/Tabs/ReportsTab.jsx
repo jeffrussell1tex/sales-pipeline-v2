@@ -5016,17 +5016,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         });
     }, [contacts, isAdmin, isManager, currentUserName, settings]);
 
-    // ── Auto-select first on load ──────────────────────────────
-    React.useEffect(() => {
-        if (!selectedAccountId && visibleAccounts.length > 0) {
-            setSelectedAccountId(visibleAccounts[0].id);
-        }
-    }, [visibleAccounts]);
-    React.useEffect(() => {
-        if (!selectedContactId && visibleContacts.length > 0) {
-            setSelectedContactId(visibleContacts[0].id);
-        }
-    }, [visibleContacts]);
+    // No auto-select — user must choose an account/contact
 
     const selectedAccount = visibleAccounts.find(a => a.id === selectedAccountId) || null;
     const selectedContact = visibleContacts.find(c => c.id === selectedContactId) || null;
@@ -5047,79 +5037,80 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     // ── Build event feed for selected account ─────────────────
     const accountEvents = React.useMemo(() => {
         if (!selectedAccount) return [];
-        const accName = selectedAccount.name || '';
+        const accName = (selectedAccount.name || '').toLowerCase();
         const events = [];
 
-        // Activities linked to this account
+        // Build set of opp IDs for this account (activities/tasks link via opportunityId)
+        const accOppsAll = (opportunities || []).filter(o =>
+            (o.account || o.accountName || '').toLowerCase() === accName
+        );
+        const accOppIds = new Set(accOppsAll.map(o => o.id));
+
+        // Activities linked via opportunityId → account, or directly by companyName (no opp)
         (activities || []).forEach(a => {
-            if ((a.account||a.accountName||'').toLowerCase() === accName.toLowerCase()) {
-                events.push({
-                    id: 'act_' + a.id,
-                    date: a.date || a.createdAt || '',
-                    type: 'activity',
-                    actType: a.type || 'Activity',
-                    label: a.subject || a.description || a.type || 'Activity',
-                    sub: a.notes || a.outcome || '',
-                    rep: a.rep || a.salesRep || a.assignedTo || a.author || '',
-                    amount: null,
-                });
-            }
+            const linkedByOpp = a.opportunityId && accOppIds.has(a.opportunityId);
+            const linkedByName = (a.companyName || a.account || a.accountName || '').toLowerCase() === accName;
+            if (!linkedByOpp && !linkedByName) return;
+            const opp = linkedByOpp ? accOppsAll.find(o => o.id === a.opportunityId) : null;
+            events.push({
+                id: 'act_' + a.id,
+                date: a.date || a.createdAt || '',
+                type: 'activity',
+                actType: a.type || 'Activity',
+                label: a.subject || a.description || a.type || 'Activity',
+                sub: a.notes || a.outcome || (opp ? opp.opportunityName || opp.name : '') || '',
+                rep: a.rep || a.salesRep || a.assignedTo || a.author || '',
+                amount: null,
+            });
         });
 
-        // Tasks linked to this account
+        // Tasks linked via opportunityId → account, or directly by account name
         (tasks || []).forEach(t => {
-            if ((t.account||t.accountName||'').toLowerCase() === accName.toLowerCase()) {
-                events.push({
-                    id: 'task_' + t.id,
-                    date: t.dueDate || t.createdAt || '',
-                    type: 'task',
-                    actType: 'Task',
-                    label: t.title || t.subject || 'Task',
-                    sub: t.notes || '',
-                    rep: t.assignedTo || t.salesRep || '',
-                    amount: null,
-                    done: !!t.completed,
-                });
-            }
+            const linkedByOpp = t.opportunityId && accOppIds.has(t.opportunityId);
+            const linkedByName = (t.companyName || t.account || t.accountName || '').toLowerCase() === accName;
+            if (!linkedByOpp && !linkedByName) return;
+            events.push({
+                id: 'task_' + t.id,
+                date: t.completedAt || t.dueDate || t.createdAt || '',
+                type: 'task',
+                actType: t.completed ? 'Task Done' : 'Task',
+                label: t.title || t.subject || 'Task',
+                sub: t.notes || '',
+                rep: t.assignedTo || t.salesRep || '',
+                amount: null,
+                done: !!t.completed,
+            });
         });
 
         // Opportunities linked to this account
-        (opportunities || []).forEach(o => {
-            if ((o.account||o.accountName||'').toLowerCase() === accName.toLowerCase()) {
-                if (o.stage === 'Closed Won') {
-                    events.push({
-                        id: 'opp_won_' + o.id,
-                        date: o.closedAt || o.closeDate || o.updatedAt || '',
-                        type: 'won',
-                        actType: 'Won',
-                        label: o.opportunityName || o.name || 'Deal',
-                        sub: o.stage,
-                        rep: o.salesRep || o.assignedTo || '',
-                        amount: parseFloat(o.arr||o.revenue||0)||0,
-                    });
-                } else if (o.stage === 'Closed Lost') {
-                    events.push({
-                        id: 'opp_lost_' + o.id,
-                        date: o.closedAt || o.closeDate || o.updatedAt || '',
-                        type: 'lost',
-                        actType: 'Lost',
-                        label: o.opportunityName || o.name || 'Deal',
-                        sub: o.lostReason || '',
-                        rep: o.salesRep || o.assignedTo || '',
-                        amount: parseFloat(o.arr||o.revenue||0)||0,
-                    });
-                } else {
-                    events.push({
-                        id: 'opp_open_' + o.id,
-                        date: o.createdAt || o.closeDate || '',
-                        type: 'deal',
-                        actType: 'Deal',
-                        label: o.opportunityName || o.name || 'Deal',
-                        sub: o.stage,
-                        rep: o.salesRep || o.assignedTo || '',
-                        amount: parseFloat(o.arr||o.revenue||0)||0,
-                    });
-                }
+        accOppsAll.forEach(o => {
+            if (o.stage === 'Closed Won') {
+                events.push({
+                    id: 'opp_won_' + o.id,
+                    date: o.closedAt || o.closeDate || o.updatedAt || '',
+                    type: 'won', actType: 'Won',
+                    label: o.opportunityName || o.name || 'Deal',
+                    sub: o.stage, rep: o.salesRep || o.assignedTo || '',
+                    amount: parseFloat(o.arr||o.revenue||0)||0,
+                });
+            } else if (o.stage === 'Closed Lost') {
+                events.push({
+                    id: 'opp_lost_' + o.id,
+                    date: o.closedAt || o.closeDate || o.updatedAt || '',
+                    type: 'lost', actType: 'Lost',
+                    label: o.opportunityName || o.name || 'Deal',
+                    sub: o.lostReason || '', rep: o.salesRep || o.assignedTo || '',
+                    amount: parseFloat(o.arr||o.revenue||0)||0,
+                });
+            } else {
+                events.push({
+                    id: 'opp_open_' + o.id,
+                    date: o.createdAt || o.closeDate || '',
+                    type: 'deal', actType: 'Deal',
+                    label: o.opportunityName || o.name || 'Deal',
+                    sub: o.stage, rep: o.salesRep || o.assignedTo || '',
+                    amount: parseFloat(o.arr||o.revenue||0)||0,
+                });
             }
         });
 
@@ -5135,42 +5126,50 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         const cId = selectedContact.id;
         const events = [];
 
-        (activities || []).forEach(a => {
-            const matchContact = (a.contactId === cId) ||
-                (a.contact||a.contactName||'').toLowerCase() === cName;
-            if (matchContact) {
-                events.push({
-                    id: 'act_' + a.id,
-                    date: a.date || a.createdAt || '',
-                    type: 'activity',
-                    actType: a.type || 'Activity',
-                    label: a.subject || a.description || a.type || 'Activity',
-                    sub: a.notes || a.outcome || '',
-                    rep: a.rep || a.salesRep || a.assignedTo || a.author || '',
-                    amount: null,
-                });
-            }
-        });
-
-        (tasks || []).forEach(t => {
-            if (t.contactId === cId || (t.contact||'').toLowerCase() === cName) {
-                events.push({
-                    id: 'task_' + t.id,
-                    date: t.dueDate || t.createdAt || '',
-                    type: 'task',
-                    actType: 'Task',
-                    label: t.title || t.subject || 'Task',
-                    sub: t.notes || '',
-                    rep: t.assignedTo || '',
-                    amount: null,
-                    done: !!t.completed,
-                });
-            }
-        });
-
-        (opportunities || []).forEach(o => {
+        // Opps this contact is linked to
+        const conOppsAll = (opportunities || []).filter(o => {
             const ids = Array.isArray(o.contactIds) ? o.contactIds : [];
-            if (!ids.includes(cId)) return;
+            return ids.includes(cId);
+        });
+        const conOppIds = new Set(conOppsAll.map(o => o.id));
+
+        // Activities: linked via opportunityId on a contact opp, or directly by contactId/name/contactSearch
+        (activities || []).forEach(a => {
+            const linkedByOpp  = a.opportunityId && conOppIds.has(a.opportunityId);
+            const linkedDirect = (a.contactId === cId) ||
+                (a.contact||a.contactName||a.contactSearch||'').toLowerCase() === cName;
+            if (!linkedByOpp && !linkedDirect) return;
+            const opp = linkedByOpp ? conOppsAll.find(o => o.id === a.opportunityId) : null;
+            events.push({
+                id: 'act_' + a.id,
+                date: a.date || a.createdAt || '',
+                type: 'activity', actType: a.type || 'Activity',
+                label: a.subject || a.description || a.type || 'Activity',
+                sub: a.notes || a.outcome || (opp ? opp.opportunityName || opp.name : '') || '',
+                rep: a.rep || a.salesRep || a.assignedTo || a.author || '',
+                amount: null,
+            });
+        });
+
+        // Tasks: linked via opportunityId on a contact opp, or directly
+        (tasks || []).forEach(t => {
+            const linkedByOpp  = t.opportunityId && conOppIds.has(t.opportunityId);
+            const linkedDirect = (t.contactId === cId) ||
+                (t.contact||t.contactName||t.contactSearch||'').toLowerCase() === cName;
+            if (!linkedByOpp && !linkedDirect) return;
+            events.push({
+                id: 'task_' + t.id,
+                date: t.completedAt || t.dueDate || t.createdAt || '',
+                type: 'task', actType: t.completed ? 'Task Done' : 'Task',
+                label: t.title || t.subject || 'Task',
+                sub: t.notes || '',
+                rep: t.assignedTo || '',
+                amount: null, done: !!t.completed,
+            });
+        });
+
+        // Opportunities
+        conOppsAll.forEach(o => {
             if (o.stage === 'Closed Won') {
                 events.push({ id:'opp_won_'+o.id, date:o.closedAt||o.closeDate||o.updatedAt||'', type:'won', actType:'Won', label:o.opportunityName||o.name||'Deal', sub:o.stage, rep:o.salesRep||o.assignedTo||'', amount:parseFloat(o.arr||o.revenue||0)||0 });
             } else if (o.stage === 'Closed Lost') {
@@ -5305,7 +5304,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     const EntitySelector = ({ label, selected, filtered, search, setSearch, open, setOpen, onSelect, refEl, nameOf }) => (
         <div ref={refEl} style={{ position:'relative', minWidth:260 }}>
             <div onClick={() => setOpen(o=>!o)} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, cursor:'pointer', fontSize:13, color:T.ink, fontFamily:T.sans }}>
-                <span style={{ flex:1, fontWeight:500 }}>{selected ? nameOf(selected) : `Select ${label}…`}</span>
+                <span style={{ flex:1, fontWeight: selected ? 500 : 400, color: selected ? T.ink : T.inkMuted }}>{selected ? nameOf(selected) : `Type to search ${label}s…`}</span>
                 <span style={{ fontSize:9, color:T.inkMuted }}>▾</span>
             </div>
             {open && (
