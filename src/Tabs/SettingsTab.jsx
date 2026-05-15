@@ -16352,13 +16352,16 @@ const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty, setti
     };
     React.useEffect(() => {
         if (!settings) return;
-        setFlags(settings.featureFlags || {});
-        setTabViz({
-            leadsEnabled:   settings.leadsEnabled  !== false,
-            quotesEnabled:  settings.quotesEnabled !== false,
-            dispatchEnabled: settings.dispatchEnabled === true,
-        });
-        setAiSettings(settings.aiSettings || AI_DEFAULTS);
+        // Don't overwrite local state while user has unsaved changes
+        if (!dirty) {
+            setFlags(settings.featureFlags || {});
+            setTabViz({
+                leadsEnabled:   settings.leadsEnabled  !== false,
+                quotesEnabled:  settings.quotesEnabled !== false,
+                dispatchEnabled: settings.dispatchEnabled === true,
+            });
+            setAiSettings(settings.aiSettings || AI_DEFAULTS);
+        }
         setLoading(false);
     }, [settings]);
 
