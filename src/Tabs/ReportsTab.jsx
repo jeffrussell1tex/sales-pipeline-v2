@@ -5301,7 +5301,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
 
     // ── Period pills ───────────────────────────────────────────
     const PeriodPill = ({ value, label }) => (
-        <button onClick={() => setPeriod(value)} style={{ padding:'4px 12px', border:'none', borderRadius:999, background: period===value ? T.ink : T.surface, color: period===value ? T.surface : T.inkMid, fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:T.sans, border:`1px solid ${period===value ? T.ink : T.border}` }}>
+        <button onClick={() => setPeriod(value)} style={{ padding:'4px 12px', border:`1px solid ${period===value ? T.ink : T.border}`, borderRadius:999, background: period===value ? T.ink : T.surface, color: period===value ? T.surface : T.inkMid, fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:T.sans }}>
             {label}
         </button>
     );
