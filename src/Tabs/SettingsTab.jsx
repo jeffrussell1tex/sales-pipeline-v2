@@ -16523,7 +16523,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
     // Sync app-level dirty flag with detail page state
     React.useEffect(() => {
         if (setSettingsDirty) setSettingsDirty(!!activeItem);
-    }, [activeItem]); state
+    }, [activeItem]);
 
     // ── Needs Attention snooze/dismiss ───────────────────────────────────────
     const [naMenuOpen,   setNaMenuOpen]   = React.useState(null);
