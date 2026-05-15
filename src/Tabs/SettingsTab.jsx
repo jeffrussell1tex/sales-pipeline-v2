@@ -143,6 +143,8 @@ const SETTINGS_ITEMS = [
     { id:'reasons-won',      scope:'workspace', category:'Sales process', name:'Reasons won',     desc:'Win reason options shown when a deal is marked Closed Won',    status:'ok',      statusDetail:'0 reasons',                   updatedBy:'Admin', updatedAt:'never' },
     { id:'reasons-lost',     scope:'workspace', category:'Sales process', name:'Reasons lost',    desc:'Loss reason options shown when a deal is marked Closed Lost',  status:'ok',      statusDetail:'0 reasons',                   updatedBy:'Admin', updatedAt:'never' },
     { id:'industries',       scope:'workspace', category:'Sales process', name:'Industries',      desc:'Primary and sub-industry taxonomy',                           status:'ok',      statusDetail:'14 industries · 47 sub-types', updatedBy:'Admin', updatedAt:'4 months ago' },
+    { id:'dispatch-skills',  scope:'workspace', category:'Dispatch',       name:'Skills & certifications', desc:'Skills, certifications, and license levels your crews are dispatched around', status:'ok', statusDetail:'Admin-defined', updatedBy:'Admin', updatedAt:'never' },
+    { id:'dispatch-vehicles', scope:'workspace', category:'Dispatch',      name:'Vehicles & equipment',    desc:'Fleet vehicles and equipment available to techs',              status:'ok', statusDetail:'Admin-defined', updatedBy:'Admin', updatedAt:'never' },
     // Quoting
     { id:'price-book',       scope:'workspace', category:'Quoting', name:'Price book',            desc:'Product catalog for quotes — edit in Quotes tab',             status:'linked',  statusDetail:'15 products · 3 bundles',     updatedBy:'Admin', updatedAt:'1 week ago',   link:true },
     { id:'approval-tiers',   scope:'workspace', category:'Quoting', name:'Approval tiers',        desc:'Discount thresholds that trigger manager or VP approval',     status:'ok',      statusDetail:'3 tiers',                     updatedBy:'Admin', updatedAt:'2 months ago' },
@@ -804,7 +806,7 @@ const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, upd
 );
 
 // ── 1. Company Profile ─────────────────────────────────────────
-const CompanyProfileDetail = ({ settings, setSettings, onBack }) => {
+const CompanyProfileDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = {
         displayName:   settings?.companyDisplayName  || settings?.companyName || '',
         legalName:     settings?.companyLegalName    || '',
@@ -857,6 +859,14 @@ const CompanyProfileDetail = ({ settings, setSettings, onBack }) => {
         setSaving(false);
         setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     const COUNTRIES = ['United States','Canada','United Kingdom','Australia','Germany','France','Other'].map(c => ({ value:c, label:c }));
 
@@ -1002,7 +1012,7 @@ const FiscalRibbon = ({ startMonth }) => {
     );
 };
 
-const FiscalYearDetail = ({ settings, setSettings, onBack }) => {
+const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const savedStart = (parseInt(settings?.fiscalYearStart) || 10) - 1; // DB is 1-indexed, UI is 0-indexed
     const [startMonth, setStartMonth] = useState(savedStart);
     const [dirty, setDirty]   = useState(false);
@@ -1019,6 +1029,14 @@ const FiscalYearDetail = ({ settings, setSettings, onBack }) => {
         setSaving(false);
         setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     // Compute current period display
     const now = new Date();
@@ -2051,7 +2069,7 @@ const DEFAULT_FUNNEL_STAGES = [
     { name:'Closed Lost',  prob:0,   type:'Lost', color:'#9c3a2e' },
 ];
 
-const FunnelStagesDetail = ({ settings, setSettings, onBack }) => {
+const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.funnelStages?.length ? settings.funnelStages : DEFAULT_FUNNEL_STAGES;
     const [stages, setStages] = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]   = useState(false);
@@ -2069,6 +2087,14 @@ const FunnelStagesDetail = ({ settings, setSettings, onBack }) => {
         catch(e) { console.error('save funnel stages', e); }
         setSaving(false); setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     // Open stages only for probability curve
     const openStages = stages.filter(s => s.type === 'Open');
@@ -2196,7 +2222,7 @@ const DEFAULT_KPI_THRESHOLDS = [
 
 const CORE_KPI_IDS = new Set(['Quota attainment','Win rate','Avg deal size','Sales cycle length','Activities per deal','Opportunity pipeline']);
 
-const KPIThresholdsDetail = ({ settings, setSettings, onBack }) => {
+const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.kpiThresholds?.length ? settings.kpiThresholds : DEFAULT_KPI_THRESHOLDS;
     const [rows, setRows]     = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]   = useState(false);
@@ -2240,6 +2266,14 @@ const KPIThresholdsDetail = ({ settings, setSettings, onBack }) => {
         catch(e) { console.error('save kpi thresholds', e); }
         setSaving(false); setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     // ── Kebab actions ─────────────────────────────────────────
     const handleResetToDefault = (i) => {
@@ -2554,7 +2588,7 @@ const DEFAULT_CUSTOM_FIELDS = {
     ],
 };
 
-const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
+const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved     = settings?.customFieldsByObject || DEFAULT_CUSTOM_FIELDS;
     const [activeObj, setActiveObj] = useState('Accounts');
     const [fields, setFields]       = useState(() => JSON.parse(JSON.stringify(saved)));
@@ -2575,6 +2609,14 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
         catch(e) { console.error('save custom fields', e); }
         setSaving(false); setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     const handleAddField = () => {
         if (!newLabel.trim()) { setAddErr('Label is required.'); return; }
@@ -2858,7 +2900,7 @@ const MOST_USED_PAIN_POINTS = [
 
 
 // ── Generic flat-list settings panel (competitors / reasons won / reasons lost) ──
-function FlatListDetail({ title, description, placeholder, settingsKey, settings, setSettings, onBack }) {
+function FlatListDetail({ title, description, placeholder, settingsKey, settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) {
     const saved   = settings?.[settingsKey] || [];
     const [items, setItems]   = useState(() => [...saved]);
     const [dirty, setDirty]   = useState(false);
@@ -2876,6 +2918,14 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
         } catch(e) { console.error('save ' + settingsKey, e); }
         setSaving(false); setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
     const handleCancel = () => { setItems([...saved]); setDirty(false); };
 
     const addItem = () => {
@@ -3007,7 +3057,7 @@ const TagsField = ({ label, value, onChange }) => (
     </div>
 );
 
-const BuyerPersonasDetail = ({ settings, setSettings, onBack }) => {
+const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const { contacts } = useApp();
 
     const saved = React.useMemo(() => {
@@ -3066,6 +3116,14 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack }) => {
         setSaving(false);
         setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     const handleCancel = () => { setPersonas(JSON.parse(JSON.stringify(saved))); setDirty(false); };
 
@@ -3337,7 +3395,7 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack }) => {
 const ReasonsWonDetail   = (p) => <FlatListDetail {...p} title="Reasons won"  settingsKey="reasonsWon"  placeholder="e.g. Best price, Strong support…" description="Win reason options shown when a deal is marked Closed Won." />;
 const ReasonsLostDetail  = (p) => <FlatListDetail {...p} title="Reasons lost" settingsKey="reasonsLost" placeholder="e.g. Lost to competitor, Budget…"  description="Loss reason options shown when a deal is marked Closed Lost." />;
 
-const PainPointsDetail = ({ settings, setSettings, onBack }) => {
+const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved    = settings?.painPoints?.length ? settings.painPoints : DEFAULT_PAIN_POINTS;
     const [groups, setGroups]   = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
@@ -3356,6 +3414,14 @@ const PainPointsDetail = ({ settings, setSettings, onBack }) => {
         catch(e) { console.error('save pain points', e); }
         setSaving(false); setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     const addCategory = () => {
         if (!newCat.trim()) return;
@@ -7862,6 +7928,87 @@ const UserProfilePage = ({ user, settings, onBack, onUsers }) => {
                             <div style={{ color:T.inkMuted, fontSize:12, fontStyle:'italic' }}>No changes recorded yet.</div>
                         )}
                     </SectionCard>
+
+                    {/* Dispatch tech profile — only shown if dispatch is enabled */}
+                    {settings?.dispatchEnabled && (() => {
+                        const dSkills   = settings?.dispatchSkills   || [];
+                        const dCerts    = settings?.dispatchCerts    || [];
+                        const dLicenses = settings?.dispatchLicenses || ['Apprentice','Journeyman','Master','Lead'];
+                        const dVehicles = settings?.dispatchVehicles || [];
+                        const userSkills = user.dispatchSkills || [];
+                        const userCerts  = user.dispatchCerts  || [];
+
+                        const saveDispatchProfile = async (updates) => {
+                            const updatedUsers = (settings.users || []).map(u =>
+                                u.id === user.id || u.name === user.name ? { ...u, ...updates } : u
+                            );
+                            await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ users: updatedUsers }) });
+                        };
+
+                        return (
+                            <SectionCard title="Dispatch tech profile" desc="Skills, certifications, and scheduling settings for this technician.">
+                                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+                                    <div>
+                                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:8 }}>Skills</div>
+                                        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                                            {dSkills.map(s => {
+                                                const active = userSkills.includes(s.id);
+                                                return (
+                                                    <span key={s.id} onClick={async () => {
+                                                        const next = active ? userSkills.filter(id => id !== s.id) : [...userSkills, s.id];
+                                                        await saveDispatchProfile({ dispatchSkills: next });
+                                                    }} style={{
+                                                        fontSize:11, padding:'3px 9px', borderRadius:8, cursor:'pointer',
+                                                        background: active ? `${s.color}20` : T.surface2,
+                                                        border: `1px solid ${active ? s.color : T.border}`,
+                                                        color: active ? s.color : T.inkMuted, fontWeight: active ? 700 : 400,
+                                                        fontFamily:T.sans, transition:'all 100ms',
+                                                    }}>{s.name}</span>
+                                                );
+                                            })}
+                                            {dSkills.length === 0 && <span style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic' }}>No skills configured. Add in Settings → Skills & certifications.</span>}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:8 }}>License level</div>
+                                        <select defaultValue={user.dispatchLicense || dLicenses[0]}
+                                            onChange={async e => { await saveDispatchProfile({ dispatchLicense: e.target.value }); }}
+                                            style={{ padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', background:T.surface, color:T.ink }}>
+                                            {dLicenses.map(l => <option key={l}>{l}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:8 }}>Vehicle</div>
+                                        <select defaultValue={user.vehicle || ''}
+                                            onChange={async e => { await saveDispatchProfile({ vehicle: e.target.value }); }}
+                                            style={{ padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', background:T.surface, color:T.ink }}>
+                                            <option value="">— No vehicle —</option>
+                                            {dVehicles.map(v => <option key={v.id} value={v.name}>{v.name} ({v.type})</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:8 }}>Hours cap / week</div>
+                                        <input type="number" defaultValue={user.hoursCap || 40} min={1} max={80}
+                                            onBlur={async e => { await saveDispatchProfile({ hoursCap: parseInt(e.target.value) || 40 }); }}
+                                            style={{ padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', width:80 }}/>
+                                    </div>
+                                    <div style={{ gridColumn:'1 / -1' }}>
+                                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                            <div onClick={async () => { await saveDispatchProfile({ dispatchEnabled: !user.dispatchEnabled }); }}
+                                                style={{ width:30, height:18, borderRadius:9, background: user.dispatchEnabled ? T.ok : T.border, position:'relative', flexShrink:0, cursor:'pointer', transition:'background 120ms' }}>
+                                                <span style={{ position:'absolute', top:2, left: user.dispatchEnabled ? 14 : 2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans }}>Active tech</div>
+                                                <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>Include this person in dispatch crew suggestions</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </SectionCard>
+                        );
+                    })()}
+
                 </div>
             </div>
         </div>
@@ -16174,9 +16321,9 @@ const BackupDetail = ({ onBack }) => {
 };
 
 // ── ④ Features & AI Detail ────────────────────────────────────
-const FeaturesDetail = ({ settings, setSettings, onBack }) => {
+const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const [flags,      setFlags]      = React.useState({});      // { [flagId]: boolean }
-    const [tabViz,     setTabViz]     = React.useState({ leadsEnabled: true, quotesEnabled: true });
+    const [tabViz,     setTabViz]     = React.useState({ leadsEnabled: true, quotesEnabled: true, dispatchEnabled: false });
     const [aiSettings, setAiSettings] = React.useState({});
     const [loading,    setLoading]    = React.useState(true);
     const [saving,     setSaving]     = React.useState(false);
@@ -16207,8 +16354,9 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
         if (!settings) return;
         setFlags(settings.featureFlags || {});
         setTabViz({
-            leadsEnabled:  settings.leadsEnabled  !== false,
-            quotesEnabled: settings.quotesEnabled !== false,
+            leadsEnabled:   settings.leadsEnabled  !== false,
+            quotesEnabled:  settings.quotesEnabled !== false,
+            dispatchEnabled: settings.dispatchEnabled === true,
         });
         setAiSettings(settings.aiSettings || AI_DEFAULTS);
         setLoading(false);
@@ -16236,8 +16384,9 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
                 body: JSON.stringify({
                     aiSettings,
                     featureFlags: flags,
-                    leadsEnabled:  tabViz.leadsEnabled,
-                    quotesEnabled: tabViz.quotesEnabled,
+                    leadsEnabled:   tabViz.leadsEnabled,
+                    quotesEnabled:  tabViz.quotesEnabled,
+                    dispatchEnabled: tabViz.dispatchEnabled,
                 }),
             });
             if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
@@ -16245,8 +16394,9 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
                 ...prev,
                 aiSettings,
                 featureFlags: flags,
-                leadsEnabled:  tabViz.leadsEnabled,
-                quotesEnabled: tabViz.quotesEnabled,
+                leadsEnabled:   tabViz.leadsEnabled,
+                quotesEnabled:  tabViz.quotesEnabled,
+                dispatchEnabled: tabViz.dispatchEnabled,
             }));
             setDirty(false);
         } catch (e) {
@@ -16255,6 +16405,14 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
             setSaving(false);
         }
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSaveAi : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     // ── Export config ─────────────────────────────────────────
     const handleExportConfig = () => {
@@ -16320,8 +16478,9 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
             {/* ── Tab visibility ── */}
             <DataCard title="Tab visibility" desc="Show or hide top-level navigation tabs for all users in this workspace.">
                 {[
-                    { key: 'leadsEnabled',  name: 'Leads tab',  desc: 'Show the Leads tab in the top navigation bar.' },
-                    { key: 'quotesEnabled', name: 'Quotes tab', desc: 'Show the Quotes tab in the top navigation bar.' },
+                    { key: 'leadsEnabled',   name: 'Leads tab',     desc: 'Show the Leads tab in the top navigation bar.' },
+                    { key: 'quotesEnabled',  name: 'Quotes tab',    desc: 'Show the Quotes tab in the top navigation bar.' },
+                    { key: 'dispatchEnabled', name: 'Dispatch tab',  desc: 'Show the Dispatch scheduling tab. For field-service businesses that dispatch technicians to jobs.' },
                 ].map((item, i, arr) => {
                     const on = tabViz[item.key];
                     return (
@@ -16515,15 +16674,229 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
     );
 };
 
-const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter, setSettingsDirty }) => {
+// ─────────────────────────────────────────────────────────────────────────────
+//  Dispatch — Skills & Certifications Detail
+// ─────────────────────────────────────────────────────────────────────────────
+const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+    const savedSkills   = settings?.dispatchSkills   || [];
+    const savedCerts    = settings?.dispatchCerts    || [];
+    const savedLicenses = settings?.dispatchLicenses || ['Apprentice','Journeyman','Master','Lead'];
+    const [skills,   setSkills]   = useState(() => JSON.parse(JSON.stringify(savedSkills)));
+    const [certs,    setCerts]    = useState(() => JSON.parse(JSON.stringify(savedCerts)));
+    const [licenses, setLicenses] = useState(() => [...savedLicenses]);
+    const [dirty,    setDirty]    = useState(false);
+    const [saving,   setSaving]   = useState(false);
+    const [addingSkill, setAddingSkill] = useState(false);
+    const [addingCert,  setAddingCert]  = useState(false);
+    const [newSkill, setNewSkill] = useState({ name:'', category:'Field', color:'#7a5a3c' });
+    const [newCert,  setNewCert]  = useState({ name:'', renewalDays:365 });
+
+    const handleSave = async () => {
+        setSaving(true);
+        const payload = { dispatchSkills: skills, dispatchCerts: certs, dispatchLicenses: licenses };
+        setSettings(prev => ({ ...prev, ...payload }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify(payload) }); }
+        catch(e) { console.error('save dispatch skills', e); }
+        setSaving(false); setDirty(false);
+    };
+
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
+
+    const SKILL_CATS = ['Field','Electrical','Plumbing','HVAC','Solar','Role','Other'];
+    const COLORS = ['#7a5a3c','#3a5a7a','#b87333','#4d6b3d','#9c3a2e','#7a6a48','#2a2622'];
+
+    return (
+        <SPDetailPageChrome crumb="Skills & certifications" title="Skills & certifications"
+            subtitle="Skills, certs, and license levels your dispatchers schedule around."
+            onBack={onBack} dirty={dirty}
+            onCancel={() => { setSkills(JSON.parse(JSON.stringify(savedSkills))); setCerts(JSON.parse(JSON.stringify(savedCerts))); setLicenses([...savedLicenses]); setDirty(false); }}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}>
+
+            <CSectionCard title="Skills" desc="Skill names your crews are dispatched around (e.g. Refrigeration, Solar install, Panel upgrade).">
+                <SPTable columns={[
+                    { key:'name',  label:'Skill',    w:'1fr' },
+                    { key:'cat',   label:'Category', w:'110px' },
+                    { key:'color', label:'Color',    w:'50px' },
+                    { key:'del',   label:'',         w:'28px' },
+                ]} rows={skills.map((s,i) => ({
+                    name:  <span style={{ fontWeight:600, color:T.ink, fontFamily:T.sans }}>{s.name}</span>,
+                    cat:   <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{s.category}</span>,
+                    color: <span style={{ display:'inline-block', width:18, height:18, borderRadius:3, background:s.color, border:`1px solid ${T.border}` }}/>,
+                    del:   <button onClick={() => { setSkills(prev => prev.filter((_,ri) => ri!==i)); setDirty(true); }}
+                               style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:14, padding:0 }}
+                               onMouseEnter={e=>e.currentTarget.style.color=T.danger} onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>×</button>,
+                }))}/>
+                {addingSkill ? (
+                    <div style={{ display:'flex', gap:8, alignItems:'center', padding:'10px 0', flexWrap:'wrap' }}>
+                        <input value={newSkill.name} onChange={e=>setNewSkill(p=>({...p,name:e.target.value}))} placeholder="Skill name" autoFocus
+                            style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', flex:1, minWidth:120 }}/>
+                        <select value={newSkill.category} onChange={e=>setNewSkill(p=>({...p,category:e.target.value}))}
+                            style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, outline:'none' }}>
+                            {SKILL_CATS.map(c=><option key={c}>{c}</option>)}
+                        </select>
+                        <div style={{ display:'flex', gap:4 }}>
+                            {COLORS.map(c=>(
+                                <div key={c} onClick={()=>setNewSkill(p=>({...p,color:c}))}
+                                    style={{ width:20, height:20, borderRadius:3, background:c, cursor:'pointer', outline:newSkill.color===c?`2px solid ${T.ink}`:'none', outlineOffset:1 }}/>
+                            ))}
+                        </div>
+                        <button onClick={()=>{ if(!newSkill.name.trim()) return; setSkills(p=>[...p,{id:'sk_'+Date.now(),...newSkill}]); setNewSkill({name:'',category:'Field',color:'#7a5a3c'}); setAddingSkill(false); setDirty(true); }}
+                            style={{ padding:'6px 12px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
+                        <button onClick={()=>setAddingSkill(false)}
+                            style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    </div>
+                ) : (
+                    <button onClick={()=>setAddingSkill(true)}
+                        style={{ marginTop:10, padding:'6px 14px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                        + Add skill
+                    </button>
+                )}
+            </CSectionCard>
+
+            <CSectionCard title="Certifications" desc="Certs with expiry tracking. Expired certs block auto-scheduling.">
+                <SPTable columns={[
+                    { key:'name',    label:'Certification', w:'1fr' },
+                    { key:'renewal', label:'Renewal',       w:'120px' },
+                    { key:'del',     label:'',              w:'28px' },
+                ]} rows={certs.map((c,i) => ({
+                    name:    <span style={{ fontWeight:600, color:T.ink, fontFamily:T.sans }}>{c.name}</span>,
+                    renewal: <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{c.renewalDays} days</span>,
+                    del:     <button onClick={()=>{ setCerts(prev=>prev.filter((_,ri)=>ri!==i)); setDirty(true); }}
+                                 style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:14, padding:0 }}
+                                 onMouseEnter={e=>e.currentTarget.style.color=T.danger} onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>×</button>,
+                }))}/>
+                {addingCert ? (
+                    <div style={{ display:'flex', gap:8, alignItems:'center', padding:'10px 0' }}>
+                        <input value={newCert.name} onChange={e=>setNewCert(p=>({...p,name:e.target.value}))} placeholder="Cert name e.g. EPA 608" autoFocus
+                            style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', flex:1 }}/>
+                        <input type="number" value={newCert.renewalDays} onChange={e=>setNewCert(p=>({...p,renewalDays:parseInt(e.target.value)||365}))}
+                            style={{ width:70, padding:'6px 8px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, outline:'none' }}/>
+                        <span style={{ fontSize:12, color:T.inkMid }}>days</span>
+                        <button onClick={()=>{ if(!newCert.name.trim()) return; setCerts(p=>[...p,{id:'cert_'+Date.now(),...newCert}]); setNewCert({name:'',renewalDays:365}); setAddingCert(false); setDirty(true); }}
+                            style={{ padding:'6px 12px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
+                        <button onClick={()=>setAddingCert(false)}
+                            style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    </div>
+                ) : (
+                    <button onClick={()=>setAddingCert(true)}
+                        style={{ marginTop:10, padding:'6px 14px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                        + Add certification
+                    </button>
+                )}
+            </CSectionCard>
+
+            <CSectionCard title="License levels" desc="Ordered hierarchy. Jobs specify a minimum level required.">
+                <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:10 }}>
+                    {licenses.map((l,i)=>(
+                        <div key={i} style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r }}>
+                            <span style={{ fontSize:10, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{i+1}</span>
+                            <input value={l} onChange={e=>{ const n=[...licenses]; n[i]=e.target.value; setLicenses(n); setDirty(true); }}
+                                style={{ border:'none', outline:'none', background:'transparent', fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, width:90 }}/>
+                            {licenses.length>1 && <button onClick={()=>{ setLicenses(p=>p.filter((_,ri)=>ri!==i)); setDirty(true); }}
+                                style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:11, padding:0 }}
+                                onMouseEnter={e=>e.currentTarget.style.color=T.danger} onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>×</button>}
+                        </div>
+                    ))}
+                    <button onClick={()=>{ setLicenses(p=>[...p,'New level']); setDirty(true); }}
+                        style={{ padding:'6px 12px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                        + Add level
+                    </button>
+                </div>
+                <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>Level 1 is lowest (e.g. Apprentice). Jobs with a minimum level block lower-licensed techs from auto-scheduling.</div>
+            </CSectionCard>
+        </SPDetailPageChrome>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Dispatch — Vehicles & Equipment Detail
+// ─────────────────────────────────────────────────────────────────────────────
+const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+    const saved = settings?.dispatchVehicles || [];
+    const [vehicles, setVehicles] = useState(() => JSON.parse(JSON.stringify(saved)));
+    const [dirty,    setDirty]    = useState(false);
+    const [saving,   setSaving]   = useState(false);
+    const [showAdd,  setShowAdd]  = useState(false);
+    const [newV,     setNewV]     = useState({ name:'', type:'Van', plate:'', notes:'' });
+
+    const handleSave = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, dispatchVehicles: vehicles }));
+        try { await dbFetch('/.netlify/functions/settings', { method:'PUT', body: JSON.stringify({ dispatchVehicles: vehicles }) }); }
+        catch(e) { console.error('save vehicles', e); }
+        setSaving(false); setDirty(false);
+    };
+
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
+
+    const TYPES = ['Van','Truck','Car','Trailer','Other'];
+    return (
+        <SPDetailPageChrome crumb="Vehicles & equipment" title="Vehicles & equipment"
+            subtitle="Fleet vehicles available to assign to techs."
+            onBack={onBack} dirty={dirty}
+            onCancel={() => { setVehicles(JSON.parse(JSON.stringify(saved))); setDirty(false); }}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}>
+            <CSectionCard title="Fleet vehicles" desc="Assign vehicles to techs in Settings → People & Teams.">
+                <SPTable columns={[
+                    { key:'name',  label:'Vehicle',  w:'1fr' },
+                    { key:'type',  label:'Type',     w:'90px' },
+                    { key:'plate', label:'Plate',    w:'110px' },
+                    { key:'notes', label:'Equipment notes', w:'1.5fr' },
+                    { key:'del',   label:'',         w:'28px' },
+                ]} rows={vehicles.map((v,i)=>({
+                    name:  <span style={{ fontWeight:600, color:T.ink, fontFamily:T.sans }}>{v.name}</span>,
+                    type:  <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{v.type}</span>,
+                    plate: <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{v.plate||'—'}</span>,
+                    notes: <span style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>{v.notes||'—'}</span>,
+                    del:   <button onClick={()=>{ setVehicles(p=>p.filter((_,ri)=>ri!==i)); setDirty(true); }}
+                               style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:14, padding:0 }}
+                               onMouseEnter={e=>e.currentTarget.style.color=T.danger} onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>×</button>,
+                }))}/>
+                {showAdd ? (
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 90px 100px 1.5fr auto auto', gap:8, alignItems:'center', padding:'10px 0' }}>
+                        <input value={newV.name} onChange={e=>setNewV(p=>({...p,name:e.target.value}))} placeholder="Van 1, Truck A…" autoFocus
+                            style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none' }}/>
+                        <select value={newV.type} onChange={e=>setNewV(p=>({...p,type:e.target.value}))}
+                            style={{ padding:'6px 8px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, outline:'none' }}>
+                            {TYPES.map(t=><option key={t}>{t}</option>)}
+                        </select>
+                        <input value={newV.plate} onChange={e=>setNewV(p=>({...p,plate:e.target.value}))} placeholder="Plate #"
+                            style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, outline:'none' }}/>
+                        <input value={newV.notes} onChange={e=>setNewV(p=>({...p,notes:e.target.value}))} placeholder="e.g. Recovery cart, MC4 kit"
+                            style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, outline:'none' }}/>
+                        <button onClick={()=>{ if(!newV.name.trim()) return; setVehicles(p=>[...p,{id:'v_'+Date.now(),...newV}]); setNewV({name:'',type:'Van',plate:'',notes:''}); setShowAdd(false); setDirty(true); }}
+                            style={{ padding:'6px 12px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
+                        <button onClick={()=>setShowAdd(false)}
+                            style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    </div>
+                ) : (
+                    <button onClick={()=>setShowAdd(true)}
+                        style={{ marginTop:10, padding:'6px 14px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                        + Add vehicle
+                    </button>
+                )}
+            </CSectionCard>
+        </SPDetailPageChrome>
+    );
+};
+
+const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter }) => {
     const [scope, setScope] = useState('workspace');
     const [tab,   setTab  ] = useState('All');
     const [search, setSearch] = useState('');
-    const [activeItem, setActiveItem] = useState(null); // detail panel
-    // Sync app-level dirty flag with detail page state
-    React.useEffect(() => {
-        if (setSettingsDirty) setSettingsDirty(!!activeItem);
-    }, [activeItem]);
+    const [activeItem, setActiveItem] = useState(null); // detail panel state
 
     // ── Needs Attention snooze/dismiss ───────────────────────────────────────
     const [naMenuOpen,   setNaMenuOpen]   = React.useState(null);
@@ -16716,17 +17089,20 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
 
         if (activeItem) {
         const id = activeItem.id;
-        const onBack = () => setActiveItem(null);
+        const onBack = () => {
+            setSettingsDirty(false);
+            setActiveItem(null);
+        };
 
         // Company detail pages — full chrome, no wrapper card
-        if (id === 'company-profile')  return <CompanyProfileDetail  settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'fiscal-year')      return <FiscalYearDetail      settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'company-profile')  return <CompanyProfileDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'fiscal-year')      return <FiscalYearDetail      settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'company-calendar') return <CompanyCalendarDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Sales process Group 1 detail pages
         if (id === 'pipelines')            return <PipelinesDetail        settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'funnel-stages')        return <FunnelStagesDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'kpi-settings')         return <KPIThresholdsDetail    settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'funnel-stages')        return <FunnelStagesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'kpi-settings')         return <KPIThresholdsDetail    settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'lead-conv-benchmarks') return <LeadConversionDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Quoting detail pages
@@ -16738,7 +17114,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'import')   return <ImportDetail   onBack={onBack}/>;
         if (id === 'export')   return <ExportDetail   onBack={onBack}/>;
         if (id === 'backup')   return <BackupDetail   onBack={onBack}/>;
-        if (id === 'features') return <FeaturesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'features') return <FeaturesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
 
         // Security detail pages
         if (id === 'sso')              return <SsoDetail       onBack={onBack}/>;
@@ -16760,13 +17136,15 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'roles')       return <RolesDetail       settings={settings} onBack={onBack}/>;
 
         // Sales process Group 2 detail pages
-        if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'pain-points')     return <PainPointsDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'pain-points')     return <PainPointsDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'competitors')     return <CompetitorsDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'reasons-won')     return <ReasonsWonDetail      settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'reasons-lost')    return <ReasonsLostDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
-        if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'dispatch-skills')  return <DispatchSkillsDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'dispatch-vehicles') return <DispatchVehiclesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
 
         // Generic wrapper for all other panels
@@ -17101,7 +17479,7 @@ export default function SettingsTab() {
         settings, setSettings,
         currentUser, userRole,
         setActiveTab, setAccountsDeepFilter,
-        setSettingsDirty,
+        setSettingsDirty, settingsSaveRef,
     } = useApp();
 
     const isAdmin   = userRole === 'Admin';
@@ -17126,7 +17504,7 @@ export default function SettingsTab() {
 
             {/* Body — role-gated */}
             {canAdmin ? (
-                <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} setSettingsDirty={setSettingsDirty}/>
+                <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>
             ) : (
                 <PersonalView settings={settings} setSettings={setSettings} currentUser={currentUser} isAdmin={false}/>
             )}
