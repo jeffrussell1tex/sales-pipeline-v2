@@ -1208,17 +1208,7 @@ dbFetch('/.netlify/functions/users?me=true')
     // Deep link: navigate to Quotes tab pre-filtered to a specific opportunity
     // (state lives in useQuotes, exposed via AppContext)
 
-    if (!clerkLoaded || !orgLoaded) {
-        return (
-            <div className="login-page">
-                <div className="login-card" style={{ textAlign: 'center', padding: '3rem' }}>
-                    <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>
-                </div>
-            </div>
-        );
-    }
-
-    // ── Settings nav guard — declared before early returns (React hook rules) ──
+    // ── Settings nav guard — must be before ALL early returns ──────────
     const [settingsDirty, setSettingsDirty] = React.useState(false);
     const [pendingNavTab, setPendingNavTab] = React.useState(null);
     const [showNavGuard, setShowNavGuard]   = React.useState(false);
@@ -1243,6 +1233,16 @@ dbFetch('/.netlify/functions/users?me=true')
         setShowNavGuard(false);
         setPendingNavTab(null);
     }, []);
+
+    if (!clerkLoaded || !orgLoaded) {
+        return (
+            <div className="login-page">
+                <div className="login-card" style={{ textAlign: 'center', padding: '3rem' }}>
+                    <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Loading…</div>
+                </div>
+            </div>
+        );
+    }
 
     if (!clerkUser) {
         return (
