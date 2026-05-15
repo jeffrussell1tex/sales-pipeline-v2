@@ -1218,6 +1218,39 @@ dbFetch('/.netlify/functions/users?me=true')
         );
     }
 
+    // ── Settings nav guard — must be before early returns ──────────────
+    const [settingsDirty, setSettingsDirty] = React.useState(false);
+    const [pendingNavTab, setPendingNavTab] = React.useState(null);
+    const [showNavGuard, setShowNavGuard]   = React.useState(false);
+    const settingsSaveRef = React.useRef(null);
+
+    const handleNavClick = React.useCallback((tab) => {
+        if (activeTab === 'settings' && settingsDirty && tab !== 'settings') {
+            setPendingNavTab(tab);
+            setShowNavGuard(true);
+        } else {
+            setActiveTab(tab);
+        }
+    }, [activeTab, settingsDirty, setActiveTab]);
+
+    const navGuardSave = React.useCallback(async () => {
+        if (settingsSaveRef.current) await settingsSaveRef.current();
+        setSettingsDirty(false);
+        setShowNavGuard(false);
+        if (pendingNavTab) { setActiveTab(pendingNavTab); setPendingNavTab(null); }
+    }, [pendingNavTab, setActiveTab]);
+
+    const navGuardDiscard = React.useCallback(() => {
+        setSettingsDirty(false);
+        setShowNavGuard(false);
+        if (pendingNavTab) { setActiveTab(pendingNavTab); setPendingNavTab(null); }
+    }, [pendingNavTab, setActiveTab]);
+
+    const navGuardCancel = React.useCallback(() => {
+        setShowNavGuard(false);
+        setPendingNavTab(null);
+    }, []);
+
     if (!clerkUser) {
         return (
             <div className="login-page">
@@ -1255,41 +1288,6 @@ dbFetch('/.netlify/functions/users?me=true')
         );
     }
 
-
-    // ── Settings nav guard ───────────────────────────────────────────
-    const [settingsDirty, setSettingsDirty] = React.useState(false);
-    const [pendingNavTab, setPendingNavTab] = React.useState(null); // tab to navigate to after confirm
-    const [showNavGuard, setShowNavGuard]   = React.useState(false);
-    const settingsSaveRef = React.useRef(null); // active detail panel registers its save fn here
-
-    const handleNavClick = React.useCallback((tab) => {
-        if (activeTab === 'settings' && settingsDirty && tab !== 'settings') {
-            setPendingNavTab(tab);
-            setShowNavGuard(true);
-        } else {
-            setActiveTab(tab);
-        }
-    }, [activeTab, settingsDirty, setActiveTab]);
-
-    const navGuardSave = React.useCallback(async () => {
-        if (settingsSaveRef.current) {
-            await settingsSaveRef.current();
-        }
-        setSettingsDirty(false);
-        setShowNavGuard(false);
-        if (pendingNavTab) { setActiveTab(pendingNavTab); setPendingNavTab(null); }
-    }, [pendingNavTab, setActiveTab]);
-
-    const navGuardDiscard = React.useCallback(() => {
-        setSettingsDirty(false);
-        setShowNavGuard(false);
-        if (pendingNavTab) { setActiveTab(pendingNavTab); setPendingNavTab(null); }
-    }, [pendingNavTab, setActiveTab]);
-
-    const navGuardCancel = React.useCallback(() => {
-        setShowNavGuard(false);
-        setPendingNavTab(null);
-    }, []);
 
     // ── AppContext value ─────────────────────────────────────────────
     const appContextValue = {

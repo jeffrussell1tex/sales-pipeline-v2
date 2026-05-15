@@ -863,7 +863,8 @@ const CompanyProfileDetail = ({ settings, setSettings, onBack, setSettingsDirty,
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
         return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    }, [dirty, handleSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     const COUNTRIES = ['United States','Canada','United Kingdom','Australia','Germany','France','Other'].map(c => ({ value:c, label:c }));
 
@@ -1032,7 +1033,8 @@ const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDirty, set
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
         return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    }, [dirty, handleSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     // Compute current period display
     const now = new Date();
@@ -2089,7 +2091,8 @@ const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
         return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    }, [dirty, handleSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     // Open stages only for probability curve
     const openStages = stages.filter(s => s.type === 'Open');
@@ -2267,7 +2270,8 @@ const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
         return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    }, [dirty, handleSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     // ── Kebab actions ─────────────────────────────────────────
     const handleResetToDefault = (i) => {
@@ -2609,7 +2613,8 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
         return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    }, [dirty, handleSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     const handleAddField = () => {
         if (!newLabel.trim()) { setAddErr('Label is required.'); return; }
@@ -2917,7 +2922,8 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
         return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    }, [dirty, handleSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
     const handleCancel = () => { setItems([...saved]); setDirty(false); };
 
     const addItem = () => {
@@ -3114,7 +3120,8 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
         return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    }, [dirty, handleSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     const handleCancel = () => { setPersonas(JSON.parse(JSON.stringify(saved))); setDirty(false); };
 
@@ -3411,7 +3418,8 @@ const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDirty, set
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
         return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    }, [dirty, handleSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     const addCategory = () => {
         if (!newCat.trim()) return;
@@ -16315,9 +16323,10 @@ const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty, setti
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
     React.useEffect(() => {
         if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
+        settingsSaveRef.current = dirty ? handleSaveAi : null;
         return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
-    }, [dirty, handleSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
 
     // ── Export config ─────────────────────────────────────────
     const handleExportConfig = () => {
