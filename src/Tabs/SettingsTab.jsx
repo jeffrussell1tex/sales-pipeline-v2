@@ -16519,7 +16519,11 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
     const [scope, setScope] = useState('workspace');
     const [tab,   setTab  ] = useState('All');
     const [search, setSearch] = useState('');
-    const [activeItem, setActiveItem] = useState(null); // detail panel state
+    const [activeItem, setActiveItem] = useState(null); // detail panel
+    // Sync app-level dirty flag with detail page state
+    React.useEffect(() => {
+        if (setSettingsDirty) setSettingsDirty(!!activeItem);
+    }, [activeItem]); state
 
     // ── Needs Attention snooze/dismiss ───────────────────────────────────────
     const [naMenuOpen,   setNaMenuOpen]   = React.useState(null);
@@ -17097,6 +17101,7 @@ export default function SettingsTab() {
         settings, setSettings,
         currentUser, userRole,
         setActiveTab, setAccountsDeepFilter,
+        setSettingsDirty,
     } = useApp();
 
     const isAdmin   = userRole === 'Admin';
