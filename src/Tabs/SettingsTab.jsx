@@ -860,7 +860,7 @@ const CompanyProfileDetail = ({ settings, setSettings, onBack, setSettingsDirty,
         setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     React.useEffect(() => {
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
@@ -1030,7 +1030,7 @@ const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDirty, set
         setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     React.useEffect(() => {
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
@@ -2088,7 +2088,7 @@ const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
         setSaving(false); setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     React.useEffect(() => {
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
@@ -2267,7 +2267,7 @@ const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
         setSaving(false); setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     React.useEffect(() => {
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
@@ -2610,7 +2610,7 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
         setSaving(false); setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     React.useEffect(() => {
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
@@ -2919,7 +2919,7 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
         setSaving(false); setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     React.useEffect(() => {
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
@@ -3117,7 +3117,7 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
         setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     React.useEffect(() => {
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
@@ -3415,7 +3415,7 @@ const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDirty, set
         setSaving(false); setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     React.useEffect(() => {
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
@@ -16409,7 +16409,7 @@ const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty, setti
         }
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     React.useEffect(() => {
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSaveAi : null;
@@ -16703,7 +16703,7 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
         setSaving(false); setDirty(false);
     };
 
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     React.useEffect(() => {
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
@@ -16836,7 +16836,7 @@ const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirt
         setSaving(false); setDirty(false);
     };
 
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
     React.useEffect(() => {
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
