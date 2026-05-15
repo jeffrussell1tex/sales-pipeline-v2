@@ -1546,14 +1546,13 @@ dbFetch('/.netlify/functions/users?me=true')
                 >
                     QUOTES
                 </button>
-                {settings.dispatchEnabled && (
-                    <button
-                        className={`nav-tab ${activeTab === 'dispatch' ? 'active' : ''}`}
-                        onClick={() => handleNavClick('dispatch')}
-                    >
-                        DISPATCH
-                    </button>
-                )}
+                <button
+                    className={`nav-tab ${activeTab === 'dispatch' ? 'active' : ''}`}
+                    onClick={() => handleNavClick('dispatch')}
+                    style={{ display: settings.dispatchEnabled ? '' : 'none' }}
+                >
+                    DISPATCH
+                </button>
                 <button 
                     className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
                     onClick={() => setActiveTab('reports')}
@@ -1625,7 +1624,7 @@ dbFetch('/.netlify/functions/users?me=true')
                 </ErrorBoundary>
             )}
 
-            {activeTab === 'dispatch' && settings.dispatchEnabled && (
+            {activeTab === 'dispatch' && settings.dispatchEnabled !== false && (
                 <ErrorBoundary tabName="Dispatch">
                     <DispatchTab />
                 </ErrorBoundary>

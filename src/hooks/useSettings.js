@@ -60,6 +60,12 @@ const DEFAULT_SETTINGS = {
     ],
     aiScoringEnabled: false,
     leadsEnabled: true,
+    dispatchEnabled: false,
+    dispatchSkills: [],
+    dispatchCerts: [],
+    dispatchLicenses: ['Apprentice','Journeyman','Master','Lead'],
+    dispatchVehicles: [],
+    dispatchJobs: [],
     customerTypes: [],
     companyProfile: { address: '', phone: '', notes: '' },
     priceBookConfig: {
