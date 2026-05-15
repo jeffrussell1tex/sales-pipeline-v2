@@ -858,13 +858,13 @@ const CompanyProfileDetail = ({ settings, setSettings, onBack, setSettingsDirty,
         setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
+    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
+    React.useEffect(() => {{
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    }}, [dirty]);
 
     const COUNTRIES = ['United States','Canada','United Kingdom','Australia','Germany','France','Other'].map(c => ({ value:c, label:c }));
 
@@ -1028,13 +1028,13 @@ const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDirty, set
         setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
+    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
+    React.useEffect(() => {{
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    }}, [dirty]);
 
     // Compute current period display
     const now = new Date();
@@ -2086,13 +2086,13 @@ const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
         setSaving(false); setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
+    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
+    React.useEffect(() => {{
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    }}, [dirty]);
 
     // Open stages only for probability curve
     const openStages = stages.filter(s => s.type === 'Open');
@@ -2265,13 +2265,13 @@ const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
         setSaving(false); setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
+    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
+    React.useEffect(() => {{
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    }}, [dirty]);
 
     // ── Kebab actions ─────────────────────────────────────────
     const handleResetToDefault = (i) => {
@@ -2608,13 +2608,13 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
         setSaving(false); setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
+    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
+    React.useEffect(() => {{
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    }}, [dirty]);
 
     const handleAddField = () => {
         if (!newLabel.trim()) { setAddErr('Label is required.'); return; }
@@ -2917,13 +2917,13 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
         setSaving(false); setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
+    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
+    React.useEffect(() => {{
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    }}, [dirty]);
     const handleCancel = () => { setItems([...saved]); setDirty(false); };
 
     const addItem = () => {
@@ -3115,13 +3115,13 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
         setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
+    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
+    React.useEffect(() => {{
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    }}, [dirty]);
 
     const handleCancel = () => { setPersonas(JSON.parse(JSON.stringify(saved))); setDirty(false); };
 
@@ -3413,13 +3413,13 @@ const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDirty, set
         setSaving(false); setDirty(false);
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
+    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
+    React.useEffect(() => {{
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSave : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    }}, [dirty]);
 
     const addCategory = () => {
         if (!newCat.trim()) return;
@@ -16320,13 +16320,13 @@ const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty, setti
         }
     };
     // Sync dirty state to app-level nav guard
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
+    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
+    React.useEffect(() => {{
         if (!settingsSaveRef) return;
         settingsSaveRef.current = dirty ? handleSaveAi : null;
-        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [dirty]);
+    }}, [dirty]);
 
     // ── Export config ─────────────────────────────────────────
     const handleExportConfig = () => {
