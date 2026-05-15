@@ -16515,7 +16515,7 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
     );
 };
 
-const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter }) => {
+const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter, setSettingsDirty }) => {
     const [scope, setScope] = useState('workspace');
     const [tab,   setTab  ] = useState('All');
     const [search, setSearch] = useState('');
@@ -17126,7 +17126,7 @@ export default function SettingsTab() {
 
             {/* Body — role-gated */}
             {canAdmin ? (
-                <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>
+                <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} setSettingsDirty={setSettingsDirty}/>
             ) : (
                 <PersonalView settings={settings} setSettings={setSettings} currentUser={currentUser} isAdmin={false}/>
             )}
