@@ -16515,11 +16515,15 @@ const FeaturesDetail = ({ settings, setSettings, onBack }) => {
     );
 };
 
-const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter }) => {
+const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter, setSettingsDirty }) => {
     const [scope, setScope] = useState('workspace');
     const [tab,   setTab  ] = useState('All');
     const [search, setSearch] = useState('');
-    const [activeItem, setActiveItem] = useState(null); // detail panel state
+    const [activeItem, setActiveItem] = useState(null); // detail panel
+    // Sync app-level dirty flag with detail page state
+    React.useEffect(() => {
+        if (setSettingsDirty) setSettingsDirty(!!activeItem);
+    }, [activeItem]);
 
     // ── Needs Attention snooze/dismiss ───────────────────────────────────────
     const [naMenuOpen,   setNaMenuOpen]   = React.useState(null);
@@ -17097,6 +17101,7 @@ export default function SettingsTab() {
         settings, setSettings,
         currentUser, userRole,
         setActiveTab, setAccountsDeepFilter,
+        setSettingsDirty,
     } = useApp();
 
     const isAdmin   = userRole === 'Admin';
@@ -17121,7 +17126,7 @@ export default function SettingsTab() {
 
             {/* Body — role-gated */}
             {canAdmin ? (
-                <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>
+                <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} setSettingsDirty={setSettingsDirty}/>
             ) : (
                 <PersonalView settings={settings} setSettings={setSettings} currentUser={currentUser} isAdmin={false}/>
             )}

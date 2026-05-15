@@ -1208,6 +1208,32 @@ dbFetch('/.netlify/functions/users?me=true')
     // Deep link: navigate to Quotes tab pre-filtered to a specific opportunity
     // (state lives in useQuotes, exposed via AppContext)
 
+    // ── Settings nav guard — must be before ALL early returns ──────────
+    const [settingsDirty, setSettingsDirty] = React.useState(false);
+    const [pendingNavTab, setPendingNavTab] = React.useState(null);
+    const [showNavGuard, setShowNavGuard]   = React.useState(false);
+    const settingsSaveRef = React.useRef(null);
+
+    const handleNavClick = React.useCallback((tab) => {
+        if (activeTab === 'settings' && settingsDirty && tab !== 'settings') {
+            setPendingNavTab(tab);
+            setShowNavGuard(true);
+        } else {
+            setActiveTab(tab);
+        }
+    }, [activeTab, settingsDirty, setActiveTab]);
+
+    const navGuardDiscard = React.useCallback(() => {
+        setSettingsDirty(false);
+        setShowNavGuard(false);
+        if (pendingNavTab) { setActiveTab(pendingNavTab); setPendingNavTab(null); }
+    }, [pendingNavTab, setActiveTab]);
+
+    const navGuardCancel = React.useCallback(() => {
+        setShowNavGuard(false);
+        setPendingNavTab(null);
+    }, []);
+
     if (!clerkLoaded || !orgLoaded) {
         return (
             <div className="login-page">
@@ -1260,6 +1286,7 @@ dbFetch('/.netlify/functions/users?me=true')
     const appContextValue = {
         // Data
         settings, setSettings,
+        settingsDirty, setSettingsDirty,
         opportunities, setOpportunities,
         accounts, setAccounts,
         contacts, setContacts,
@@ -1481,13 +1508,13 @@ dbFetch('/.netlify/functions/users?me=true')
             <nav className="nav-tabs">
                 <button 
                     className={`nav-tab ${activeTab === 'home' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('home')}
+                    onClick={() => handleNavClick('home')}
                 >
                     HOME
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'pipeline' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('pipeline')}
+                    onClick={() => handleNavClick('pipeline')}
                 >
                     PIPELINE
                 </button>
@@ -1515,40 +1542,40 @@ dbFetch('/.netlify/functions/users?me=true')
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'accounts' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('accounts')}
+                    onClick={() => handleNavClick('accounts')}
                 >
                     ACCOUNTS
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'contacts' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('contacts')}
+                    onClick={() => handleNavClick('contacts')}
                 >
                     CONTACTS
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'leads' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('leads')}
+                    onClick={() => handleNavClick('leads')}
                     style={{ display: settings.leadsEnabled === false ? 'none' : '' }}
                 >
                     LEADS
                 </button>
                 <button
                     className={`nav-tab ${activeTab === 'quotes' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('quotes')}
+                    onClick={() => handleNavClick('quotes')}
                     style={{ display: settings.quotesEnabled === false ? 'none' : '' }}
                 >
                     QUOTES
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('reports')}
+                    onClick={() => handleNavClick('reports')}
                 >
                     REPORTS
                 </button>
                 {(isAdmin || isManager) && (
                     <button
                         className={`nav-tab ${activeTab === 'salesManager' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('salesManager')}
+                        onClick={() => handleNavClick('salesManager')}
                     >
                         SALES MANAGER
                     </button>
@@ -1846,6 +1873,27 @@ dbFetch('/.netlify/functions/users?me=true')
 
         </div>
         <ModalLayer />
+
+            {showNavGuard && (
+                <div style={{ position:'fixed', inset:0, zIndex:99999, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(42,38,34,0.55)' }}
+                     onClick={navGuardCancel}>
+                    <div style={{ background:'#fbf8f3', borderRadius:8, boxShadow:'0 24px 64px rgba(42,38,34,0.22)', width:420, padding:'28px 32px', fontFamily:'"Plus Jakarta Sans",system-ui,sans-serif' }}
+                         onClick={e => e.stopPropagation()}>
+                        <div style={{ fontSize:17, fontWeight:700, color:'#2a2622', marginBottom:8 }}>Unsaved changes</div>
+                        <div style={{ fontSize:13.5, color:'#5a544c', lineHeight:1.55, marginBottom:24 }}>You have unsaved changes in Settings. Save them before leaving, or discard and continue.</div>
+                        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                            <button onClick={navGuardCancel}
+                                style={{ padding:'10px 16px', background:'#2a2622', color:'#fbf8f3', border:'none', borderRadius:4, fontSize:13.5, fontWeight:600, cursor:'pointer', textAlign:'left' }}>
+                                Stay on Settings (save first)
+                            </button>
+                            <button onClick={navGuardDiscard}
+                                style={{ padding:'10px 16px', background:'transparent', color:'#9c3a2e', border:'1px solid #e6ddd0', borderRadius:4, fontSize:13.5, fontWeight:500, cursor:'pointer', textAlign:'left' }}>
+                                Discard changes and continue
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         <QuickLogFab />
         </AppProvider>
     );
