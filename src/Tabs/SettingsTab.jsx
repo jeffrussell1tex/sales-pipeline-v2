@@ -16892,7 +16892,7 @@ const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirt
     );
 };
 
-const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter }) => {
+const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter, setSettingsDirty, settingsSaveRef }) => {
     const [scope, setScope] = useState('workspace');
     const [tab,   setTab  ] = useState('All');
     const [search, setSearch] = useState('');
@@ -17504,7 +17504,7 @@ export default function SettingsTab() {
 
             {/* Body — role-gated */}
             {canAdmin ? (
-                <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>
+                <AdminView settings={settings} setSettings={setSettings} currentUser={currentUser} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>
             ) : (
                 <PersonalView settings={settings} setSettings={setSettings} currentUser={currentUser} isAdmin={false}/>
             )}
