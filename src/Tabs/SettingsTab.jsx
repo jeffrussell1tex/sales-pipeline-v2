@@ -804,7 +804,7 @@ const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, upd
 );
 
 // ── 1. Company Profile ─────────────────────────────────────────
-const CompanyProfileDetail = ({ settings, setSettings, onBack }) => {
+const CompanyProfileDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = {
         displayName:   settings?.companyDisplayName  || settings?.companyName || '',
         legalName:     settings?.companyLegalName    || '',
@@ -820,6 +820,12 @@ const CompanyProfileDetail = ({ settings, setSettings, onBack }) => {
     };
     const [form, setForm]   = useState({ ...saved });
     const [dirty, setDirty] = useState(false);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
     const [saving, setSaving] = useState(false);
 
     const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setDirty(true); };
@@ -1002,10 +1008,16 @@ const FiscalRibbon = ({ startMonth }) => {
     );
 };
 
-const FiscalYearDetail = ({ settings, setSettings, onBack }) => {
+const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const savedStart = (parseInt(settings?.fiscalYearStart) || 10) - 1; // DB is 1-indexed, UI is 0-indexed
     const [startMonth, setStartMonth] = useState(savedStart);
     const [dirty, setDirty]   = useState(false);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
     const [saving, setSaving] = useState(false);
 
     const handleCancel = () => { setStartMonth(savedStart); setDirty(false); };
@@ -2051,10 +2063,16 @@ const DEFAULT_FUNNEL_STAGES = [
     { name:'Closed Lost',  prob:0,   type:'Lost', color:'#9c3a2e' },
 ];
 
-const FunnelStagesDetail = ({ settings, setSettings, onBack }) => {
+const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.funnelStages?.length ? settings.funnelStages : DEFAULT_FUNNEL_STAGES;
     const [stages, setStages] = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]   = useState(false);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
     const [saving, setSaving] = useState(false);
 
     const update = (i, field, val) => {
@@ -2196,10 +2214,16 @@ const DEFAULT_KPI_THRESHOLDS = [
 
 const CORE_KPI_IDS = new Set(['Quota attainment','Win rate','Avg deal size','Sales cycle length','Activities per deal','Opportunity pipeline']);
 
-const KPIThresholdsDetail = ({ settings, setSettings, onBack }) => {
+const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved = settings?.kpiThresholds?.length ? settings.kpiThresholds : DEFAULT_KPI_THRESHOLDS;
     const [rows, setRows]     = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]   = useState(false);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState({});
     // Kebab menu state
@@ -2554,11 +2578,17 @@ const DEFAULT_CUSTOM_FIELDS = {
     ],
 };
 
-const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
+const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved     = settings?.customFieldsByObject || DEFAULT_CUSTOM_FIELDS;
     const [activeObj, setActiveObj] = useState('Accounts');
     const [fields, setFields]       = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]         = useState(false);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
     const [saving, setSaving]       = useState(false);
     const [search, setSearch]       = useState('');
     const [showAdd, setShowAdd]     = useState(false);
@@ -2858,10 +2888,16 @@ const MOST_USED_PAIN_POINTS = [
 
 
 // ── Generic flat-list settings panel (competitors / reasons won / reasons lost) ──
-function FlatListDetail({ title, description, placeholder, settingsKey, settings, setSettings, onBack }) {
+function FlatListDetail({ title, description, placeholder, settingsKey, settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) {
     const saved   = settings?.[settingsKey] || [];
     const [items, setItems]   = useState(() => [...saved]);
     const [dirty, setDirty]   = useState(false);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
     const [saving, setSaving] = useState(false);
     const [newItem, setNewItem] = useState('');
     const inputRef = useRef(null);
@@ -3007,7 +3043,7 @@ const TagsField = ({ label, value, onChange }) => (
     </div>
 );
 
-const BuyerPersonasDetail = ({ settings, setSettings, onBack }) => {
+const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const { contacts } = useApp();
 
     const saved = React.useMemo(() => {
@@ -3337,10 +3373,16 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack }) => {
 const ReasonsWonDetail   = (p) => <FlatListDetail {...p} title="Reasons won"  settingsKey="reasonsWon"  placeholder="e.g. Best price, Strong support…" description="Win reason options shown when a deal is marked Closed Won." />;
 const ReasonsLostDetail  = (p) => <FlatListDetail {...p} title="Reasons lost" settingsKey="reasonsLost" placeholder="e.g. Lost to competitor, Budget…"  description="Loss reason options shown when a deal is marked Closed Lost." />;
 
-const PainPointsDetail = ({ settings, setSettings, onBack }) => {
+const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const saved    = settings?.painPoints?.length ? settings.painPoints : DEFAULT_PAIN_POINTS;
     const [groups, setGroups]   = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
     const [saving, setSaving]   = useState(false);
     const [search, setSearch]   = useState('');
     const [addingCat, setAddingCat] = useState(false);
@@ -3508,6 +3550,12 @@ const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTab, setA
     const saved    = settings?.customerTypeTiers?.length ? settings.customerTypeTiers : DEFAULT_CUST_TYPES;
     const [tiers, setTiers]     = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
     const [saving, setSaving]   = useState(false);
     const [showAdd, setShowAdd] = useState(false);
     const [newTier, setNewTier] = useState({ tier:'', hex:'#7a6a48', range:'', sla:'', owner:'', count:0 });
@@ -3766,6 +3814,12 @@ const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, setAcco
     const saved = settings?.industries?.length ? settings.industries : DEFAULT_INDUSTRIES;
     const [industries, setIndustries] = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
     const [saving, setSaving]   = useState(false);
     const [expanded, setExpanded] = useState({});
     const [addingSubTo, setAddingSubTo] = useState(null);
@@ -5889,6 +5943,36 @@ const PBProductModal = ({ mode, product, onClose, onSave }) => {
 
     const [draft, setDraft] = useState(init);
     const [dirty, setDirty] = useState(false);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        if (dirty) settingsSaveRef.current = handleSave;
+        return () => { settingsSaveRef.current = null; };
+    }, [dirty]);
     const [scrollTarget, setScrollTarget] = useState(null);
 
     const set = (k, v) => { setDraft(p => ({ ...p, [k]:v })); setDirty(true); };
@@ -16174,7 +16258,7 @@ const BackupDetail = ({ onBack }) => {
 };
 
 // ── ④ Features & AI Detail ────────────────────────────────────
-const FeaturesDetail = ({ settings, setSettings, onBack }) => {
+const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const [flags,      setFlags]      = React.useState({});      // { [flagId]: boolean }
     const [tabViz,     setTabViz]     = React.useState({ leadsEnabled: true, quotesEnabled: true });
     const [aiSettings, setAiSettings] = React.useState({});
@@ -16712,17 +16796,23 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
 
         if (activeItem) {
         const id = activeItem.id;
-        const onBack = () => setActiveItem(null);
+        const onBack = () => {
+            // Guard: if a panel has registered dirty+save, intercept back navigation
+            // Panels clear settingsDirty on successful save or cancel, so this is safe
+            setSettingsDirty(false);
+            settingsSaveRef.current = null;
+            setActiveItem(null);
+        };
 
         // Company detail pages — full chrome, no wrapper card
-        if (id === 'company-profile')  return <CompanyProfileDetail  settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'fiscal-year')      return <FiscalYearDetail      settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'company-profile')  return <CompanyProfileDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'fiscal-year')      return <FiscalYearDetail      settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'company-calendar') return <CompanyCalendarDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Sales process Group 1 detail pages
         if (id === 'pipelines')            return <PipelinesDetail        settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'funnel-stages')        return <FunnelStagesDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'kpi-settings')         return <KPIThresholdsDetail    settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'funnel-stages')        return <FunnelStagesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'kpi-settings')         return <KPIThresholdsDetail    settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'lead-conv-benchmarks') return <LeadConversionDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Quoting detail pages
@@ -16734,7 +16824,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'import')   return <ImportDetail   onBack={onBack}/>;
         if (id === 'export')   return <ExportDetail   onBack={onBack}/>;
         if (id === 'backup')   return <BackupDetail   onBack={onBack}/>;
-        if (id === 'features') return <FeaturesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'features') return <FeaturesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
 
         // Security detail pages
         if (id === 'sso')              return <SsoDetail       onBack={onBack}/>;
@@ -16756,13 +16846,13 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'roles')       return <RolesDetail       settings={settings} onBack={onBack}/>;
 
         // Sales process Group 2 detail pages
-        if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'pain-points')     return <PainPointsDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'pain-points')     return <PainPointsDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'competitors')     return <CompetitorsDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'reasons-won')     return <ReasonsWonDetail      settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'reasons-lost')    return <ReasonsLostDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
-        if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
 
         // Generic wrapper for all other panels
@@ -17097,6 +17187,7 @@ export default function SettingsTab() {
         settings, setSettings,
         currentUser, userRole,
         setActiveTab, setAccountsDeepFilter,
+        setSettingsDirty, settingsSaveRef,
     } = useApp();
 
     const isAdmin   = userRole === 'Admin';
