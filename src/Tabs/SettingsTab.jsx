@@ -804,7 +804,7 @@ const DetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, upd
 );
 
 // ── 1. Company Profile ─────────────────────────────────────────
-const CompanyProfileDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+const CompanyProfileDetail = ({ settings, setSettings, onBack }) => {
     const saved = {
         displayName:   settings?.companyDisplayName  || settings?.companyName || '',
         legalName:     settings?.companyLegalName    || '',
@@ -857,14 +857,6 @@ const CompanyProfileDetail = ({ settings, setSettings, onBack, setSettingsDirty,
         setSaving(false);
         setDirty(false);
     };
-    // Sync dirty state to app-level nav guard
-    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
-    React.useEffect(() => {{
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }}, [dirty]);
 
     const COUNTRIES = ['United States','Canada','United Kingdom','Australia','Germany','France','Other'].map(c => ({ value:c, label:c }));
 
@@ -1010,7 +1002,7 @@ const FiscalRibbon = ({ startMonth }) => {
     );
 };
 
-const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+const FiscalYearDetail = ({ settings, setSettings, onBack }) => {
     const savedStart = (parseInt(settings?.fiscalYearStart) || 10) - 1; // DB is 1-indexed, UI is 0-indexed
     const [startMonth, setStartMonth] = useState(savedStart);
     const [dirty, setDirty]   = useState(false);
@@ -1027,14 +1019,6 @@ const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDirty, set
         setSaving(false);
         setDirty(false);
     };
-    // Sync dirty state to app-level nav guard
-    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
-    React.useEffect(() => {{
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }}, [dirty]);
 
     // Compute current period display
     const now = new Date();
@@ -2067,7 +2051,7 @@ const DEFAULT_FUNNEL_STAGES = [
     { name:'Closed Lost',  prob:0,   type:'Lost', color:'#9c3a2e' },
 ];
 
-const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+const FunnelStagesDetail = ({ settings, setSettings, onBack }) => {
     const saved = settings?.funnelStages?.length ? settings.funnelStages : DEFAULT_FUNNEL_STAGES;
     const [stages, setStages] = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]   = useState(false);
@@ -2085,14 +2069,6 @@ const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
         catch(e) { console.error('save funnel stages', e); }
         setSaving(false); setDirty(false);
     };
-    // Sync dirty state to app-level nav guard
-    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
-    React.useEffect(() => {{
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }}, [dirty]);
 
     // Open stages only for probability curve
     const openStages = stages.filter(s => s.type === 'Open');
@@ -2220,7 +2196,7 @@ const DEFAULT_KPI_THRESHOLDS = [
 
 const CORE_KPI_IDS = new Set(['Quota attainment','Win rate','Avg deal size','Sales cycle length','Activities per deal','Opportunity pipeline']);
 
-const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+const KPIThresholdsDetail = ({ settings, setSettings, onBack }) => {
     const saved = settings?.kpiThresholds?.length ? settings.kpiThresholds : DEFAULT_KPI_THRESHOLDS;
     const [rows, setRows]     = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]   = useState(false);
@@ -2264,14 +2240,6 @@ const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
         catch(e) { console.error('save kpi thresholds', e); }
         setSaving(false); setDirty(false);
     };
-    // Sync dirty state to app-level nav guard
-    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
-    React.useEffect(() => {{
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }}, [dirty]);
 
     // ── Kebab actions ─────────────────────────────────────────
     const handleResetToDefault = (i) => {
@@ -2586,7 +2554,7 @@ const DEFAULT_CUSTOM_FIELDS = {
     ],
 };
 
-const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+const CustomFieldsDetail = ({ settings, setSettings, onBack }) => {
     const saved     = settings?.customFieldsByObject || DEFAULT_CUSTOM_FIELDS;
     const [activeObj, setActiveObj] = useState('Accounts');
     const [fields, setFields]       = useState(() => JSON.parse(JSON.stringify(saved)));
@@ -2607,14 +2575,6 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
         catch(e) { console.error('save custom fields', e); }
         setSaving(false); setDirty(false);
     };
-    // Sync dirty state to app-level nav guard
-    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
-    React.useEffect(() => {{
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }}, [dirty]);
 
     const handleAddField = () => {
         if (!newLabel.trim()) { setAddErr('Label is required.'); return; }
@@ -2898,7 +2858,7 @@ const MOST_USED_PAIN_POINTS = [
 
 
 // ── Generic flat-list settings panel (competitors / reasons won / reasons lost) ──
-function FlatListDetail({ title, description, placeholder, settingsKey, settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) {
+function FlatListDetail({ title, description, placeholder, settingsKey, settings, setSettings, onBack }) {
     const saved   = settings?.[settingsKey] || [];
     const [items, setItems]   = useState(() => [...saved]);
     const [dirty, setDirty]   = useState(false);
@@ -2916,14 +2876,6 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
         } catch(e) { console.error('save ' + settingsKey, e); }
         setSaving(false); setDirty(false);
     };
-    // Sync dirty state to app-level nav guard
-    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
-    React.useEffect(() => {{
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }}, [dirty]);
     const handleCancel = () => { setItems([...saved]); setDirty(false); };
 
     const addItem = () => {
@@ -3055,7 +3007,7 @@ const TagsField = ({ label, value, onChange }) => (
     </div>
 );
 
-const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+const BuyerPersonasDetail = ({ settings, setSettings, onBack }) => {
     const { contacts } = useApp();
 
     const saved = React.useMemo(() => {
@@ -3114,14 +3066,6 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
         setSaving(false);
         setDirty(false);
     };
-    // Sync dirty state to app-level nav guard
-    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
-    React.useEffect(() => {{
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }}, [dirty]);
 
     const handleCancel = () => { setPersonas(JSON.parse(JSON.stringify(saved))); setDirty(false); };
 
@@ -3393,7 +3337,7 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
 const ReasonsWonDetail   = (p) => <FlatListDetail {...p} title="Reasons won"  settingsKey="reasonsWon"  placeholder="e.g. Best price, Strong support…" description="Win reason options shown when a deal is marked Closed Won." />;
 const ReasonsLostDetail  = (p) => <FlatListDetail {...p} title="Reasons lost" settingsKey="reasonsLost" placeholder="e.g. Lost to competitor, Budget…"  description="Loss reason options shown when a deal is marked Closed Lost." />;
 
-const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+const PainPointsDetail = ({ settings, setSettings, onBack }) => {
     const saved    = settings?.painPoints?.length ? settings.painPoints : DEFAULT_PAIN_POINTS;
     const [groups, setGroups]   = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
@@ -3412,14 +3356,6 @@ const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDirty, set
         catch(e) { console.error('save pain points', e); }
         setSaving(false); setDirty(false);
     };
-    // Sync dirty state to app-level nav guard
-    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
-    React.useEffect(() => {{
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSave : null;
-        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }}, [dirty]);
 
     const addCategory = () => {
         if (!newCat.trim()) return;
@@ -16238,7 +16174,7 @@ const BackupDetail = ({ onBack }) => {
 };
 
 // ── ④ Features & AI Detail ────────────────────────────────────
-const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+const FeaturesDetail = ({ settings, setSettings, onBack }) => {
     const [flags,      setFlags]      = React.useState({});      // { [flagId]: boolean }
     const [tabViz,     setTabViz]     = React.useState({ leadsEnabled: true, quotesEnabled: true });
     const [aiSettings, setAiSettings] = React.useState({});
@@ -16319,14 +16255,6 @@ const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty, setti
             setSaving(false);
         }
     };
-    // Sync dirty state to app-level nav guard
-    React.useEffect(() => {{ if (setSettingsDirty) setSettingsDirty(dirty); }}, [dirty]);
-    React.useEffect(() => {{
-        if (!settingsSaveRef) return;
-        settingsSaveRef.current = dirty ? handleSaveAi : null;
-        return () => {{ if (settingsSaveRef) settingsSaveRef.current = null; }};
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }}, [dirty]);
 
     // ── Export config ─────────────────────────────────────────
     const handleExportConfig = () => {
@@ -16784,20 +16712,17 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
 
         if (activeItem) {
         const id = activeItem.id;
-        const onBack = () => {
-            setSettingsDirty(false);
-            setActiveItem(null);
-        };
+        const onBack = () => setActiveItem(null);
 
         // Company detail pages — full chrome, no wrapper card
-        if (id === 'company-profile')  return <CompanyProfileDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
-        if (id === 'fiscal-year')      return <FiscalYearDetail      settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'company-profile')  return <CompanyProfileDetail  settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'fiscal-year')      return <FiscalYearDetail      settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'company-calendar') return <CompanyCalendarDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Sales process Group 1 detail pages
         if (id === 'pipelines')            return <PipelinesDetail        settings={settings} setSettings={setSettings} onBack={onBack}/>;
-        if (id === 'funnel-stages')        return <FunnelStagesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
-        if (id === 'kpi-settings')         return <KPIThresholdsDetail    settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'funnel-stages')        return <FunnelStagesDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'kpi-settings')         return <KPIThresholdsDetail    settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'lead-conv-benchmarks') return <LeadConversionDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Quoting detail pages
@@ -16809,7 +16734,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'import')   return <ImportDetail   onBack={onBack}/>;
         if (id === 'export')   return <ExportDetail   onBack={onBack}/>;
         if (id === 'backup')   return <BackupDetail   onBack={onBack}/>;
-        if (id === 'features') return <FeaturesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'features') return <FeaturesDetail settings={settings} setSettings={setSettings} onBack={onBack}/>;
 
         // Security detail pages
         if (id === 'sso')              return <SsoDetail       onBack={onBack}/>;
@@ -16831,13 +16756,13 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'roles')       return <RolesDetail       settings={settings} onBack={onBack}/>;
 
         // Sales process Group 2 detail pages
-        if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
-        if (id === 'pain-points')     return <PainPointsDetail     settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'custom-fields')   return <CustomFieldsDetail   settings={settings} setSettings={setSettings} onBack={onBack}/>;
+        if (id === 'pain-points')     return <PainPointsDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'competitors')     return <CompetitorsDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'reasons-won')     return <ReasonsWonDetail      settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'reasons-lost')    return <ReasonsLostDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
-        if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
 
         // Generic wrapper for all other panels
@@ -17172,7 +17097,6 @@ export default function SettingsTab() {
         settings, setSettings,
         currentUser, userRole,
         setActiveTab, setAccountsDeepFilter,
-        setSettingsDirty, settingsSaveRef,
     } = useApp();
 
     const isAdmin   = userRole === 'Admin';
