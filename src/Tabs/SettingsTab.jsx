@@ -17093,7 +17093,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (activeItem) {
         const id = activeItem.id;
         const onBack = () => {
-            setSettingsDirty(false);
+            if (typeof setSettingsDirty === 'function') setSettingsDirty(false);
             setActiveItem(null);
         };
 
@@ -17482,7 +17482,7 @@ export default function SettingsTab() {
         settings, setSettings,
         currentUser, userRole,
         setActiveTab, setAccountsDeepFilter,
-        setSettingsDirty, settingsSaveRef,
+        setSettingsDirty = () => {}, settingsSaveRef = { current: null },
     } = useApp();
 
     const isAdmin   = userRole === 'Admin';
