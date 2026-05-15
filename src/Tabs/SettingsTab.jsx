@@ -820,12 +820,6 @@ const CompanyProfileDetail = ({ settings, setSettings, onBack, setSettingsDirty,
     };
     const [form, setForm]   = useState({ ...saved });
     const [dirty, setDirty] = useState(false);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
     const [saving, setSaving] = useState(false);
 
     const set = (k, v) => { setForm(p => ({ ...p, [k]: v })); setDirty(true); };
@@ -863,6 +857,13 @@ const CompanyProfileDetail = ({ settings, setSettings, onBack, setSettingsDirty,
         setSaving(false);
         setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    }, [dirty, handleSave]);
 
     const COUNTRIES = ['United States','Canada','United Kingdom','Australia','Germany','France','Other'].map(c => ({ value:c, label:c }));
 
@@ -1012,12 +1013,6 @@ const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDirty, set
     const savedStart = (parseInt(settings?.fiscalYearStart) || 10) - 1; // DB is 1-indexed, UI is 0-indexed
     const [startMonth, setStartMonth] = useState(savedStart);
     const [dirty, setDirty]   = useState(false);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
     const [saving, setSaving] = useState(false);
 
     const handleCancel = () => { setStartMonth(savedStart); setDirty(false); };
@@ -1031,6 +1026,13 @@ const FiscalYearDetail = ({ settings, setSettings, onBack, setSettingsDirty, set
         setSaving(false);
         setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    }, [dirty, handleSave]);
 
     // Compute current period display
     const now = new Date();
@@ -2067,12 +2069,6 @@ const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
     const saved = settings?.funnelStages?.length ? settings.funnelStages : DEFAULT_FUNNEL_STAGES;
     const [stages, setStages] = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]   = useState(false);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
     const [saving, setSaving] = useState(false);
 
     const update = (i, field, val) => {
@@ -2087,6 +2083,13 @@ const FunnelStagesDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
         catch(e) { console.error('save funnel stages', e); }
         setSaving(false); setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    }, [dirty, handleSave]);
 
     // Open stages only for probability curve
     const openStages = stages.filter(s => s.type === 'Open');
@@ -2218,12 +2221,6 @@ const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
     const saved = settings?.kpiThresholds?.length ? settings.kpiThresholds : DEFAULT_KPI_THRESHOLDS;
     const [rows, setRows]     = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]   = useState(false);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState({});
     // Kebab menu state
@@ -2264,6 +2261,13 @@ const KPIThresholdsDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
         catch(e) { console.error('save kpi thresholds', e); }
         setSaving(false); setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    }, [dirty, handleSave]);
 
     // ── Kebab actions ─────────────────────────────────────────
     const handleResetToDefault = (i) => {
@@ -2583,12 +2587,6 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
     const [activeObj, setActiveObj] = useState('Accounts');
     const [fields, setFields]       = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]         = useState(false);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
     const [saving, setSaving]       = useState(false);
     const [search, setSearch]       = useState('');
     const [showAdd, setShowAdd]     = useState(false);
@@ -2605,6 +2603,13 @@ const CustomFieldsDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
         catch(e) { console.error('save custom fields', e); }
         setSaving(false); setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    }, [dirty, handleSave]);
 
     const handleAddField = () => {
         if (!newLabel.trim()) { setAddErr('Label is required.'); return; }
@@ -2892,12 +2897,6 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
     const saved   = settings?.[settingsKey] || [];
     const [items, setItems]   = useState(() => [...saved]);
     const [dirty, setDirty]   = useState(false);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
     const [saving, setSaving] = useState(false);
     const [newItem, setNewItem] = useState('');
     const inputRef = useRef(null);
@@ -2912,6 +2911,13 @@ function FlatListDetail({ title, description, placeholder, settingsKey, settings
         } catch(e) { console.error('save ' + settingsKey, e); }
         setSaving(false); setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    }, [dirty, handleSave]);
     const handleCancel = () => { setItems([...saved]); setDirty(false); };
 
     const addItem = () => {
@@ -3102,6 +3108,13 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
         setSaving(false);
         setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    }, [dirty, handleSave]);
 
     const handleCancel = () => { setPersonas(JSON.parse(JSON.stringify(saved))); setDirty(false); };
 
@@ -3377,12 +3390,6 @@ const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDirty, set
     const saved    = settings?.painPoints?.length ? settings.painPoints : DEFAULT_PAIN_POINTS;
     const [groups, setGroups]   = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
     const [saving, setSaving]   = useState(false);
     const [search, setSearch]   = useState('');
     const [addingCat, setAddingCat] = useState(false);
@@ -3398,6 +3405,13 @@ const PainPointsDetail = ({ settings, setSettings, onBack, setSettingsDirty, set
         catch(e) { console.error('save pain points', e); }
         setSaving(false); setDirty(false);
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    }, [dirty, handleSave]);
 
     const addCategory = () => {
         if (!newCat.trim()) return;
@@ -3550,12 +3564,6 @@ const CustomerTypesDetail = ({ settings, setSettings, onBack, setActiveTab, setA
     const saved    = settings?.customerTypeTiers?.length ? settings.customerTypeTiers : DEFAULT_CUST_TYPES;
     const [tiers, setTiers]     = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
     const [saving, setSaving]   = useState(false);
     const [showAdd, setShowAdd] = useState(false);
     const [newTier, setNewTier] = useState({ tier:'', hex:'#7a6a48', range:'', sla:'', owner:'', count:0 });
@@ -3814,12 +3822,6 @@ const IndustriesDetail = ({ settings, setSettings, onBack, setActiveTab, setAcco
     const saved = settings?.industries?.length ? settings.industries : DEFAULT_INDUSTRIES;
     const [industries, setIndustries] = useState(() => JSON.parse(JSON.stringify(saved)));
     const [dirty, setDirty]     = useState(false);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
     const [saving, setSaving]   = useState(false);
     const [expanded, setExpanded] = useState({});
     const [addingSubTo, setAddingSubTo] = useState(null);
@@ -5943,36 +5945,6 @@ const PBProductModal = ({ mode, product, onClose, onSave }) => {
 
     const [draft, setDraft] = useState(init);
     const [dirty, setDirty] = useState(false);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
-    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
-    React.useEffect(() => {
-        if (!settingsSaveRef) return;
-        if (dirty) settingsSaveRef.current = handleSave;
-        return () => { settingsSaveRef.current = null; };
-    }, [dirty]);
     const [scrollTarget, setScrollTarget] = useState(null);
 
     const set = (k, v) => { setDraft(p => ({ ...p, [k]:v })); setDirty(true); };
@@ -16339,6 +16311,13 @@ const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty, setti
             setSaving(false);
         }
     };
+    // Sync dirty state to app-level nav guard
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    }, [dirty, handleSave]);
 
     // ── Export config ─────────────────────────────────────────
     const handleExportConfig = () => {
@@ -16797,10 +16776,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (activeItem) {
         const id = activeItem.id;
         const onBack = () => {
-            // Guard: if a panel has registered dirty+save, intercept back navigation
-            // Panels clear settingsDirty on successful save or cancel, so this is safe
             setSettingsDirty(false);
-            settingsSaveRef.current = null;
             setActiveItem(null);
         };
 
