@@ -671,8 +671,28 @@ export default function DispatchTab() {
     const [jobs, setJobs] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    // ── Filter state ──────────────────────────────────────────────────────────
+    const [filterSkill,   setFilterSkill]   = useState(null); // skill id or null
+    const [filterVehicle, setFilterVehicle] = useState(null); // vehicle id or null
+    const [filterLicense, setFilterLicense] = useState(null); // license string or null
+    const [filterTeam,    setFilterTeam]    = useState(null); // crew id or null
+    const [openFilter,    setOpenFilter]    = useState(null); // 'skills'|'vehicles'|'licenses'|'teams'
+    const [filterRect,    setFilterRect]    = useState(null);
+    const filterRef = React.useRef(null);
+
+    const openFilterMenu = React.useCallback((e, key) => {
+        e.stopPropagation();
+        if (openFilter === key) { setOpenFilter(null); setFilterRect(null); return; }
+        const r = e.currentTarget.getBoundingClientRect();
+        setFilterRect({ top: r.bottom + 4, left: r.left });
+        setOpenFilter(key);
+    }, [openFilter]);
+
+    const closeFilter = React.useCallback(() => { setOpenFilter(null); setFilterRect(null); }, []);
+
     // Pull skills, certs, license levels from settings
     const skills     = settings?.dispatchSkills     || [];
+    const crews      = settings?.dispatchCrews      || [];
     const certs      = settings?.dispatchCerts      || [];
     const licLevels  = settings?.dispatchLicenses   || ['Apprentice', 'Journeyman', 'Master', 'Lead'];
     const vehicles   = settings?.dispatchVehicles   || [];
@@ -720,6 +740,27 @@ export default function DispatchTab() {
         setJobs([...raw, ...autoJobs]);
         setLoading(false);
     }, [settings?.dispatchJobs, opportunities, settings?.users]);
+
+    // ── Apply filters ────────────────────────────────────────────────────────
+    const filteredTechs = React.useMemo(() => {
+        let t = techs;
+        if (filterSkill)   t = t.filter(tech => (tech.dispatchSkills || []).includes(filterSkill));
+        if (filterVehicle) t = t.filter(tech => tech.vehicle === (vehicles.find(v => v.id === filterVehicle)?.name));
+        if (filterLicense) t = t.filter(tech => tech.license === filterLicense);
+        if (filterTeam) {
+            const crew = crews.find(c => c.id === filterTeam);
+            if (crew) t = t.filter(tech => (crew.members || []).includes(tech.id || tech.name));
+        }
+        return t;
+    }, [techs, filterSkill, filterVehicle, filterLicense, filterTeam, vehicles, crews]);
+
+    const filteredJobs = React.useMemo(() => {
+        if (!filterSkill && !filterVehicle && !filterLicense && !filterTeam) return jobs;
+        return jobs.filter(j => {
+            if (filterSkill && !(j.needSkills || []).includes(filterSkill)) return false;
+            return true;
+        });
+    }, [jobs, filterSkill, filterVehicle, filterLicense, filterTeam]);
 
     const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     const unscheduled = jobs.filter(j => !j.start || (j.assignedTechIds || []).length === 0).length;
@@ -781,35 +822,112 @@ export default function DispatchTab() {
             </div>
 
             {/* Filter bar (board only) */}
-            {view === 'board' && (
-                <div style={{ padding: '8px 20px', background: T.surface, borderBottom: `1px solid ${T.border}`,
-                    display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                    {['All skills', 'All vehicles', 'All licenses', 'All teams'].map((l, i) => (
-                        <span key={i} style={{ padding: '4px 10px', background: T.surface,
-                            border: `1px solid ${T.borderStrong}`, borderRadius: 12,
-                            display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer',
-                            fontSize: 12, color: T.inkMid, fontFamily: T.sans }}>
-                            {l} <span style={{ fontSize: 9, color: T.inkMuted }}>▾</span>
-                        </span>
-                    ))}
-                    <span style={{ flex: 1 }}/>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.inkMid }}>
-                        {[['urgent', T.danger], ['standard', T.warn], ['low', T.inkMuted]].map(([l, c]) => (
-                            <span key={l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <span style={{ width: 10, height: 10, background: c, borderRadius: 2 }}/>
-                                {l.charAt(0).toUpperCase() + l.slice(1)}
+            {view === 'board' && (() => {
+                const filterPillStyle = (active) => ({
+                    padding: '4px 10px', background: active ? T.ink : T.surface,
+                    border: `1px solid ${active ? T.ink : T.borderStrong}`, borderRadius: 12,
+                    display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer',
+                    fontSize: 12, color: active ? '#fbf8f3' : T.inkMid, fontFamily: T.sans,
+                    transition: 'all 100ms',
+                });
+
+                const filters = [
+                    {
+                        key: 'skills', active: filterSkill,
+                        label: filterSkill ? (skills.find(s => s.id === filterSkill)?.name || 'Skill') : 'All skills',
+                        items: [{ id: null, name: 'All skills' }, ...skills],
+                        onSelect: (id) => { setFilterSkill(id); closeFilter(); },
+                    },
+                    {
+                        key: 'vehicles', active: filterVehicle,
+                        label: filterVehicle ? (vehicles.find(v => v.id === filterVehicle)?.name || 'Vehicle') : 'All vehicles',
+                        items: [{ id: null, name: 'All vehicles' }, ...vehicles],
+                        onSelect: (id) => { setFilterVehicle(id); closeFilter(); },
+                    },
+                    {
+                        key: 'licenses', active: filterLicense,
+                        label: filterLicense || 'All licenses',
+                        items: [{ id: null, name: 'All licenses' }, ...licLevels.map(l => ({ id: l, name: l }))],
+                        onSelect: (id) => { setFilterLicense(id); closeFilter(); },
+                    },
+                    {
+                        key: 'teams', active: filterTeam,
+                        label: filterTeam ? (crews.find(c => c.id === filterTeam)?.name || 'Team') : 'All teams',
+                        items: [{ id: null, name: 'All teams' }, ...crews],
+                        onSelect: (id) => { setFilterTeam(id); closeFilter(); },
+                    },
+                ];
+
+                const anyActive = filterSkill || filterVehicle || filterLicense || filterTeam;
+
+                return (
+                    <div style={{ padding: '8px 20px', background: T.surface, borderBottom: `1px solid ${T.border}`,
+                        display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                        {filters.map(f => (
+                            <span key={f.key} onClick={e => openFilterMenu(e, f.key)}
+                                style={filterPillStyle(!!f.active)}>
+                                {f.label}
+                                <span style={{ fontSize: 9 }}>▾</span>
                             </span>
                         ))}
+                        {anyActive && (
+                            <button onClick={() => { setFilterSkill(null); setFilterVehicle(null); setFilterLicense(null); setFilterTeam(null); }}
+                                style={{ padding: '3px 9px', background: 'transparent', border: `1px solid ${T.border}`, borderRadius: 12, fontSize: 11.5, color: T.inkMuted, cursor: 'pointer', fontFamily: T.sans }}>
+                                Clear
+                            </button>
+                        )}
+                        <span style={{ flex: 1 }}/>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.inkMid }}>
+                            {[['urgent', T.danger], ['standard', T.warn], ['low', T.inkMuted]].map(([l, c]) => (
+                                <span key={l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <span style={{ width: 10, height: 10, background: c, borderRadius: 2 }}/>
+                                    {l.charAt(0).toUpperCase() + l.slice(1)}
+                                </span>
+                            ))}
+                        </div>
+
+                        {/* Filter popover — fixed positioned, outside overflow:hidden */}
+                        {openFilter && filterRect && (() => {
+                            const f = filters.find(fi => fi.key === openFilter);
+                            if (!f) return null;
+                            return (
+                                <>
+                                    <div style={{ position:'fixed', inset:0, zIndex:9998 }} onClick={closeFilter}/>
+                                    <div style={{ position:'fixed', top:filterRect.top, left:filterRect.left, zIndex:9999,
+                                        background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2,
+                                        boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:160, maxHeight:240,
+                                        overflowY:'auto', overscrollBehavior:'contain' }}>
+                                        {f.items.map((item, i) => {
+                                            const isActive = f.active === item.id;
+                                            return (
+                                                <button key={item.id ?? 'all'} onClick={() => f.onSelect(item.id)}
+                                                    style={{ display:'flex', alignItems:'center', gap:8, width:'100%', padding:'9px 14px',
+                                                        background: isActive ? `${T.goldInk}12` : 'none', border:'none',
+                                                        borderTop: i>0 ? `1px solid ${T.border}` : 'none',
+                                                        textAlign:'left', fontSize:13, cursor:'pointer', fontFamily:T.sans,
+                                                        color: item.id === null ? T.inkMuted : T.ink, fontStyle: item.id === null ? 'italic' : 'normal' }}
+                                                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                                                    onMouseLeave={e=>e.currentTarget.style.background=isActive?`${T.goldInk}12`:'none'}>
+                                                    {item.color && <span style={{ width:10, height:10, borderRadius:2, background:item.color, flexShrink:0 }}/>}
+                                                    {item.name}
+                                                    {isActive && <span style={{ marginLeft:'auto', color:T.goldInk, fontSize:14 }}>✓</span>}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            );
+                        })()}
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Main content */}
             <div style={{ flex: 1, overflow: 'hidden' }}>
                 {view === 'board' ? (
-                    <BoardView jobs={jobs} techs={techs} skills={skills} onJobClick={handleJobClick}/>
+                    <BoardView jobs={filteredJobs} techs={filteredTechs} skills={skills} onJobClick={handleJobClick}/>
                 ) : (
-                    <CrewBuilderView jobs={jobs} techs={techs} skills={skills}
+                    <CrewBuilderView jobs={filteredJobs} techs={filteredTechs} skills={skills}
                         selectedJobId={selectedJobId || jobs[0]?.id}
                         onSelectJob={setSelectedJobId}
                         onBack={() => setView('board')}/>
