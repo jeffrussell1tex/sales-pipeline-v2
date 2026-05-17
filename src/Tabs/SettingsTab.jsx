@@ -16687,6 +16687,47 @@ const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty, setti
 //  Dispatch — Skills & Certifications Detail
 // ─────────────────────────────────────────────────────────────────────────────
 // ── Shared dispatch row kebab (fixed-position, escapes overflow:hidden) ──────
+// ── Module-scope components (must NOT be defined inside hooks or components) ──
+const DspKebabBtn = ({ id, openId, onOpen }) => (
+    <button onClick={e => onOpen(e, id)}
+        style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, fontWeight:700, padding:'0 2px', lineHeight:1, fontFamily:T.sans }}
+        onMouseEnter={e=>e.currentTarget.style.color=T.ink}
+        onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>⋯</button>
+);
+
+const DspKebabMenu = ({ id, items, openId, rect, onClose }) => {
+    if (openId !== id || !rect) return null;
+    return (
+        <>
+            <div style={{ position:'fixed', inset:0, zIndex:9998 }} onClick={onClose}/>
+            <div style={{ position:'fixed', top:rect.top, right:rect.right, zIndex:9999,
+                background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2,
+                boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:148, overflow:'hidden' }}>
+                {items.map((item, i) => (
+                    item === 'divider' ? (
+                        <div key={i} style={{ height:1, background:T.border }}/>
+                    ) : (
+                        <button key={i} disabled={item.disabled}
+                            onClick={() => { if (!item.disabled) { item.action(); onClose(); } }}
+                            style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none',
+                                borderTop: i>0 ? `1px solid ${T.border}` : 'none',
+                                textAlign:'left', fontSize:13, cursor:item.disabled?'default':'pointer', fontFamily:T.sans,
+                                color:item.danger ? T.danger : item.disabled ? T.inkMuted : T.ink, opacity:item.disabled?0.5:1 }}
+                            onMouseEnter={e=>{ if(!item.disabled) e.currentTarget.style.background=T.surface2; }}
+                            onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                            {item.label}
+                            {item.disabled && item.disabledReason && (
+                                <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2 }}>{item.disabledReason}</div>
+                            )}
+                        </button>
+                    )
+                ))}
+            </div>
+        </>
+    );
+};
+
+// Hook returns state + open/close handlers only — components are at module scope above
 const useDspKebab = () => {
     const [openId, setOpenId] = React.useState(null);
     const [rect,   setRect]   = React.useState(null);
@@ -16701,44 +16742,9 @@ const useDspKebab = () => {
 
     const close = React.useCallback(() => { setOpenId(null); setRect(null); }, []);
 
-    const KebabBtn = ({ id }) => (
-        <button onClick={e => open(e, id)}
-            style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, fontWeight:700, padding:'0 2px', lineHeight:1, fontFamily:T.sans }}
-            onMouseEnter={e=>e.currentTarget.style.color=T.ink}
-            onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>⋯</button>
-    );
-
-    const KebabMenu = ({ id, items }) => {
-        if (openId !== id || !rect) return null;
-        return (
-            <>
-                <div style={{ position:'fixed', inset:0, zIndex:9998 }} onClick={close}/>
-                <div style={{ position:'fixed', top:rect.top, right:rect.right, zIndex:9999,
-                    background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2,
-                    boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:148, overflow:'hidden' }}>
-                    {items.map((item, i) => (
-                        item === 'divider' ? (
-                            <div key={i} style={{ height:1, background:T.border }}/>
-                        ) : (
-                            <button key={i} disabled={item.disabled}
-                                onClick={() => { if (!item.disabled) { item.action(); close(); } }}
-                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none',
-                                    borderTop: i>0 && item !== 'divider' ? `1px solid ${T.border}` : 'none',
-                                    textAlign:'left', fontSize:13, cursor:item.disabled?'default':'pointer', fontFamily:T.sans,
-                                    color:item.danger ? T.danger : item.disabled ? T.inkMuted : T.ink, opacity:item.disabled?0.5:1 }}
-                                onMouseEnter={e=>{ if(!item.disabled) e.currentTarget.style.background=T.surface2; }}
-                                onMouseLeave={e=>e.currentTarget.style.background='none'}>
-                                {item.label}
-                                {item.disabled && item.disabledReason && (
-                                    <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2 }}>{item.disabledReason}</div>
-                                )}
-                            </button>
-                        )
-                    ))}
-                </div>
-            </>
-        );
-    };
+    // Convenience wrappers that bind the hook state — still module-scope components under the hood
+    const KebabBtn  = React.useCallback(({ id }) => <DspKebabBtn  id={id} openId={openId} onOpen={open}/>,  [openId, open]);
+    const KebabMenu = React.useCallback(({ id, items }) => <DspKebabMenu id={id} items={items} openId={openId} rect={rect} onClose={close}/>, [openId, rect, close]);
 
     return { openId, open, close, KebabBtn, KebabMenu };
 };
