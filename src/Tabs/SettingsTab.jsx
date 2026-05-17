@@ -16686,6 +16686,63 @@ const FeaturesDetail = ({ settings, setSettings, onBack, setSettingsDirty, setti
 // ─────────────────────────────────────────────────────────────────────────────
 //  Dispatch — Skills & Certifications Detail
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Shared dispatch row kebab (fixed-position, escapes overflow:hidden) ──────
+const useDspKebab = () => {
+    const [openId, setOpenId] = React.useState(null);
+    const [rect,   setRect]   = React.useState(null);
+
+    const open = React.useCallback((e, id) => {
+        e.stopPropagation();
+        if (openId === id) { setOpenId(null); setRect(null); return; }
+        const r = e.currentTarget.getBoundingClientRect();
+        setRect({ top: r.bottom + 4, right: window.innerWidth - r.right });
+        setOpenId(id);
+    }, [openId]);
+
+    const close = React.useCallback(() => { setOpenId(null); setRect(null); }, []);
+
+    const KebabBtn = ({ id }) => (
+        <button onClick={e => open(e, id)}
+            style={{ background:'none', border:'none', cursor:'pointer', color:T.inkMuted, fontSize:16, fontWeight:700, padding:'0 2px', lineHeight:1, fontFamily:T.sans }}
+            onMouseEnter={e=>e.currentTarget.style.color=T.ink}
+            onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>⋯</button>
+    );
+
+    const KebabMenu = ({ id, items }) => {
+        if (openId !== id || !rect) return null;
+        return (
+            <>
+                <div style={{ position:'fixed', inset:0, zIndex:9998 }} onClick={close}/>
+                <div style={{ position:'fixed', top:rect.top, right:rect.right, zIndex:9999,
+                    background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2,
+                    boxShadow:'0 4px 16px rgba(42,38,34,0.12)', minWidth:148, overflow:'hidden' }}>
+                    {items.map((item, i) => (
+                        item === 'divider' ? (
+                            <div key={i} style={{ height:1, background:T.border }}/>
+                        ) : (
+                            <button key={i} disabled={item.disabled}
+                                onClick={() => { if (!item.disabled) { item.action(); close(); } }}
+                                style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none',
+                                    borderTop: i>0 && item !== 'divider' ? `1px solid ${T.border}` : 'none',
+                                    textAlign:'left', fontSize:13, cursor:item.disabled?'default':'pointer', fontFamily:T.sans,
+                                    color:item.danger ? T.danger : item.disabled ? T.inkMuted : T.ink, opacity:item.disabled?0.5:1 }}
+                                onMouseEnter={e=>{ if(!item.disabled) e.currentTarget.style.background=T.surface2; }}
+                                onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                                {item.label}
+                                {item.disabled && item.disabledReason && (
+                                    <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:2 }}>{item.disabledReason}</div>
+                                )}
+                            </button>
+                        )
+                    ))}
+                </div>
+            </>
+        );
+    };
+
+    return { openId, open, close, KebabBtn, KebabMenu };
+};
+
 const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
     const savedSkills   = settings?.dispatchSkills   || [];
     const savedCerts    = settings?.dispatchCerts    || [];
@@ -16698,6 +16755,11 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
     const [addingSkill, setAddingSkill] = useState(false);
     const [addingCert,  setAddingCert]  = useState(false);
     const [newSkill, setNewSkill] = useState({ name:'', category:'Field', color:'#7a5a3c' });
+    const [editingSkill, setEditingSkill] = useState(null);
+    const [editingCert,  setEditingCert]  = useState(null);
+    const skillKebab = useDspKebab();
+    const certKebab  = useDspKebab();
+    const licKebab   = useDspKebab();
     const [newCert,  setNewCert]  = useState({ name:'', renewalDays:365 });
 
     const handleSave = async () => {
@@ -16729,19 +16791,20 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
 
             <CSectionCard title="Skills" desc="Skill names your crews are dispatched around (e.g. Refrigeration, Solar install, Panel upgrade).">
                 <SPTable columns={[
-                    { key:'name',  label:'Skill',    w:'1fr' },
-                    { key:'cat',   label:'Category', w:'110px' },
-                    { key:'color', label:'Color',    w:'50px' },
-                    { key:'del',   label:'',         w:'28px' },
+                    { key:'name',  label:'Skill',         w:'1fr' },
+                    { key:'cat',   label:'Category',      w:'110px' },
+                    { key:'cert',  label:'Requires cert', w:'130px' },
+                    { key:'color', label:'Color',         w:'50px' },
+                    { key:'techs', label:'Techs',         w:'55px' },
+                    { key:'more',  label:'',              w:'28px' },
                 ]} rows={skills.map((s,i) => ({
-                    name:  <span style={{ fontWeight:600, color:T.ink, fontFamily:T.sans }}>{s.name}</span>,
+                    name:  editingSkill===s.id ? <input autoFocus value={s.name} onChange={e=>{ const n=[...skills]; n[i]={...n[i],name:e.target.value}; setSkills(n); setDirty(true); }} onBlur={()=>setEditingSkill(null)} onKeyDown={e=>e.key==='Enter'&&setEditingSkill(null)} style={{ padding:'3px 7px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', width:'100%' }}/> : <span style={{ fontWeight:600, color:T.ink, fontFamily:T.sans }}>{s.name}</span>,
                     cat:   <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{s.category}</span>,
+                    cert:  s.cert ? <span style={{ fontSize:11, padding:'1px 7px', borderRadius:8, background:`${T.info}14`, color:T.info, fontWeight:600 }}>{s.cert}</span> : <span style={{ fontSize:11, color:T.inkMuted, fontStyle:'italic' }}>—</span>,
                     color: <span style={{ display:'inline-block', width:18, height:18, borderRadius:3, background:s.color, border:`1px solid ${T.border}` }}/>,
-                    del:   <button onClick={() => { setSkills(prev => prev.filter((_,ri) => ri!==i)); setDirty(true); }}
-                               style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:14, padding:0 }}
-                               onMouseEnter={e=>e.currentTarget.style.color=T.danger} onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>×</button>,
+                    techs: <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{s.techs||0}</span>,
+                    more:  (<><skillKebab.KebabBtn id={s.id}/><skillKebab.KebabMenu id={s.id} items={[{label:'Edit',action:()=>setEditingSkill(s.id)},{label:'Delete',danger:true,disabled:(s.techs||0)>0,disabledReason:`Used by ${s.techs||0} tech${s.techs===1?'':'s'}`,action:()=>{setSkills(prev=>prev.filter((_,ri)=>ri!==i));setDirty(true);}}]}/></>),
                 }))}/>
-                {addingSkill ? (
                     <div style={{ display:'flex', gap:8, alignItems:'center', padding:'10px 0', flexWrap:'wrap' }}>
                         <input value={newSkill.name} onChange={e=>setNewSkill(p=>({...p,name:e.target.value}))} placeholder="Skill name" autoFocus
                             style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', flex:1, minWidth:120 }}/>
@@ -16770,17 +16833,20 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
 
             <CSectionCard title="Certifications" desc="Certs with expiry tracking. Expired certs block auto-scheduling.">
                 <SPTable columns={[
-                    { key:'name',    label:'Certification', w:'1fr' },
-                    { key:'renewal', label:'Renewal',       w:'120px' },
-                    { key:'del',     label:'',              w:'28px' },
+                    { key:'name',    label:'Cert',         w:'1fr' },
+                    { key:'gates',   label:'Gates skill',  w:'1fr' },
+                    { key:'renewal', label:'Renewal',      w:'100px' },
+                    { key:'holding', label:'Techs',        w:'60px' },
+                    { key:'exp30',   label:'Expiring 30d', w:'90px' },
+                    { key:'more',    label:'',             w:'28px' },
                 ]} rows={certs.map((c,i) => ({
-                    name:    <span style={{ fontWeight:600, color:T.ink, fontFamily:T.sans }}>{c.name}</span>,
-                    renewal: <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{c.renewalDays} days</span>,
-                    del:     <button onClick={()=>{ setCerts(prev=>prev.filter((_,ri)=>ri!==i)); setDirty(true); }}
-                                 style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:14, padding:0 }}
-                                 onMouseEnter={e=>e.currentTarget.style.color=T.danger} onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>×</button>,
+                    name:    editingCert===c.id ? <input autoFocus value={c.name} onChange={e=>{ const n=[...certs]; n[i]={...n[i],name:e.target.value}; setCerts(n); setDirty(true); }} onBlur={()=>setEditingCert(null)} onKeyDown={e=>e.key==='Enter'&&setEditingCert(null)} style={{ padding:'3px 7px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', width:'100%' }}/> : <span style={{ fontWeight:600, color:T.ink, fontFamily:T.sans }}>{c.name}</span>,
+                    gates:   c.gatesSkill ? <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{c.gatesSkill}</span> : <span style={{ fontSize:11, color:T.inkMuted, fontStyle:'italic' }}>none — informational</span>,
+                    renewal: <span style={{ fontSize:12, fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMid }}>{Math.round((c.renewalDays||365)/30)} months</span>,
+                    holding: <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{c.techsHolding||0}</span>,
+                    exp30:   (c.expiringIn30d||0)>0 ? <span style={{ fontSize:12, fontWeight:700, color:T.warn }}>{c.expiringIn30d} ⚠</span> : <span style={{ fontSize:12, color:T.inkMuted }}>0</span>,
+                    more:    (<><certKebab.KebabBtn id={c.id}/><certKebab.KebabMenu id={c.id} items={[{label:'Edit',action:()=>setEditingCert(c.id)},{label:'Delete',danger:true,disabled:(c.techsHolding||0)>0,disabledReason:`Held by ${c.techsHolding||0} tech${c.techsHolding===1?'':'s'}`,action:()=>{setCerts(prev=>prev.filter((_,ri)=>ri!==i));setDirty(true);}}]}/></>),
                 }))}/>
-                {addingCert ? (
                     <div style={{ display:'flex', gap:8, alignItems:'center', padding:'10px 0' }}>
                         <input value={newCert.name} onChange={e=>setNewCert(p=>({...p,name:e.target.value}))} placeholder="Cert name e.g. EPA 608" autoFocus
                             style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', flex:1 }}/>
@@ -16801,23 +16867,28 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
             </CSectionCard>
 
             <CSectionCard title="License levels" desc="Ordered hierarchy. Jobs specify a minimum level required.">
-                <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:10 }}>
+                <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r, overflow:'visible' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'40px 1fr 70px 100px 28px', gap:12, padding:'8px 14px', background:T.surface2, fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5, fontFamily:T.sans, borderBottom:`1px solid ${T.border}` }}>
+                        <div>Rank</div><div>Name</div><div>Techs</div><div>Jobs requiring</div><div/>
+                    </div>
                     {licenses.map((l,i)=>(
-                        <div key={i} style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 12px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r }}>
-                            <span style={{ fontSize:10, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{i+1}</span>
+                        <div key={i} style={{ display:'grid', gridTemplateColumns:'40px 1fr 70px 100px 28px', gap:12, padding:'10px 14px', alignItems:'center', borderBottom:i<licenses.length-1?`1px solid ${T.border}`:'none', fontSize:13, fontFamily:T.sans }}>
+                            <span style={{ fontSize:11, fontWeight:700, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{i+1}</span>
                             <input value={l} onChange={e=>{ const n=[...licenses]; n[i]=e.target.value; setLicenses(n); setDirty(true); }}
-                                style={{ border:'none', outline:'none', background:'transparent', fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, width:90 }}/>
-                            {licenses.length>1 && <button onClick={()=>{ setLicenses(p=>p.filter((_,ri)=>ri!==i)); setDirty(true); }}
-                                style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:11, padding:0 }}
-                                onMouseEnter={e=>e.currentTarget.style.color=T.danger} onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>×</button>}
+                                style={{ border:'none', outline:'none', background:'transparent', fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, width:'100%' }}/>
+                            <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>—</span>
+                            <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>—</span>
+                            <div><licKebab.KebabBtn id={`lic_${i}`}/><licKebab.KebabMenu id={`lic_${i}`} items={[
+                                {label:'Rename',action:()=>{}},
+                                {label:'Delete',danger:true,disabled:licenses.length<=1,disabledReason:'Need at least one level',action:()=>{setLicenses(p=>p.filter((_,ri)=>ri!==i));setDirty(true);}},
+                            ]}/></div>
                         </div>
                     ))}
-                    <button onClick={()=>{ setLicenses(p=>[...p,'New level']); setDirty(true); }}
-                        style={{ padding:'6px 12px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
-                        + Add level
-                    </button>
                 </div>
-                <div style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>Level 1 is lowest (e.g. Apprentice). Jobs with a minimum level block lower-licensed techs from auto-scheduling.</div>
+                <button onClick={()=>{ setLicenses(p=>[...p,'New level']); setDirty(true); }}
+                    style={{ marginTop:8, padding:'6px 12px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                    + Add level
+                </button>
             </CSectionCard>
         </SPDetailPageChrome>
     );
@@ -16833,6 +16904,12 @@ const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirt
     const [saving,   setSaving]   = useState(false);
     const [showAdd,  setShowAdd]  = useState(false);
     const [newV,     setNewV]     = useState({ name:'', type:'Van', plate:'', notes:'' });
+    const savedEquipment = settings?.dispatchEquipment || [];
+    const [equipment, setEquipment] = useState(() => JSON.parse(JSON.stringify(savedEquipment)));
+    const [showAddEquip, setShowAddEquip] = useState(false);
+    const [newEquip, setNewEquip] = useState({ name:'', qty:1, share:true, notes:'' });
+    const vehKebab  = useDspKebab();
+    const equipKebab = useDspKebab();
 
     const handleSave = async () => {
         setSaving(true);
@@ -16859,21 +16936,26 @@ const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirt
             primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}>
             <CSectionCard title="Fleet vehicles" desc="Assign vehicles to techs in Settings → People & Teams.">
                 <SPTable columns={[
-                    { key:'name',  label:'Vehicle',  w:'1fr' },
-                    { key:'type',  label:'Type',     w:'90px' },
-                    { key:'plate', label:'Plate',    w:'110px' },
-                    { key:'notes', label:'Equipment notes', w:'1.5fr' },
-                    { key:'del',   label:'',         w:'28px' },
+                    { key:'name',   label:'Vehicle',          w:'1.2fr' },
+                    { key:'kind',   label:'Kind',             w:'110px' },
+                    { key:'payload',label:'Payload',          w:'90px' },
+                    { key:'tech',   label:'Assigned to',      w:'1fr' },
+                    { key:'equip',  label:'On-board equipment', w:'1.5fr' },
+                    { key:'status', label:'Status',           w:'80px' },
+                    { key:'more',   label:'',                 w:'28px' },
                 ]} rows={vehicles.map((v,i)=>({
-                    name:  <span style={{ fontWeight:600, color:T.ink, fontFamily:T.sans }}>{v.name}</span>,
-                    type:  <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{v.type}</span>,
-                    plate: <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{v.plate||'—'}</span>,
-                    notes: <span style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>{v.notes||'—'}</span>,
-                    del:   <button onClick={()=>{ setVehicles(p=>p.filter((_,ri)=>ri!==i)); setDirty(true); }}
-                               style={{ background:'none', border:'none', color:T.inkMuted, cursor:'pointer', fontSize:14, padding:0 }}
-                               onMouseEnter={e=>e.currentTarget.style.color=T.danger} onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>×</button>,
+                    name:   <span style={{ fontWeight:600, color:T.ink, fontFamily:T.sans }}>{v.name}</span>,
+                    kind:   <span style={{ fontSize:12, color:T.inkMid, fontFamily:T.sans }}>{v.type||v.kind||'—'}</span>,
+                    payload:<span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>{v.payload||'—'}</span>,
+                    tech:   v.assignedTo && v.assignedTo!=='—' ? <span style={{ fontSize:12, fontWeight:500, color:T.ink, fontFamily:T.sans }}>{v.assignedTo}</span> : <span style={{ fontSize:11.5, color:T.inkMuted, fontStyle:'italic' }}>Unassigned</span>,
+                    equip:  <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>{(v.equip||[]).map(e=><span key={e} style={{ fontSize:10.5, padding:'1px 6px', borderRadius:4, background:T.surface2, border:`1px solid ${T.border}`, color:T.inkMid }}>{e}</span>)}</div>,
+                    status: <span style={{ fontSize:11, padding:'2px 8px', borderRadius:3, fontWeight:600, background:v.status==='Active'?`${T.ok}14`:`${T.warn}14`, color:v.status==='Active'?T.ok:T.warn }}>{v.status||'Active'}</span>,
+                    more:   (<><vehKebab.KebabBtn id={v.id}/><vehKebab.KebabMenu id={v.id} items={[
+                        {label:'Edit',action:()=>{}},
+                        {label:v.status==='Active'?'Mark in shop':'Mark active',action:()=>{const n=[...vehicles];n[i]={...n[i],status:v.status==='Active'?'In shop':'Active'};setVehicles(n);setDirty(true);}},
+                        {label:'Delete',danger:true,disabled:v.assignedTo&&v.assignedTo!=='—',disabledReason:`Assigned to ${v.assignedTo}`,action:()=>{setVehicles(p=>p.filter((_,ri)=>ri!==i));setDirty(true);}},
+                    ]}/></>),
                 }))}/>
-                {showAdd ? (
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 90px 100px 1.5fr auto auto', gap:8, alignItems:'center', padding:'10px 0' }}>
                         <input value={newV.name} onChange={e=>setNewV(p=>({...p,name:e.target.value}))} placeholder="Van 1, Truck A…" autoFocus
                             style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none' }}/>
@@ -16895,6 +16977,37 @@ const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirt
                         style={{ marginTop:10, padding:'6px 14px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
                         + Add vehicle
                     </button>
+                )}
+            </CSectionCard>
+
+            <CSectionCard title="Shared equipment" desc="Tools/kits stored at HQ or shared across vehicles. Match scoring deducts when a job needs an item that isn't available.">
+                <SPTable columns={[
+                    { key:'name',  label:'Item',           w:'1.5fr' },
+                    { key:'qty',   label:'Quantity',       w:'80px' },
+                    { key:'share', label:'Shared / Per-van', w:'110px' },
+                    { key:'notes', label:'Notes',          w:'1.5fr' },
+                    { key:'more',  label:'',               w:'28px' },
+                ]} rows={equipment.map((eq,i)=>({name:  <span style={{ fontWeight:600, color:T.ink, fontFamily:T.sans }}>{eq.name}</span>,
+                    qty:   <span style={{ fontSize:12, fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMid }}>{eq.qty||1}</span>,
+                    share: <span style={{ fontSize:11, padding:'2px 8px', borderRadius:3, fontWeight:600, background:eq.share?`${T.info}14`:`${T.ok}14`, color:eq.share?T.info:T.ok }}>{eq.share?'Shared':'Per-van'}</span>,
+                    notes: <span style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>{eq.notes||'—'}</span>,
+                    more:  (<><equipKebab.KebabBtn id={eq.id}/><equipKebab.KebabMenu id={eq.id} items={[
+                        {label:'Edit',action:()=>{}},
+                        {label:'Toggle shared/per-van',action:()=>{const n=[...equipment];n[i]={...n[i],share:!eq.share};setEquipment(n);setDirty(true);}},
+                        {label:'Delete',danger:true,action:()=>{setEquipment(p=>p.filter((_,ri)=>ri!==i));setDirty(true);}},
+                    ]}/></>),
+                }))}/>
+                {showAddEquip ? (
+                    <div style={{ display:'grid', gridTemplateColumns:'1.5fr 70px 110px 1.5fr auto auto', gap:8, alignItems:'center', padding:'10px 0' }}>
+                        <input value={newEquip.name} onChange={e=>setNewEquip(p=>({...p,name:e.target.value}))} placeholder="Item name" autoFocus style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none' }}/>
+                        <input type="number" value={newEquip.qty} onChange={e=>setNewEquip(p=>({...p,qty:parseInt(e.target.value)||1}))} style={{ padding:'6px 8px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, outline:'none' }}/>
+                        <select value={newEquip.share?'Shared':'Per-van'} onChange={e=>setNewEquip(p=>({...p,share:e.target.value==='Shared'}))} style={{ padding:'6px 8px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, outline:'none' }}><option>Shared</option><option>Per-van</option></select>
+                        <input value={newEquip.notes} onChange={e=>setNewEquip(p=>({...p,notes:e.target.value}))} placeholder="Notes" style={{ padding:'6px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12, fontFamily:T.sans, outline:'none' }}/>
+                        <button onClick={()=>{if(!newEquip.name.trim())return;setEquipment(p=>[...p,{id:'eq_'+Date.now(),...newEquip}]);setNewEquip({name:'',qty:1,share:true,notes:''});setShowAddEquip(false);setDirty(true);}} style={{ padding:'6px 12px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Add</button>
+                        <button onClick={()=>setShowAddEquip(false)} style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
+                    </div>
+                ) : (
+                    <button onClick={()=>setShowAddEquip(true)} style={{ marginTop:10, padding:'6px 14px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>+ Add item</button>
                 )}
             </CSectionCard>
         </SPDetailPageChrome>
@@ -17150,6 +17263,7 @@ const DispatchTechDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
 
     const [filter, setFilter] = useState('All techs');
     const [dirty, setDirty] = useState(false);
+    const techKebab = useDspKebab();
 
     const handleSave = async () => {};
     React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
@@ -17273,7 +17387,7 @@ const DispatchTechDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
                                 </div>
                                 <div style={{ fontSize: 11.5, color: T.inkMid }}>{u.vehicle || '—'}</div>
                                 <div style={{ fontSize: 11.5, color: T.inkMid }}>{userCrew?.name || '—'}</div>
-                                <div style={{ color: T.inkMuted, cursor: 'pointer', fontSize: 16 }}>⋯</div>
+                                <><techKebab.KebabBtn id={u.id||u.name}/><techKebab.KebabMenu id={u.id||u.name} items={[{label:'View in People & Teams',action:()=>{}},{label:'Disable dispatch',danger:true,action:()=>saveUserDispatch(u.id||u.name,{dispatchEnabled:false})}]}/></>
                             </div>
                         );
                     })}
@@ -17297,6 +17411,7 @@ const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setSettings
     const [saving,   setSaving]   = useState(false);
     const [selectedId, setSelectedId] = useState(saved[0]?.id || null);
     const [showAdd,  setShowAdd]  = useState(false);
+    const tmplKebab = useDspKebab();
 
     const selected = templates.find(t => t.id === selectedId);
 
@@ -17382,7 +17497,7 @@ const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setSettings
                                     <div><span style={{ fontSize:11, padding:'2px 7px', borderRadius:3, background:`${prioColor(t.priority)}14`, color:prioColor(t.priority), fontWeight:600 }}>{t.priority}</span></div>
                                     <div><span style={{ fontSize:11, padding:'2px 7px', borderRadius:3, background:t.autojob?`${T.ok}14`:`${T.inkMuted}14`, color:t.autojob?T.ok:T.inkMuted, fontWeight:600 }}>{t.autojob?'On':'Off'}</span></div>
                                     <div style={{ color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{t.used||0}</div>
-                                    <div style={{ color:T.inkMuted, cursor:'pointer', fontSize:14 }}>⋯</div>
+                                    <><tmplKebab.KebabBtn id={t.id}/><tmplKebab.KebabMenu id={t.id} items={[{label:'Duplicate',action:()=>{const clone={...t,id:'tmpl_'+Date.now(),ctype:t.ctype+' (copy)',used:0};setTemplates(p=>[...p,clone]);setSelectedId(clone.id);setDirty(true);}},{label:t.autojob?'Disable auto-create':'Enable auto-create',action:()=>{setTemplates(p=>p.map(tm=>tm.id===t.id?{...tm,autojob:!tm.autojob}:tm));setDirty(true);}},{label:'Delete',danger:true,action:()=>{setTemplates(p=>p.filter(tm=>tm.id!==t.id));if(selectedId===t.id)setSelectedId(templates.find(tm=>tm.id!==t.id)?.id||null);setDirty(true);}}]}/></>
                                 </div>
                             ))}
                         </div>
