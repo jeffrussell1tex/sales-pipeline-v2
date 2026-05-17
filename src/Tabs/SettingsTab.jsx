@@ -17102,6 +17102,7 @@ const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
     const [dirty, setDirty] = useState(false);
     const [saving, setSaving] = useState(false);
     const [selectedId, setSelectedId] = useState(saved[0]?.id || null);
+    const [showAddMember, setShowAddMember] = useState(false);
     const [showAdd, setShowAdd] = useState(false);
     const [newCrew, setNewCrew] = useState({ name: '', area: '', color: '#3a5a7a', defaultVehicle: '' });
 
@@ -17269,15 +17270,10 @@ const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
                                             <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>Members</div>
                                             <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>Techs assigned to this crew. Crew lead is starred.</div>
                                         </div>
-                                        {nonMembers.length > 0 && (
-                                            <button onClick={() => {
-                                                const uid = nonMembers[0].id || nonMembers[0].name;
-                                                toggleMember(uid);
-                                            }}
+                                        <button onClick={() => setShowAddMember(p => !p)}
                                             style={{ padding: '5px 12px', background: T.surface2, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600, color: T.ink, cursor: 'pointer', fontFamily: T.sans }}>
-                                                + Add member
-                                            </button>
-                                        )}
+                                            + Add member
+                                        </button>
                                     </div>
 
                                     {memberUsers.length === 0 ? (
@@ -17355,37 +17351,42 @@ const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
                                         </div>
                                     )}
 
-                                    {/* Add member picker — shows non-member users */}
-                                    {nonMembers.length > 0 && memberUsers.length > 0 && (
+                                    {/* Add member picker — inline expandable */}
+                                    {showAddMember && (
                                         <div style={{ marginTop: 12 }}>
-                                            <details style={{ fontFamily: T.sans }}>
-                                                <summary style={{ fontSize: 12.5, color: T.info, cursor: 'pointer', fontWeight: 600, listStyle: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                    <span>+ Add member</span>
-                                                </summary>
-                                                <div style={{ marginTop: 8, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                                            {nonMembers.length === 0 ? (
+                                                <div style={{ fontSize: 12.5, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans, padding: '8px 0' }}>All dispatch-enabled techs are already in this crew.</div>
+                                            ) : (
+                                                <div style={{ border: `1px solid ${T.borderStrong}`, borderRadius: T.r, overflow: 'hidden', background: T.surface }}>
+                                                    <div style={{ padding: '8px 12px', background: T.surface2, fontSize: 11, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: T.sans }}>
+                                                        Available techs — click to add
+                                                    </div>
                                                     {nonMembers.map((u, i) => {
                                                         const userSkills = (u.dispatchSkills || []).slice(0, 2).map(id => skills.find(s => s.id === id)).filter(Boolean);
                                                         return (
-                                                            <div key={u.id||u.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderTop: i > 0 ? `1px solid ${T.border}` : 'none', background: T.surface, cursor: 'pointer' }}
-                                                                onClick={() => toggleMember(u.id||u.name)}
+                                                            <div key={u.id||u.name}
+                                                                onClick={() => { toggleMember(u.id||u.name); }}
+                                                                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderTop: i > 0 ? `1px solid ${T.border}` : 'none', cursor: 'pointer', transition: 'background 80ms' }}
                                                                 onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
-                                                                onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
-                                                                <div style={{ width: 28, height: 28, borderRadius: '50%', background: T.ink, color: '#fbf8f3', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                                onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                                                <div style={{ width: 30, height: 30, borderRadius: '50%', background: T.ink, color: '#fbf8f3', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                                                     {(u.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2)}
                                                                 </div>
-                                                                <div style={{ flex: 1 }}>
-                                                                    <div style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>{u.name}</div>
-                                                                    <div style={{ display: 'flex', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
-                                                                        <span style={{ fontSize: 10, color: T.inkMuted }}>{u.dispatchLicense || 'Apprentice'}</span>
-                                                                        {userSkills.map(s => <span key={s.id} style={{ fontSize: 10, color: s.color, fontWeight: 600 }}>{s.name}</span>)}
+                                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                                    <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, fontFamily: T.sans }}>{u.name}</div>
+                                                                    <div style={{ display: 'flex', gap: 5, marginTop: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                                                                        <span style={{ fontSize: 10.5, color: T.inkMuted, fontFamily: T.sans }}>{u.dispatchLicense || 'Apprentice'}</span>
+                                                                        {userSkills.map(s => (
+                                                                            <span key={s.id} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${s.color}14`, color: s.color, fontWeight: 600, border: `1px solid ${s.color}30` }}>{s.name}</span>
+                                                                        ))}
                                                                     </div>
                                                                 </div>
-                                                                <span style={{ fontSize: 12, color: T.ok, fontWeight: 600 }}>+ Add</span>
+                                                                <span style={{ fontSize: 12, color: T.ok, fontWeight: 700, fontFamily: T.sans, flexShrink: 0 }}>+ Add</span>
                                                             </div>
                                                         );
                                                     })}
                                                 </div>
-                                            </details>
+                                            )}
                                         </div>
                                     )}
                                 </div>
