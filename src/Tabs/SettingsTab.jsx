@@ -17256,64 +17256,141 @@ const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
                             </div>
                         </div>
 
-                        {/* Members */}
-                        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+2, padding: '16px 18px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                                <div>
-                                    <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>Members</div>
-                                    <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>Techs assigned to this crew. Crew lead is starred.</div>
-                                </div>
-                            </div>
-                            {users.length === 0 ? (
-                                <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>No dispatch-enabled users. Enable dispatch in People & Teams.</div>
-                            ) : (
-                                <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px 1fr 80px 28px', gap: 10, padding: '8px 12px', background: T.surface2, fontSize: 10.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: T.sans }}>
-                                        <div>Tech</div><div>Role</div><div>License</div><div>Top skills</div><div>Hours</div><div/>
+                        {/* Members card — matching design spec */}
+                        {(() => {
+                            const memberIds = selectedCrew.members || [];
+                            const memberUsers = memberIds.map(id => users.find(u => (u.id||u.name) === id)).filter(Boolean);
+                            const nonMembers = users.filter(u => !memberIds.includes(u.id||u.name));
+
+                            return (
+                                <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+2, padding: '16px 18px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <div>
+                                            <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>Members</div>
+                                            <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>Techs assigned to this crew. Crew lead is starred.</div>
+                                        </div>
+                                        {nonMembers.length > 0 && (
+                                            <button onClick={() => {
+                                                const uid = nonMembers[0].id || nonMembers[0].name;
+                                                toggleMember(uid);
+                                            }}
+                                            style={{ padding: '5px 12px', background: T.surface2, border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 12.5, fontWeight: 600, color: T.ink, cursor: 'pointer', fontFamily: T.sans }}>
+                                                + Add member
+                                            </button>
+                                        )}
                                     </div>
-                                    {users.map((u, i) => {
-                                        const isMember = (selectedCrew.members || []).includes(u.id || u.name);
-                                        const isLead = selectedCrew.lead === (u.id || u.name);
-                                        const userSkills = (u.dispatchSkills || []).slice(0, 2).map(id => skills.find(s => s.id === id)).filter(Boolean);
-                                        return (
-                                            <div key={u.id || u.name} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px 1fr 80px 28px', gap: 10, padding: '10px 12px', alignItems: 'center', fontSize: 12.5, fontFamily: T.sans, borderTop: i > 0 ? `1px solid ${T.border}` : 'none', background: isMember ? `${T.ok}08` : T.surface }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: T.ink, color: '#fbf8f3', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                        {(u.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2)}
-                                                    </div>
-                                                    <span style={{ fontWeight: isMember ? 700 : 400, color: T.ink }}>
-                                                        {u.name} {isLead && <span style={{ color: T.goldInk }}>★</span>}
-                                                    </span>
-                                                </div>
-                                                <div>
-                                                    {isMember && (
-                                                        <button onClick={() => { updateCrew('lead', isLead ? null : (u.id||u.name)); }}
-                                                            style={{ fontSize: 10.5, padding: '2px 7px', borderRadius: 3, border: `1px solid ${isLead ? T.goldInk : T.border}`, background: isLead ? `${T.goldInk}14` : 'transparent', color: isLead ? T.goldInk : T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
-                                                            {isLead ? 'Crew lead' : 'Make lead'}
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <div style={{ fontSize: 11.5 }}>
-                                                    <span style={{ padding: '2px 7px', borderRadius: 3, background: `${T.info}14`, color: T.info, fontWeight: 600 }}>{u.dispatchLicense || 'Apprentice'}</span>
-                                                </div>
-                                                <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                                                    {userSkills.map(s => (
-                                                        <span key={s.id} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${s.color}14`, color: s.color, fontWeight: 600, border: `1px solid ${s.color}30` }}>{s.name}</span>
-                                                    ))}
-                                                </div>
-                                                <div style={{ fontSize: 11, fontFamily: 'ui-monospace,Menlo,monospace', color: (u.hoursThisWeek||0) > (u.hoursCap||40) ? T.danger : T.inkMid }}>
-                                                    {u.hoursThisWeek||0}/{u.hoursCap||40}h
-                                                </div>
-                                                <div>
-                                                    <input type="checkbox" checked={isMember} onChange={() => toggleMember(u.id || u.name)}
-                                                        style={{ width: 14, height: 14, cursor: 'pointer', accentColor: T.ok }}/>
-                                                </div>
+
+                                    {memberUsers.length === 0 ? (
+                                        <div style={{ padding: '1.5rem', textAlign: 'center', color: T.inkMuted, fontSize: 12.5, fontStyle: 'italic', fontFamily: T.sans, border: `1px dashed ${T.borderStrong}`, borderRadius: T.r }}>
+                                            No members yet. Click "+ Add member" to assign techs to this crew.
+                                        </div>
+                                    ) : (
+                                        <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                                            {/* Header */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 110px 100px 1.2fr 80px 28px', gap: 10, padding: '8px 12px', background: T.surface2, fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: T.sans }}>
+                                                <div>Tech</div><div>Role</div><div>License</div><div>Top skills</div><div>Hours</div><div/>
                                             </div>
-                                        );
-                                    })}
+                                            {/* Member rows */}
+                                            {memberUsers.map((u, i) => {
+                                                const uid = u.id || u.name;
+                                                const isLead = selectedCrew.lead === uid;
+                                                const userSkills = (u.dispatchSkills || []).slice(0, 3).map(id => skills.find(s => s.id === id)).filter(Boolean);
+                                                const hoursUsed = u.hoursThisWeek || 0;
+                                                const hoursCap  = u.hoursCap || 40;
+                                                const over = hoursUsed > hoursCap;
+                                                return (
+                                                    <div key={uid} style={{ display: 'grid', gridTemplateColumns: '1.4fr 110px 100px 1.2fr 80px 28px', gap: 10, padding: '11px 12px', alignItems: 'center', fontSize: 12.5, fontFamily: T.sans, borderTop: i > 0 ? `1px solid ${T.border}` : 'none', background: T.surface }}>
+                                                        {/* Tech name + avatar */}
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                            <div style={{ width: 30, height: 30, borderRadius: '50%', background: T.ink, color: '#fbf8f3', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                                {(u.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2)}
+                                                            </div>
+                                                            <div>
+                                                                <div style={{ fontWeight: 600, color: T.ink }}>
+                                                                    {u.name} {isLead && <span style={{ color: T.goldInk, fontSize: 13 }}>★</span>}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        {/* Role / make lead */}
+                                                        <div>
+                                                            <button onClick={() => updateCrew('lead', isLead ? null : uid)}
+                                                                style={{ fontSize: 11, padding: '2px 8px', borderRadius: 3,
+                                                                    border: `1px solid ${isLead ? T.goldInk : T.border}`,
+                                                                    background: isLead ? `${T.goldInk}14` : 'transparent',
+                                                                    color: isLead ? T.goldInk : T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
+                                                                {isLead ? 'Crew lead' : 'Tech'}
+                                                            </button>
+                                                        </div>
+                                                        {/* License */}
+                                                        <div>
+                                                            <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 3, background: `${T.info}14`, color: T.info, fontWeight: 600 }}>
+                                                                {u.dispatchLicense || 'Apprentice'}
+                                                            </span>
+                                                        </div>
+                                                        {/* Skills */}
+                                                        <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                                                            {userSkills.map(s => (
+                                                                <span key={s.id} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${s.color}14`, color: s.color, fontWeight: 600, border: `1px solid ${s.color}30` }}>{s.name}</span>
+                                                            ))}
+                                                            {(u.dispatchSkills||[]).length > 3 && <span style={{ fontSize: 10, color: T.inkMuted }}>+{(u.dispatchSkills||[]).length - 3}</span>}
+                                                        </div>
+                                                        {/* Hours bar */}
+                                                        <div>
+                                                            <div style={{ fontSize: 10.5, fontFamily: 'ui-monospace,Menlo,monospace', color: over ? T.danger : T.inkMid, marginBottom: 2 }}>
+                                                                {hoursUsed}/{hoursCap}h
+                                                            </div>
+                                                            <div style={{ height: 3, background: T.surface2, borderRadius: 2, overflow: 'hidden' }}>
+                                                                <div style={{ height: '100%', width: `${Math.min(hoursUsed/hoursCap,1)*100}%`, background: over ? T.danger : hoursUsed >= hoursCap*0.9 ? T.warn : T.ok }}/>
+                                                            </div>
+                                                        </div>
+                                                        {/* Kebab — remove from crew */}
+                                                        <button onClick={() => toggleMember(uid)}
+                                                            title="Remove from crew"
+                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 13, padding: 0, fontFamily: T.sans }}
+                                                            onMouseEnter={e=>e.currentTarget.style.color=T.danger}
+                                                            onMouseLeave={e=>e.currentTarget.style.color=T.inkMuted}>×</button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {/* Add member picker — shows non-member users */}
+                                    {nonMembers.length > 0 && memberUsers.length > 0 && (
+                                        <div style={{ marginTop: 12 }}>
+                                            <details style={{ fontFamily: T.sans }}>
+                                                <summary style={{ fontSize: 12.5, color: T.info, cursor: 'pointer', fontWeight: 600, listStyle: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <span>+ Add member</span>
+                                                </summary>
+                                                <div style={{ marginTop: 8, border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                                                    {nonMembers.map((u, i) => {
+                                                        const userSkills = (u.dispatchSkills || []).slice(0, 2).map(id => skills.find(s => s.id === id)).filter(Boolean);
+                                                        return (
+                                                            <div key={u.id||u.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderTop: i > 0 ? `1px solid ${T.border}` : 'none', background: T.surface, cursor: 'pointer' }}
+                                                                onClick={() => toggleMember(u.id||u.name)}
+                                                                onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                                                                onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
+                                                                <div style={{ width: 28, height: 28, borderRadius: '50%', background: T.ink, color: '#fbf8f3', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                                    {(u.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2)}
+                                                                </div>
+                                                                <div style={{ flex: 1 }}>
+                                                                    <div style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>{u.name}</div>
+                                                                    <div style={{ display: 'flex', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
+                                                                        <span style={{ fontSize: 10, color: T.inkMuted }}>{u.dispatchLicense || 'Apprentice'}</span>
+                                                                        {userSkills.map(s => <span key={s.id} style={{ fontSize: 10, color: s.color, fontWeight: 600 }}>{s.name}</span>)}
+                                                                    </div>
+                                                                </div>
+                                                                <span style={{ fontSize: 12, color: T.ok, fontWeight: 600 }}>+ Add</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </details>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                        </div>
+                            );
+                        })()}
                     </div>
                 ) : (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+2, color: T.inkMuted, fontSize: 13, fontStyle: 'italic', fontFamily: T.sans }}>
