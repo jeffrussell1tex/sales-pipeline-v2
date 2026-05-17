@@ -16763,9 +16763,10 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
     const [newSkill, setNewSkill] = useState({ name:'', category:'Field', color:'#7a5a3c' });
     const [editingSkill, setEditingSkill] = useState(null);
     const [editingCert,  setEditingCert]  = useState(null);
-    const skillKebab = useDspKebab();
-    const certKebab  = useDspKebab();
-    const licKebab   = useDspKebab();
+    // Kebab state — one per section, rendered outside the table to escape overflow:hidden
+    const [skillMenu, setSkillMenu] = useState(null); // { id, idx, rect }
+    const [certMenu,  setCertMenu]  = useState(null);
+    const [licMenu,   setLicMenu]   = useState(null);
     const [newCert,  setNewCert]  = useState({ name:'', renewalDays:365 });
 
     const handleSave = async () => {
@@ -16809,7 +16810,7 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
                     cert:  s.cert ? <span style={{ fontSize:11, padding:'1px 7px', borderRadius:8, background:`${T.info}14`, color:T.info, fontWeight:600 }}>{s.cert}</span> : <span style={{ fontSize:11, color:T.inkMuted, fontStyle:'italic' }}>—</span>,
                     color: <span style={{ display:'inline-block', width:18, height:18, borderRadius:3, background:s.color, border:`1px solid ${T.border}` }}/>,
                     techs: <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{s.techs||0}</span>,
-                    more:  (<><skillKebab.KebabBtn id={s.id}/><skillKebab.KebabMenu id={s.id} items={[{label:'Edit',action:()=>setEditingSkill(s.id)},{label:'Delete',danger:true,disabled:(s.techs||0)>0,disabledReason:`Used by ${s.techs||0} tech${s.techs===1?'':'s'}`,action:()=>{setSkills(prev=>prev.filter((_,ri)=>ri!==i));setDirty(true);}}]}/></>),
+                    more:  <button onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setSkillMenu(skillMenu?.id===s.id?null:{id:s.id,idx:i,rect:{top:r.bottom+4,right:window.innerWidth-r.right}});}} style={{background:'none',border:'none',cursor:'pointer',color:T.inkMuted,fontSize:16,fontWeight:700,padding:'0 2px',lineHeight:1}}>⋯</button>,
                 }))}/>
                     <div style={{ display:'flex', gap:8, alignItems:'center', padding:'10px 0', flexWrap:'wrap' }}>
                         <input value={newSkill.name} onChange={e=>setNewSkill(p=>({...p,name:e.target.value}))} placeholder="Skill name" autoFocus
@@ -16851,7 +16852,7 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
                     renewal: <span style={{ fontSize:12, fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMid }}>{Math.round((c.renewalDays||365)/30)} months</span>,
                     holding: <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>{c.techsHolding||0}</span>,
                     exp30:   (c.expiringIn30d||0)>0 ? <span style={{ fontSize:12, fontWeight:700, color:T.warn }}>{c.expiringIn30d} ⚠</span> : <span style={{ fontSize:12, color:T.inkMuted }}>0</span>,
-                    more:    (<><certKebab.KebabBtn id={c.id}/><certKebab.KebabMenu id={c.id} items={[{label:'Edit',action:()=>setEditingCert(c.id)},{label:'Delete',danger:true,disabled:(c.techsHolding||0)>0,disabledReason:`Held by ${c.techsHolding||0} tech${c.techsHolding===1?'':'s'}`,action:()=>{setCerts(prev=>prev.filter((_,ri)=>ri!==i));setDirty(true);}}]}/></>),
+                    more:    <button onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCertMenu(certMenu?.id===c.id?null:{id:c.id,idx:i,rect:{top:r.bottom+4,right:window.innerWidth-r.right}});}} style={{background:'none',border:'none',cursor:'pointer',color:T.inkMuted,fontSize:16,fontWeight:700,padding:'0 2px',lineHeight:1}}>⋯</button>,
                 }))}/>
                     <div style={{ display:'flex', gap:8, alignItems:'center', padding:'10px 0' }}>
                         <input value={newCert.name} onChange={e=>setNewCert(p=>({...p,name:e.target.value}))} placeholder="Cert name e.g. EPA 608" autoFocus
@@ -16884,10 +16885,7 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
                                 style={{ border:'none', outline:'none', background:'transparent', fontSize:13, fontWeight:600, color:T.ink, fontFamily:T.sans, width:'100%' }}/>
                             <span style={{ fontSize:12, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace' }}>—</span>
                             <span style={{ fontSize:12, color:T.inkMuted, fontFamily:T.sans }}>—</span>
-                            <div><licKebab.KebabBtn id={`lic_${i}`}/><licKebab.KebabMenu id={`lic_${i}`} items={[
-                                {label:'Rename',action:()=>{}},
-                                {label:'Delete',danger:true,disabled:licenses.length<=1,disabledReason:'Need at least one level',action:()=>{setLicenses(p=>p.filter((_,ri)=>ri!==i));setDirty(true);}},
-                            ]}/></div>
+                            <button onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setLicMenu(licMenu?.id===`lic_${i}`?null:{id:`lic_${i}`,idx:i,rect:{top:r.bottom+4,right:window.innerWidth-r.right}});}} style={{background:'none',border:'none',cursor:'pointer',color:T.inkMuted,fontSize:16,fontWeight:700,padding:'0 2px',lineHeight:1}}>⋯</button>
                         </div>
                     ))}
                 </div>
@@ -16896,6 +16894,56 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
                     + Add level
                 </button>
             </CSectionCard>
+
+            {/* ── Skill row kebab dropdown ── */}
+            {skillMenu && skillMenu.rect && (() => {
+                const s = skills[skillMenu.idx];
+                if (!s) return null;
+                return (
+                    <>
+                        <div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setSkillMenu(null)}/>
+                        <div style={{position:'fixed',top:skillMenu.rect.top,right:skillMenu.rect.right,zIndex:9999,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.r+2,boxShadow:'0 4px 16px rgba(42,38,34,0.12)',minWidth:140,overflow:'hidden'}}>
+                            <button onClick={()=>{setEditingSkill(s.id);setSkillMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Edit</button>
+                            <button onClick={()=>{if((s.techs||0)>0)return;setSkills(prev=>prev.filter((_,ri)=>ri!==skillMenu.idx));setDirty(true);setSkillMenu(null);}} disabled={(s.techs||0)>0} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:(s.techs||0)>0?T.inkMuted:T.danger,cursor:(s.techs||0)>0?'default':'pointer',fontFamily:T.sans,opacity:(s.techs||0)>0?0.5:1}} onMouseEnter={e=>e.currentTarget.style.background='rgba(156,58,46,0.06)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                                Delete{(s.techs||0)>0 && <div style={{fontSize:10.5,color:T.inkMuted,marginTop:2}}>Used by {s.techs} tech{s.techs===1?'':'s'}</div>}
+                            </button>
+                        </div>
+                    </>
+                );
+            })()}
+
+            {/* ── Cert row kebab dropdown ── */}
+            {certMenu && certMenu.rect && (() => {
+                const c = certs[certMenu.idx];
+                if (!c) return null;
+                return (
+                    <>
+                        <div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setCertMenu(null)}/>
+                        <div style={{position:'fixed',top:certMenu.rect.top,right:certMenu.rect.right,zIndex:9999,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.r+2,boxShadow:'0 4px 16px rgba(42,38,34,0.12)',minWidth:140,overflow:'hidden'}}>
+                            <button onClick={()=>{setEditingCert(c.id);setCertMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Edit</button>
+                            <button onClick={()=>{if((c.techsHolding||0)>0)return;setCerts(prev=>prev.filter((_,ri)=>ri!==certMenu.idx));setDirty(true);setCertMenu(null);}} disabled={(c.techsHolding||0)>0} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:(c.techsHolding||0)>0?T.inkMuted:T.danger,cursor:(c.techsHolding||0)>0?'default':'pointer',fontFamily:T.sans,opacity:(c.techsHolding||0)>0?0.5:1}} onMouseEnter={e=>e.currentTarget.style.background='rgba(156,58,46,0.06)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                                Delete{(c.techsHolding||0)>0 && <div style={{fontSize:10.5,color:T.inkMuted,marginTop:2}}>Held by {c.techsHolding} tech{c.techsHolding===1?'':'s'}</div>}
+                            </button>
+                        </div>
+                    </>
+                );
+            })()}
+
+            {/* ── License row kebab dropdown ── */}
+            {licMenu && licMenu.rect && (() => {
+                const i = licMenu.idx;
+                return (
+                    <>
+                        <div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setLicMenu(null)}/>
+                        <div style={{position:'fixed',top:licMenu.rect.top,right:licMenu.rect.right,zIndex:9999,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.r+2,boxShadow:'0 4px 16px rgba(42,38,34,0.12)',minWidth:140,overflow:'hidden'}}>
+                            <button onClick={()=>setLicMenu(null)} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Rename</button>
+                            <button onClick={()=>{if(licenses.length<=1)return;setLicenses(p=>p.filter((_,ri)=>ri!==i));setDirty(true);setLicMenu(null);}} disabled={licenses.length<=1} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:licenses.length<=1?T.inkMuted:T.danger,cursor:licenses.length<=1?'default':'pointer',fontFamily:T.sans,opacity:licenses.length<=1?0.5:1}} onMouseEnter={e=>e.currentTarget.style.background='rgba(156,58,46,0.06)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                                Delete{licenses.length<=1 && <div style={{fontSize:10.5,color:T.inkMuted,marginTop:2}}>Need at least one level</div>}
+                            </button>
+                        </div>
+                    </>
+                );
+            })()}
         </SPDetailPageChrome>
     );
 };
@@ -16914,8 +16962,8 @@ const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirt
     const [equipment, setEquipment] = useState(() => JSON.parse(JSON.stringify(savedEquipment)));
     const [showAddEquip, setShowAddEquip] = useState(false);
     const [newEquip, setNewEquip] = useState({ name:'', qty:1, share:true, notes:'' });
-    const vehKebab  = useDspKebab();
-    const equipKebab = useDspKebab();
+    const [vehMenu,   setVehMenu]   = useState(null);
+    const [equipMenu, setEquipMenu] = useState(null);
 
     const handleSave = async () => {
         setSaving(true);
@@ -16956,11 +17004,7 @@ const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirt
                     tech:   v.assignedTo && v.assignedTo!=='—' ? <span style={{ fontSize:12, fontWeight:500, color:T.ink, fontFamily:T.sans }}>{v.assignedTo}</span> : <span style={{ fontSize:11.5, color:T.inkMuted, fontStyle:'italic' }}>Unassigned</span>,
                     equip:  <div style={{ display:'flex', flexWrap:'wrap', gap:3 }}>{(v.equip||[]).map(e=><span key={e} style={{ fontSize:10.5, padding:'1px 6px', borderRadius:4, background:T.surface2, border:`1px solid ${T.border}`, color:T.inkMid }}>{e}</span>)}</div>,
                     status: <span style={{ fontSize:11, padding:'2px 8px', borderRadius:3, fontWeight:600, background:v.status==='Active'?`${T.ok}14`:`${T.warn}14`, color:v.status==='Active'?T.ok:T.warn }}>{v.status||'Active'}</span>,
-                    more:   (<><vehKebab.KebabBtn id={v.id}/><vehKebab.KebabMenu id={v.id} items={[
-                        {label:'Edit',action:()=>{}},
-                        {label:v.status==='Active'?'Mark in shop':'Mark active',action:()=>{const n=[...vehicles];n[i]={...n[i],status:v.status==='Active'?'In shop':'Active'};setVehicles(n);setDirty(true);}},
-                        {label:'Delete',danger:true,disabled:v.assignedTo&&v.assignedTo!=='—',disabledReason:`Assigned to ${v.assignedTo}`,action:()=>{setVehicles(p=>p.filter((_,ri)=>ri!==i));setDirty(true);}},
-                    ]}/></>),
+                    more:   <button onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setVehMenu(vehMenu?.id===v.id?null:{id:v.id,idx:i,v,rect:{top:r.bottom+4,right:window.innerWidth-r.right}});}} style={{background:'none',border:'none',cursor:'pointer',color:T.inkMuted,fontSize:16,fontWeight:700,padding:'0 2px',lineHeight:1}}>⋯</button>,
                 }))}/>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 90px 100px 1.5fr auto auto', gap:8, alignItems:'center', padding:'10px 0' }}>
                         <input value={newV.name} onChange={e=>setNewV(p=>({...p,name:e.target.value}))} placeholder="Van 1, Truck A…" autoFocus
@@ -16997,11 +17041,7 @@ const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirt
                     qty:   <span style={{ fontSize:12, fontFamily:'ui-monospace,Menlo,monospace', color:T.inkMid }}>{eq.qty||1}</span>,
                     share: <span style={{ fontSize:11, padding:'2px 8px', borderRadius:3, fontWeight:600, background:eq.share?`${T.info}14`:`${T.ok}14`, color:eq.share?T.info:T.ok }}>{eq.share?'Shared':'Per-van'}</span>,
                     notes: <span style={{ fontSize:11.5, color:T.inkMuted, fontFamily:T.sans }}>{eq.notes||'—'}</span>,
-                    more:  (<><equipKebab.KebabBtn id={eq.id}/><equipKebab.KebabMenu id={eq.id} items={[
-                        {label:'Edit',action:()=>{}},
-                        {label:'Toggle shared/per-van',action:()=>{const n=[...equipment];n[i]={...n[i],share:!eq.share};setEquipment(n);setDirty(true);}},
-                        {label:'Delete',danger:true,action:()=>{setEquipment(p=>p.filter((_,ri)=>ri!==i));setDirty(true);}},
-                    ]}/></>),
+                    more:  <button onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setEquipMenu(equipMenu?.id===eq.id?null:{id:eq.id,idx:i,eq,rect:{top:r.bottom+4,right:window.innerWidth-r.right}});}} style={{background:'none',border:'none',cursor:'pointer',color:T.inkMuted,fontSize:16,fontWeight:700,padding:'0 2px',lineHeight:1}}>⋯</button>,
                 }))}/>
                 {showAddEquip ? (
                     <div style={{ display:'grid', gridTemplateColumns:'1.5fr 70px 110px 1.5fr auto auto', gap:8, alignItems:'center', padding:'10px 0' }}>
@@ -17016,6 +17056,35 @@ const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirt
                     <button onClick={()=>setShowAddEquip(true)} style={{ marginTop:10, padding:'6px 14px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>+ Add item</button>
                 )}
             </CSectionCard>
+
+            {/* ── Vehicle row kebab ── */}
+            {vehMenu && vehMenu.rect && (() => {
+                const {idx, v} = vehMenu;
+                const assigned = v.assignedTo && v.assignedTo !== '—';
+                return (<>
+                    <div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setVehMenu(null)}/>
+                    <div style={{position:'fixed',top:vehMenu.rect.top,right:vehMenu.rect.right,zIndex:9999,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.r+2,boxShadow:'0 4px 16px rgba(42,38,34,0.12)',minWidth:148,overflow:'hidden'}}>
+                        <button onClick={()=>setVehMenu(null)} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Edit</button>
+                        <button onClick={()=>{const n=[...vehicles];n[idx]={...n[idx],status:v.status==='Active'?'In shop':'Active'};setVehicles(n);setDirty(true);setVehMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>{v.status==='Active'?'Mark in shop':'Mark active'}</button>
+                        <button onClick={()=>{if(assigned)return;setVehicles(p=>p.filter((_,ri)=>ri!==idx));setDirty(true);setVehMenu(null);}} disabled={assigned} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:assigned?T.inkMuted:T.danger,cursor:assigned?'default':'pointer',fontFamily:T.sans,opacity:assigned?0.5:1}} onMouseEnter={e=>e.currentTarget.style.background='rgba(156,58,46,0.06)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
+                            Delete{assigned&&<div style={{fontSize:10.5,color:T.inkMuted,marginTop:2}}>Assigned to {v.assignedTo}</div>}
+                        </button>
+                    </div>
+                </>);
+            })()}
+
+            {/* ── Equipment row kebab ── */}
+            {equipMenu && equipMenu.rect && (() => {
+                const {idx, eq} = equipMenu;
+                return (<>
+                    <div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setEquipMenu(null)}/>
+                    <div style={{position:'fixed',top:equipMenu.rect.top,right:equipMenu.rect.right,zIndex:9999,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.r+2,boxShadow:'0 4px 16px rgba(42,38,34,0.12)',minWidth:148,overflow:'hidden'}}>
+                        <button onClick={()=>setEquipMenu(null)} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Edit</button>
+                        <button onClick={()=>{const n=[...equipment];n[idx]={...n[idx],share:!eq.share};setEquipment(n);setDirty(true);setEquipMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Toggle shared / per-van</button>
+                        <button onClick={()=>{setEquipment(p=>p.filter((_,ri)=>ri!==idx));setDirty(true);setEquipMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.danger,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background='rgba(156,58,46,0.06)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>Delete</button>
+                    </div>
+                </>);
+            })()}
         </SPDetailPageChrome>
     );
 };
@@ -17417,7 +17486,7 @@ const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setSettings
     const [saving,   setSaving]   = useState(false);
     const [selectedId, setSelectedId] = useState(saved[0]?.id || null);
     const [showAdd,  setShowAdd]  = useState(false);
-    const tmplKebab = useDspKebab();
+    const [tmplMenu, setTmplMenu] = useState(null);
 
     const selected = templates.find(t => t.id === selectedId);
 
@@ -17503,7 +17572,7 @@ const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setSettings
                                     <div><span style={{ fontSize:11, padding:'2px 7px', borderRadius:3, background:`${prioColor(t.priority)}14`, color:prioColor(t.priority), fontWeight:600 }}>{t.priority}</span></div>
                                     <div><span style={{ fontSize:11, padding:'2px 7px', borderRadius:3, background:t.autojob?`${T.ok}14`:`${T.inkMuted}14`, color:t.autojob?T.ok:T.inkMuted, fontWeight:600 }}>{t.autojob?'On':'Off'}</span></div>
                                     <div style={{ color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{t.used||0}</div>
-                                    <><tmplKebab.KebabBtn id={t.id}/><tmplKebab.KebabMenu id={t.id} items={[{label:'Duplicate',action:()=>{const clone={...t,id:'tmpl_'+Date.now(),ctype:t.ctype+' (copy)',used:0};setTemplates(p=>[...p,clone]);setSelectedId(clone.id);setDirty(true);}},{label:t.autojob?'Disable auto-create':'Enable auto-create',action:()=>{setTemplates(p=>p.map(tm=>tm.id===t.id?{...tm,autojob:!tm.autojob}:tm));setDirty(true);}},{label:'Delete',danger:true,action:()=>{setTemplates(p=>p.filter(tm=>tm.id!==t.id));if(selectedId===t.id)setSelectedId(templates.find(tm=>tm.id!==t.id)?.id||null);setDirty(true);}}]}/></>
+                                    <button onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setTmplMenu(tmplMenu?.id===t.id?null:{id:t.id,t,rect:{top:r.bottom+4,right:window.innerWidth-r.right}});}} style={{background:'none',border:'none',cursor:'pointer',color:T.inkMuted,fontSize:16,fontWeight:700,padding:'0 2px',lineHeight:1}}>⋯</button>
                                 </div>
                             ))}
                         </div>
@@ -17632,6 +17701,19 @@ const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setSettings
                     )}
                 </div>
             </div>
+
+            {/* ── Job template row kebab ── */}
+            {tmplMenu && tmplMenu.rect && (() => {
+                const {t} = tmplMenu;
+                return (<>
+                    <div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setTmplMenu(null)}/>
+                    <div style={{position:'fixed',top:tmplMenu.rect.top,right:tmplMenu.rect.right,zIndex:9999,background:T.surface,border:`1px solid ${T.border}`,borderRadius:T.r+2,boxShadow:'0 4px 16px rgba(42,38,34,0.12)',minWidth:180,overflow:'hidden'}}>
+                        <button onClick={()=>{const clone={...t,id:'tmpl_'+Date.now(),ctype:t.ctype+' (copy)',used:0};setTemplates(p=>[...p,clone]);setSelectedId(clone.id);setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>Duplicate</button>
+                        <button onClick={()=>{setTemplates(p=>p.map(tm=>tm.id===t.id?{...tm,autojob:!tm.autojob}:tm));setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.ink,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background=T.surface2} onMouseLeave={e=>e.currentTarget.style.background='none'}>{t.autojob?'Disable auto-create':'Enable auto-create'}</button>
+                        <button onClick={()=>{setTemplates(p=>p.filter(tm=>tm.id!==t.id));if(selectedId===t.id)setSelectedId(templates.find(tm=>tm.id!==t.id)?.id||null);setDirty(true);setTmplMenu(null);}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',borderTop:`1px solid ${T.border}`,textAlign:'left',fontSize:13,color:T.danger,cursor:'pointer',fontFamily:T.sans}} onMouseEnter={e=>e.currentTarget.style.background='rgba(156,58,46,0.06)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>Delete</button>
+                    </div>
+                </>);
+            })()}
         </SPDetailPageChrome>
     );
 };
