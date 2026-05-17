@@ -1437,13 +1437,13 @@ const CompanyCalendarDetail = ({ settings, setSettings, onBack }) => {
 // Already defined above — we use it with secondCrumb prop added below.
 // We extend by wrapping: SPDetailPageChrome adds the Sales process crumb.
 const SPDetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, updatedAt,
-    onBack, dirty, onCancel, primaryAction, primaryLabel, disablePrimary, rightActions, children }) => (
+    onBack, dirty, onCancel, primaryAction, primaryLabel, disablePrimary, rightActions, extraActions, children }) => (
     <div style={{ fontFamily: T.sans }}>
         {/* Breadcrumb */}
         <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:T.inkMuted, marginBottom:10 }}>
             <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Settings</button>
             <span>/</span>
-            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Sales process</button>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:T.info, fontWeight:600, cursor:'pointer', fontFamily:T.sans, padding:0, fontSize:12 }}>Company</button>
             <span>/</span>
             <span style={{ color:T.ink, fontWeight:600 }}>{crumb}</span>
         </div>
@@ -1462,7 +1462,8 @@ const SPDetailPageChrome = ({ crumb, title, subtitle, statusDetail, updatedBy, u
                     <span style={{ fontSize:11.5, color:T.inkMuted }}>Last edited {updatedAt} by <span style={{ color:T.inkMid, fontWeight:500 }}>{updatedBy}</span></span>
                 </div>
             </div>
-            <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+            <div style={{ display:'flex', gap:8, flexShrink:0, alignItems:'center' }}>
+                {extraActions && <div style={{ display:'flex', gap:8 }}>{extraActions}</div>}
                 {rightActions || (
                     <>
                         <button onClick={onCancel} style={{ padding:'8px 16px', background:T.surface, color:T.ink, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
@@ -16794,7 +16795,8 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
             subtitle="Skills, certs, and license levels your dispatchers schedule around."
             onBack={onBack} dirty={dirty}
             onCancel={() => { setSkills(JSON.parse(JSON.stringify(savedSkills))); setCerts(JSON.parse(JSON.stringify(savedCerts))); setLicenses([...savedLicenses]); setDirty(false); }}
-            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}>
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+            extraActions={<button style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Import preset</button>}>
 
             <CSectionCard title="Skills" desc="Skill names your crews are dispatched around (e.g. Refrigeration, Solar install, Panel upgrade).">
                 <SPTable columns={[
@@ -16832,7 +16834,7 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
                     </div>
                 ) : (
                     <button onClick={()=>setAddingSkill(true)}
-                        style={{ marginTop:10, padding:'6px 14px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                        style={{ marginTop:10, padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, fontWeight:600, color:T.ink, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
                         + Add skill
                     </button>
                 )}
@@ -16867,7 +16869,7 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
                     </div>
                 ) : (
                     <button onClick={()=>setAddingCert(true)}
-                        style={{ marginTop:10, padding:'6px 14px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                        style={{ marginTop:10, padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, fontWeight:600, color:T.ink, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
                         + Add certification
                     </button>
                 )}
@@ -16890,7 +16892,7 @@ const DispatchSkillsDetail = ({ settings, setSettings, onBack, setSettingsDirty,
                     ))}
                 </div>
                 <button onClick={()=>{ setLicenses(p=>[...p,'New level']); setDirty(true); }}
-                    style={{ marginTop:8, padding:'6px 12px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                    style={{ marginTop:8, padding:'6px 12px', background:T.surface, border:`1px solid ${T.borderStrong}`, fontWeight:600, color:T.ink, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
                     + Add level
                 </button>
             </CSectionCard>
@@ -16987,7 +16989,13 @@ const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirt
             subtitle="Fleet vehicles available to assign to techs."
             onBack={onBack} dirty={dirty}
             onCancel={() => { setVehicles(JSON.parse(JSON.stringify(saved))); setDirty(false); }}
-            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}>
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+            extraActions={
+                <>
+                    <button style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Export CSV</button>
+                    <button onClick={()=>setShowAdd(true)} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ Add vehicle</button>
+                </>
+            }>
             <CSectionCard title="Fleet vehicles" desc="Assign vehicles to techs in Settings → People & Teams.">
                 <SPTable columns={[
                     { key:'name',   label:'Vehicle',          w:'1.2fr' },
@@ -17022,12 +17030,7 @@ const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirt
                         <button onClick={()=>setShowAdd(false)}
                             style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
                     </div>
-                ) : (
-                    <button onClick={()=>setShowAdd(true)}
-                        style={{ marginTop:10, padding:'6px 14px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
-                        + Add vehicle
-                    </button>
-                )}
+                ) : null}
             </CSectionCard>
 
             <CSectionCard title="Shared equipment" desc="Tools/kits stored at HQ or shared across vehicles. Match scoring deducts when a job needs an item that isn't available.">
@@ -17053,7 +17056,7 @@ const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirt
                         <button onClick={()=>setShowAddEquip(false)} style={{ padding:'6px 10px', background:'transparent', color:T.inkMid, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12, cursor:'pointer', fontFamily:T.sans }}>Cancel</button>
                     </div>
                 ) : (
-                    <button onClick={()=>setShowAddEquip(true)} style={{ marginTop:10, padding:'6px 14px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>+ Add item</button>
+                    <button onClick={()=>setShowAddEquip(true)} style={{ marginTop:10, padding:'6px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:600, color:T.ink, cursor:'pointer', fontFamily:T.sans }}>+ Add item</button>
                 )}
             </CSectionCard>
 
@@ -17155,7 +17158,13 @@ const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
             subtitle="Named groups of techs who work together in the field. Distinct from CRM Sales teams (which structure reps for reporting)."
             onBack={onBack} dirty={dirty}
             onCancel={() => { setCrews(JSON.parse(JSON.stringify(saved))); setDirty(false); }}
-            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}>
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+            extraActions={
+                <>
+                    <button style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Import preset</button>
+                    <button onClick={()=>setShowAdd(true)} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New crew</button>
+                </>
+            }>
 
             {/* Disambiguation banner */}
             <div style={{ background: `${T.info}0e`, border: `1px solid ${T.info}30`, borderRadius: T.r, padding: '10px 14px', marginBottom: 16, fontSize: 12.5, color: T.inkMid, fontFamily: T.sans }}>
@@ -17446,7 +17455,13 @@ const DispatchTechDetail = ({ settings, setSettings, onBack, setSettingsDirty, s
             subtitle="Dispatcher view of every user with dispatch enabled. Edit skills, certs, license, vehicle, and hours cap in one place."
             onBack={onBack} dirty={false} onCancel={onBack}
             disablePrimary={true} primaryLabel="Auto-saved"
-            primaryAction={() => {}}>
+            primaryAction={() => {}}
+            extraActions={
+                <>
+                    <button style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Export CSV</button>
+                    <button style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ Enable dispatch for user</button>
+                </>
+            }>
 
             {/* Source-of-truth banner */}
             <div style={{ background: `${T.goldInk}0e`, border: `1px solid ${T.goldInk}30`, borderRadius: T.r, padding: '10px 14px', marginBottom: 16, fontSize: 12.5, color: T.inkMid, fontFamily: T.sans, display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -17623,7 +17638,13 @@ const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setSettings
             subtitle="When an opportunity moves to Closed Won, Accelerep can auto-create a Job using the template tied to the customer's type. Defaults pre-fill — dispatchers can still edit before scheduling."
             onBack={onBack} dirty={dirty}
             onCancel={() => { setTemplates(JSON.parse(JSON.stringify(saved))); setDirty(false); }}
-            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}>
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}
+            extraActions={
+                <>
+                    <button style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, fontWeight:500, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Test auto-create</button>
+                    <button onClick={()=>{ const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',equip:'',autojob:true,priority:'standard',used:0}]); setSelectedId(id); setDirty(true); }} style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>+ New template</button>
+                </>
+            }>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20 }}>
                 {/* Left — templates + form */}
@@ -17654,12 +17675,8 @@ const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setSettings
                                 </div>
                             ))}
                         </div>
-                        <button onClick={() => { const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',equip:'',autojob:true,priority:'standard',used:0}]); setSelectedId(id); setDirty(true); }}
-                            style={{ marginTop:10, padding:'6px 14px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
-                            + New template
-                        </button>
-                    </CSectionCard>
 
+                    </CSectionCard>
                     {/* Selected template form */}
                     {selected && (
                         <CSectionCard title={selected.ctype || 'New template'} desc="Edit the template fields below.">
