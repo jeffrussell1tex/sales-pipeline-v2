@@ -23,6 +23,7 @@ const CATEGORY_TINT = {
     'Sales process':     { bg: '#ece7f2', fg: '#5e4e7a' },
     'Quoting':           { bg: '#f0ece1', fg: '#8a6a3a' },
     'People & Teams':    { bg: '#e6eef0', fg: '#3a5a6a' },
+    'Dispatch':          { bg: '#e8ede4', fg: '#4d6b3d' },
     'Integrations':      { bg: '#eaf0e6', fg: '#4d6b3d' },
     'Security':          { bg: '#f4ebe4', fg: '#9c5a3a' },
     'Data':              { bg: '#ede7db', fg: '#7a6a48' },
@@ -143,8 +144,12 @@ const SETTINGS_ITEMS = [
     { id:'reasons-won',      scope:'workspace', category:'Sales process', name:'Reasons won',     desc:'Win reason options shown when a deal is marked Closed Won',    status:'ok',      statusDetail:'0 reasons',                   updatedBy:'Admin', updatedAt:'never' },
     { id:'reasons-lost',     scope:'workspace', category:'Sales process', name:'Reasons lost',    desc:'Loss reason options shown when a deal is marked Closed Lost',  status:'ok',      statusDetail:'0 reasons',                   updatedBy:'Admin', updatedAt:'never' },
     { id:'industries',       scope:'workspace', category:'Sales process', name:'Industries',      desc:'Primary and sub-industry taxonomy',                           status:'ok',      statusDetail:'14 industries · 47 sub-types', updatedBy:'Admin', updatedAt:'4 months ago' },
-    { id:'dispatch-skills',  scope:'workspace', category:'Dispatch',       name:'Skills & certifications', desc:'Skills, certifications, and license levels your crews are dispatched around', status:'ok', statusDetail:'Admin-defined', updatedBy:'Admin', updatedAt:'never' },
-    { id:'dispatch-vehicles', scope:'workspace', category:'Dispatch',      name:'Vehicles & equipment',    desc:'Fleet vehicles and equipment available to techs',              status:'ok', statusDetail:'Admin-defined', updatedBy:'Admin', updatedAt:'never' },
+    // Dispatch — field-service config (shown only when dispatchEnabled)
+    { id:'dsp-skills',    scope:'workspace', category:'Dispatch', name:'Skills & certifications', desc:'Skills your techs hold, certs that gate work, and ordered license levels.', status:'ok', statusDetail:'Admin-defined', updatedBy:'Admin', updatedAt:'never', moved:true },
+    { id:'dsp-vehicles',  scope:'workspace', category:'Dispatch', name:'Vehicles & equipment',    desc:'Fleet vehicles, tools, and shared assets that techs draw from when assigned.', status:'ok', statusDetail:'Admin-defined', updatedBy:'Admin', updatedAt:'never', moved:true },
+    { id:'dsp-crews',     scope:'workspace', category:'Dispatch', name:'Crews',           desc:'Named groups of techs who work together — coverage area, default vehicle, crew lead.', status:'ok', statusDetail:'Admin-defined', updatedBy:'Admin', updatedAt:'never', isNew:true },
+    { id:'dsp-techs',     scope:'workspace', category:'Dispatch', name:'Tech profiles',   desc:'Dispatcher view of every user with dispatch enabled: skills, certs, license, vehicle, hours cap.', status:'ok', statusDetail:'Admin-defined', updatedBy:'Admin', updatedAt:'never', isNew:true },
+    { id:'dsp-templates', scope:'workspace', category:'Dispatch', name:'Job templates',   desc:'Per Customer Type defaults — crew size, duration, required skills, license, and auto-create rule.', status:'ok', statusDetail:'Admin-defined', updatedBy:'Admin', updatedAt:'never', isNew:true },
     // Quoting
     { id:'price-book',       scope:'workspace', category:'Quoting', name:'Price book',            desc:'Product catalog for quotes — edit in Quotes tab',             status:'linked',  statusDetail:'15 products · 3 bundles',     updatedBy:'Admin', updatedAt:'1 week ago',   link:true },
     { id:'approval-tiers',   scope:'workspace', category:'Quoting', name:'Approval tiers',        desc:'Discount thresholds that trigger manager or VP approval',     status:'ok',      statusDetail:'3 tiers',                     updatedBy:'Admin', updatedAt:'2 months ago' },
@@ -172,7 +177,8 @@ const SETTINGS_ITEMS = [
     { id:'features',         scope:'workspace', category:'Data', name:'Features & AI',              desc:'Enable app features and AI (deal scoring, writing assist)',   status:'ok',      statusDetail:'14 of 18 on · AI enabled',    updatedBy:'Admin', updatedAt:'1 month ago' },
 ];
 
-const WORKSPACE_TABS = ['All', 'Company', 'Sales process', 'Quoting', 'People & Teams', 'Integrations', 'Security', 'Data'];
+const WORKSPACE_TABS_BASE = ['All', 'Company', 'Sales process', 'Quoting', 'People & Teams', 'Integrations', 'Security', 'Data'];
+// Dispatch tab injected at runtime when dispatchEnabled
 
 // ─────────────────────────────────────────────────────────────
 // Personal prefs detail panels
@@ -16895,6 +16901,620 @@ const DispatchVehiclesDetail = ({ settings, setSettings, onBack, setSettingsDirt
     );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Dispatch — Crews Detail
+// ─────────────────────────────────────────────────────────────────────────────
+const DispatchCrewsDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+    const saved = settings?.dispatchCrews || [];
+    const skills = settings?.dispatchSkills || [];
+    const vehicles = settings?.dispatchVehicles || [];
+    const users = (settings?.users || []).filter(u => u.dispatchEnabled);
+
+    const [crews, setCrews] = useState(() => JSON.parse(JSON.stringify(saved)));
+    const [dirty, setDirty] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [selectedId, setSelectedId] = useState(saved[0]?.id || null);
+    const [showAdd, setShowAdd] = useState(false);
+    const [newCrew, setNewCrew] = useState({ name: '', area: '', color: '#3a5a7a', defaultVehicle: '' });
+
+    const selectedCrew = crews.find(c => c.id === selectedId);
+
+    const handleSave = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, dispatchCrews: crews }));
+        try { await dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ dispatchCrews: crews }) }); }
+        catch(e) { console.error('save crews', e); }
+        setSaving(false); setDirty(false);
+    };
+
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
+
+    const CREW_COLORS = ['#3a5a7a','#4d6b3d','#b87333','#9c3a2e','#7a6a48','#8a8378','#2a2622'];
+
+    const addCrew = () => {
+        if (!newCrew.name.trim()) return;
+        const id = 'crew_' + Date.now();
+        setCrews(prev => [...prev, { id, ...newCrew, members: [], lead: null, activeJobs: 0, hoursWeek: 0 }]);
+        setSelectedId(id);
+        setNewCrew({ name: '', area: '', color: '#3a5a7a', defaultVehicle: '' });
+        setShowAdd(false); setDirty(true);
+    };
+
+    const updateCrew = (field, val) => {
+        setCrews(prev => prev.map(c => c.id === selectedId ? { ...c, [field]: val } : c));
+        setDirty(true);
+    };
+
+    const toggleMember = (userId) => {
+        setCrews(prev => prev.map(c => {
+            if (c.id !== selectedId) return c;
+            const members = c.members || [];
+            const next = members.includes(userId) ? members.filter(m => m !== userId) : [...members, userId];
+            return { ...c, members: next };
+        }));
+        setDirty(true);
+    };
+
+    return (
+        <SPDetailPageChrome crumb="Dispatch · Crews" title="Crews"
+            subtitle="Named groups of techs who work together in the field. Distinct from CRM Sales teams (which structure reps for reporting)."
+            onBack={onBack} dirty={dirty}
+            onCancel={() => { setCrews(JSON.parse(JSON.stringify(saved))); setDirty(false); }}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}>
+
+            {/* Disambiguation banner */}
+            <div style={{ background: `${T.info}0e`, border: `1px solid ${T.info}30`, borderRadius: T.r, padding: '10px 14px', marginBottom: 16, fontSize: 12.5, color: T.inkMid, fontFamily: T.sans }}>
+                <strong style={{ color: T.ink }}>Crews ≠ Sales teams.</strong> A crew is an operational group of techs who share vehicles and coverage. Sales teams group reps for reporting and live under People & Teams. A user can belong to both.
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16 }}>
+                {/* Left — crew list */}
+                <div>
+                    <div style={{ fontFamily: T.sans }}>
+                        {crews.map(crew => (
+                            <div key={crew.id} onClick={() => setSelectedId(crew.id)}
+                                style={{ padding: '12px 14px', marginBottom: 6, borderRadius: T.r, cursor: 'pointer',
+                                    background: T.surface, border: `1.5px solid ${selectedId === crew.id ? T.goldInk : T.border}`,
+                                    borderLeft: `4px solid ${crew.color || T.inkMuted}`,
+                                    boxShadow: selectedId === crew.id ? '0 2px 8px rgba(42,38,34,0.08)' : 'none' }}>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, marginBottom: 3 }}>{crew.name}</div>
+                                <div style={{ fontSize: 11, color: T.inkMuted, marginBottom: 6 }}>{crew.area || 'No area set'}</div>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                    {(crew.members || []).slice(0, 4).map(uid => {
+                                        const u = users.find(u => u.id === uid || u.name === uid);
+                                        return u ? (
+                                            <div key={uid} style={{ width: 22, height: 22, borderRadius: '50%', background: T.ink, color: '#fbf8f3', fontSize: 8, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                {(u.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2)}
+                                            </div>
+                                        ) : null;
+                                    })}
+                                    {(crew.members || []).length > 4 && <span style={{ fontSize: 10, color: T.inkMuted }}>+{crew.members.length - 4}</span>}
+                                </div>
+                                <div style={{ fontSize: 10.5, color: T.inkMuted, marginTop: 6 }}>
+                                    {crew.activeJobs || 0} jobs · {crew.hoursWeek || 0}h
+                                </div>
+                            </div>
+                        ))}
+                        {showAdd ? (
+                            <div style={{ padding: '10px 12px', background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r }}>
+                                <input value={newCrew.name} onChange={e => setNewCrew(p => ({...p, name: e.target.value}))} placeholder="Crew name" autoFocus
+                                    style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 13, fontFamily: T.sans, outline: 'none', marginBottom: 6, boxSizing: 'border-box' }}/>
+                                <input value={newCrew.area} onChange={e => setNewCrew(p => ({...p, area: e.target.value}))} placeholder="Coverage area"
+                                    style={{ width: '100%', padding: '6px 8px', border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 12, fontFamily: T.sans, outline: 'none', marginBottom: 8, boxSizing: 'border-box' }}/>
+                                <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                                    {CREW_COLORS.map(c => <div key={c} onClick={() => setNewCrew(p=>({...p,color:c}))}
+                                        style={{ width: 18, height: 18, borderRadius: 3, background: c, cursor: 'pointer', outline: newCrew.color===c?`2px solid ${T.ink}`:'none', outlineOffset: 1 }}/>)}
+                                </div>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                    <button onClick={addCrew} style={{ flex: 1, padding: '5px 0', background: T.ink, color: '#fbf8f3', border: 'none', borderRadius: T.r, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>Add</button>
+                                    <button onClick={() => setShowAdd(false)} style={{ flex: 1, padding: '5px 0', background: 'transparent', color: T.inkMid, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, cursor: 'pointer', fontFamily: T.sans }}>Cancel</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <button onClick={() => setShowAdd(true)}
+                                style={{ width: '100%', padding: '8px 0', background: 'transparent', border: `1px dashed ${T.borderStrong}`, borderRadius: T.r, fontSize: 12.5, color: T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
+                                + New crew
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Right — crew detail */}
+                {selectedCrew ? (
+                    <div>
+                        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+2, padding: '16px 18px', marginBottom: 14 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                                <div style={{ fontSize: 16, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>{selectedCrew.name}</div>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                    <button onClick={() => { const clone = {...selectedCrew, id:'crew_'+Date.now(), name:selectedCrew.name+' (copy)', members:[]}; setCrews(p=>[...p,clone]); setSelectedId(clone.id); setDirty(true); }}
+                                        style={{ padding: '5px 12px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, cursor: 'pointer', fontFamily: T.sans, color: T.ink }}>Duplicate</button>
+                                    <button onClick={() => { setCrews(p=>p.filter(c=>c.id!==selectedId)); setSelectedId(crews.find(c=>c.id!==selectedId)?.id||null); setDirty(true); }}
+                                        style={{ padding: '5px 12px', background: T.surface2, border: `1px solid ${T.border}`, borderRadius: T.r, fontSize: 12, cursor: 'pointer', fontFamily: T.sans, color: T.danger }}>Archive</button>
+                                </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                <div>
+                                    <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5, fontFamily: T.sans }}>Crew name</div>
+                                    <input value={selectedCrew.name} onChange={e => updateCrew('name', e.target.value)}
+                                        style={{ width: '100%', padding: '7px 10px', border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 13, fontFamily: T.sans, outline: 'none', boxSizing: 'border-box', background: T.surface }}/>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5, fontFamily: T.sans }}>Color</div>
+                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                        {CREW_COLORS.map(c => <div key={c} onClick={() => updateCrew('color', c)}
+                                            style={{ width: 22, height: 22, borderRadius: 3, background: c, cursor: 'pointer', outline: selectedCrew.color===c?`2px solid ${T.ink}`:'none', outlineOffset: 1 }}/>)}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5, fontFamily: T.sans }}>Default coverage area</div>
+                                    <input value={selectedCrew.area || ''} onChange={e => updateCrew('area', e.target.value)}
+                                        placeholder="e.g. Berkeley · Oakland · Alameda"
+                                        style={{ width: '100%', padding: '7px 10px', border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 13, fontFamily: T.sans, outline: 'none', boxSizing: 'border-box', background: T.surface }}/>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 5, fontFamily: T.sans }}>Default vehicle</div>
+                                    <select value={selectedCrew.defaultVehicle || ''} onChange={e => updateCrew('defaultVehicle', e.target.value)}
+                                        style={{ width: '100%', padding: '7px 10px', border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 13, fontFamily: T.sans, outline: 'none', background: T.surface, boxSizing: 'border-box' }}>
+                                        <option value="">— None —</option>
+                                        {vehicles.map(v => <option key={v.id} value={v.id}>{v.name} ({v.type})</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Members */}
+                        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+2, padding: '16px 18px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                <div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: T.ink, fontFamily: T.sans }}>Members</div>
+                                    <div style={{ fontSize: 11.5, color: T.inkMuted, fontFamily: T.sans }}>Techs assigned to this crew. Crew lead is starred.</div>
+                                </div>
+                            </div>
+                            {users.length === 0 ? (
+                                <div style={{ fontSize: 12, color: T.inkMuted, fontStyle: 'italic', fontFamily: T.sans }}>No dispatch-enabled users. Enable dispatch in People & Teams.</div>
+                            ) : (
+                                <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px 1fr 80px 28px', gap: 10, padding: '8px 12px', background: T.surface2, fontSize: 10.5, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: T.sans }}>
+                                        <div>Tech</div><div>Role</div><div>License</div><div>Top skills</div><div>Hours</div><div/>
+                                    </div>
+                                    {users.map((u, i) => {
+                                        const isMember = (selectedCrew.members || []).includes(u.id || u.name);
+                                        const isLead = selectedCrew.lead === (u.id || u.name);
+                                        const userSkills = (u.dispatchSkills || []).slice(0, 2).map(id => skills.find(s => s.id === id)).filter(Boolean);
+                                        return (
+                                            <div key={u.id || u.name} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px 1fr 80px 28px', gap: 10, padding: '10px 12px', alignItems: 'center', fontSize: 12.5, fontFamily: T.sans, borderTop: i > 0 ? `1px solid ${T.border}` : 'none', background: isMember ? `${T.ok}08` : T.surface }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: T.ink, color: '#fbf8f3', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        {(u.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2)}
+                                                    </div>
+                                                    <span style={{ fontWeight: isMember ? 700 : 400, color: T.ink }}>
+                                                        {u.name} {isLead && <span style={{ color: T.goldInk }}>★</span>}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    {isMember && (
+                                                        <button onClick={() => { updateCrew('lead', isLead ? null : (u.id||u.name)); }}
+                                                            style={{ fontSize: 10.5, padding: '2px 7px', borderRadius: 3, border: `1px solid ${isLead ? T.goldInk : T.border}`, background: isLead ? `${T.goldInk}14` : 'transparent', color: isLead ? T.goldInk : T.inkMid, cursor: 'pointer', fontFamily: T.sans }}>
+                                                            {isLead ? 'Crew lead' : 'Make lead'}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div style={{ fontSize: 11.5 }}>
+                                                    <span style={{ padding: '2px 7px', borderRadius: 3, background: `${T.info}14`, color: T.info, fontWeight: 600 }}>{u.dispatchLicense || 'Apprentice'}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                                                    {userSkills.map(s => (
+                                                        <span key={s.id} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${s.color}14`, color: s.color, fontWeight: 600, border: `1px solid ${s.color}30` }}>{s.name}</span>
+                                                    ))}
+                                                </div>
+                                                <div style={{ fontSize: 11, fontFamily: 'ui-monospace,Menlo,monospace', color: (u.hoursThisWeek||0) > (u.hoursCap||40) ? T.danger : T.inkMid }}>
+                                                    {u.hoursThisWeek||0}/{u.hoursCap||40}h
+                                                </div>
+                                                <div>
+                                                    <input type="checkbox" checked={isMember} onChange={() => toggleMember(u.id || u.name)}
+                                                        style={{ width: 14, height: 14, cursor: 'pointer', accentColor: T.ok }}/>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+2, color: T.inkMuted, fontSize: 13, fontStyle: 'italic', fontFamily: T.sans }}>
+                        Select a crew to edit its members and settings.
+                    </div>
+                )}
+            </div>
+        </SPDetailPageChrome>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Dispatch — Tech Profiles Detail
+// ─────────────────────────────────────────────────────────────────────────────
+const DispatchTechDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+    const users = (settings?.users || []).filter(u => u.dispatchEnabled);
+    const skills = settings?.dispatchSkills || [];
+    const certs  = settings?.dispatchCerts  || [];
+    const licenses = settings?.dispatchLicenses || ['Apprentice','Journeyman','Master','Lead'];
+    const vehicles = settings?.dispatchVehicles || [];
+    const crews  = settings?.dispatchCrews  || [];
+
+    const [filter, setFilter] = useState('All techs');
+    const [dirty, setDirty] = useState(false);
+
+    const handleSave = async () => {};
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
+
+    const activeTechs = users.filter(u => u.dispatchEnabled);
+    const overHours   = users.filter(u => (u.hoursThisWeek||0) > (u.hoursCap||40));
+    const certsExp30  = users.filter(u => (u.dispatchCerts||[]).some(c => c.expiresIn <= 30));
+
+    const getStatus = (u) => {
+        if ((u.hoursThisWeek||0) > (u.hoursCap||40)) return { label: 'Over hours', color: T.danger };
+        if (u.status === 'training') return { label: 'Training', color: T.info };
+        if (u.status === 'pto')     return { label: 'PTO', color: T.inkMuted };
+        return { label: 'Active', color: T.ok };
+    };
+
+    const saveUserDispatch = async (userId, updates) => {
+        const updatedUsers = (settings?.users || []).map(u =>
+            (u.id === userId || u.name === userId) ? { ...u, ...updates } : u
+        );
+        setSettings(prev => ({ ...prev, users: updatedUsers }));
+        try { await dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ users: updatedUsers }) }); }
+        catch(e) { console.error('save tech profile', e); }
+    };
+
+    return (
+        <SPDetailPageChrome crumb="Dispatch · Tech profiles" title="Tech profiles"
+            subtitle="Dispatcher view of every user with dispatch enabled. Edit skills, certs, license, vehicle, and hours cap in one place."
+            onBack={onBack} dirty={false} onCancel={onBack}
+            disablePrimary={true} primaryLabel="Auto-saved"
+            primaryAction={() => {}}>
+
+            {/* Source-of-truth banner */}
+            <div style={{ background: `${T.goldInk}0e`, border: `1px solid ${T.goldInk}30`, borderRadius: T.r, padding: '10px 14px', marginBottom: 16, fontSize: 12.5, color: T.inkMid, fontFamily: T.sans, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: 14 }}>↺</span>
+                User identity (name, email, role) lives in <strong style={{ color: T.ink }}>People & Teams → Users</strong>. This page edits only the dispatch fields — changes here sync both ways.
+            </div>
+
+            {/* Quick-stat strip */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 16 }}>
+                {[
+                    { label: 'Active', value: activeTechs.length, color: T.ok },
+                    { label: 'Over hours this week', value: overHours.length, color: overHours.length > 0 ? T.danger : T.inkMuted },
+                    { label: 'In training', value: users.filter(u=>u.status==='training').length, color: T.info },
+                    { label: 'Certs expiring 30d', value: certsExp30.length, color: certsExp30.length > 0 ? T.warn : T.inkMuted },
+                    { label: 'Avg utilization', value: users.length > 0 ? Math.round(users.reduce((a,u)=>(a+(u.hoursThisWeek||0)/(u.hoursCap||40)),0)/users.length*100)+'%' : '—', color: T.ink },
+                ].map((s,i) => (
+                    <div key={i} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+2, padding: '12px 14px' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, fontFamily: T.sans }}>{s.label}</div>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: s.color, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>{s.value}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Filter chips */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                {['All techs', 'By crew', 'By skill', 'By license', 'Status any'].map(f => (
+                    <span key={f} onClick={() => setFilter(f)}
+                        style={{ padding: '4px 10px', borderRadius: 3, background: filter===f ? T.ink : T.surface2, color: filter===f ? '#fbf8f3' : T.inkMid, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: T.sans }}>
+                        {f}
+                    </span>
+                ))}
+            </div>
+
+            {users.length === 0 ? (
+                <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+2, padding: '3rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontStyle: 'italic', fontFamily: T.sans }}>
+                    No dispatch-enabled users. Enable dispatch for a user in People & Teams → their profile.
+                </div>
+            ) : (
+                <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+2, overflow: 'hidden' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 100px 100px 1.5fr 1fr 90px 100px 100px 28px', gap: 10, padding: '8px 14px', background: T.surface2, fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: T.sans }}>
+                        <div>Tech</div><div>Status</div><div>License</div><div>Skills</div><div>Certs</div><div>Hours</div><div>Vehicle</div><div>Crew</div><div/>
+                    </div>
+                    {users.map((u, i) => {
+                        const st = getStatus(u);
+                        const userSkills = (u.dispatchSkills||[]).map(id => skills.find(s=>s.id===id)).filter(Boolean);
+                        const userCerts  = (u.dispatchCerts||[]);
+                        const hoursUsed  = u.hoursThisWeek||0;
+                        const hoursCap   = u.hoursCap||40;
+                        const over       = hoursUsed > hoursCap;
+                        const userCrew   = crews.find(c => (c.members||[]).includes(u.id||u.name));
+                        return (
+                            <div key={u.id||u.name} style={{ display: 'grid', gridTemplateColumns: '1.5fr 100px 100px 1.5fr 1fr 90px 100px 100px 28px', gap: 10, padding: '11px 14px', alignItems: 'center', fontSize: 12.5, fontFamily: T.sans, borderTop: i>0 ? `1px solid ${T.border}` : 'none' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: T.ink, color: '#fbf8f3', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        {(u.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2)}
+                                    </div>
+                                    <div>
+                                        <div style={{ fontWeight: 700, color: T.ink }}>{u.name}</div>
+                                    </div>
+                                </div>
+                                <div><span style={{ fontSize: 10.5, padding: '2px 7px', borderRadius: 3, background: `${st.color}18`, color: st.color, fontWeight: 700 }}>{st.label}</span></div>
+                                <div>
+                                    <select value={u.dispatchLicense || licenses[0] || 'Apprentice'}
+                                        onChange={e => saveUserDispatch(u.id||u.name, { dispatchLicense: e.target.value })}
+                                        style={{ padding: '3px 7px', border: `1px solid ${T.borderStrong}`, borderRadius: T.r, fontSize: 11.5, fontFamily: T.sans, outline: 'none', background: T.surface }}>
+                                        {licenses.map(l => <option key={l}>{l}</option>)}
+                                    </select>
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                                    {userSkills.slice(0,3).map(s => (
+                                        <span key={s.id} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 8, background: `${s.color}14`, color: s.color, fontWeight: 600, border: `1px solid ${s.color}30` }}>{s.name}</span>
+                                    ))}
+                                    {userSkills.length > 3 && <span style={{ fontSize: 10, color: T.inkMuted }}>+{userSkills.length-3}</span>}
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                                    {userCerts.map(c => {
+                                        const cert = certs.find(ct => ct.id === c.id || ct.name === c.id);
+                                        const expiring = (c.expiresIn||0) <= 30;
+                                        return cert ? (
+                                            <span key={c.id} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 3, background: expiring?`${T.warn}18`:T.surface2, color: expiring?T.warn:T.inkMid, fontWeight: 600, border: `1px solid ${expiring?T.warn:T.border}` }}>
+                                                {expiring ? '⚠ ' : ''}{cert.name}
+                                            </span>
+                                        ) : null;
+                                    })}
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: 10.5, fontFamily: 'ui-monospace,Menlo,monospace', color: over?T.danger:T.inkMid, marginBottom: 2 }}>{hoursUsed}/{hoursCap}h</div>
+                                    <div style={{ height: 3, background: T.surface2, borderRadius: 2, overflow: 'hidden' }}>
+                                        <div style={{ height: '100%', width: `${Math.min(hoursUsed/hoursCap,1)*100}%`, background: over?T.danger:(hoursUsed>=hoursCap*0.9?T.warn:T.ok) }}/>
+                                    </div>
+                                </div>
+                                <div style={{ fontSize: 11.5, color: T.inkMid }}>{u.vehicle || '—'}</div>
+                                <div style={{ fontSize: 11.5, color: T.inkMid }}>{userCrew?.name || '—'}</div>
+                                <div style={{ color: T.inkMuted, cursor: 'pointer', fontSize: 16 }}>⋯</div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </SPDetailPageChrome>
+    );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Dispatch — Job Templates Detail
+// ─────────────────────────────────────────────────────────────────────────────
+const DispatchJobTemplatesDetail = ({ settings, setSettings, onBack, setSettingsDirty, settingsSaveRef }) => {
+    const saved = settings?.dispatchJobTemplates || [];
+    const skills   = settings?.dispatchSkills   || [];
+    const licenses = settings?.dispatchLicenses || ['Apprentice','Journeyman','Master','Lead'];
+    const custTypes = settings?.customerTypes   || [];
+
+    const [templates, setTemplates] = useState(() => JSON.parse(JSON.stringify(saved)));
+    const [dirty,    setDirty]    = useState(false);
+    const [saving,   setSaving]   = useState(false);
+    const [selectedId, setSelectedId] = useState(saved[0]?.id || null);
+    const [showAdd,  setShowAdd]  = useState(false);
+
+    const selected = templates.find(t => t.id === selectedId);
+
+    const handleSave = async () => {
+        setSaving(true);
+        setSettings(prev => ({ ...prev, dispatchJobTemplates: templates }));
+        try { await dbFetch('/.netlify/functions/settings', { method: 'PUT', body: JSON.stringify({ dispatchJobTemplates: templates }) }); }
+        catch(e) { console.error('save job templates', e); }
+        setSaving(false); setDirty(false);
+    };
+
+    React.useEffect(() => { if (setSettingsDirty) setSettingsDirty(dirty); return () => { if (setSettingsDirty) setSettingsDirty(false); }; }, [dirty]);
+    React.useEffect(() => {
+        if (!settingsSaveRef) return;
+        settingsSaveRef.current = dirty ? handleSave : null;
+        return () => { if (settingsSaveRef) settingsSaveRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dirty]);
+
+    const updateTemplate = (field, val) => {
+        setTemplates(prev => prev.map(t => t.id === selectedId ? { ...t, [field]: val } : t));
+        setDirty(true);
+    };
+
+    const toggleSkill = (skillId) => {
+        if (!selected) return;
+        const next = (selected.skills||[]).includes(skillId)
+            ? (selected.skills||[]).filter(s => s !== skillId)
+            : [...(selected.skills||[]), skillId];
+        updateTemplate('skills', next);
+    };
+
+    const prioColor = (p) => ({ urgent: T.danger, standard: T.warn, low: T.inkMuted }[p] || T.inkMuted);
+
+    // Sanity checks for selected template
+    const sanityChecks = selected ? [
+        {
+            ok: (selected.skills||[]).every(id => skills.find(s=>s.id===id)),
+            label: 'All required skills exist',
+            detail: `${(selected.skills||[]).filter(id=>skills.find(s=>s.id===id)).length} of ${(selected.skills||[]).length} skills referenced`,
+        },
+        {
+            ok: licenses.includes(selected.minLicense),
+            label: 'Min license exists',
+            detail: `"${selected.minLicense}" is rank ${licenses.indexOf(selected.minLicense)+1} of ${licenses.length}`,
+        },
+        {
+            ok: true,
+            label: 'Customer type linked',
+            detail: selected.ctype || 'No customer type',
+        },
+    ] : [];
+
+    return (
+        <SPDetailPageChrome crumb="Dispatch · Job templates" title="Job templates"
+            subtitle="When an opportunity moves to Closed Won, Accelerep can auto-create a Job using the template tied to the customer's type. Defaults pre-fill — dispatchers can still edit before scheduling."
+            onBack={onBack} dirty={dirty}
+            onCancel={() => { setTemplates(JSON.parse(JSON.stringify(saved))); setDirty(false); }}
+            primaryAction={handleSave} primaryLabel={saving ? 'Saving…' : 'Save changes'}>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20 }}>
+                {/* Left — templates + form */}
+                <div>
+                    {/* Templates table */}
+                    <CSectionCard title="Templates" desc="One per Customer Type. Reach the Customer Types list at Settings → Sales process → Customer types.">
+                        <div style={{ border: `1px solid ${T.border}`, borderRadius: T.r, overflow: 'hidden' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 60px 60px 1.2fr 100px 80px 80px 80px 28px', gap: 8, padding: '8px 12px', background: T.surface2, fontSize: 10, fontWeight: 700, color: T.inkMuted, textTransform: 'uppercase', letterSpacing: 0.5, fontFamily: T.sans }}>
+                                <div>Customer type</div><div>Crew</div><div>Hours</div><div>Required skills</div><div>Min license</div><div>Priority</div><div>Auto-create</div><div>Used 30d</div><div/>
+                            </div>
+                            {templates.map((t, i) => (
+                                <div key={t.id} onClick={() => setSelectedId(t.id)}
+                                    style={{ display: 'grid', gridTemplateColumns: '1.5fr 60px 60px 1.2fr 100px 80px 80px 80px 28px', gap: 8, padding: '10px 12px', alignItems: 'center', fontSize: 12, fontFamily: T.sans, cursor: 'pointer',
+                                        borderTop: i>0?`1px solid ${T.border}`:'none',
+                                        background: selectedId===t.id ? `${T.goldInk}08` : T.surface,
+                                        borderLeft: selectedId===t.id ? `3px solid ${T.goldInk}` : '3px solid transparent' }}>
+                                    <div style={{ fontWeight: selectedId===t.id ? 700 : 400, color: T.ink }}>{t.ctype || '—'}</div>
+                                    <div style={{ color: T.inkMid }}>{t.crew}p</div>
+                                    <div style={{ color: T.inkMid }}>{t.hrs}h</div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                                        {(t.skills||[]).map(id => { const s=skills.find(sk=>sk.id===id); return s?<span key={id} style={{ fontSize:9.5, padding:'1px 5px', borderRadius:8, background:`${s.color}14`, color:s.color, fontWeight:600 }}>{s.name}</span>:null; })}
+                                    </div>
+                                    <div><span style={{ fontSize:11, padding:'2px 7px', borderRadius:3, background:`${T.info}14`, color:T.info, fontWeight:600 }}>{t.minLicense}</span></div>
+                                    <div><span style={{ fontSize:11, padding:'2px 7px', borderRadius:3, background:`${prioColor(t.priority)}14`, color:prioColor(t.priority), fontWeight:600 }}>{t.priority}</span></div>
+                                    <div><span style={{ fontSize:11, padding:'2px 7px', borderRadius:3, background:t.autojob?`${T.ok}14`:`${T.inkMuted}14`, color:t.autojob?T.ok:T.inkMuted, fontWeight:600 }}>{t.autojob?'On':'Off'}</span></div>
+                                    <div style={{ color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', fontSize:11 }}>{t.used||0}</div>
+                                    <div style={{ color:T.inkMuted, cursor:'pointer', fontSize:14 }}>⋯</div>
+                                </div>
+                            ))}
+                        </div>
+                        <button onClick={() => { const id='tmpl_'+Date.now(); setTemplates(p=>[...p,{id,ctype:'',crew:1,hrs:2,skills:[],minLicense:licenses[0]||'Apprentice',equip:'',autojob:true,priority:'standard',used:0}]); setSelectedId(id); setDirty(true); }}
+                            style={{ marginTop:10, padding:'6px 14px', background:'transparent', border:`1px dashed ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>
+                            + New template
+                        </button>
+                    </CSectionCard>
+
+                    {/* Selected template form */}
+                    {selected && (
+                        <CSectionCard title={selected.ctype || 'New template'} desc="Edit the template fields below.">
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                                <div>
+                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Template name</div>
+                                    <input value={selected.ctype||''} onChange={e=>updateTemplate('ctype',e.target.value)} placeholder="e.g. Emergency · same-day"
+                                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}/>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Tied to customer type</div>
+                                    <select value={selected.ctype||''} onChange={e=>updateTemplate('ctype',e.target.value)}
+                                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' }}>
+                                        <option value="">— Select customer type —</option>
+                                        {custTypes.map((ct,i)=><option key={i} value={typeof ct==='string'?ct:ct.name}>{typeof ct==='string'?ct:ct.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Default crew size</div>
+                                    <input type="number" min={1} max={10} value={selected.crew||1} onChange={e=>updateTemplate('crew',parseInt(e.target.value)||1)}
+                                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}/>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Default duration</div>
+                                    <input value={selected.hrs ? selected.hrs + ' hours' : ''} onChange={e=>updateTemplate('hrs',parseFloat(e.target.value)||2)}
+                                        placeholder="e.g. 4 hours"
+                                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}/>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Minimum license</div>
+                                    <select value={selected.minLicense||licenses[0]} onChange={e=>updateTemplate('minLicense',e.target.value)}
+                                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' }}>
+                                        {licenses.map(l=><option key={l}>{l}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Default priority</div>
+                                    <select value={selected.priority||'standard'} onChange={e=>updateTemplate('priority',e.target.value)}
+                                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', background:T.surface, boxSizing:'border-box' }}>
+                                        <option>urgent</option><option>standard</option><option>low</option>
+                                    </select>
+                                </div>
+                                <div style={{ gridColumn:'1 / -1' }}>
+                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:8, fontFamily:T.sans }}>Required skills</div>
+                                    <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                                        {skills.map(s => {
+                                            const active = (selected.skills||[]).includes(s.id);
+                                            return (
+                                                <span key={s.id} onClick={()=>toggleSkill(s.id)} style={{ fontSize:11, padding:'3px 9px', borderRadius:8, cursor:'pointer',
+                                                    background:active?`${s.color}20`:T.surface2, border:`1px solid ${active?s.color:T.border}`,
+                                                    color:active?s.color:T.inkMuted, fontWeight:active?700:400, fontFamily:T.sans, transition:'all 100ms' }}>{s.name}</span>
+                                            );
+                                        })}
+                                    </div>
+                                    {skills.length===0 && <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>No skills configured. Add in Settings → Dispatch → Skills.</div>}
+                                </div>
+                                <div style={{ gridColumn:'1 / -1' }}>
+                                    <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:5, fontFamily:T.sans }}>Default equipment</div>
+                                    <input value={selected.equip||''} onChange={e=>updateTemplate('equip',e.target.value)} placeholder="e.g. Recovery cart, spares"
+                                        style={{ width:'100%', padding:'7px 10px', border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:13, fontFamily:T.sans, outline:'none', boxSizing:'border-box', background:T.surface }}/>
+                                    <div style={{ fontSize:11, color:T.inkMuted, marginTop:4, fontFamily:T.sans }}>Comma-separated. Each item must exist in Vehicles & equipment.</div>
+                                </div>
+                            </div>
+
+                            {/* Auto-create rule card */}
+                            <div style={{ marginTop:16, background:`${T.warn}0a`, border:`1px solid ${T.warn}30`, borderRadius:T.r, padding:'14px 16px' }}>
+                                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+                                    <div style={{ fontSize:10, fontWeight:700, color:T.warn, textTransform:'uppercase', letterSpacing:0.8, fontFamily:T.sans }}>Auto-create</div>
+                                    <div onClick={()=>updateTemplate('autojob',!selected.autojob)}
+                                        style={{ width:30, height:18, borderRadius:9, background:selected.autojob?T.ok:T.border, position:'relative', cursor:'pointer', transition:'background 120ms', flexShrink:0 }}>
+                                        <span style={{ position:'absolute', top:2, left:selected.autojob?14:2, width:14, height:14, borderRadius:'50%', background:'#fbf8f3', boxShadow:'0 1px 2px rgba(0,0,0,0.15)', transition:'left 100ms' }}/>
+                                    </div>
+                                    <span style={{ fontSize:12, fontWeight:600, color:selected.autojob?T.ok:T.inkMuted, fontFamily:T.sans }}>{selected.autojob?'ON':'OFF'}</span>
+                                </div>
+                                <div style={{ fontSize:12.5, color:T.inkMid, lineHeight:1.55, fontFamily:T.sans }}>
+                                    When an opportunity of this customer type moves to <strong style={{ color:T.ink }}>Closed Won</strong>, Accelerep auto-creates a Job in the Dispatch queue with these defaults pre-filled. Dispatchers can still edit before scheduling.
+                                </div>
+                            </div>
+                        </CSectionCard>
+                    )}
+                </div>
+
+                {/* Right rail — preview + sanity checks */}
+                <div>
+                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:'14px 16px', marginBottom:12 }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:10, fontFamily:T.sans }}>Preview · what gets created</div>
+                        {selected ? (
+                            <div style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:T.r, padding:'10px 12px' }}>
+                                <div style={{ fontSize:12, fontWeight:700, color:T.ink, marginBottom:4, fontFamily:T.sans }}>New Customer · {selected.ctype || 'Unknown type'}</div>
+                                <div style={{ fontSize:11, color:T.inkMuted, marginBottom:8, fontFamily:T.sans }}>123 Main St · ASAP · same day</div>
+                                <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:8 }}>
+                                    {(selected.skills||[]).map(id=>{ const s=skills.find(sk=>sk.id===id); return s?<span key={id} style={{ fontSize:10, padding:'1px 6px', borderRadius:8, background:`${s.color}14`, color:s.color, fontWeight:600, border:`1px solid ${s.color}30` }}>{s.name}</span>:null; })}
+                                </div>
+                                <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Crew × hours: <strong>{selected.crew||1} × {selected.hrs||2}h</strong></div>
+                                <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Min license: <strong>{selected.minLicense}</strong></div>
+                                <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Priority: <strong style={{ color:prioColor(selected.priority) }}>{selected.priority}</strong></div>
+                                {selected.equip && <div style={{ fontSize:11, color:T.inkMid, fontFamily:T.sans }}>Equipment: <strong>{selected.equip}</strong></div>}
+                            </div>
+                        ) : (
+                            <div style={{ fontSize:12, color:T.inkMuted, fontStyle:'italic', fontFamily:T.sans }}>Select a template to preview.</div>
+                        )}
+                    </div>
+
+                    {selected && (
+                        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:'14px 16px' }}>
+                            <div style={{ fontSize:11, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:10, fontFamily:T.sans }}>Sanity checks</div>
+                            {sanityChecks.map((c,i) => (
+                                <div key={i} style={{ display:'flex', gap:8, alignItems:'flex-start', marginBottom:10 }}>
+                                    <span style={{ fontSize:14, color:c.ok?T.ok:T.warn, flexShrink:0 }}>{c.ok?'✓':'⚠'}</span>
+                                    <div>
+                                        <div style={{ fontSize:12, fontWeight:600, color:T.ink, fontFamily:T.sans }}>{c.label}</div>
+                                        <div style={{ fontSize:11, color:T.inkMuted, fontFamily:T.sans }}>{c.detail}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </SPDetailPageChrome>
+    );
+};
+
 const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccountsDeepFilter, setSettingsDirty, settingsSaveRef }) => {
     const [scope, setScope] = useState('workspace');
     const [tab,   setTab  ] = useState('All');
@@ -17146,8 +17766,12 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         if (id === 'reasons-lost')    return <ReasonsLostDetail     settings={settings} setSettings={setSettings} onBack={onBack}/>;
         if (id === 'customer-types')  return <CustomerTypesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
         if (id === 'buyer-personas')  return <BuyerPersonasDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
-        if (id === 'dispatch-skills')  return <DispatchSkillsDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
-        if (id === 'dispatch-vehicles') return <DispatchVehiclesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        // Dispatch detail pages
+        if (id === 'dsp-skills'    || id === 'dispatch-skills')   return <DispatchSkillsDetail   settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'dsp-vehicles'  || id === 'dispatch-vehicles') return <DispatchVehiclesDetail  settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'dsp-crews')     return <DispatchCrewsDetail    settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'dsp-techs')     return <DispatchTechDetail      settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
+        if (id === 'dsp-templates') return <DispatchJobTemplatesDetail settings={settings} setSettings={setSettings} onBack={onBack} setSettingsDirty={setSettingsDirty} settingsSaveRef={settingsSaveRef}/>;
         if (id === 'industries')      return <IndustriesDetail     settings={settings} setSettings={setSettings} onBack={onBack} setActiveTab={setActiveTab} setAccountsDeepFilter={setAccountsDeepFilter}/>;
 
         // Generic wrapper for all other panels
@@ -17174,9 +17798,11 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         );
     }
 
+    const WORKSPACE_TABS = [...WORKSPACE_TABS_BASE.slice(0, 5), ...(settings?.dispatchEnabled ? ['Dispatch'] : []), ...WORKSPACE_TABS_BASE.slice(5)];
     const tabs = scope === 'workspace' ? WORKSPACE_TABS : ['All', 'Profile & Account'];
     const scopeItems = SETTINGS_ITEMS.filter(i => i.scope === scope);
-    const filteredByTab = tab === 'All' ? scopeItems : scopeItems.filter(i => i.category === tab);
+    const filteredByTab = (tab === 'All' ? scopeItems : scopeItems.filter(i => i.category === tab))
+        .filter(i => i.category !== 'Dispatch' || settings?.dispatchEnabled);
     const items = search.trim()
         ? scopeItems.filter(i => (i.name + ' ' + i.desc + ' ' + i.category).toLowerCase().includes(search.toLowerCase()))
         : filteredByTab;

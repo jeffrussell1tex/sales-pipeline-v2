@@ -66,6 +66,9 @@ const DEFAULT_SETTINGS = {
     dispatchLicenses: ['Apprentice','Journeyman','Master','Lead'],
     dispatchVehicles: [],
     dispatchJobs: [],
+    dispatchCrews: [],
+    dispatchTechProfiles: [],
+    dispatchJobTemplates: [],
     customerTypes: [],
     companyProfile: { address: '', phone: '', notes: '' },
     priceBookConfig: {
