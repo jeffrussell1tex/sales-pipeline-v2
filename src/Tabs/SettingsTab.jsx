@@ -17825,6 +17825,14 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
         'reasons-won':          'reasons-won',
         'reasons-lost':         'reasons-lost',
         'buyer-personas':       'buyer-personas',
+        // Dispatch
+        'dsp-skills':           'dsp-skills',
+        'dsp-vehicles':         'dsp-vehicles',
+        'dsp-crews':            'dsp-crews',
+        'dsp-techs':            'dsp-techs',
+        'dsp-templates':        'dsp-templates',
+        'dispatch-skills':      'dispatch-skills',
+        'dispatch-vehicles':    'dispatch-vehicles',
     };
 
     // ── Live card badge counts — fetched once on mount ────────────────────────
