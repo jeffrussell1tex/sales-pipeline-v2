@@ -30,7 +30,8 @@ export default function ReportsTab({ leadsEnabled = true }) {
         visibleTasks,
         activePipeline,
         allPipelines,
-            isMobile,
+        isMobile,
+        setViewingAccount,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';
@@ -5986,10 +5987,25 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                             <div style={{ fontSize:17, fontWeight:700, color:T.ink }}>{selectedOpp.account}</div>
                                         </div>
                                         <div style={{ display:'flex', alignItems:'center', gap:14, fontSize:11.5, color:T.inkMid }}>
-                                            {selectedAccount?.website && <span style={{ fontFamily:'ui-monospace,Menlo,monospace' }}>{selectedAccount.website}</span>}
+                                            {selectedAccount?.website && (
+                                                <a
+                                                    href={/^https?:\/\//i.test(selectedAccount.website) ? selectedAccount.website : `https://${selectedAccount.website}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.info, textDecoration:'none' }}
+                                                    onMouseEnter={e => e.currentTarget.style.textDecoration='underline'}
+                                                    onMouseLeave={e => e.currentTarget.style.textDecoration='none'}
+                                                >
+                                                    {selectedAccount.website}
+                                                </a>
+                                            )}
                                             {selectedAccount?.city && <><span style={{ width:1, height:14, background:T.border }}/><span>{selectedAccount.city}{selectedAccount.state ? ', '+selectedAccount.state : ''}</span></>}
                                             <span style={{ width:1, height:14, background:T.border }}/>
-                                            <span style={{ color:T.goldInk, fontWeight:600, cursor:'pointer' }}>Open account panel ↗</span>
+                                            <span
+                                                onClick={() => selectedAccount && setViewingAccount(selectedAccount)}
+                                                style={{ color:T.goldInk, fontWeight:600, cursor: selectedAccount ? 'pointer' : 'default', opacity: selectedAccount ? 1 : 0.4 }}>
+                                                Open account panel ↗
+                                            </span>
                                         </div>
                                     </div>
                                     <div style={{ padding:22, display:'grid', gridTemplateColumns:'1fr 300px', gap:24 }}>
@@ -6002,7 +6018,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                         <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:'14px 16px' }}>
                                             <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:10 }}>At a glance</div>
                                             {[
-                                                { l:'Industry',  v: selectedAccount?.vertical || selectedAccount?.industry || '—' },
+                                                { l:'Industry',  v: selectedAccount?.verticalMarket || selectedAccount?.vertical || selectedAccount?.industry || '—' },
                                                 { l:'Employees', v: (() => { const n = selectedAccount?.totalEmployees ?? selectedAccount?.employeeCount ?? selectedAccount?.employees; return (n != null && n !== '') ? Number(n).toLocaleString() : '—'; })() },
                                                 { l:'Status',    v: <span style={{ padding:'2px 7px', fontSize:11, fontWeight:700, borderRadius:3, background:`${T.ok}14`, color:T.ok }}>Active customer</span> },
                                                 { l:'Owner',     v: selectedOpp.salesRep || selectedOpp.rep || '—' },
