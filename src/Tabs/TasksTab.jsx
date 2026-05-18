@@ -952,8 +952,8 @@ export default function TasksTab() {
                             </>
                         )}
 
-                        {/* Upcoming — only when source === 'open' per spec */}
-                        {upcoming.length > 0 && source === 'open' && (
+                        {/* Upcoming — shown in All and Open views */}
+                        {upcoming.length > 0 && showOpen && (
                             <>
                                 <SubGroupHeader label="Upcoming" count={upcoming.length} accent={T.gold}/>
                                 {upcoming.slice(0, 5).map(t => (
@@ -963,7 +963,7 @@ export default function TasksTab() {
                                 ))}
                                 {upcoming.length > 5 && (
                                     <div style={{ padding: '10px 16px', fontSize: 12, color: T.inkMuted, textAlign: 'center', borderBottom: `1px solid ${T.border}`, fontFamily: T.sans }}>
-                                        {upcoming.length - 5} more upcoming — switch to "Open tasks" to see all
+                                        {upcoming.length - 5} more upcoming tasks
                                     </div>
                                 )}
                             </>

@@ -102,6 +102,7 @@ export default function AppHeader({
         { id: 'contacts',     label: 'Contacts'     },
         ...(settings.leadsEnabled  !== false ? [{ id: 'leads',        label: 'Leads'        }] : []),
         ...(settings.quotesEnabled !== false ? [{ id: 'quotes',       label: 'Quotes'       }] : []),
+        ...(settings.dispatchEnabled       ? [{ id: 'dispatch',     label: 'Dispatch'     }] : []),
         { id: 'reports',      label: 'Reports'      },
         ...((isAdmin || isManager) ? [{ id: 'salesManager', label: 'Sales Manager' }] : []),
         ...(isAdmin             ? [{ id: 'settings',     label: 'Settings'     }] : []),

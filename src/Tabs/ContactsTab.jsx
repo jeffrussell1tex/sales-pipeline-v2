@@ -165,6 +165,8 @@ function TableHeader({ selectMode, selectedIds, sorted, toggleSelectAll }) {
 
 // ── Contact row (flat modes) ───────────────────────────────────
 function ContactRow({ contact, isEven, anchorId, selectMode, selectedIds, oppCount, openRowMenu, setOpenRowMenu, toggleSelect, setViewingContact, handleEditContact, handleDeleteOne }) {
+    const [menuUp, setMenuUp] = React.useState(false);
+    const menuBtnRef = React.useRef(null);
     const [hov, setHov] = useState(false);
     const isSelected = selectedIds.includes(contact.id);
     const initials   = ((contact.firstName||'')[0]||'') + ((contact.lastName||'')[0]||'');
@@ -248,13 +250,13 @@ function ContactRow({ contact, isEven, anchorId, selectMode, selectedIds, oppCou
                 onClick={e => e.stopPropagation()}>
                 <button
                     id={'contact-row-btn-' + contact.id}
-                    onClick={e => { e.stopPropagation(); setOpenRowMenu(openRowMenu === contact.id ? null : contact.id); }}
+                    ref={menuBtnRef} onClick={e => { e.stopPropagation(); if (openRowMenu !== contact.id) { const r = menuBtnRef.current?.getBoundingClientRect(); setMenuUp(r ? window.innerHeight - r.bottom < 180 : false); } setOpenRowMenu(openRowMenu === contact.id ? null : contact.id); }}
                     style={{ background: openRowMenu === contact.id ? 'rgba(200,185,154,0.25)' : 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 3 }}>
                     <Icon name="dots" size={14} color={openRowMenu === contact.id ? T.goldInk : hov ? T.inkMid : T.border} />
                 </button>
                 {openRowMenu === contact.id && (
                     <div id={'contact-row-menu-' + contact.id} onClick={e => e.stopPropagation()}
-                        style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 200,
+                        style={{ position: 'absolute', right: 0, zIndex: 200, ...(menuUp ? { bottom: '100%', marginBottom: 4 } : { top: '100%', marginTop: 4 }),
                             width: 180, background: T.surface, border: `1px solid ${T.borderStrong}`,
                             borderRadius: 4, padding: 4, boxShadow: '0 8px 24px rgba(42,38,34,0.12)', fontFamily: T.sans }}>
                         <div style={{ position: 'absolute', top: -6, right: 10, width: 12, height: 12,

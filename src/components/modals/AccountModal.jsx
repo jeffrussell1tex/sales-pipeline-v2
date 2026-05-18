@@ -416,7 +416,7 @@ export default function AccountModal({
                                     autoComplete="off"
                                 />
                                 {showVerticalSugg && (
-                                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '240px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                    <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginBottom: '0.25rem', maxHeight: '240px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                         {(() => {
                                             const q = verticalSearch.toLowerCase();
                                             const rows = [];
@@ -475,7 +475,7 @@ export default function AccountModal({
                                     autoComplete="off"
                                 />
                                 {showTerritorySugg && (
-                                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                    <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginBottom: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                         {allTerritories.filter(t => t.toLowerCase().includes(territorySearch.toLowerCase())).map((t, i) => (
                                             <div key={i}
                                                 onMouseDown={e => e.preventDefault()}
@@ -505,7 +505,7 @@ export default function AccountModal({
                                     autoComplete="off"
                                 />
                                 {showRepSugg && (
-                                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                    <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginBottom: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                         {allRepNames.filter(r => r.toLowerCase().includes(repSearch.toLowerCase())).map((r, i) => (
                                             <div key={i}
                                                 onMouseDown={e => e.preventDefault()}
@@ -566,7 +566,7 @@ export default function AccountModal({
                                     autoComplete="off"
                                 />
                                 {showCustomerTypeSugg && (
-                                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                    <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginBottom: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                         {(settings?.customerTypes || [])
                                             .filter(ct => ct.toLowerCase().includes(customerTypeInput.toLowerCase()) && !(formData.customerTypes || []).includes(ct))
                                             .map((ct, i) => (

@@ -297,7 +297,7 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                                 </div>
                             )}
                             {showContactSuggestions && (
-                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0 0 6px 6px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                                <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '6px 6px 0 0', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 -4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                                     {contacts.filter(contact => 
                                         `${contact.firstName} ${contact.lastName}`.toLowerCase().startsWith(contactSearch.toLowerCase()) ||
                                         contact.firstName?.toLowerCase().startsWith(contactSearch.toLowerCase()) ||
@@ -349,7 +349,7 @@ export default function TaskModal({ task, taskTypes, opportunities, accounts, co
                                 </div>
                             )}
                             {showAccountSuggestions && (
-                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '0 0 6px 6px', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                                <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '6px 6px 0 0', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 -4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                                     {accounts.filter(account => 
                                         account.name?.toLowerCase().startsWith(accountSearch.toLowerCase())
                                     ).map(account => (

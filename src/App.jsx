@@ -49,6 +49,7 @@ import { useCalendarState } from './hooks/useCalendarState';
 import { useUserHandlers } from './hooks/useUserHandlers';
 import { useQuotes } from './hooks/useQuotes';
 import QuotesTab from './Tabs/QuotesTab';
+import DispatchTab from './Tabs/DispatchTab';
 import ErrorBoundary from './components/ErrorBoundary';
 
 
@@ -1198,6 +1199,12 @@ dbFetch('/.netlify/functions/users?me=true')
         }
     }, [settings.quotesEnabled]);
 
+    useEffect(() => {
+        if (settings.dispatchEnabled === false && activeTab === 'dispatch') {
+            setActiveTab('home');
+        }
+    }, [settings.dispatchEnabled]);
+
     // Redirect any user who had 'opportunities' stored in localStorage to 'pipeline'
     useEffect(() => {
         if (activeTab === 'opportunities') {
@@ -1208,7 +1215,7 @@ dbFetch('/.netlify/functions/users?me=true')
     // Deep link: navigate to Quotes tab pre-filtered to a specific opportunity
     // (state lives in useQuotes, exposed via AppContext)
 
-    // ── Settings nav guard — must be before ALL early returns ──────────
+    // ── Settings nav guard — must be before ALL early returns ──────────────
     const [settingsDirty, setSettingsDirty] = React.useState(false);
     const [pendingNavTab, setPendingNavTab] = React.useState(null);
     const [showNavGuard, setShowNavGuard]   = React.useState(false);
@@ -1286,7 +1293,7 @@ dbFetch('/.netlify/functions/users?me=true')
     const appContextValue = {
         // Data
         settings, setSettings,
-        settingsDirty, setSettingsDirty,
+        settingsDirty, setSettingsDirty, settingsSaveRef,
         opportunities, setOpportunities,
         accounts, setAccounts,
         contacts, setContacts,
@@ -1508,13 +1515,13 @@ dbFetch('/.netlify/functions/users?me=true')
             <nav className="nav-tabs">
                 <button 
                     className={`nav-tab ${activeTab === 'home' ? 'active' : ''}`}
-                    onClick={() => handleNavClick('home')}
+                    onClick={() => setActiveTab('home')}
                 >
                     HOME
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'pipeline' ? 'active' : ''}`}
-                    onClick={() => handleNavClick('pipeline')}
+                    onClick={() => setActiveTab('pipeline')}
                 >
                     PIPELINE
                 </button>
@@ -1542,40 +1549,47 @@ dbFetch('/.netlify/functions/users?me=true')
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'accounts' ? 'active' : ''}`}
-                    onClick={() => handleNavClick('accounts')}
+                    onClick={() => setActiveTab('accounts')}
                 >
                     ACCOUNTS
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'contacts' ? 'active' : ''}`}
-                    onClick={() => handleNavClick('contacts')}
+                    onClick={() => setActiveTab('contacts')}
                 >
                     CONTACTS
                 </button>
                 <button 
                     className={`nav-tab ${activeTab === 'leads' ? 'active' : ''}`}
-                    onClick={() => handleNavClick('leads')}
+                    onClick={() => setActiveTab('leads')}
                     style={{ display: settings.leadsEnabled === false ? 'none' : '' }}
                 >
                     LEADS
                 </button>
                 <button
                     className={`nav-tab ${activeTab === 'quotes' ? 'active' : ''}`}
-                    onClick={() => handleNavClick('quotes')}
+                    onClick={() => setActiveTab('quotes')}
                     style={{ display: settings.quotesEnabled === false ? 'none' : '' }}
                 >
                     QUOTES
                 </button>
+                <button
+                    className={`nav-tab ${activeTab === 'dispatch' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('dispatch')}
+                    style={{ display: settings.dispatchEnabled ? '' : 'none' }}
+                >
+                    DISPATCH
+                </button>
                 <button 
                     className={`nav-tab ${activeTab === 'reports' ? 'active' : ''}`}
-                    onClick={() => handleNavClick('reports')}
+                    onClick={() => setActiveTab('reports')}
                 >
                     REPORTS
                 </button>
                 {(isAdmin || isManager) && (
                     <button
                         className={`nav-tab ${activeTab === 'salesManager' ? 'active' : ''}`}
-                        onClick={() => handleNavClick('salesManager')}
+                        onClick={() => setActiveTab('salesManager')}
                     >
                         SALES MANAGER
                     </button>
@@ -1634,6 +1648,12 @@ dbFetch('/.netlify/functions/users?me=true')
             {activeTab === 'quotes' && settings.quotesEnabled !== false && (
                 <ErrorBoundary tabName="Quotes">
                     <QuotesTab />
+                </ErrorBoundary>
+            )}
+
+            {activeTab === 'dispatch' && settings.dispatchEnabled !== false && (
+                <ErrorBoundary tabName="Dispatch">
+                    <DispatchTab />
                 </ErrorBoundary>
             )}
 
@@ -1873,6 +1893,7 @@ dbFetch('/.netlify/functions/users?me=true')
 
         </div>
         <ModalLayer />
+        <QuickLogFab />
 
             {showNavGuard && (
                 <div style={{ position:'fixed', inset:0, zIndex:99999, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(42,38,34,0.55)' }}
@@ -1894,7 +1915,6 @@ dbFetch('/.netlify/functions/users?me=true')
                     </div>
                 </div>
             )}
-        <QuickLogFab />
         </AppProvider>
     );
 }

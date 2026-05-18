@@ -214,7 +214,7 @@ const SourceChipSelect = ({ value, onChange, options }) => {
                 <span style={{ fontSize: 9, color: T.inkMuted }}>▾</span>
             </div>
             {open && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 3, zIndex: 100,
+                <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, marginBottom: 3, zIndex: 100,
                     background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: T.r,
                     boxShadow: '0 8px 24px rgba(42,38,34,0.12)', overflow: 'hidden' }}>
                     {options.map(s => {

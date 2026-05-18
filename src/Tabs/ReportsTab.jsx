@@ -30,7 +30,10 @@ export default function ReportsTab({ leadsEnabled = true }) {
         visibleTasks,
         activePipeline,
         allPipelines,
-            isMobile,
+        isMobile,
+        setViewingAccount,
+        setOpportunities,
+        setContacts,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';
@@ -2448,6 +2451,8 @@ ${bodyHtml}
                                 userRole={userRole}
                                 settings={settings}
                                 canSeeAll={canSeeAll}
+                                setOpportunities={setOpportunities}
+                                setContacts={setContacts}
                                 onSaveReport={(report) => setSavedReportsList(prev => [report, ...prev.filter(r => r.id !== report.id)])}
                             />
                         )}
@@ -4936,7 +4941,7 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
 // ─────────────────────────────────────────────────────────────
 //  Activity History Tab — Account History + Contact History
 // ─────────────────────────────────────────────────────────────
-function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, onSaveReport }) {
+function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, setOpportunities, setContacts, onSaveReport }) {
 
     const T = {
         bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
@@ -4952,14 +4957,22 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     const [historySubTab, setHistorySubTab] = React.useState('account');
     const [selectedAccountId, setSelectedAccountId] = React.useState('');
     const [selectedContactId, setSelectedContactId] = React.useState('');
+    const [selectedOppId,     setSelectedOppId]     = React.useState('');
     const [period, setPeriod] = React.useState('6months');
+    const [oppPeriod, setOppPeriod] = React.useState('all');
     const [showFilter, setShowFilter] = React.useState('all');
     const [accSearch, setAccSearch] = React.useState('');
     const [conSearch, setConSearch] = React.useState('');
+    const [oppSearch, setOppSearch] = React.useState('');
     const [accOpen, setAccOpen] = React.useState(false);
     const [conOpen, setConOpen] = React.useState(false);
+    const [oppOpen, setOppOpen] = React.useState(false);
     const accRef = React.useRef(null);
     const conRef = React.useRef(null);
+    const oppRef = React.useRef(null);
+    const [contactMenuId,   setContactMenuId]   = React.useState(null);
+    const [personaPickerId, setPersonaPickerId] = React.useState(null);
+    const contactMenuRef = React.useRef(null);
 
     const currentUserName = currentUser?.name || currentUser || '';
     const isAdmin = userRole === 'Admin';
@@ -4970,6 +4983,8 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         const handler = (e) => {
             if (accRef.current && !accRef.current.contains(e.target)) setAccOpen(false);
             if (conRef.current && !conRef.current.contains(e.target)) setConOpen(false);
+            if (oppRef.current && !oppRef.current.contains(e.target)) setOppOpen(false);
+            if (contactMenuRef.current && !contactMenuRef.current.contains(e.target)) { setContactMenuId(null); setPersonaPickerId(null); }
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
@@ -5546,6 +5561,49 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         win.document.close();
     }, []);
 
+    const handleOppExportPDF = React.useCallback((opp, events) => {
+        const win = window.open('', '_blank', 'width=1100,height=800');
+        if (!win) return;
+        const printDate = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+        const title = `Opportunity History — ${opp.account} · ${opp.opportunityName || opp.name || ''}`;
+        const amt = parseFloat(opp.arr||0);
+        const amtFmt = amt >= 1000 ? `$${(amt/1000).toFixed(1)}k` : `$${Math.round(amt)}`;
+        const closeDate = (opp.forecastedCloseDate||opp.closeDate) ? new Date((opp.forecastedCloseDate||opp.closeDate)+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+        const rowsHtml = events.map(e => {
+            const tone = { call:'CALL', email:'EMAIL', meeting:'MEETING', task:'TASK', note:'NOTE', quote:'QUOTE', stage:'STAGE', amount:'AMOUNT', prob:'PROB', slip:'SLIP', open:'CREATED' };
+            const lbl = tone[e.type] || (e.type||'').toUpperCase().slice(0,10);
+            return `<tr><td style="white-space:nowrap">${e.ts||'—'}</td><td><span style="background:#f5efe3;color:#5a544c;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px">${lbl}</span></td><td style="font-weight:600">${e.title||'—'}</td><td style="color:#8a8378;font-size:11px">${e.sub||''}</td><td style="color:#8a8378">${e.who||''}</td></tr>`;
+        }).join('');
+        win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>
+@page { margin: 0.625in; size: landscape; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, sans-serif; font-size: 12px; color: #2a2622; }
+.hdr { display: flex; justify-content: space-between; padding-bottom: 12px; border-bottom: 3px solid #7a6a48; margin-bottom: 16px; }
+.hdr h1 { font-size: 16px; font-weight: 800; }
+.meta { font-size: 9px; color: #8a8378; text-align: right; }
+.kpi { display: flex; gap: 16px; margin-bottom: 16px; }
+.kpi-tile { flex: 1; background: #f5efe3; border: 1px solid #e6ddd0; border-radius: 3px; padding: 10px 12px; }
+.kpi-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #8a8378; margin-bottom: 4px; }
+.kpi-val { font-size: 18px; font-weight: 700; color: #2a2622; }
+table { width: 100%; border-collapse: collapse; font-size: 11px; }
+th { background: #fbf8f3; padding: 6px 10px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #8a8378; border-bottom: 2px solid #e6ddd0; text-align: left; }
+td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
+.footer { margin-top: 16px; font-size: 9px; color: #8a8378; border-top: 1px solid #e6ddd0; padding-top: 8px; display: flex; justify-content: space-between; }
+</style></head><body>
+<div class="hdr"><h1>${title}</h1><div class="meta">Generated ${printDate}<br>Accelerep · Confidential</div></div>
+<div class="kpi">
+  <div class="kpi-tile"><div class="kpi-label">Amount</div><div class="kpi-val">${amtFmt}</div></div>
+  <div class="kpi-tile"><div class="kpi-label">Stage</div><div class="kpi-val">${opp.stage||'—'}</div></div>
+  <div class="kpi-tile"><div class="kpi-label">Probability</div><div class="kpi-val">${opp.probability||0}%</div></div>
+  <div class="kpi-tile"><div class="kpi-label">Close date</div><div class="kpi-val">${closeDate}</div></div>
+  <div class="kpi-tile"><div class="kpi-label">Forecast</div><div class="kpi-val">${opp.forecastCategory||'—'}</div></div>
+</div>
+<table><thead><tr><th>Date</th><th>Type</th><th>Event</th><th>Detail</th><th>Rep</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+<div class="footer"><span>Accelerep · Confidential</span><span>Generated ${printDate}</span></div>
+<script>window.onload=function(){ window.print(); }<\/script></body></html>`);
+        win.document.close();
+    }, []);
+
     const ActionButtons = ({ entityName, entityType, events }) => (
         <div style={{ display:'flex', gap:8 }}>
             <button
@@ -5573,6 +5631,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             <div style={{ display:'flex', borderBottom:`1px solid ${T.border}`, marginBottom:16 }}>
                 <SubTabBtn value="account" label="Account history"/>
                 <SubTabBtn value="contact" label="Contact history"/>
+                <SubTabBtn value="opportunity" label="Opportunity history"/>
             </div>
 
             {/* ── ACCOUNT HISTORY ── */}
@@ -5697,6 +5756,700 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                     )}
                 </div>
             )}
+
+            {/* ── OPPORTUNITY HISTORY ── */}
+            {historySubTab === 'opportunity' && (() => {
+                // ── Derived data ───────────────────────────────────────────────────────
+                const visibleOpps = (opportunities || []).filter(o => {
+                    if (!canSeeAll) {
+                        const isOwner = o.salesRep === currentUserName || o.rep === currentUserName;
+                        if (!isOwner) return false;
+                    }
+                    if (!oppSearch) return true;
+                    const s = oppSearch.toLowerCase();
+                    return (o.account||'').toLowerCase().includes(s) ||
+                           (o.opportunityName||'').toLowerCase().includes(s);
+                });
+
+                const selectedOpp = visibleOpps.find(o => o.id === selectedOppId) || null;
+                const selectedAccount = selectedOpp ? (accounts||[]).find(a => (a.name||'').toLowerCase() === (selectedOpp.account||'').toLowerCase()) : null;
+
+                // Stage journey from opportunity data
+                const funnelStages = (settings?.funnelStages || [
+                    { name:'Prospecting' }, { name:'Qualification' }, { name:'Discovery' },
+                    { name:'Proposal' }, { name:'Negotiation' }, { name:'Closing' },
+                    { name:'Closed Won' }, { name:'Closed Lost' },
+                ]).filter(s => s.name !== 'Closed Won' && s.name !== 'Closed Lost');
+
+                const currentStageIdx = selectedOpp
+                    ? funnelStages.findIndex(s => s.name === selectedOpp.stage)
+                    : -1;
+
+                // Events: merge activities + tasks for this opp
+                const oppActivities = (activities||[]).filter(a => a.opportunityId === selectedOppId);
+                const oppTasks = (tasks||[]).filter(t => t.opportunityId === selectedOppId);
+                const allEvents = [
+                    ...oppActivities.map(a => ({
+                        id: a.id, type: a.type?.toLowerCase() || 'note',
+                        ts: a.date ? new Date(a.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—',
+                        who: a.createdBy || a.rep || 'Rep',
+                        title: a.subject || a.notes?.slice(0,60) || 'Activity',
+                        sub: a.notes || '',
+                        value: null, delta: null,
+                        rawDate: a.date || '1900-01-01',
+                    })),
+                    ...oppTasks.map(t => ({
+                        id: t.id, type: 'task',
+                        ts: t.dueDate ? new Date(t.dueDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—',
+                        who: t.assignedTo || 'Rep',
+                        title: t.title || 'Task',
+                        sub: t.description || '',
+                        value: null, delta: null,
+                        rawDate: t.dueDate || '1900-01-01',
+                    })),
+                ].sort((a,b) => new Date(b.rawDate) - new Date(a.rawDate));
+
+                // Bucket events
+                const now = new Date();
+                const today = now.toDateString();
+                const yest = new Date(now - 86400000).toDateString();
+                const thisWeekStart = new Date(now - (now.getDay() * 86400000));
+                const lastMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1);
+
+                const bucketName = (dateStr) => {
+                    if (!dateStr || dateStr === '1900-01-01') return 'Earlier';
+                    const d = new Date(dateStr+'T12:00:00');
+                    if (d.toDateString() === today) return 'Today';
+                    if (d.toDateString() === yest) return 'Yesterday';
+                    if (d >= thisWeekStart) return 'This week';
+                    if (d >= lastMonthStart) return 'Last month';
+                    return 'Earlier';
+                };
+                const buckets = {};
+                const BUCKET_ORDER = ['Today','Yesterday','This week','Last month','Earlier'];
+                allEvents.forEach(e => {
+                    const b = bucketName(e.rawDate);
+                    (buckets[b] ||= []).push(e);
+                });
+
+                // Event tone map
+                const eventTone = {
+                    call:    { color: T.info,    label: 'Call',     glyph: '☏' },
+                    email:   { color: T.info,    label: 'Email',    glyph: '✉' },
+                    meeting: { color: T.info,    label: 'Meeting',  glyph: '◑' },
+                    task:    { color: T.warn,    label: 'Task',     glyph: '✓' },
+                    note:    { color: T.inkMuted,label: 'Note',     glyph: '✎' },
+                    quote:   { color: T.goldInk, label: 'Quote',    glyph: '$' },
+                    stage:   { color: T.ok,      label: 'Stage',    glyph: '⇨' },
+                    amount:  { color: T.goldInk, label: 'Amount',   glyph: '↑' },
+                    prob:    { color: T.goldInk, label: 'Probability',glyph:'%' },
+                    slip:    { color: T.danger,  label: 'Close slip',glyph:'⇥' },
+                    open:    { color: T.ok,      label: 'Created',  glyph: '◆' },
+                };
+
+                // Buyer persona lookup from settings
+                const personaLookup = {};
+                (settings?.buyerPersonas || []).forEach(p => {
+                    personaLookup[p.id] = { color: p.color || T.inkMuted, icon: (p.name||'?')[0] };
+                });
+
+                // Opp contacts
+                const oppContactIds = selectedOpp?.contactIds || [];
+                const oppContacts = (contacts||[]).filter(c =>
+                    (c.opportunityId === selectedOppId) ||
+                    oppContactIds.includes(c.id)
+                );
+
+                // Quotes for this opp
+                const quotes = []; // from opportunities data if available
+
+                // Amount data
+                const amount = parseFloat(selectedOpp?.arr || selectedOpp?.revenue || 0) || 0;
+                const amountFmt = amount >= 1000 ? `$${(amount/1000).toFixed(1)}k` : `$${amount.toFixed(0)}`;
+
+                const stageColor = (idx, curIdx) =>
+                    idx < curIdx ? T.ok : idx === curIdx ? T.goldInk : T.inkMuted;
+
+                // Period filter for metrics
+                const PERIODS = [
+                    { k:'1m', label:'1 month' },
+                    { k:'6m', label:'6 months' },
+                    { k:'1y', label:'1 year' },
+                    { k:'all', label:'All time' },
+                ];
+
+                return (
+                    <div>
+                        {/* Toolbar */}
+                        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
+                            {/* Opportunity picker */}
+                            <div style={{ position:'relative', minWidth:360 }} ref={oppRef}>
+                                <div onClick={() => setOppOpen(p => !p)}
+                                    style={{ padding:'7px 12px', background:T.surface,
+                                        border:`1.5px solid ${oppOpen ? T.goldInk : T.borderStrong}`,
+                                        borderRadius:T.r, display:'flex', alignItems:'center', gap:10, cursor:'pointer' }}>
+                                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke={T.inkMid} strokeWidth="1.5">
+                                        <circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L13 13" strokeLinecap="round"/>
+                                    </svg>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                        <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, letterSpacing:0.5, textTransform:'uppercase' }}>Opportunity</div>
+                                        <div style={{ fontSize:13.5, fontWeight:700, color:selectedOpp ? T.ink : T.inkMuted,
+                                            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontStyle: selectedOpp ? 'normal' : 'italic' }}>
+                                            {selectedOpp
+                                                ? `${selectedOpp.account} · ${selectedOpp.opportunityName || selectedOpp.name || ''}`
+                                                : 'Type to search opportunities…'}
+                                        </div>
+                                    </div>
+                                    <span style={{ fontSize:10, color:T.inkMuted }}>▾</span>
+                                </div>
+                                {oppOpen && (
+                                    <div style={{ position:'absolute', top:'100%', left:0, right:0, marginTop:4,
+                                        background:T.surface, border:`1px solid ${T.borderStrong}`,
+                                        borderRadius:T.r, boxShadow:'0 8px 24px rgba(42,38,34,0.12)', zIndex:50, padding:4 }}>
+                                        <div style={{ padding:'6px 8px 8px', borderBottom:`1px solid ${T.border}` }}>
+                                            <input autoFocus value={oppSearch} onChange={e => setOppSearch(e.target.value)}
+                                                placeholder="Search opportunities…"
+                                                style={{ width:'100%', padding:'6px 10px', background:T.surface2,
+                                                    border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12,
+                                                    color:T.ink, fontFamily:T.sans, outline:'none', boxSizing:'border-box' }}/>
+                                        </div>
+                                        <div style={{ maxHeight:260, overflowY:'auto' }}>
+                                            {visibleOpps.slice(0,12).map(o => (
+                                                <div key={o.id}
+                                                    onClick={() => { setSelectedOppId(o.id); setOppOpen(false); setOppSearch(''); }}
+                                                    style={{ padding:'9px 12px', borderRadius:T.r, cursor:'pointer',
+                                                        background: o.id === selectedOppId ? `${T.goldInk}14` : 'transparent',
+                                                        display:'flex', alignItems:'center', gap:10 }}
+                                                    onMouseEnter={e=>e.currentTarget.style.background=T.surface2}
+                                                    onMouseLeave={e=>e.currentTarget.style.background=o.id===selectedOppId?`${T.goldInk}14`:'transparent'}>
+                                                    <div style={{ flex:1, minWidth:0 }}>
+                                                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink,
+                                                            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                                            {o.account} · {o.opportunityName || o.name || ''}
+                                                        </div>
+                                                        <div style={{ fontSize:10.5, color:T.inkMuted }}>
+                                                            {o.arr || o.revenue ? `$${(parseFloat(o.arr||o.revenue||0)/1000).toFixed(1)}k` : ''} · {o.stage} · {o.probability ? o.probability+'%' : ''}
+                                                        </div>
+                                                    </div>
+                                                    {o.id === selectedOppId && <span style={{ color:T.goldInk, fontSize:11, fontWeight:700 }}>✓</span>}
+                                                </div>
+                                            ))}
+                                            {visibleOpps.length === 0 && (
+                                                <div style={{ padding:'16px 12px', fontSize:12.5, color:T.inkMuted, textAlign:'center', fontStyle:'italic' }}>
+                                                    No opportunities found
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <div style={{ flex:1 }}/>
+                            <button
+                                onClick={() => handleSaveAsReport(selectedOpp.opportunityName || selectedOpp.name || selectedOpp.account, 'Opportunity')}
+                                disabled={saveReportState === 'saving'}
+                                style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5,
+                                    color: saveReportState==='saved' ? T.ok : saveReportState==='error' ? T.danger : T.inkMid,
+                                    cursor:'pointer', fontFamily:T.sans, opacity: saveReportState==='saving' ? 0.6 : 1 }}>
+                                {saveReportState==='saving' ? 'Saving…' : saveReportState==='saved' ? '✓ Saved' : saveReportState==='error' ? 'Error — retry' : 'Save as report'}
+                            </button>
+                            <button onClick={() => handleOppExportPDF(selectedOpp, allEvents)} style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Export PDF</button>
+                            <button
+                                onClick={() => {
+                                    const owner = selectedOpp.salesRep || selectedOpp.rep || '';
+                                    const subject = encodeURIComponent(`Opportunity history: ${selectedOpp.opportunityName || selectedOpp.account}`);
+                                    const body = encodeURIComponent(`Hi ${owner},\n\nPlease find the opportunity history report for ${selectedOpp.opportunityName || selectedOpp.account} attached.\n\nDeal: ${selectedOpp.opportunityName || ''}\nAccount: ${selectedOpp.account || ''}\nStage: ${selectedOpp.stage || ''}\nAmount: $${(parseFloat(selectedOpp.arr||0)/1000).toFixed(1)}k\nClose date: ${selectedOpp.forecastedCloseDate || selectedOpp.closeDate || '—'}\n`);
+                                    window.location.href = `mailto:${owner}?subject=${subject}&body=${body}`;
+                                }}
+                                style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                                Email to owner
+                            </button>
+                        </div>
+
+                        {/* Period pills */}
+                        <div style={{ display:'flex', gap:6, marginBottom:20, alignItems:'center' }}>
+                            <span style={{ fontSize:11.5, fontWeight:600, color:T.inkMuted, marginRight:4 }}>Period</span>
+                            {PERIODS.map(p => (
+                                <button key={p.k} onClick={() => setOppPeriod(p.k)}
+                                    style={{ padding:'5px 12px', fontSize:12.5, fontWeight:600, borderRadius:12,
+                                        background: oppPeriod===p.k ? T.ink : T.surface,
+                                        color: oppPeriod===p.k ? '#fbf8f3' : T.inkMid,
+                                        border:`1px solid ${oppPeriod===p.k ? T.ink : T.borderStrong}`,
+                                        cursor:'pointer', fontFamily:T.sans }}>
+                                    {p.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {!selectedOpp ? (
+                            <div style={{ textAlign:'center', padding:'4rem', color:T.inkMuted, fontSize:14, fontStyle:'italic', fontFamily:T.sans }}>
+                                Select an opportunity to view its history.
+                            </div>
+                        ) : (
+                            <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+
+                                {/* ── Section 1: Account ── */}
+                                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                                    <div style={{ padding:'14px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:12 }}>
+                                        <div style={{ flex:1 }}>
+                                            <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:4 }}>Account</div>
+                                            <div style={{ fontSize:17, fontWeight:700, color:T.ink }}>{selectedOpp.account}</div>
+                                        </div>
+                                        <div style={{ display:'flex', alignItems:'center', gap:14, fontSize:11.5, color:T.inkMid }}>
+                                            {selectedAccount?.website && (
+                                                <a
+                                                    href={/^https?:\/\//i.test(selectedAccount.website) ? selectedAccount.website : `https://${selectedAccount.website}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    style={{ fontFamily:'ui-monospace,Menlo,monospace', color:T.info, textDecoration:'none' }}
+                                                    onMouseEnter={e => e.currentTarget.style.textDecoration='underline'}
+                                                    onMouseLeave={e => e.currentTarget.style.textDecoration='none'}
+                                                >
+                                                    {selectedAccount.website}
+                                                </a>
+                                            )}
+                                            {selectedAccount?.city && <><span style={{ width:1, height:14, background:T.border }}/><span>{selectedAccount.city}{selectedAccount.state ? ', '+selectedAccount.state : ''}</span></>}
+                                            <span style={{ width:1, height:14, background:T.border }}/>
+                                            <span
+                                                onClick={(e) => { e.stopPropagation(); if (selectedAccount) setTimeout(() => setViewingAccount(selectedAccount), 0); }}
+                                                style={{ color:T.goldInk, fontWeight:600, cursor: selectedAccount ? 'pointer' : 'default', opacity: selectedAccount ? 1 : 0.4 }}>
+                                                Open account panel ↗
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div style={{ padding:22, display:'grid', gridTemplateColumns:'1fr 300px', gap:24 }}>
+                                        <div>
+                                            <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:6 }}>Company description</div>
+                                            <div style={{ fontSize:13.5, color:T.ink, lineHeight:1.65 }}>
+                                                {selectedAccount?.description || selectedAccount?.notes || <span style={{ color:T.inkMuted, fontStyle:'italic' }}>No description on file.</span>}
+                                            </div>
+                                        </div>
+                                        <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r+2, padding:'14px 16px' }}>
+                                            <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:10 }}>At a glance</div>
+                                            {[
+                                                { l:'Industry',  v: selectedAccount?.verticalMarket || selectedAccount?.vertical || selectedAccount?.industry || '—' },
+                                                { l:'Employees', v: (() => { const n = selectedAccount?.totalEmployees ?? selectedAccount?.employeeCount ?? selectedAccount?.employees; return (n != null && n !== '') ? Number(n).toLocaleString() : '—'; })() },
+                                                { l:'Status',    v: <span style={{ padding:'2px 7px', fontSize:11, fontWeight:700, borderRadius:3, background:`${T.ok}14`, color:T.ok }}>Active customer</span> },
+                                                { l:'Owner',     v: selectedOpp.salesRep || selectedOpp.rep || '—' },
+                                            ].map((r,i) => (
+                                                <div key={i} style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6, fontSize:12 }}>
+                                                    <span style={{ width:72, fontSize:11, color:T.inkMuted, flexShrink:0 }}>{r.l}</span>
+                                                    <span style={{ flex:1, color:T.ink }}>{r.v}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* ── Section 2: Opportunity KPI strip ── */}
+                                {(() => {
+                                    const amt = parseFloat(selectedOpp.arr||selectedOpp.revenue||0)||0;
+                                    const prob = parseFloat(selectedOpp.probability||0)||0;
+                                    const stage = selectedOpp.stage || '—';
+                                    // FIX 4: use forecastedCloseDate || closeDate, same pattern as rest of codebase
+                                    const rawCloseDate = selectedOpp.forecastedCloseDate || selectedOpp.closeDate || '';
+                                    const closeDate = rawCloseDate
+                                        ? new Date(rawCloseDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+                                        : '—';
+                                    // FIX 2: use createdDate (the actual field) not createdAt/openedDate
+                                    const openedRaw = selectedOpp.createdDate || selectedOpp.createdAt || selectedOpp.openedDate || '';
+                                    const age = openedRaw
+                                        ? Math.round((Date.now() - new Date(openedRaw+'T12:00:00'))/86400000)
+                                        : null;
+                                    const openedLabel = openedRaw
+                                        ? new Date(openedRaw+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+                                        : null;
+                                    // Days in current stage: prefer stageHistory match, fall back to stageChangedDate
+                                    const stageEnteredRaw = (() => {
+                                        const history = selectedOpp.stageHistory || [];
+                                        const match = [...history].reverse().find(h => h.stage === selectedOpp.stage);
+                                        if (match) return match.date || match.changedAt || '';
+                                        return selectedOpp.stageChangedDate || selectedOpp.stageChangedAt || '';
+                                    })();
+                                    const daysInStage = stageEnteredRaw
+                                        ? Math.round((Date.now() - new Date(stageEnteredRaw+'T12:00:00'))/86400000)
+                                        : null;
+
+                                    const stageStatusColor = stage.includes('Won') ? T.ok : stage.includes('Lost') ? T.danger : T.warn;
+
+                                    return (
+                                        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                                            <div style={{ padding:'14px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:12 }}>
+                                                <div style={{ flex:1 }}>
+                                                    <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:4 }}>Opportunity</div>
+                                                    <div style={{ fontSize:17, fontWeight:700, color:T.ink }}>{selectedOpp.opportunityName || selectedOpp.name || '—'}</div>
+                                                </div>
+                                                <span style={{ padding:'3px 10px', fontSize:11, fontWeight:700, borderRadius:12,
+                                                    background:`${stageStatusColor}18`, color:stageStatusColor,
+                                                    border:`1px solid ${stageStatusColor}40`, textTransform:'uppercase', letterSpacing:0.5 }}>
+                                                    {stage}
+                                                </span>
+                                                <span style={{ fontSize:11.5, color:T.inkMid }}>
+                                                    Forecast: <b style={{ color:T.ink, textTransform:'capitalize' }}>{selectedOpp.forecastCategory || '—'}</b>
+                                                </span>
+                                            </div>
+                                            <div style={{ padding:22 }}>
+                                                {/* FIX 1+3: 5-tile KPI strip — Amount, Stage, Days in stage, Probability, Close date, Age */}
+                                                <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10, marginBottom:16 }}>
+                                                    {[
+                                                        { label:'Amount', value: amt >= 1000 ? `$${(amt/1000).toFixed(1)}k` : `$${Math.round(amt)}`, sub: null, serif:true, tone:T.ok },
+                                                        { label:'Stage', value: stage, sub: null, serif:true },
+                                                        { label:'Days in stage', value: daysInStage != null ? `${daysInStage}d` : '—', sub: null, mono:true, tone: daysInStage > 30 ? T.warn : undefined },
+                                                        { label:'Probability', value: `${prob}%`, sub: null, mono:true },
+                                                        { label:'Close date', value: closeDate, sub: null },
+                                                        // FIX 2+3: Age in pipeline — no Pipeline tile
+                                                    ].map((kpi,i) => (
+                                                        <div key={i} style={{ padding:'12px 14px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r+2 }}>
+                                                            <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:6 }}>{kpi.label}</div>
+                                                            <div style={{ fontFamily: kpi.mono ? 'ui-monospace,Menlo,monospace' : kpi.serif ? T.serif : T.sans,
+                                                                fontStyle: kpi.serif ? 'italic' : 'normal', fontWeight:700, fontSize:22,
+                                                                color: kpi.tone || T.ink, lineHeight:1 }}>{kpi.value}</div>
+                                                            {kpi.sub && <div style={{ fontSize:11, color:T.inkMid, marginTop:6 }}>{kpi.sub}</div>}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                {/* Age in pipeline — separate row below the main strip */}
+                                                {age != null && (
+                                                    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', marginBottom:10,
+                                                        background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12 }}>
+                                                        <span style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6 }}>Age in pipeline</span>
+                                                        <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontWeight:700, color:T.ink, fontSize:13 }}>{age}d</span>
+                                                        {openedLabel && <span style={{ color:T.inkMuted }}>· opened {openedLabel}</span>}
+                                                    </div>
+                                                )}
+                                                {/* Products + next step */}
+                                                {(selectedOpp.products?.length > 0 || selectedOpp.nextStep) && (
+                                                    <div style={{ display:'flex', alignItems:'center', gap:14, padding:'10px 14px',
+                                                        background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, flexWrap:'wrap' }}>
+                                                        {selectedOpp.products?.length > 0 && <>
+                                                            <span style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6 }}>Products</span>
+                                                            {selectedOpp.products.map((p,i) => (
+                                                                <span key={i} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12 }}>
+                                                                    <span style={{ fontWeight:600, color:T.ink }}>{p.name || p}</span>
+                                                                </span>
+                                                            ))}
+                                                            <span style={{ width:1, height:14, background:T.border }}/>
+                                                        </>}
+                                                        {selectedOpp.nextStep && <>
+                                                            <span style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6 }}>Next step</span>
+                                                            <span style={{ fontSize:12, color:T.ink, fontWeight:600 }}>{selectedOpp.nextStep}</span>
+                                                            {selectedOpp.nextStepDate && (
+                                                                <span style={{ padding:'2px 8px', fontSize:10.5, fontWeight:600, borderRadius:8,
+                                                                    background:`${T.warn}14`, color:T.warn, border:`1px solid ${T.warn}40` }}>
+                                                                    due {new Date(selectedOpp.nextStepDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+                                                                </span>
+                                                            )}
+                                                        </>}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* ── Section 3: Contacts on this deal ── */}
+                                {oppContacts.length > 0 && (
+                                    <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                                        <div style={{ padding:'14px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center' }}>
+                                            <div style={{ flex:1 }}>
+                                                <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:4 }}>Opportunity contacts</div>
+                                                <div style={{ fontSize:17, fontWeight:700, color:T.ink }}>Contacts on this deal ({oppContacts.length})</div>
+                                            </div>
+                                        </div>
+                                        <div style={{ overflowX:'auto' }}>
+                                            <div style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1.2fr 1fr 1fr 1fr 36px', gap:14,
+                                                padding:'8px 22px', background:T.surface2, borderBottom:`1px solid ${T.border}`,
+                                                fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5, fontFamily:T.sans }}>
+                                                <div>Name</div><div>Title</div><div>Email</div><div>Phone</div><div>Buyer persona</div><div>Engagement</div><div/>
+                                            </div>
+                                            {oppContacts.map((c,i) => {
+                                                const personaId = c.buyerPersona || c.persona || '';
+                                                const persona = personaId ? (() => {
+                                                    const found = (settings?.buyerPersonas||[]).find(p =>
+                                                        typeof p === 'string' ? p === personaId : p.id === personaId || p.name === personaId
+                                                    );
+                                                    if (typeof found === 'string') return { name: found, color: T.inkMuted };
+                                                    return found || null;
+                                                })() : null;
+                                                const personaColor = persona?.color || T.inkMuted;
+                                                const fullName = ((c.firstName||'')+' '+(c.lastName||'')).trim();
+                                                const initials = fullName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+                                                const menuOpen = contactMenuId === c.id;
+                                                const pickerOpen = personaPickerId === c.id;
+
+                                                const handleRemoveFromOpp = () => {
+                                                    setContactMenuId(null);
+                                                    const updatedIds = (selectedOpp.contactIds||[]).filter(id => id !== c.id);
+                                                    const updated = { ...selectedOpp, contactIds: updatedIds };
+                                                    setOpportunities(prev => prev.map(o => o.id === selectedOpp.id ? updated : o));
+                                                    dbFetch('/.netlify/functions/opportunities', {
+                                                        method: 'PUT',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify(updated),
+                                                    }).catch(err => console.error('Failed to remove contact from opp:', err));
+                                                };
+
+                                                const handleSetPersona = (personaName) => {
+                                                    setPersonaPickerId(null);
+                                                    setContactMenuId(null);
+                                                    const updated = { ...c, buyerPersona: personaName };
+                                                    setContacts(prev => prev.map(ct => ct.id === c.id ? updated : ct));
+                                                    dbFetch('/.netlify/functions/contacts', {
+                                                        method: 'PUT',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify(updated),
+                                                    }).catch(err => console.error('Failed to update buyer persona:', err));
+                                                };
+
+                                                return (
+                                                    <div key={c.id||i} style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1.2fr 1fr 1fr 1fr 36px', gap:14,
+                                                        padding:'12px 22px', borderBottom:`1px solid ${T.border}`, fontSize:12.5, fontFamily:T.sans,
+                                                        alignItems:'center', background:T.surface, position:'relative' }}>
+                                                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                                            <div style={{ width:32, height:32, borderRadius:'50%', background:T.ink, color:'#fbf8f3',
+                                                                fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                                                {initials}
+                                                            </div>
+                                                            <div>
+                                                                <div style={{ fontWeight:700, color:T.ink }}>{fullName}</div>
+                                                                <div style={{ fontSize:10.5, color:T.inkMuted }}>
+                                                                    last touch {c.lastTouch || '—'} · {c.activities || 0} activities
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ color:T.inkMid }}>{c.title || '—'}</div>
+                                                        <div>
+                                                            {c.email ? <a href={`mailto:${c.email}`} style={{ color:T.info, fontWeight:500, fontSize:12 }}>{c.email}</a> : <span style={{ color:T.inkMuted }}>—</span>}
+                                                        </div>
+                                                        <div style={{ color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{c.phone || '—'}</div>
+                                                        <div>
+                                                            {persona ? (
+                                                                <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'2px 8px 2px 4px',
+                                                                    borderRadius:999, background:`${personaColor}14`, border:`1px solid ${personaColor}40` }}>
+                                                                    <span style={{ width:16, height:16, borderRadius:'50%', background:personaColor, color:'#fbf8f3',
+                                                                        display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                                                        fontSize:9, fontWeight:700, fontFamily:T.serif }}>
+                                                                        {(persona.name||'?')[0]}
+                                                                    </span>
+                                                                    <span style={{ fontSize:11, fontWeight:600, color:personaColor }}>{persona.name}</span>
+                                                                </span>
+                                                            ) : <span style={{ color:T.inkMuted, fontStyle:'italic', fontSize:11 }}>—</span>}
+                                                        </div>
+                                                        <div>
+                                                            {(() => {
+                                                                const eng = c.engagement || 'warm';
+                                                                const ec = eng==='hot' ? T.danger : eng==='cool' ? T.info : eng==='stale' ? T.inkMuted : T.warn;
+                                                                return <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                                                                    <span style={{ width:7, height:7, borderRadius:'50%', background:ec }}/>
+                                                                    <span style={{ fontSize:11.5, color:T.inkMid, textTransform:'capitalize' }}>{eng}</span>
+                                                                </span>;
+                                                            })()}
+                                                        </div>
+                                                        {/* ── Kebab ── */}
+                                                        <div ref={menuOpen || pickerOpen ? contactMenuRef : null} style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                                                            <button
+                                                                onClick={() => { setContactMenuId(menuOpen ? null : c.id); setPersonaPickerId(null); }}
+                                                                style={{ width:26, height:26, borderRadius:6, border:`1px solid ${menuOpen ? T.borderStrong : 'transparent'}`,
+                                                                    background: menuOpen ? T.surface2 : 'transparent', color:T.inkMuted, cursor:'pointer',
+                                                                    fontSize:14, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center',
+                                                                    fontFamily:'inherit', lineHeight:1 }}>
+                                                                ⋯
+                                                            </button>
+                                                            {menuOpen && !pickerOpen && (
+                                                                <div style={{ position:'absolute', top:'100%', right:0, marginTop:4, zIndex:200,
+                                                                    background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+2,
+                                                                    boxShadow:'0 8px 24px rgba(42,38,34,0.14)', minWidth:170, overflow:'hidden' }}>
+                                                                    <button
+                                                                        onClick={() => setPersonaPickerId(c.id)}
+                                                                        style={{ width:'100%', padding:'9px 14px', border:'none', background:'transparent',
+                                                                            color:T.ink, fontSize:12.5, fontWeight:500, cursor:'pointer', fontFamily:T.sans,
+                                                                            textAlign:'left', display:'flex', alignItems:'center', gap:8 }}
+                                                                        onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                                                        onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                                        <span style={{ fontSize:13 }}>👤</span> Buyer persona
+                                                                    </button>
+                                                                    <div style={{ height:1, background:T.border, margin:'0 10px' }}/>
+                                                                    <button
+                                                                        onClick={handleRemoveFromOpp}
+                                                                        style={{ width:'100%', padding:'9px 14px', border:'none', background:'transparent',
+                                                                            color:T.danger, fontSize:12.5, fontWeight:500, cursor:'pointer', fontFamily:T.sans,
+                                                                            textAlign:'left', display:'flex', alignItems:'center', gap:8 }}
+                                                                        onMouseEnter={e => e.currentTarget.style.background='rgba(156,58,46,0.06)'}
+                                                                        onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                                        <span style={{ fontSize:13 }}>✕</span> Remove from deal
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                            {pickerOpen && (
+                                                                <div style={{ position:'absolute', top:'100%', right:0, marginTop:4, zIndex:200,
+                                                                    background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+2,
+                                                                    boxShadow:'0 8px 24px rgba(42,38,34,0.14)', minWidth:190, overflow:'hidden' }}>
+                                                                    <div style={{ padding:'8px 12px 6px', fontSize:9.5, fontWeight:700, color:T.inkMuted,
+                                                                        textTransform:'uppercase', letterSpacing:0.6, borderBottom:`1px solid ${T.border}` }}>
+                                                                        Buyer persona
+                                                                    </div>
+                                                                    {(settings?.buyerPersonas||[]).filter(p => p.active !== false).map((p, pi) => {
+                                                                        const pName = typeof p === 'string' ? p : p.name;
+                                                                        const pColor = typeof p === 'object' ? (p.color || T.inkMuted) : T.inkMuted;
+                                                                        const isSelected = personaId === pName;
+                                                                        return (
+                                                                            <button key={pi}
+                                                                                onClick={() => handleSetPersona(pName)}
+                                                                                style={{ width:'100%', padding:'8px 12px', border:'none',
+                                                                                    background: isSelected ? `${pColor}14` : 'transparent',
+                                                                                    cursor:'pointer', fontFamily:T.sans, textAlign:'left',
+                                                                                    display:'flex', alignItems:'center', gap:8 }}
+                                                                                onMouseEnter={e => e.currentTarget.style.background=`${pColor}14`}
+                                                                                onMouseLeave={e => e.currentTarget.style.background=isSelected?`${pColor}14`:'transparent'}>
+                                                                                <span style={{ width:14, height:14, borderRadius:'50%', background:pColor, flexShrink:0 }}/>
+                                                                                <span style={{ fontSize:12.5, fontWeight:isSelected?700:500, color: isSelected ? pColor : T.ink }}>{pName}</span>
+                                                                                {isSelected && <span style={{ marginLeft:'auto', fontSize:11, color:pColor }}>✓</span>}
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                    {(settings?.buyerPersonas||[]).filter(p => p.active !== false).length === 0 && (
+                                                                        <div style={{ padding:'10px 12px', fontSize:12, color:T.inkMuted, fontStyle:'italic' }}>
+                                                                            No personas defined — add in Settings
+                                                                        </div>
+                                                                    )}
+                                                                    {personaId && (
+                                                                        <>
+                                                                        <div style={{ height:1, background:T.border, margin:'0 10px' }}/>
+                                                                        <button
+                                                                            onClick={() => handleSetPersona('')}
+                                                                            style={{ width:'100%', padding:'8px 12px', border:'none', background:'transparent',
+                                                                                cursor:'pointer', fontFamily:T.sans, textAlign:'left', fontSize:12, color:T.inkMuted }}
+                                                                            onMouseEnter={e => e.currentTarget.style.background=T.surface2}
+                                                                            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                                            Clear persona
+                                                                        </button>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ── Section 4: Stage progression & activity ── */}
+                                <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
+                                    <div style={{ padding:'14px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center' }}>
+                                        <div style={{ flex:1 }}>
+                                            <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:4 }}>Deal history</div>
+                                            <div style={{ fontSize:17, fontWeight:700, color:T.ink }}>Stage progression & activity</div>
+                                        </div>
+                                        <span style={{ fontSize:11.5, color:T.inkMid }}>
+                                            <b style={{ color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{allEvents.length}</b> events ·{' '}
+                                            <b style={{ color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{oppActivities.length}</b> activities
+                                        </span>
+                                    </div>
+                                    <div style={{ padding:22 }}>
+
+                                        {/* Stage track */}
+                                        <div style={{ display:'grid', gridTemplateColumns:`repeat(${funnelStages.length}, 1fr)`, gap:0, marginBottom:14, border:`1px solid ${T.border}`, borderRadius:T.r+2, overflow:'hidden' }}>
+                                            {funnelStages.map((s, i) => {
+                                                const visited = i < currentStageIdx;
+                                                const current = i === currentStageIdx;
+                                                const future = i > currentStageIdx;
+                                                const color = current ? T.goldInk : visited ? T.ok : T.inkMuted;
+                                                const bg = current ? 'rgba(122,106,72,0.10)' : visited ? `${T.ok}0a` : T.surface2;
+                                                return (
+                                                    <div key={s.name} style={{ padding:'12px 10px', background:bg, borderTop:`2px solid ${color}`,
+                                                        borderRight: i < funnelStages.length-1 ? `1px solid ${T.border}` : 'none',
+                                                        opacity: future ? 0.6 : 1 }}>
+                                                        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:5 }}>
+                                                            <span style={{ width:20, height:20, borderRadius:'50%',
+                                                                background: visited||current ? color : T.surface,
+                                                                color: visited||current ? '#fbf8f3' : T.inkMuted,
+                                                                border:`1.5px solid ${color}`,
+                                                                display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                                                fontSize:10, fontWeight:700, fontFamily:T.serif, fontStyle:'italic', flexShrink:0 }}>
+                                                                {visited ? '✓' : i+1}
+                                                            </span>
+                                                            <span style={{ fontSize:11.5, fontWeight:700, color:T.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{s.name}</span>
+                                                            {current && <span style={{ fontSize:8, fontWeight:700, color:T.goldInk, background:'rgba(200,185,154,0.3)', borderRadius:2, padding:'1px 4px', marginLeft:'auto', textTransform:'uppercase', flexShrink:0 }}>Now</span>}
+                                                        </div>
+                                                        {future ? (
+                                                            <div style={{ fontSize:10.5, color:T.inkMuted, fontStyle:'italic' }}>not yet · avg {s.weight}%</div>
+                                                        ) : (
+                                                            <div style={{ fontSize:10.5, color:T.inkMid, lineHeight:1.5 }}>
+                                                                <div style={{ fontFamily:'ui-monospace,Menlo,monospace', fontSize:10 }}>{s.enteredDate || '—'}</div>
+                                                                <div style={{ fontSize:9.5, color:T.inkMuted }}>prob set <b style={{ color:T.inkMid }}>{s.weight}%</b></div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Summary line */}
+                                        <div style={{ display:'flex', alignItems:'center', gap:16, padding:'9px 14px',
+                                            background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:11.5, marginBottom:20 }}>
+                                            <span style={{ color:T.inkMid }}>Stages completed <b style={{ color:T.ink, fontFamily:'ui-monospace,Menlo,monospace' }}>{currentStageIdx >= 0 ? currentStageIdx+1 : 0} of {funnelStages.length}</b></span>
+                                            <span style={{ width:1, height:14, background:T.border }}/>
+                                            <span style={{ color:T.inkMid }}>Current stage: <b style={{ color:T.ink }}>{selectedOpp.stage}</b></span>
+                                        </div>
+
+                                        {/* Activity log */}
+                                        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+                                            <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7 }}>Activity log</div>
+                                            <span style={{ flex:1, height:1, background:T.border }}/>
+                                            <span style={{ fontSize:11.5, color:T.inkMid }}>{allEvents.length} events · newest first</span>
+                                        </div>
+
+                                        {allEvents.length === 0 ? (
+                                            <div style={{ textAlign:'center', padding:'2rem', color:T.inkMuted, fontSize:13, fontStyle:'italic' }}>
+                                                No activities logged against this opportunity yet.
+                                            </div>
+                                        ) : (
+                                            <div style={{ border:`1px solid ${T.border}`, borderRadius:T.r, background:T.surface, overflow:'hidden' }}>
+                                                {BUCKET_ORDER.filter(b => buckets[b]).map((bucket, bi) => (
+                                                    <div key={bucket}>
+                                                        <div style={{ padding:'8px 16px 4px', display:'flex', alignItems:'center', gap:10,
+                                                            borderTop: bi > 0 ? `1px solid ${T.border}` : 'none', background:T.surface2 }}>
+                                                            <span style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7 }}>{bucket}</span>
+                                                            <span style={{ fontSize:10, padding:'1px 7px', borderRadius:8, background:T.surface, color:T.inkMuted, border:`1px solid ${T.border}` }}>{buckets[bucket].length}</span>
+                                                            <span style={{ flex:1, height:1, background:T.border, marginLeft:4 }}/>
+                                                        </div>
+                                                        {buckets[bucket].map((e, i) => {
+                                                            const tone = eventTone[e.type] || eventTone.note;
+                                                            return (
+                                                                <div key={e.id} style={{ padding:'10px 16px', display:'grid',
+                                                                    gridTemplateColumns:'60px 28px 1fr auto', gap:14, alignItems:'flex-start',
+                                                                    borderBottom: i < buckets[bucket].length-1 ? `1px solid ${T.border}` : 'none',
+                                                                    borderTop: i === 0 ? `1px solid ${T.border}` : 'none' }}>
+                                                                    <span style={{ fontSize:11, color:T.inkMuted, fontFamily:'ui-monospace,Menlo,monospace', paddingTop:3 }}>{e.ts}</span>
+                                                                    <span style={{ width:28, height:28, borderRadius:'50%',
+                                                                        background:`${tone.color}18`, border:`1.5px solid ${tone.color}`,
+                                                                        color:tone.color, display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                                                        fontSize:12, fontWeight:700, fontFamily:T.serif, flexShrink:0 }}>{tone.glyph}</span>
+                                                                    <div>
+                                                                        <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, lineHeight:1.4 }}>{e.title}</div>
+                                                                        {e.sub && <div style={{ fontSize:11.5, color:T.inkMid, marginTop:2, lineHeight:1.45 }}>{e.sub}</div>}
+                                                                        <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:4, display:'flex', alignItems:'center', gap:6 }}>
+                                                                            <span style={{ padding:'1px 6px', fontSize:9.5, fontWeight:700, background:`${tone.color}14`, color:tone.color, borderRadius:8, textTransform:'uppercase', letterSpacing:0.4 }}>{tone.label}</span>
+                                                                            <span>by {e.who}</span>
+                                                                            {e.delta && <span style={{ padding:'1px 6px', fontSize:9.5, fontWeight:700, background:T.surface2, color:T.inkMid, borderRadius:8, fontFamily:'ui-monospace,Menlo,monospace', border:`1px solid ${T.border}` }}>Δ {e.delta}</span>}
+                                                                        </div>
+                                                                    </div>
+                                                                    {e.value != null && <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:16, color:T.ink, whiteSpace:'nowrap' }}>${(e.value/1000).toFixed(1)}k</span>}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
         </div>
     );
 }
