@@ -336,7 +336,7 @@ export default function ContactModal({
                                     onBlur={() => setTimeout(() => setShowContactRepSugg(false), 200)}
                                     placeholder="Type or select rep..." autoComplete="off" />
                                 {showContactRepSugg && (
-                                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                    <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginBottom: '0.25rem', maxHeight: '180px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                         {contactAllRepNames.filter(r => r.toLowerCase().includes(contactRepSearch.toLowerCase())).map((r, i) => (
                                             <div key={i}
                                                 onMouseDown={e => e.preventDefault()}
@@ -372,7 +372,7 @@ export default function ContactModal({
                                         autoComplete="off"
                                     />
                                     {showPersonaSugg && (
-                                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                                        <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', marginBottom: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
                                             {(settings.buyerPersonas || [])
                                                 .filter(p => {
                                                     // Support both legacy strings and rich objects
