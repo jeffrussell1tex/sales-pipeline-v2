@@ -6306,9 +6306,9 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                                         <div style={{ fontSize:12.5, fontWeight:600, color:T.ink, lineHeight:1.4 }}>{e.title}</div>
                                                                         {e.sub && <div style={{ fontSize:11.5, color:T.inkMid, marginTop:2, lineHeight:1.45 }}>{e.sub}</div>}
                                                                         <div style={{ fontSize:10.5, color:T.inkMuted, marginTop:4, display:'flex', alignItems:'center', gap:6 }}>
-                                                                            <span style={{ padding:'1px 6px', fontSize:9.5, fontWeight:700, background:`${tone.color}14`, color:tone.color, borderRadius:8, textTransform:'uppercase', letterSpacing:0.4 }}>{tone.label}</span>
+                                                                            <span style={{ padding:'1px 6px', fontSize:9.5, fontWeight:700, background:`${tone.color}14`, color:tone.color, borderRadius:999, textTransform:'uppercase', letterSpacing:0.4 }}>{tone.label}</span>
                                                                             <span>by {e.who}</span>
-                                                                            {e.delta && <span style={{ padding:'1px 6px', fontSize:9.5, fontWeight:700, background:T.surface2, color:T.inkMid, borderRadius:8, fontFamily:'ui-monospace,Menlo,monospace', border:`1px solid ${T.border}` }}>Δ {e.delta}</span>}
+                                                                            {e.delta && <span style={{ padding:'1px 6px', fontSize:9.5, fontWeight:700, background:T.surface2, color:T.inkMid, borderRadius:999, fontFamily:'ui-monospace,Menlo,monospace', border:`1px solid ${T.border}` }}>Δ {e.delta}</span>}
                                                                         </div>
                                                                     </div>
                                                                     {e.value != null && <span style={{ fontFamily:T.serif, fontStyle:'italic', fontWeight:700, fontSize:16, color:T.ink, whiteSpace:'nowrap' }}>${(e.value/1000).toFixed(1)}k</span>}

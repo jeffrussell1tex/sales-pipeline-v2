@@ -287,7 +287,7 @@ export default function ViewingContactPanel({
                                             <div style={{ fontWeight: '600', color: '#2a2622', fontSize: '0.875rem' }}>{opp.opportunityName || opp.account || 'Unnamed'}</div>
                                             <div style={{ fontSize: '0.75rem', color: '#8a8378' }}>{opp.account}</div>
                                         </div>
-                                        <span style={{ background: isWon ? 'rgba(77,107,61,0.1)' : 'rgba(156,58,46,0.06)', color: isWon ? '#2e4a24' : '#7a2820', padding: '0.2rem 0.625rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700', marginRight: '1rem' }}>{opp.stage}</span>
+                                        <span style={{ background: isWon ? 'rgba(77,107,61,0.1)' : 'rgba(156,58,46,0.06)', color: isWon ? '#2e4a24' : '#7a2820', padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700', marginRight: '1rem' }}>{opp.stage}</span>
                                         <span style={{ fontWeight: '700', color: '#2a2622', fontSize: '0.875rem', minWidth: '80px', textAlign: 'right' }}>${(parseFloat(opp.arr) || 0).toLocaleString()}</span>
                                     </div>
                                 );

@@ -59,7 +59,7 @@ export default function ViewingAccountPanel({
         return {
             display: 'inline-block',
             padding: '0.2rem 0.625rem',
-            borderRadius: 3,
+            borderRadius: 999,
             fontSize: '0.6875rem',
             fontWeight: 600,
             fontFamily: 'inherit',
@@ -407,7 +407,7 @@ export default function ViewingAccountPanel({
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1, minWidth: 0 }}>
                                             <div style={{ fontWeight: '700', color: '#3a5a7a', fontSize: '0.75rem', whiteSpace: 'nowrap', minWidth: '130px' }}>{c.firstName} {c.lastName}</div>
                                             <div style={{ fontSize: '0.75rem', color: '#8a8378', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{c.title || ''}</div>
-                                            {isSubContact && <span style={{ fontSize: '0.625rem', color: '#3a5a7a', fontWeight: '700', background: 'rgba(58,90,122,0.1)', padding: '0.05rem 0.35rem', borderRadius: '3px', flexShrink: 0 }}>↳ {c.company}</span>}
+                                            {isSubContact && <span style={{ fontSize: '0.625rem', color: '#3a5a7a', fontWeight: '700', background: 'rgba(58,90,122,0.1)', padding: '0.05rem 0.35rem', borderRadius: '999px', flexShrink: 0 }}>↳ {c.company}</span>}
                                         </div>
                                         <div style={{ display: 'flex', gap: '1rem', flexShrink: 0, alignItems: 'center' }}>
                                             {c.email && <div style={{ fontSize: '0.75rem', color: '#8a8378' }}>{c.email}</div>}

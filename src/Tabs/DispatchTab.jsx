@@ -415,7 +415,7 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                                     borderLeft: `4px solid ${pc}`,
                                     boxShadow: isSel ? '0 2px 8px rgba(42,38,34,0.08)' : 'none' }}>
                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
-                                    <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 2,
+                                    <span style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 999,
                                         background: `${pc}22`, color: pc, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                                         {j.priority}
                                     </span>
@@ -453,7 +453,7 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
                         <div style={{ padding: '14px 18px', background: T.surface,
                             borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
-                                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 2,
+                                <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 9px', borderRadius: 999,
                                     background: `${prioColor2(selectedJob.priority)}22`, color: prioColor2(selectedJob.priority),
                                     textTransform: 'uppercase', letterSpacing: 0.6 }}>
                                     {selectedJob.priority}

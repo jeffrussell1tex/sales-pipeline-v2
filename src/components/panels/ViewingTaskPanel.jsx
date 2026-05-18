@@ -107,8 +107,8 @@ export default function ViewingTaskPanel({
                         {t.title}
                     </h2>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
-                        <span style={{ background: sc.bg, color: sc.color, padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700' }}>{status}</span>
-                        <span style={{ background: '#3a5a7a', color: '#fff', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.6875rem', fontWeight: '700' }}>{t.type}</span>
+                        <span style={{ background: sc.bg, color: sc.color, padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700' }}>{status}</span>
+                        <span style={{ background: '#3a5a7a', color: '#fff', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.6875rem', fontWeight: '700' }}>{t.type}</span>
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0, marginLeft: '1rem' }}>
@@ -197,7 +197,7 @@ export default function ViewingTaskPanel({
                                     <span style={{ width: '65px', flexShrink: 0, color: '#8a8378', fontSize: '0.75rem' }}>
                                         {a.date ? new Date(a.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                                     </span>
-                                    <span style={{ padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.625rem', fontWeight: '700', background: 'rgba(58,90,122,0.1)', color: '#2a2622', flexShrink: 0 }}>{a.type}</span>
+                                    <span style={{ padding: '0.1rem 0.4rem', borderRadius: '999px', fontSize: '0.625rem', fontWeight: '700', background: 'rgba(58,90,122,0.1)', color: '#2a2622', flexShrink: 0 }}>{a.type}</span>
                                     <span style={{ flex: 1, color: '#5a544c' }}>{a.notes || a.subject || 'No details'}</span>
                                 </div>
                             ))}

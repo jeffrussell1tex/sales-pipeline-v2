@@ -128,7 +128,7 @@ const TYPE_COLORS = {
 };
 const TypeBadge = ({ type }) => {
     const c = TYPE_COLORS[type] || { bg: '#f1f5f9', color: '#64748b', label: type || '—' };
-    return <span style={{ background: c.bg, color: c.color, fontSize: '0.5625rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0.15rem 0.4rem', borderRadius: 4 }}>{c.label}</span>;
+    return <span style={{ background: c.bg, color: c.color, fontSize: '0.5625rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0.15rem 0.5rem', borderRadius: 999 }}>{c.label}</span>;
 };
 
 // ─── Approval gauge ───────────────────────────────────────────
@@ -412,7 +412,7 @@ const QuoteColumn = ({ quote, otherQuote, label, readOnly, editable, products, o
                             <div>
                                 <div style={{ color: T.ink, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5 }}>
                                     {li.productName || p.name}
-                                    {isNew && <span style={{ fontSize: 8.5, fontWeight: 700, color: T.ok, background: `${T.ok}20`, padding: '1px 4px', borderRadius: 2 }}>ADDED</span>}
+                                    {isNew && <span style={{ fontSize: 8.5, fontWeight: 700, color: T.ok, background: `${T.ok}20`, padding: '1px 4px', borderRadius: 999 }}>ADDED</span>}
                                 </div>
                                 <div style={{ fontSize: 9.5, color: T.inkMuted, fontFamily: 'ui-monospace,Menlo,monospace' }}>{p.sku || ''}</div>
                             </div>
