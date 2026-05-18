@@ -5552,6 +5552,49 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         win.document.close();
     }, []);
 
+    const handleOppExportPDF = React.useCallback((opp, events) => {
+        const win = window.open('', '_blank', 'width=1100,height=800');
+        if (!win) return;
+        const printDate = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+        const title = `Opportunity History — ${opp.account} · ${opp.opportunityName || opp.name || ''}`;
+        const amt = parseFloat(opp.arr||0);
+        const amtFmt = amt >= 1000 ? `$${(amt/1000).toFixed(1)}k` : `$${Math.round(amt)}`;
+        const closeDate = (opp.forecastedCloseDate||opp.closeDate) ? new Date((opp.forecastedCloseDate||opp.closeDate)+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+        const rowsHtml = events.map(e => {
+            const tone = { call:'CALL', email:'EMAIL', meeting:'MEETING', task:'TASK', note:'NOTE', quote:'QUOTE', stage:'STAGE', amount:'AMOUNT', prob:'PROB', slip:'SLIP', open:'CREATED' };
+            const lbl = tone[e.type] || (e.type||'').toUpperCase().slice(0,10);
+            return `<tr><td style="white-space:nowrap">${e.ts||'—'}</td><td><span style="background:#f5efe3;color:#5a544c;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px">${lbl}</span></td><td style="font-weight:600">${e.title||'—'}</td><td style="color:#8a8378;font-size:11px">${e.sub||''}</td><td style="color:#8a8378">${e.who||''}</td></tr>`;
+        }).join('');
+        win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>
+@page { margin: 0.625in; size: landscape; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, sans-serif; font-size: 12px; color: #2a2622; }
+.hdr { display: flex; justify-content: space-between; padding-bottom: 12px; border-bottom: 3px solid #7a6a48; margin-bottom: 16px; }
+.hdr h1 { font-size: 16px; font-weight: 800; }
+.meta { font-size: 9px; color: #8a8378; text-align: right; }
+.kpi { display: flex; gap: 16px; margin-bottom: 16px; }
+.kpi-tile { flex: 1; background: #f5efe3; border: 1px solid #e6ddd0; border-radius: 3px; padding: 10px 12px; }
+.kpi-label { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #8a8378; margin-bottom: 4px; }
+.kpi-val { font-size: 18px; font-weight: 700; color: #2a2622; }
+table { width: 100%; border-collapse: collapse; font-size: 11px; }
+th { background: #fbf8f3; padding: 6px 10px; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #8a8378; border-bottom: 2px solid #e6ddd0; text-align: left; }
+td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
+.footer { margin-top: 16px; font-size: 9px; color: #8a8378; border-top: 1px solid #e6ddd0; padding-top: 8px; display: flex; justify-content: space-between; }
+</style></head><body>
+<div class="hdr"><h1>${title}</h1><div class="meta">Generated ${printDate}<br>Accelerep · Confidential</div></div>
+<div class="kpi">
+  <div class="kpi-tile"><div class="kpi-label">Amount</div><div class="kpi-val">${amtFmt}</div></div>
+  <div class="kpi-tile"><div class="kpi-label">Stage</div><div class="kpi-val">${opp.stage||'—'}</div></div>
+  <div class="kpi-tile"><div class="kpi-label">Probability</div><div class="kpi-val">${opp.probability||0}%</div></div>
+  <div class="kpi-tile"><div class="kpi-label">Close date</div><div class="kpi-val">${closeDate}</div></div>
+  <div class="kpi-tile"><div class="kpi-label">Forecast</div><div class="kpi-val">${opp.forecastCategory||'—'}</div></div>
+</div>
+<table><thead><tr><th>Date</th><th>Type</th><th>Event</th><th>Detail</th><th>Rep</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+<div class="footer"><span>Accelerep · Confidential</span><span>Generated ${printDate}</span></div>
+<script>window.onload=function(){ window.print(); }<\/script></body></html>`);
+        win.document.close();
+    }, []);
+
     const ActionButtons = ({ entityName, entityType, events }) => (
         <div style={{ display:'flex', gap:8 }}>
             <button
@@ -5892,9 +5935,25 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                                 )}
                             </div>
                             <div style={{ flex:1 }}/>
-                            <button onClick={() => {}} style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Save as report</button>
-                            <button onClick={() => window.print()} style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Export PDF</button>
-                            <button style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>Email to owner</button>
+                            <button
+                                onClick={() => handleSaveAsReport(selectedOpp.opportunityName || selectedOpp.name || selectedOpp.account, 'Opportunity')}
+                                disabled={saveReportState === 'saving'}
+                                style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5,
+                                    color: saveReportState==='saved' ? T.ok : saveReportState==='error' ? T.danger : T.inkMid,
+                                    cursor:'pointer', fontFamily:T.sans, opacity: saveReportState==='saving' ? 0.6 : 1 }}>
+                                {saveReportState==='saving' ? 'Saving…' : saveReportState==='saved' ? '✓ Saved' : saveReportState==='error' ? 'Error — retry' : 'Save as report'}
+                            </button>
+                            <button onClick={() => handleOppExportPDF(selectedOpp, allEvents)} style={{ padding:'7px 14px', background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r, fontSize:12.5, color:T.inkMid, cursor:'pointer', fontFamily:T.sans }}>Export PDF</button>
+                            <button
+                                onClick={() => {
+                                    const owner = selectedOpp.salesRep || selectedOpp.rep || '';
+                                    const subject = encodeURIComponent(`Opportunity history: ${selectedOpp.opportunityName || selectedOpp.account}`);
+                                    const body = encodeURIComponent(`Hi ${owner},\n\nPlease find the opportunity history report for ${selectedOpp.opportunityName || selectedOpp.account} attached.\n\nDeal: ${selectedOpp.opportunityName || ''}\nAccount: ${selectedOpp.account || ''}\nStage: ${selectedOpp.stage || ''}\nAmount: $${(parseFloat(selectedOpp.arr||0)/1000).toFixed(1)}k\nClose date: ${selectedOpp.forecastedCloseDate || selectedOpp.closeDate || '—'}\n`);
+                                    window.location.href = `mailto:${owner}?subject=${subject}&body=${body}`;
+                                }}
+                                style={{ padding:'7px 14px', background:T.ink, color:'#fbf8f3', border:'none', borderRadius:T.r, fontSize:12.5, fontWeight:600, cursor:'pointer', fontFamily:T.sans }}>
+                                Email to owner
+                            </button>
                         </div>
 
                         {/* Period pills */}
@@ -5944,7 +6003,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                                             <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:10 }}>At a glance</div>
                                             {[
                                                 { l:'Industry',  v: selectedAccount?.vertical || selectedAccount?.industry || '—' },
-                                                { l:'Employees', v: selectedAccount?.employees ? selectedAccount.employees.toLocaleString() : '—' },
+                                                { l:'Employees', v: (selectedAccount?.employeeCount || selectedAccount?.employees || selectedAccount?.numberOfEmployees) ? (selectedAccount.employeeCount || selectedAccount.employees || selectedAccount.numberOfEmployees).toLocaleString() : '—' },
                                                 { l:'Status',    v: <span style={{ padding:'2px 7px', fontSize:11, fontWeight:700, borderRadius:3, background:`${T.ok}14`, color:T.ok }}>Active customer</span> },
                                                 { l:'Owner',     v: selectedOpp.salesRep || selectedOpp.rep || '—' },
                                             ].map((r,i) => (
@@ -5962,13 +6021,24 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                                     const amt = parseFloat(selectedOpp.arr||selectedOpp.revenue||0)||0;
                                     const prob = parseFloat(selectedOpp.probability||0)||0;
                                     const stage = selectedOpp.stage || '—';
-                                    const closeDate = selectedOpp.closeDate
-                                        ? new Date(selectedOpp.closeDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+                                    // FIX 4: use forecastedCloseDate || closeDate, same pattern as rest of codebase
+                                    const rawCloseDate = selectedOpp.forecastedCloseDate || selectedOpp.closeDate || '';
+                                    const closeDate = rawCloseDate
+                                        ? new Date(rawCloseDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
                                         : '—';
-                                    const opened = selectedOpp.createdAt || selectedOpp.openedDate || '—';
-                                    const age = opened && opened !== '—'
-                                        ? Math.round((Date.now() - new Date(opened+'T12:00:00'))/86400000)
+                                    // FIX 2: use createdDate (the actual field) not createdAt/openedDate
+                                    const openedRaw = selectedOpp.createdDate || selectedOpp.createdAt || selectedOpp.openedDate || '';
+                                    const age = openedRaw
+                                        ? Math.round((Date.now() - new Date(openedRaw+'T12:00:00'))/86400000)
                                         : null;
+                                    const openedLabel = openedRaw
+                                        ? new Date(openedRaw+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+                                        : null;
+                                    // FIX 1: compute days in current stage
+                                    const stageEnteredRaw = selectedOpp.stageEnteredAt || selectedOpp.stageEnteredDate || '';
+                                    const daysInStage = stageEnteredRaw
+                                        ? Math.round((Date.now() - new Date(stageEnteredRaw+'T12:00:00'))/86400000)
+                                        : (selectedOpp.daysInStage || null);
 
                                     const stageStatusColor = stage.includes('Won') ? T.ok : stage.includes('Lost') ? T.danger : T.warn;
 
@@ -5989,15 +6059,15 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                                                 </span>
                                             </div>
                                             <div style={{ padding:22 }}>
-                                                {/* 6-tile KPI strip */}
-                                                <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:10, marginBottom:16 }}>
+                                                {/* FIX 1+3: 5-tile KPI strip — Amount, Stage, Days in stage, Probability, Close date, Age */}
+                                                <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10, marginBottom:16 }}>
                                                     {[
-                                                        { label:'Amount', value: amt >= 1000 ? `$${(amt/1000).toFixed(1)}k` : `$${amt}`, sub: null, serif:true, tone:T.ok },
+                                                        { label:'Amount', value: amt >= 1000 ? `$${(amt/1000).toFixed(1)}k` : `$${Math.round(amt)}`, sub: null, serif:true, tone:T.ok },
                                                         { label:'Stage', value: stage, sub: null, serif:true },
+                                                        { label:'Days in stage', value: daysInStage != null ? `${daysInStage}d` : '—', sub: null, mono:true, tone: daysInStage > 30 ? T.warn : undefined },
                                                         { label:'Probability', value: `${prob}%`, sub: null, mono:true },
                                                         { label:'Close date', value: closeDate, sub: null },
-                                                        { label:'Age in pipeline', value: age != null ? `${age}d` : '—', sub: opened !== '—' ? `opened ${new Date(opened+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}` : null, mono:true },
-                                                        { label:'Pipeline', value: selectedOpp.pipeline || 'New Business', sub: null },
+                                                        // FIX 2+3: Age in pipeline — no Pipeline tile
                                                     ].map((kpi,i) => (
                                                         <div key={i} style={{ padding:'12px 14px', background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r+2 }}>
                                                             <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6, marginBottom:6 }}>{kpi.label}</div>
@@ -6008,6 +6078,15 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                                                         </div>
                                                     ))}
                                                 </div>
+                                                {/* Age in pipeline — separate row below the main strip */}
+                                                {age != null && (
+                                                    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', marginBottom:10,
+                                                        background:T.surface2, border:`1px solid ${T.border}`, borderRadius:T.r, fontSize:12 }}>
+                                                        <span style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.6 }}>Age in pipeline</span>
+                                                        <span style={{ fontFamily:'ui-monospace,Menlo,monospace', fontWeight:700, color:T.ink, fontSize:13 }}>{age}d</span>
+                                                        {openedLabel && <span style={{ color:T.inkMuted }}>· opened {openedLabel}</span>}
+                                                    </div>
+                                                )}
                                                 {/* Products + next step */}
                                                 {(selectedOpp.products?.length > 0 || selectedOpp.nextStep) && (
                                                     <div style={{ display:'flex', alignItems:'center', gap:14, padding:'10px 14px',
