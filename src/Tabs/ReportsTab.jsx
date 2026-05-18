@@ -5566,7 +5566,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             return `<tr><td style="white-space:nowrap">${e.ts||'—'}</td><td><span style="background:#f5efe3;color:#5a544c;font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px">${lbl}</span></td><td style="font-weight:600">${e.title||'—'}</td><td style="color:#8a8378;font-size:11px">${e.sub||''}</td><td style="color:#8a8378">${e.who||''}</td></tr>`;
         }).join('');
         win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>
-@page { margin: 0.625in; }
+@page { margin: 0.625in; size: landscape; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, sans-serif; font-size: 12px; color: #2a2622; }
 .hdr { display: flex; justify-content: space-between; padding-bottom: 12px; border-bottom: 3px solid #7a6a48; margin-bottom: 16px; }
@@ -6003,7 +6003,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                             <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:10 }}>At a glance</div>
                                             {[
                                                 { l:'Industry',  v: selectedAccount?.vertical || selectedAccount?.industry || '—' },
-                                                { l:'Employees', v: selectedAccount?.employees ? Number(selectedAccount.employees).toLocaleString() : '—' },
+                                                { l:'Employees', v: (() => { const n = selectedAccount?.employeeCount ?? selectedAccount?.employees ?? selectedAccount?.numberOfEmployees; return (n != null && n !== '' && n !== 0) ? Number(n).toLocaleString() : '—'; })() },
                                                 { l:'Status',    v: <span style={{ padding:'2px 7px', fontSize:11, fontWeight:700, borderRadius:3, background:`${T.ok}14`, color:T.ok }}>Active customer</span> },
                                                 { l:'Owner',     v: selectedOpp.salesRep || selectedOpp.rep || '—' },
                                             ].map((r,i) => (
@@ -6034,17 +6034,11 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                     const openedLabel = openedRaw
                                         ? new Date(openedRaw+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
                                         : null;
-                                    // FIX 1: days in current stage from stageHistory
-                                    const currentStage = selectedOpp.stage || '';
-                                    const stageHistory = selectedOpp.stageHistory || [];
-                                    // Find last stageHistory entry that matches current stage
-                                    const currentStageEntry = [...stageHistory].reverse().find(h => h.stage === currentStage);
-                                    const stageEnteredRaw = currentStageEntry
-                                        ? (currentStageEntry.date || currentStageEntry.changedAt || '')
-                                        : (selectedOpp.stageEnteredAt || selectedOpp.stageEnteredDate || '');
+                                    // FIX 1: compute days in current stage
+                                    const stageEnteredRaw = selectedOpp.stageEnteredAt || selectedOpp.stageEnteredDate || '';
                                     const daysInStage = stageEnteredRaw
                                         ? Math.round((Date.now() - new Date(stageEnteredRaw+'T12:00:00'))/86400000)
-                                        : (selectedOpp.daysInStage != null ? selectedOpp.daysInStage : null);
+                                        : (selectedOpp.daysInStage || null);
 
                                     const stageStatusColor = stage.includes('Won') ? T.ok : stage.includes('Lost') ? T.danger : T.warn;
 
