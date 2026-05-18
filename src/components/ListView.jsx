@@ -115,19 +115,20 @@ function relativeDay(isoDate) {
 
 // ── Stage pill ────────────────────────────────────────────────
 function StagePill({ stage }) {
+    const c = stageColor(stage);
     return (
-        <div style={{
+        <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
-            padding: '2px 7px',
-            background: T.surface,
-            border: `1px solid ${T.border}`,
-            borderRadius: T.rSm,
-            fontSize: 11, fontWeight: 500, fontFamily: T.sans,
+            padding: '2px 8px',
+            background: c + '22',
+            border: `1px solid ${c}44`,
+            borderRadius: 999,
+            fontSize: 11, fontWeight: 600, fontFamily: T.sans,
+            color: c,
             whiteSpace: 'nowrap',
         }}>
-            <div style={{ width: 6, height: 6, borderRadius: 1, background: stageColor(stage), flexShrink: 0 }}/>
             {stage}
-        </div>
+        </span>
     );
 }
 
