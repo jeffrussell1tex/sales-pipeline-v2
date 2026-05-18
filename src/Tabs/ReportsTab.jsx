@@ -32,6 +32,8 @@ export default function ReportsTab({ leadsEnabled = true }) {
         allPipelines,
         isMobile,
         setViewingAccount,
+        setOpportunities,
+        setContacts,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';
@@ -2449,6 +2451,8 @@ ${bodyHtml}
                                 userRole={userRole}
                                 settings={settings}
                                 canSeeAll={canSeeAll}
+                                setOpportunities={setOpportunities}
+                                setContacts={setContacts}
                                 onSaveReport={(report) => setSavedReportsList(prev => [report, ...prev.filter(r => r.id !== report.id)])}
                             />
                         )}
@@ -4937,7 +4941,7 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
 // ─────────────────────────────────────────────────────────────
 //  Activity History Tab — Account History + Contact History
 // ─────────────────────────────────────────────────────────────
-function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, onSaveReport }) {
+function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, setOpportunities, setContacts, onSaveReport }) {
 
     const T = {
         bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
@@ -4966,6 +4970,9 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     const accRef = React.useRef(null);
     const conRef = React.useRef(null);
     const oppRef = React.useRef(null);
+    const [contactMenuId,   setContactMenuId]   = React.useState(null);
+    const [personaPickerId, setPersonaPickerId] = React.useState(null);
+    const contactMenuRef = React.useRef(null);
 
     const currentUserName = currentUser?.name || currentUser || '';
     const isAdmin = userRole === 'Admin';
@@ -6237,7 +6244,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                                 </span>;
                                                             })()}
                                                         </div>
-                                                        {/* ── Kebab menu ── */}
+                                                        {/* ── Kebab ── */}
                                                         <div ref={menuOpen || pickerOpen ? contactMenuRef : null} style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center' }}>
                                                             <button
                                                                 onClick={() => { setContactMenuId(menuOpen ? null : c.id); setPersonaPickerId(null); }}
