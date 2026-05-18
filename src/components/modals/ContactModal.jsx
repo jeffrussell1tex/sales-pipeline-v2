@@ -363,7 +363,7 @@ export default function ContactModal({
                                         onChange={e => {
                                             setPersonaSearch(e.target.value);
                                             handleChange('buyerPersona', e.target.value);
-                                            setShowPersonaSugg(e.target.value.trim().length > 0);
+                                            setShowPersonaSugg(true);
                                         }}
                                         onFocus={() => setShowPersonaSugg(true)}
                                         onBlur={() => setTimeout(() => setShowPersonaSugg(false), 200)}
