@@ -285,7 +285,7 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
                                 </div>
                             )}
                             {showOpportunitySuggestions && (
-                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '6px', marginTop: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
+                                <div style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '6px', marginBottom: '0.25rem', maxHeight: '200px', overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                                     {filteredOpportunities.map(opp => (
                                         <div key={opp.id}
                                             onClick={() => { handleChange('opportunityId', opp.id); setOpportunitySearch(''); setShowOpportunitySuggestions(false); }}

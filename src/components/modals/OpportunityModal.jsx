@@ -1747,7 +1747,7 @@ export default function OpportunityModal({
                                             autoComplete="off"
                                             style={inputStyle(false)}/>
                                         {showContactSuggestions && (
-                                            <div style={suggestionDropStyle}>
+                                            <div style={{ ...suggestionDropStyle, top: 'auto', bottom: '100%', marginTop: 0, marginBottom: 3 }}>
                                                 {(contacts || []).filter(c => {
                                                     const fullName = `${c.firstName} ${c.lastName}`;
                                                     return fullName.toLowerCase().includes(contactSearch.toLowerCase()) && !selectedContacts.some(s => s.startsWith(fullName));
