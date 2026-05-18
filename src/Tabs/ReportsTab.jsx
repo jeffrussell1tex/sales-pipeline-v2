@@ -6002,7 +6002,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                             {selectedAccount?.city && <><span style={{ width:1, height:14, background:T.border }}/><span>{selectedAccount.city}{selectedAccount.state ? ', '+selectedAccount.state : ''}</span></>}
                                             <span style={{ width:1, height:14, background:T.border }}/>
                                             <span
-                                                onClick={() => selectedAccount && setViewingAccount(selectedAccount)}
+                                                onClick={(e) => { e.stopPropagation(); if (selectedAccount) setTimeout(() => setViewingAccount(selectedAccount), 0); }}
                                                 style={{ color:T.goldInk, fontWeight:600, cursor: selectedAccount ? 'pointer' : 'default', opacity: selectedAccount ? 1 : 0.4 }}>
                                                 Open account panel ↗
                                             </span>
@@ -6050,11 +6050,16 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                     const openedLabel = openedRaw
                                         ? new Date(openedRaw+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
                                         : null;
-                                    // FIX 1: compute days in current stage
-                                    const stageEnteredRaw = selectedOpp.stageEnteredAt || selectedOpp.stageEnteredDate || '';
+                                    // Days in current stage: prefer stageHistory match, fall back to stageChangedDate
+                                    const stageEnteredRaw = (() => {
+                                        const history = selectedOpp.stageHistory || [];
+                                        const match = [...history].reverse().find(h => h.stage === selectedOpp.stage);
+                                        if (match) return match.date || match.changedAt || '';
+                                        return selectedOpp.stageChangedDate || selectedOpp.stageChangedAt || '';
+                                    })();
                                     const daysInStage = stageEnteredRaw
                                         ? Math.round((Date.now() - new Date(stageEnteredRaw+'T12:00:00'))/86400000)
-                                        : (selectedOpp.daysInStage || null);
+                                        : null;
 
                                     const stageStatusColor = stage.includes('Won') ? T.ok : stage.includes('Lost') ? T.danger : T.warn;
 
