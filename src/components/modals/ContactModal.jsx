@@ -355,7 +355,6 @@ export default function ContactModal({
                             </div>
 
                             {/* Buyer Persona */}
-                            {(settings?.buyerPersonas || []).length > 0 && (
                                 <div className="form-group" style={{ position: 'relative' }}>
                                     <label>Buyer Persona</label>
                                     <input
@@ -409,7 +408,6 @@ export default function ContactModal({
                                         </div>
                                     )}
                                 </div>
-                            )}
 
                             {/* Do Not Contact */}
                             <div className="form-group full">
