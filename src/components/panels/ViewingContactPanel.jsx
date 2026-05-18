@@ -52,7 +52,7 @@ export default function ViewingContactPanel({
     };
     const getStageBadgeStyle = (stage) => {
         const c = STAGE_COLORS[stage] || '#8a8378';
-        return { display:'inline-block', padding:'0.2rem 0.625rem', borderRadius:3, fontSize:'0.6875rem', fontWeight:600, fontFamily:'inherit', background:c+'22', color:c, border:`1px solid ${c}44` };
+        return { display:'inline-block', padding:'0.2rem 0.625rem', borderRadius:999, fontSize:'0.6875rem', fontWeight:600, fontFamily:'inherit', background:c+'22', color:c, border:`1px solid ${c}44` };
     };
     useEffect(() => { setShowActivityModal(false); }, []);
 
@@ -326,11 +326,11 @@ export default function ViewingContactPanel({
                                                 onMouseEnter={e => e.currentTarget.style.background = '#f5efe3'}
                                                 onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#fbf8f3'}
                                             >
-                                                <span style={{ background: stc.bg, color: stc.c, padding: '0.15rem 0.4rem', borderRadius: '3px', fontSize: '0.625rem', fontWeight: '700', flexShrink: 0, width: '65px', textAlign: 'center' }}>{st}</span>
+                                                <span style={{ background: stc.bg, color: stc.c, padding: '0.15rem 0.4rem', borderRadius: '999px', fontSize: '0.625rem', fontWeight: '700', flexShrink: 0, width: '65px', textAlign: 'center' }}>{st}</span>
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                     <div style={{ fontWeight: '600', fontSize: '0.8125rem', color: '#2a2622', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
                                                 </div>
-                                                <span style={{ background: '#3a5a7a18', color: '#3a5a7a', padding: '0.1rem 0.4rem', borderRadius: '3px', fontSize: '0.625rem', fontWeight: '600', flexShrink: 0 }}>{t.type}</span>
+                                                <span style={{ background: '#3a5a7a18', color: '#3a5a7a', padding: '0.1rem 0.4rem', borderRadius: '999px', fontSize: '0.625rem', fontWeight: '600', flexShrink: 0 }}>{t.type}</span>
                                                 <span style={{ fontSize: '0.75rem', color: isOD ? '#9c3a2e' : '#8a8378', fontWeight: isOD ? '700' : '400', flexShrink: 0, width: '75px', textAlign: 'right' }}>
                                                     {t.dueDate ? new Date(t.dueDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                                                 </span>
