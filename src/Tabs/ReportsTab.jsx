@@ -6003,7 +6003,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                             <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:10 }}>At a glance</div>
                                             {[
                                                 { l:'Industry',  v: selectedAccount?.vertical || selectedAccount?.industry || '—' },
-                                                { l:'Employees', v: (() => { const n = selectedAccount?.employeeCount ?? selectedAccount?.employees ?? selectedAccount?.numberOfEmployees; return (n != null && n !== '' && n !== 0) ? Number(n).toLocaleString() : '—'; })() },
+                                                { l:'Employees', v: (() => { const n = selectedAccount?.totalEmployees ?? selectedAccount?.employeeCount ?? selectedAccount?.employees; return (n != null && n !== '') ? Number(n).toLocaleString() : '—'; })() },
                                                 { l:'Status',    v: <span style={{ padding:'2px 7px', fontSize:11, fontWeight:700, borderRadius:3, background:`${T.ok}14`, color:T.ok }}>Active customer</span> },
                                                 { l:'Owner',     v: selectedOpp.salesRep || selectedOpp.rep || '—' },
                                             ].map((r,i) => (
