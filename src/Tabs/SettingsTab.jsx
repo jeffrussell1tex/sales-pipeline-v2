@@ -3221,7 +3221,7 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
                         </div>
 
                         {/* Rows */}
-                        {personas.map((p) => {
+                        {personas.map((p, personaIdx) => {
                             const count = contactCounts[p.name] || 0;
                             const isOpen = openKebab === p.id;
                             const isArchived = p.active === false;
@@ -3245,7 +3245,7 @@ const BuyerPersonasDetail = ({ settings, setSettings, onBack, setSettingsDirty, 
                                         <button onClick={e => { e.stopPropagation(); setOpenKebab(isOpen ? null : p.id); }}
                                             style={{ background: isOpen ? 'rgba(200,185,154,0.25)' : 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', borderRadius: 3, fontSize: 15, color: isOpen ? T.goldInk : T.inkMuted, lineHeight: 1 }}>⋯</button>
                                         {isOpen && (
-                                            <div id={'persona-menu-' + p.id} onClick={e => e.stopPropagation()} style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 200, width: 210, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: 5, padding: 4, boxShadow: '0 8px 24px rgba(42,38,34,0.13)', fontFamily: T.sans }}>
+                                            <div id={'persona-menu-' + p.id} onClick={e => e.stopPropagation()} style={{ position: 'absolute', right: 0, zIndex: 200, ...(personaIdx >= personas.length - 3 ? { bottom: '100%', marginBottom: 4, top: 'auto' } : { top: '100%', marginTop: 4 }), width: 210, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRadius: 5, padding: 4, boxShadow: '0 8px 24px rgba(42,38,34,0.13)', fontFamily: T.sans }}>
                                                 <div style={{ position: 'absolute', top: -6, right: 8, width: 12, height: 12, background: T.surface, border: `1px solid ${T.borderStrong}`, borderRight: 'none', borderBottom: 'none', transform: 'rotate(45deg)' }}/>
                                                 {[
                                                     { icon: '✎', label: 'Edit persona',     sub: 'Name, description, color, icon', fn: () => openEdit(p) },
@@ -4665,7 +4665,7 @@ const MiniQuoteDoc = ({ scale = 0.32 }) => {
 };
 
 // Template card — with hover edit affordance, lock icon, overflow menu, ownership stamp
-const TplLibCard = ({ t, isDefault, isSelected, isEditing, editingName, onEditingNameChange, onEditingCommit, onClick, onEdit, onDuplicate, onSetDefault, onDelete }) => {
+const TplLibCard = ({ t, isDefault, isSelected, isEditing, editingName, onEditingNameChange, onEditingCommit, onClick, onEdit, onDuplicate, onSetDefault, onDelete, isLastRow = false }) => {
     const [hover,    setHover]    = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [tooltip,  setTooltip]  = useState(false);
@@ -4821,7 +4821,7 @@ const TplLibCard = ({ t, isDefault, isSelected, isEditing, editingName, onEditin
                             {/* Dropdown menu */}
                             {menuOpen && (
                                 <div style={{
-                                    position:'absolute', top:'100%', right:0, marginTop:4,
+                                    position:'absolute', right:0, marginTop:4, ...(isLastRow ? { bottom:'100%', marginBottom:4, top:'auto' } : { top:'100%' }),
                                     background:T.surface, border:`1px solid ${T.border}`,
                                     borderRadius:6, minWidth:186,
                                     boxShadow:'0 8px 24px rgba(0,0,0,0.12)',
@@ -5760,7 +5760,7 @@ const QuoteTemplatesDetail = ({ settings, setSettings, onBack }) => {
                     >
                         <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:14 }}>
                             {templates.map((t,i) => (
-                                <TplLibCard key={t.id} t={t}
+                                <TplLibCard key={t.id} t={t} isLastRow={i >= templates.length - 3}
                                     isDefault={i===0}
                                     isSelected={selectedId===t.id}
                                     isEditing={editingTplId===t.id}
@@ -5912,7 +5912,9 @@ const CAT_TABS = ['All','Platform','Modules','Services','Hardware','Support'];
 // ── Catalog row overflow menu ──────────────────────────────────
 const PBRowMenu = ({ product, onEdit, onDuplicate, onArchive }) => {
     const [open, setOpen] = useState(false);
+    const [openUp, setOpenUp] = useState(false);
     const ref = React.useRef(null);
+    const btnRef = React.useRef(null);
     React.useEffect(() => {
         if (!open) return;
         const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -5921,14 +5923,14 @@ const PBRowMenu = ({ product, onEdit, onDuplicate, onArchive }) => {
     }, [open]);
     return (
         <div ref={ref} style={{ position:'relative', flexShrink:0 }}>
-            <button onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+            <button ref={btnRef} onClick={e => { e.stopPropagation(); if (!open) { const r = btnRef.current?.getBoundingClientRect(); setOpenUp(r ? window.innerHeight - r.bottom < 180 : false); } setOpen(v => !v); }}
                 style={{ padding:'2px 7px', fontSize:15, fontWeight:700, color:T.inkMuted, background:'none', border:'none', cursor:'pointer', lineHeight:1, borderRadius:3 }}
                 onMouseEnter={e => e.currentTarget.style.color=T.ink}
                 onMouseLeave={e => e.currentTarget.style.color=T.inkMuted}>
                 ⋯
             </button>
             {open && (
-                <div style={{ position:'absolute', right:0, top:'100%', marginTop:4, background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', minWidth:200, zIndex:30, overflow:'hidden' }}>
+                <div style={{ position:'absolute', right:0, ...(openUp ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }), background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, boxShadow:'0 8px 24px rgba(0,0,0,0.12)', minWidth:200, zIndex:30, overflow:'hidden' }}>
                     {[
                         { label:'Edit pricing rules', action:() => { onEdit('tiers'); setOpen(false); } },
                         { label:'Edit product',       action:() => { onEdit('top');   setOpen(false); } },
@@ -10957,7 +10959,7 @@ const ApiKeysDetail = ({ onBack }) => {
                                             borderRadius:3, fontSize:15, fontWeight:700, border:'none', cursor:'pointer', lineHeight:1,
                                             color:isMenuOpen?T.goldInk:T.inkMuted, background:isMenuOpen?'rgba(200,185,154,0.30)':'transparent' }}>⋯</button>
                                     {isMenuOpen && (
-                                        <div id={'key-menu-' + k.id} style={{ position:'absolute', top:'100%', right:0, marginTop:4, zIndex:100 }}>
+                                        <div id={'key-menu-' + k.id} style={{ position:'absolute', right:0, ...(i >= visible.length - 3 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }), zIndex:100 }}>
                                             <ApiKeyRowMenu
                                                 keyRecord={k}
                                                 onClose={() => setActiveMenu(null)}
@@ -11147,7 +11149,7 @@ const WebhooksDetail = ({ onBack }) => {
                                         onClick={() => setActiveMenu(isMenuOpen ? null : wh.id)}
                                         style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:24, height:24, borderRadius:3, fontSize:16, fontWeight:700, border:'none', cursor:'pointer', lineHeight:1, color:isMenuOpen?T.goldInk:T.inkMuted, background:isMenuOpen?'rgba(200,185,154,0.30)':'transparent' }}>⋯</button>
                                     {isMenuOpen && (
-                                        <div id={'wh-menu-' + wh.id} style={{ position:'absolute', top:'100%', right:0, marginTop:4, zIndex:100 }}>
+                                        <div id={'wh-menu-' + wh.id} style={{ position:'absolute', right:0, ...(i >= webhooks.length - 3 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }), zIndex:100 }}>
                                             <WebhookRowMenu wh={wh} onClose={() => setActiveMenu(null)} onToggle={() => handleToggle(wh)} onDelete={() => handleDelete(wh)}/>
                                         </div>
                                     )}
@@ -11633,7 +11635,7 @@ const AutomationsDetail = ({ onBack }) => {
                                         borderRadius:3, fontSize:15, fontWeight:700, border:'none', cursor:'pointer', lineHeight:1,
                                         color:isMenuOpen?T.goldInk:T.inkMuted, background:isMenuOpen?'rgba(200,185,154,0.30)':'transparent' }}>⋯</button>
                                 {isMenuOpen && (
-                                    <div id={'auto-menu-' + rule.id} style={{ position:'absolute', top:'100%', right:0, marginTop:4, zIndex:100,
+                                    <div id={'auto-menu-' + rule.id} style={{ position:'absolute', right:0, ...(i >= visible.length - 3 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }), zIndex:100,
                                         width:188, background:T.surface, border:`1px solid ${T.borderStrong}`,
                                         borderRadius:4, padding:4, boxShadow:'0 8px 24px rgba(42,38,34,0.12)', fontFamily:T.sans }}>
                                         <div style={{ position:'absolute', top:-6, right:10, width:12, height:12,
@@ -18236,7 +18238,7 @@ const AdminView = ({ settings, setSettings, currentUser, setActiveTab, setAccoun
                                     {/* Kebab menu */}
                                     {isOpen && (
                                         <div id={'na-menu-' + it.id}
-                                            style={{ position:'absolute', top:'100%', right:0, zIndex:50, marginTop:4,
+                                            style={{ position:'absolute', right:0, zIndex:50, ...(i >= 1 ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }),
                                                 width:220, background:T.surface, border:`1px solid ${T.borderStrong}`,
                                                 borderRadius:4, padding:4, fontFamily:T.sans,
                                                 boxShadow:'0 8px 24px rgba(42,38,34,0.12), 0 2px 4px rgba(42,38,34,0.06)' }}>
