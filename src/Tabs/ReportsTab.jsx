@@ -5266,11 +5266,11 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         lost:     { bg: 'rgba(156,58,46,0.10)', ink: '#9c3a2e' },
         deal:     { bg: 'rgba(58,90,122,0.10)', ink: '#3a5a7a' },
     };
-    const typeLabels = { Call:'CALL', Email:'EMAIL', Meeting:'MEETING', Task:'TASK', Won:'WON', Lost:'LOST', Deal:'DEAL', Note:'NOTE', Activity:'ACTIVITY', Quote:'QUOTE' };
+    const typeLabels = { Call:'CALL', Email:'EMAIL', Meeting:'MEETING', Task:'TASK', 'Task Done':'TASK DONE', Won:'WON', Lost:'LOST', Deal:'DEAL', Note:'NOTE', Activity:'ACTIVITY', Quote:'QUOTE' };
 
     const EventRow = ({ event }) => {
         const cfg = typeConfig[event.type] || typeConfig.activity;
-        const label = typeLabels[event.actType] || (event.actType||'').toUpperCase().slice(0,8);
+        const label = typeLabels[event.actType] || (event.actType||'').toUpperCase().slice(0,12);
         const timeStr = event.date ? new Date(event.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}).toLowerCase() : '';
         return (
             <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 0', borderBottom:`1px solid ${T.border}` }}>
@@ -5282,7 +5282,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                        <span style={{ display:'inline-block', padding:'2px 7px', background:cfg.bg, color:cfg.ink, fontSize:10, fontWeight:700, borderRadius:3, letterSpacing:0.5, fontFamily:T.sans }}>{label}</span>
+                        <span style={{ display:'inline-block', padding:'2px 7px', background:cfg.bg, color:cfg.ink, fontSize:10, fontWeight:700, borderRadius:999, letterSpacing:0.5, fontFamily:T.sans }}>{label}</span>
                         <span style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{event.label}</span>
                         {event.amount > 0 && <span style={{ fontSize:12, fontWeight:700, color: event.type==='won' ? T.ok : event.type==='lost' ? T.danger : T.inkMid, fontFamily:T.sans, marginLeft:'auto' }}>{fmtMoney(event.amount)}</span>}
                     </div>
@@ -6179,7 +6179,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                         <div>
                                                             {c.email ? <a href={`mailto:${c.email}`} style={{ color:T.info, fontWeight:500, fontSize:12 }}>{c.email}</a> : <span style={{ color:T.inkMuted }}>—</span>}
                                                         </div>
-                                                        <div style={{ color:T.inkMid, fontFamily:T.sans, fontSize:12.5 }}>{c.phone || '—'}</div>
+                                                        <div style={{ color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{c.phone || '—'}</div>
                                                         <div>
                                                             {persona ? (
                                                                 <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'2px 8px 2px 4px',
