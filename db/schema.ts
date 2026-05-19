@@ -528,3 +528,278 @@ export const automationRuns = pgTable('automation_runs', {
     error:            text('error'),
     createdAt:        timestamp('created_at').notNull().defaultNow(),
 });
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  DISPATCH MODULE                                                            ║
+// ║  Field-service job scheduling, technician management, vehicle/equipment     ║
+// ║  tracking, and work-order lifecycle for HVAC, plumbing, electrical, etc.   ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+// ── DISPATCH TECHNICIANS ──────────────────────────────────────────────────────
+// One row per field technician (separate from CRM users — a tech may not have a
+// login, or may be a sub-contractor). Links to a users row via userId when the
+// tech does have a CRM login.
+//
+// status:        'active' | 'inactive' | 'on_leave'
+// employmentType:'employee' | 'subcontractor' | '1099'
+// certifications: [{ name, issuedBy, expiresAt }]
+// skills:         ['hvac_install', 'electrical', 'plumbing', ...]
+// workingHours:   { mon:[start,end], tue:[start,end], ... } — null = day off
+export const dispatchTechnicians = pgTable('dispatch_technicians', {
+    id:              text('id').primaryKey(),
+    orgId:           text('org_id').notNull(),
+    userId:          text('user_id'),                                 // FK → users.id (nullable for subs)
+    firstName:       varchar('first_name', { length: 255 }).notNull(),
+    lastName:        varchar('last_name', { length: 255 }).notNull(),
+    email:           varchar('email', { length: 255 }),
+    phone:           varchar('phone', { length: 50 }),
+    employmentType:  varchar('employment_type', { length: 30 }).notNull().default('employee'),
+    status:          varchar('status', { length: 20 }).notNull().default('active'),
+    homeZip:         varchar('home_zip', { length: 20 }),
+    serviceZones:    jsonb('service_zones').default('[]'),            // array of zip codes or zone names
+    skills:          jsonb('skills').default('[]'),                   // array of skill strings
+    certifications:  jsonb('certifications').default('[]'),           // array of cert objects
+    workingHours:    jsonb('working_hours').default('{}'),            // schedule by day
+    laborRate:       decimal('labor_rate', { precision: 10, scale: 2 }), // hourly billing rate
+    overtimeRate:    decimal('overtime_rate', { precision: 10, scale: 2 }),
+    assignedVehicleId: text('assigned_vehicle_id'),                  // FK → dispatch_vehicles.id
+    notes:           text('notes'),
+    avatarInitials:  varchar('avatar_initials', { length: 4 }),
+    createdAt:       timestamp('created_at').notNull().defaultNow(),
+    updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── DISPATCH VEHICLES ─────────────────────────────────────────────────────────
+// Company vehicles and trailers used for field service dispatch.
+//
+// status:  'available' | 'in_use' | 'maintenance' | 'retired'
+// type:    'van' | 'truck' | 'pickup' | 'trailer' | 'car'
+// fuelType:'gas' | 'diesel' | 'electric' | 'hybrid'
+export const dispatchVehicles = pgTable('dispatch_vehicles', {
+    id:               text('id').primaryKey(),
+    orgId:            text('org_id').notNull(),
+    name:             varchar('name', { length: 255 }).notNull(),     // e.g. "Van 3 — HVAC"
+    type:             varchar('type', { length: 50 }).notNull().default('van'),
+    make:             varchar('make', { length: 100 }),
+    model:            varchar('model', { length: 100 }),
+    year:             integer('year'),
+    licensePlate:     varchar('license_plate', { length: 30 }),
+    vin:              varchar('vin', { length: 20 }),
+    color:            varchar('color', { length: 50 }),
+    fuelType:         varchar('fuel_type', { length: 20 }).default('gas'),
+    status:           varchar('status', { length: 20 }).notNull().default('available'),
+    assignedTechId:   text('assigned_tech_id'),                       // FK → dispatch_technicians.id
+    odometer:         integer('odometer'),                             // miles
+    lastServiceDate:  varchar('last_service_date', { length: 20 }),
+    nextServiceMiles: integer('next_service_miles'),
+    insuranceExpiry:  varchar('insurance_expiry', { length: 20 }),
+    registrationExpiry: varchar('registration_expiry', { length: 20 }),
+    gpsTrackerUrl:    varchar('gps_tracker_url', { length: 500 }),
+    notes:            text('notes'),
+    createdAt:        timestamp('created_at').notNull().defaultNow(),
+    updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── DISPATCH SHARED EQUIPMENT ─────────────────────────────────────────────────
+// Shared tools and equipment that are checked out to techs or vehicles for a job.
+// Distinct from vehicle inventory — these move between jobs and people.
+//
+// status:        'available' | 'checked_out' | 'maintenance' | 'retired'
+// category:      'diagnostic' | 'hvac' | 'plumbing' | 'electrical' | 'safety' | 'general'
+// checkedOutTo:  techId currently holding the item
+export const dispatchEquipment = pgTable('dispatch_equipment', {
+    id:               text('id').primaryKey(),
+    orgId:            text('org_id').notNull(),
+    name:             varchar('name', { length: 255 }).notNull(),
+    category:         varchar('category', { length: 100 }).notNull().default('general'),
+    serialNumber:     varchar('serial_number', { length: 100 }),
+    assetTag:         varchar('asset_tag', { length: 50 }),
+    make:             varchar('make', { length: 100 }),
+    model:            varchar('model', { length: 100 }),
+    purchaseDate:     varchar('purchase_date', { length: 20 }),
+    purchasePrice:    decimal('purchase_price', { precision: 10, scale: 2 }),
+    status:           varchar('status', { length: 20 }).notNull().default('available'),
+    checkedOutToId:   text('checked_out_to_id'),                     // FK → dispatch_technicians.id
+    checkedOutJobId:  text('checked_out_job_id'),                     // FK → dispatch_jobs.id
+    checkedOutAt:     timestamp('checked_out_at'),
+    lastCalibrationDate: varchar('last_calibration_date', { length: 20 }),
+    nextCalibrationDate: varchar('next_calibration_date', { length: 20 }),
+    notes:            text('notes'),
+    createdAt:        timestamp('created_at').notNull().defaultNow(),
+    updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── DISPATCH CUSTOMERS ────────────────────────────────────────────────────────
+// Field-service customer records. Mirrors/extends CRM accounts for dispatch use.
+// accountId links to an existing CRM account when applicable (may be null for
+// direct dispatch customers not yet in the CRM pipeline).
+//
+// customerType: 'residential' | 'commercial' | 'industrial' | 'municipal'
+// serviceAgreement: 'none' | 'basic' | 'premium' | 'enterprise'
+export const dispatchCustomers = pgTable('dispatch_customers', {
+    id:                 text('id').primaryKey(),
+    orgId:              text('org_id').notNull(),
+    accountId:          text('account_id'),                           // FK → accounts.id (nullable)
+    name:               varchar('name', { length: 255 }).notNull(),
+    contactName:        varchar('contact_name', { length: 255 }),
+    contactPhone:       varchar('contact_phone', { length: 50 }),
+    contactEmail:       varchar('contact_email', { length: 255 }),
+    customerType:       varchar('customer_type', { length: 30 }).notNull().default('commercial'),
+    billingAddress:     text('billing_address'),
+    billingCity:        varchar('billing_city', { length: 255 }),
+    billingState:       varchar('billing_state', { length: 100 }),
+    billingZip:         varchar('billing_zip', { length: 20 }),
+    serviceAddress:     text('service_address'),                      // if different from billing
+    serviceCity:        varchar('service_city', { length: 255 }),
+    serviceState:       varchar('service_state', { length: 100 }),
+    serviceZip:         varchar('service_zip', { length: 20 }),
+    serviceAgreement:   varchar('service_agreement', { length: 30 }).default('none'),
+    agreementExpiry:    varchar('agreement_expiry', { length: 20 }),
+    preferredTechId:    text('preferred_tech_id'),                    // FK → dispatch_technicians.id
+    doNotService:       boolean('do_not_service').default(false),
+    doNotServiceReason: text('do_not_service_reason'),
+    taxExempt:          boolean('tax_exempt').default(false),
+    taxExemptId:        varchar('tax_exempt_id', { length: 50 }),
+    paymentMethod:      varchar('payment_method', { length: 50 }),
+    creditLimit:        decimal('credit_limit', { precision: 10, scale: 2 }),
+    notes:              text('notes'),
+    tags:               jsonb('tags').default('[]'),
+    createdAt:          timestamp('created_at').notNull().defaultNow(),
+    updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── DISPATCH SERVICE LOCATIONS ────────────────────────────────────────────────
+// A customer may have multiple service locations (e.g. a property manager with
+// 8 apartment complexes). Each location has its own equipment history.
+export const dispatchServiceLocations = pgTable('dispatch_service_locations', {
+    id:           text('id').primaryKey(),
+    orgId:        text('org_id').notNull(),
+    customerId:   text('customer_id').notNull(),                      // FK → dispatch_customers.id
+    name:         varchar('name', { length: 255 }).notNull(),         // e.g. "North Campus Building A"
+    address:      text('address').notNull(),
+    city:         varchar('city', { length: 255 }).notNull(),
+    state:        varchar('state', { length: 100 }),
+    zip:          varchar('zip', { length: 20 }),
+    accessNotes:  text('access_notes'),                               // gate codes, parking, etc.
+    locationType: varchar('location_type', { length: 50 }),           // 'office' | 'warehouse' | 'retail' | 'residential' | 'rooftop'
+    squareFeet:   integer('square_feet'),
+    floors:       integer('floors'),
+    isDefault:    boolean('is_default').default(false),
+    gateCode:     varchar('gate_code', { length: 50 }),
+    contactOnSite: varchar('contact_on_site', { length: 255 }),
+    contactPhone: varchar('contact_phone', { length: 50 }),
+    notes:        text('notes'),
+    createdAt:    timestamp('created_at').notNull().defaultNow(),
+    updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── DISPATCH JOBS (WORK ORDERS) ───────────────────────────────────────────────
+// The core work-order entity. One row per job/visit.
+//
+// status:      'unscheduled' | 'scheduled' | 'en_route' | 'on_site' | 'paused'
+//              | 'completed' | 'cancelled' | 'requires_follow_up'
+// priority:    'low' | 'normal' | 'high' | 'emergency'
+// jobType:     'install' | 'repair' | 'maintenance' | 'inspection' | 'estimate'
+//              | 'warranty' | 'callback'
+// trade:       'hvac' | 'plumbing' | 'electrical' | 'general' | 'refrigeration'
+// invoiceStatus: 'none' | 'draft' | 'sent' | 'paid' | 'void'
+// timeSlot:    'morning' | 'afternoon' | 'evening' | 'anytime' | 'exact'
+export const dispatchJobs = pgTable('dispatch_jobs', {
+    id:                 text('id').primaryKey(),
+    orgId:              text('org_id').notNull(),
+    jobNumber:          varchar('job_number', { length: 50 }),        // e.g. "JOB-2026-0042"
+    customerId:         text('customer_id').notNull(),                // FK → dispatch_customers.id
+    locationId:         text('location_id'),                          // FK → dispatch_service_locations.id
+    accountId:          text('account_id'),                           // FK → accounts.id (CRM link)
+    opportunityId:      text('opportunity_id'),                       // FK → opportunities.id (if job closes a deal)
+    title:              varchar('title', { length: 500 }).notNull(),
+    description:        text('description'),
+    trade:              varchar('trade', { length: 50 }).notNull().default('hvac'),
+    jobType:            varchar('job_type', { length: 50 }).notNull().default('repair'),
+    status:             varchar('status', { length: 30 }).notNull().default('unscheduled'),
+    priority:           varchar('priority', { length: 20 }).notNull().default('normal'),
+    scheduledDate:      varchar('scheduled_date', { length: 20 }),
+    scheduledStart:     varchar('scheduled_start', { length: 10 }),   // "HH:MM"
+    scheduledEnd:       varchar('scheduled_end', { length: 10 }),
+    timeSlot:           varchar('time_slot', { length: 20 }).default('anytime'),
+    actualStart:        timestamp('actual_start'),
+    actualEnd:          timestamp('actual_end'),
+    durationMinutes:    integer('duration_minutes'),                   // estimated
+    assignedTechId:     text('assigned_tech_id'),                     // FK → dispatch_technicians.id
+    assignedVehicleId:  text('assigned_vehicle_id'),                  // FK → dispatch_vehicles.id
+    coTechIds:          jsonb('co_tech_ids').default('[]'),           // additional techs on job
+    equipmentIds:       jsonb('equipment_ids').default('[]'),         // checked-out equipment IDs
+    laborHours:         decimal('labor_hours', { precision: 6, scale: 2 }),
+    laborCost:          decimal('labor_cost', { precision: 10, scale: 2 }),
+    materialCost:       decimal('material_cost', { precision: 10, scale: 2 }),
+    totalCost:          decimal('total_cost', { precision: 10, scale: 2 }),
+    invoiceAmount:      decimal('invoice_amount', { precision: 10, scale: 2 }),
+    invoiceStatus:      varchar('invoice_status', { length: 20 }).default('none'),
+    invoicePaidAt:      varchar('invoice_paid_at', { length: 20 }),
+    customerPoNumber:   varchar('customer_po_number', { length: 100 }),
+    techNotes:          text('tech_notes'),                            // filled in by tech on site
+    completionNotes:    text('completion_notes'),
+    customerSignature:  boolean('customer_signature').default(false),
+    photosCount:        integer('photos_count').default(0),
+    requiresFollowUp:   boolean('requires_follow_up').default(false),
+    followUpJobId:      text('follow_up_job_id'),                     // FK → dispatch_jobs.id
+    parentJobId:        text('parent_job_id'),                        // for callback/warranty callbacks
+    tags:               jsonb('tags').default('[]'),
+    customFields:       jsonb('custom_fields').default('{}'),
+    createdBy:          varchar('created_by', { length: 255 }),
+    dispatchedBy:       varchar('dispatched_by', { length: 255 }),
+    createdAt:          timestamp('created_at').notNull().defaultNow(),
+    updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── DISPATCH JOB LINE ITEMS ───────────────────────────────────────────────────
+// Parts, materials, and labor lines on a work order.
+// itemType: 'labor' | 'part' | 'material' | 'fee' | 'discount'
+export const dispatchJobLineItems = pgTable('dispatch_job_line_items', {
+    id:          text('id').primaryKey(),
+    orgId:       text('org_id').notNull(),
+    jobId:       text('job_id').notNull(),                            // FK → dispatch_jobs.id
+    itemType:    varchar('item_type', { length: 20 }).notNull().default('part'),
+    description: varchar('description', { length: 500 }).notNull(),
+    partNumber:  varchar('part_number', { length: 100 }),
+    quantity:    decimal('quantity', { precision: 8, scale: 2 }).notNull().default('1'),
+    unitPrice:   decimal('unit_price', { precision: 10, scale: 2 }).notNull(),
+    totalPrice:  decimal('total_price', { precision: 10, scale: 2 }).notNull(),
+    taxable:     boolean('taxable').default(true),
+    sortOrder:   integer('sort_order').default(0),
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
+    updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── DISPATCH JOB STATUS HISTORY ───────────────────────────────────────────────
+// Immutable audit trail of every status transition on a job.
+export const dispatchJobStatusHistory = pgTable('dispatch_job_status_history', {
+    id:           text('id').primaryKey(),
+    orgId:        text('org_id').notNull(),
+    jobId:        text('job_id').notNull(),                           // FK → dispatch_jobs.id
+    fromStatus:   varchar('from_status', { length: 30 }),
+    toStatus:     varchar('to_status', { length: 30 }).notNull(),
+    changedBy:    varchar('changed_by', { length: 255 }),
+    note:         text('note'),
+    createdAt:    timestamp('created_at').notNull().defaultNow(),
+});
+
+// ── DISPATCH SCHEDULE BLOCKS ──────────────────────────────────────────────────
+// Non-job blocks on the dispatch board: PTO, training, vehicle service, etc.
+// blockType: 'pto' | 'training' | 'vehicle_service' | 'admin' | 'other'
+export const dispatchScheduleBlocks = pgTable('dispatch_schedule_blocks', {
+    id:          text('id').primaryKey(),
+    orgId:       text('org_id').notNull(),
+    techId:      text('tech_id').notNull(),                          // FK → dispatch_technicians.id
+    blockType:   varchar('block_type', { length: 30 }).notNull().default('pto'),
+    title:       varchar('title', { length: 255 }),
+    startDate:   varchar('start_date', { length: 20 }).notNull(),
+    endDate:     varchar('end_date', { length: 20 }).notNull(),
+    startTime:   varchar('start_time', { length: 10 }),
+    endTime:     varchar('end_time', { length: 10 }),
+    allDay:      boolean('all_day').default(true),
+    notes:       text('notes'),
+    createdBy:   varchar('created_by', { length: 255 }),
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
+    updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+});
