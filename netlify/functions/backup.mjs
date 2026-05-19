@@ -1,5 +1,12 @@
 import { db } from '../../db/index.js';
-import { backups, backupSchedule, opportunities, accounts, contacts, leads, tasks, activities, users, settings as settingsTable, quotes, products, pipelines } from '../../db/schema.js';
+import {
+    backups, backupSchedule,
+    opportunities, accounts, contacts, leads, tasks, activities,
+    users, settings as settingsTable, quotes, products, pipelines,
+    dispatchTechnicians, dispatchVehicles, dispatchEquipment,
+    dispatchCustomers, dispatchServiceLocations,
+    dispatchJobs, dispatchJobLineItems, dispatchJobStatusHistory,
+} from '../../db/schema.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { verifyAuth } from './auth.mjs';
 
@@ -227,11 +234,7 @@ export const handler = async (event) => {
             return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
         }
 
-        // ── PATCH: import / restore from an uploaded JSON backup file ────────
-        // Accepts the same JSON envelope that collectOrgData() produces.
-        // Upserts every entity so it is safe to run on a partially-populated org.
-        // Only entities present and non-empty in the payload are written —
-        // missing keys are silently skipped so partial backups work fine.
+        // ── PATCH: import / restore from an uploaded JSON backup file ─────────
         if (event.httpMethod === 'PATCH') {
             let payload;
             try {
@@ -245,17 +248,14 @@ export const handler = async (event) => {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing entities key' }) };
             }
 
-            // Helper — stamp every row with this org's ID so cross-org imports
-            // are safe (the file may have been exported from a different org).
             const stamp = rows => (rows || []).map(r => ({ ...r, orgId }));
 
-            const CHUNK = 50; // insert in chunks to avoid Neon param limits
-            async function upsertChunked(table, rows, conflictCol) {
+            const CHUNK = 50;
+            async function upsertChunked(table, rows, conflictTarget) {
                 if (!rows || rows.length === 0) return 0;
                 const stamped = stamp(rows);
                 for (let i = 0; i < stamped.length; i += CHUNK) {
                     const chunk = stamped.slice(i, i + CHUNK);
-                    // Build a dynamic "set" object from the first row's keys
                     const setCols = Object.fromEntries(
                         Object.keys(chunk[0])
                             .filter(k => k !== 'id' && k !== 'orgId')
@@ -264,18 +264,17 @@ export const handler = async (event) => {
                     );
                     await db.insert(table)
                         .values(chunk)
-                        .onConflictDoUpdate({ target: conflictCol || table.id, set: setCols })
-                        .catch(() => {
-                            // fallback: insert ignore (some Drizzle versions need this)
-                        });
+                        .onConflictDoUpdate({ target: conflictTarget || table.id, set: setCols })
+                        .catch(() => {});
                 }
                 return stamped.length;
             }
 
             let imported = 0;
-            const errs   = [];
+            const errs = [];
 
-            const entityMap = [
+            // Standard CRM entities
+            const crmEntities = [
                 { key: 'opportunities', table: opportunities },
                 { key: 'accounts',      table: accounts      },
                 { key: 'contacts',      table: contacts      },
@@ -289,18 +288,35 @@ export const handler = async (event) => {
                 { key: 'pipelines',     table: pipelines     },
             ];
 
-            for (const { key, table } of entityMap) {
+            for (const { key, table } of crmEntities) {
                 const rows = ents[key];
                 if (!Array.isArray(rows) || rows.length === 0) continue;
-                try {
-                    const n = await upsertChunked(table, rows);
-                    imported += n;
-                } catch (e) {
-                    errs.push(`${key}: ${e.message}`);
+                try { imported += await upsertChunked(table, rows); }
+                catch (e) { errs.push(`${key}: ${e.message}`); }
+            }
+
+            // Dispatch entities (nested under entities.dispatch)
+            const dispatch = ents.dispatch;
+            if (dispatch && typeof dispatch === 'object') {
+                const dispatchEntities = [
+                    { key: 'technicians',      table: dispatchTechnicians      },
+                    { key: 'vehicles',         table: dispatchVehicles         },
+                    { key: 'equipment',        table: dispatchEquipment        },
+                    { key: 'customers',        table: dispatchCustomers        },
+                    { key: 'serviceLocations', table: dispatchServiceLocations },
+                    { key: 'jobs',             table: dispatchJobs             },
+                    { key: 'jobLineItems',     table: dispatchJobLineItems     },
+                    { key: 'jobStatusHistory', table: dispatchJobStatusHistory },
+                ];
+                for (const { key, table } of dispatchEntities) {
+                    const rows = dispatch[key];
+                    if (!Array.isArray(rows) || rows.length === 0) continue;
+                    try { imported += await upsertChunked(table, rows); }
+                    catch (e) { errs.push(`dispatch.${key}: ${e.message}`); }
                 }
             }
 
-            // Record a synthetic backup entry so the UI shows the import as a snapshot.
+            // Record a synthetic snapshot entry
             const snapId = generateSnapId() + '_import';
             try {
                 await db.insert(backups).values({
@@ -319,12 +335,7 @@ export const handler = async (event) => {
             return {
                 statusCode: errs.length && imported === 0 ? 500 : 200,
                 headers,
-                body: JSON.stringify({
-                    ok:       imported > 0,
-                    imported,
-                    errors:   errs,
-                    snapId,
-                }),
+                body: JSON.stringify({ ok: imported > 0, imported, errors: errs, snapId }),
             };
         }
 
