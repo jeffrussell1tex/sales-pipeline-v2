@@ -664,23 +664,34 @@ const CrewBuilderView = ({ jobs, techs, skills, selectedJobId, onSelectJob, onBa
 
 // ── MAIN DISPATCH TAB ─────────────────────────────────────────────────────────
 export default function DispatchTab() {
-    const { settings, opportunities, currentUser, userRole } = useApp();
+    const { settings, opportunities } = useApp();
 
     const [view, setView] = useState('board'); // 'board' | 'queue'
     const [selectedJobId, setSelectedJobId] = useState(null);
-    const [jobs, setJobs] = useState([]);
-    const [loading, setLoading] = useState(true);
+
+    // ── DB-backed state ───────────────────────────────────────────────────────
+    const [jobs,       setJobs]       = useState([]);
+    const [techs,      setTechs]      = useState([]);
+    const [vehicles,   setVehicles]   = useState([]);
+    const [equipment,  setEquipment]  = useState([]);
+    const [customers,  setCustomers]  = useState([]);
+    const [loading,    setLoading]    = useState(true);
+    const [loadError,  setLoadError]  = useState('');
+
+    // ── Config from settings.extra (not record-level data) ───────────────────
+    const skills    = settings?.dispatchSkills   || [];
+    const crews     = settings?.dispatchCrews    || [];
+    const licLevels = settings?.dispatchLicenses || ['Apprentice', 'Journeyman', 'Master', 'Lead'];
 
     // ── Filter state ──────────────────────────────────────────────────────────
-    const [filterSkill,   setFilterSkill]   = useState(null); // skill id or null
-    const [filterVehicle, setFilterVehicle] = useState(null); // vehicle id or null
-    const [filterLicense, setFilterLicense] = useState(null); // license string or null
-    const [filterTeam,    setFilterTeam]    = useState(null); // crew id or null
-    const [openFilter,    setOpenFilter]    = useState(null); // 'skills'|'vehicles'|'licenses'|'teams'
+    const [filterSkill,   setFilterSkill]   = useState(null);
+    const [filterVehicle, setFilterVehicle] = useState(null);
+    const [filterLicense, setFilterLicense] = useState(null);
+    const [filterTeam,    setFilterTeam]    = useState(null);
+    const [openFilter,    setOpenFilter]    = useState(null);
     const [filterRect,    setFilterRect]    = useState(null);
-    const filterRef = React.useRef(null);
 
-    const openFilterMenu = React.useCallback((e, key) => {
+    const openFilterMenu = useCallback((e, key) => {
         e.stopPropagation();
         if (openFilter === key) { setOpenFilter(null); setFilterRect(null); return; }
         const r = e.currentTarget.getBoundingClientRect();
@@ -688,73 +699,169 @@ export default function DispatchTab() {
         setOpenFilter(key);
     }, [openFilter]);
 
-    const closeFilter = React.useCallback(() => { setOpenFilter(null); setFilterRect(null); }, []);
+    const closeFilter = useCallback(() => { setOpenFilter(null); setFilterRect(null); }, []);
 
-    // Pull skills, certs, license levels from settings
-    const skills     = settings?.dispatchSkills     || [];
-    const crews      = settings?.dispatchCrews      || [];
-    const certs      = settings?.dispatchCerts      || [];
-    const licLevels  = settings?.dispatchLicenses   || ['Apprentice', 'Journeyman', 'Master', 'Lead'];
-    const vehicles   = settings?.dispatchVehicles   || [];
-
-    // Build tech list from users with dispatch profiles
-    const techs = useMemo(() => {
-        return (settings?.users || [])
-            .filter(u => u.dispatchEnabled && u.userType !== 'ReadOnly')
-            .map(u => ({
-                id: u.id || u.userId || u.name,
-                name: u.name,
-                license: u.dispatchLicense || 'Apprentice',
-                dispatchSkills: u.dispatchSkills || [],
-                dispatchCerts: u.dispatchCerts || [],
-                hoursThisWeek: u.hoursThisWeek || 0,
-                hoursCap: u.hoursCap || 40,
-                vehicle: u.vehicle || null,
-                baseLocation: u.baseLocation || null,
-            }));
-    }, [settings?.users]);
-
-    // Load jobs from DB (or seed from settings.dispatchJobs)
+    // ── Load all dispatch data from DB on mount ───────────────────────────────
     useEffect(() => {
-        const raw = settings?.dispatchJobs || [];
-        // Also auto-create jobs from closed-won opportunities
-        const wonOpps = (opportunities || []).filter(o => o.stage === 'Closed Won' && !raw.find(j => j.opportunityId === o.id));
-        const autoJobs = wonOpps.map(o => ({
-            id: 'job_' + o.id,
-            opportunityId: o.id,
-            customer: o.account || o.opportunityName || 'Unknown',
-            address: o.address || '',
-            needSkills: [],
-            crewSize: 1,
-            durationHrs: 4,
-            priority: 'standard',
-            window: 'TBD',
-            equipment: '',
-            value: parseFloat(o.arr || o.revenue || 0) || 0,
-            minLicense: 'Journeyman',
-            preferredTechId: o.salesRep ? (settings?.users || []).find(u => u.name === o.salesRep)?.id || null : null,
-            assignedTechIds: [],
-            start: null,
-            status: 'unscheduled',
-        }));
-        setJobs([...raw, ...autoJobs]);
-        setLoading(false);
-    }, [settings?.dispatchJobs, opportunities, settings?.users]);
+        let cancelled = false;
+        (async () => {
+            setLoading(true);
+            setLoadError('');
+            try {
+                // Wait for Clerk token to be available
+                if (typeof window.__getClerkToken === 'function') {
+                    await window.__getClerkToken().catch(() => {});
+                }
+
+                const [techsRes, vehiclesRes, equipRes, custsRes, jobsRes] = await Promise.all([
+                    dbFetch('/.netlify/functions/dispatch-technicians'),
+                    dbFetch('/.netlify/functions/dispatch-vehicles'),
+                    dbFetch('/.netlify/functions/dispatch-equipment'),
+                    dbFetch('/.netlify/functions/dispatch-customers'),
+                    dbFetch('/.netlify/functions/dispatch-jobs'),
+                ]);
+
+                if (cancelled) return;
+
+                const [techsData, vehiclesData, equipData, custsData, jobsData] = await Promise.all([
+                    techsRes.json(),
+                    vehiclesRes.json(),
+                    equipRes.json(),
+                    custsRes.json(),
+                    jobsRes.json(),
+                ]);
+
+                // Normalise technicians — map DB fields to what BoardView/CrewBuilder expect
+                const dbTechs = (techsData.technicians || []).map(t => ({
+                    id:             t.id,
+                    name:           `${t.firstName} ${t.lastName}`.trim(),
+                    firstName:      t.firstName,
+                    lastName:       t.lastName,
+                    email:          t.email,
+                    phone:          t.phone,
+                    license:        t.employmentType === 'subcontractor' ? 'Journeyman' : (t.skills?.[0] ? 'Journeyman' : 'Apprentice'),
+                    dispatchSkills: t.skills        || [],
+                    dispatchCerts:  t.certifications || [],
+                    hoursThisWeek:  0, // calculated from jobs below
+                    hoursCap:       40,
+                    vehicle:        t.assignedVehicleId || null,
+                    baseLocation:   t.homeZip || null,
+                    status:         t.status,
+                    employmentType: t.employmentType,
+                    avatarInitials: t.avatarInitials || `${t.firstName?.[0] || ''}${t.lastName?.[0] || ''}`.toUpperCase(),
+                }));
+
+                // Calculate hours this week from scheduled jobs
+                const weekStart = new Date();
+                weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+                weekStart.setHours(0, 0, 0, 0);
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekEnd.getDate() + 7);
+
+                const dbJobs = (jobsData.jobs || []);
+                const hoursMap = {};
+                dbJobs.forEach(j => {
+                    if (!j.scheduledDate || !j.durationMinutes) return;
+                    const d = new Date(j.scheduledDate);
+                    if (d < weekStart || d >= weekEnd) return;
+                    const hrs = j.durationMinutes / 60;
+                    const techIds = [j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean);
+                    techIds.forEach(tid => { hoursMap[tid] = (hoursMap[tid] || 0) + hrs; });
+                });
+                dbTechs.forEach(t => { t.hoursThisWeek = Math.round((hoursMap[t.id] || 0) * 10) / 10; });
+
+                // Normalise jobs — map DB shape to what BoardView/CrewBuilder expect
+                const normJobs = dbJobs.map(j => {
+                    const cust = (custsData.customers || []).find(c => c.id === j.customerId);
+                    // Convert scheduledStart "HH:MM" to decimal hour for timeline
+                    let startHr = null;
+                    if (j.scheduledStart) {
+                        const [hh, mm] = j.scheduledStart.split(':').map(Number);
+                        startHr = hh + mm / 60;
+                    }
+                    return {
+                        id:             j.id,
+                        jobNumber:      j.jobNumber,
+                        opportunityId:  j.opportunityId,
+                        customer:       cust?.name || j.title,
+                        address:        cust ? `${cust.billingAddress || ''}, ${cust.billingCity || ''}`.trim().replace(/^,\s*/, '') : '',
+                        needSkills:     [], // skills stored as strings in DB — map via settings.dispatchSkills
+                        crewSize:       [j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean).length || 1,
+                        durationHrs:    j.durationMinutes ? j.durationMinutes / 60 : 2,
+                        priority:       j.priority === 'emergency' ? 'urgent' : j.priority === 'low' ? 'low' : 'standard',
+                        window:         j.timeSlot === 'exact' && j.scheduledStart
+                            ? j.scheduledStart
+                            : j.scheduledDate || 'TBD',
+                        equipment:      (j.equipmentIds || []).join(', '),
+                        value:          parseFloat(j.invoiceAmount || 0),
+                        minLicense:     'Journeyman',
+                        preferredTechId: j.assignedTechId || null,
+                        assignedTechIds: [j.assignedTechId, ...(j.coTechIds || [])].filter(Boolean),
+                        start:          startHr,
+                        status:         j.status,
+                        trade:          j.trade,
+                        jobType:        j.jobType,
+                        scheduledDate:  j.scheduledDate,
+                        locationId:     j.locationId,
+                        customerId:     j.customerId,
+                        // raw DB fields preserved for saves
+                        _raw:           j,
+                    };
+                });
+
+                // Also surface Closed Won opps not yet in dispatch
+                const existingOppIds = new Set(normJobs.map(j => j.opportunityId).filter(Boolean));
+                const autoJobs = (opportunities || [])
+                    .filter(o => o.stage === 'Closed Won' && !existingOppIds.has(o.id))
+                    .map(o => ({
+                        id:             'auto_' + o.id,
+                        opportunityId:  o.id,
+                        customer:       o.account || o.opportunityName || 'Unknown',
+                        address:        '',
+                        needSkills:     [],
+                        crewSize:       1,
+                        durationHrs:    4,
+                        priority:       'standard',
+                        window:         'TBD',
+                        equipment:      '',
+                        value:          parseFloat(o.arr || o.revenue || 0) || 0,
+                        minLicense:     'Journeyman',
+                        preferredTechId:null,
+                        assignedTechIds:[],
+                        start:          null,
+                        status:         'unscheduled',
+                        _raw:           null,
+                    }));
+
+                setTechs(dbTechs);
+                setVehicles(vehiclesData.vehicles  || []);
+                setEquipment(equipData.equipment   || []);
+                setCustomers(custsData.customers   || []);
+                setJobs([...normJobs, ...autoJobs]);
+            } catch (err) {
+                if (!cancelled) setLoadError('Failed to load dispatch data. Please refresh.');
+                console.error('DispatchTab load error:', err);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Apply filters ────────────────────────────────────────────────────────
-    const filteredTechs = React.useMemo(() => {
+    const filteredTechs = useMemo(() => {
         let t = techs;
         if (filterSkill)   t = t.filter(tech => (tech.dispatchSkills || []).includes(filterSkill));
-        if (filterVehicle) t = t.filter(tech => tech.vehicle === (vehicles.find(v => v.id === filterVehicle)?.name));
+        if (filterVehicle) t = t.filter(tech => tech.vehicle === filterVehicle);
         if (filterLicense) t = t.filter(tech => tech.license === filterLicense);
         if (filterTeam) {
             const crew = crews.find(c => c.id === filterTeam);
             if (crew) t = t.filter(tech => (crew.members || []).includes(tech.id || tech.name));
         }
         return t;
-    }, [techs, filterSkill, filterVehicle, filterLicense, filterTeam, vehicles, crews]);
+    }, [techs, filterSkill, filterVehicle, filterLicense, filterTeam, crews]);
 
-    const filteredJobs = React.useMemo(() => {
+    const filteredJobs = useMemo(() => {
         if (!filterSkill && !filterVehicle && !filterLicense && !filterTeam) return jobs;
         return jobs.filter(j => {
             if (filterSkill && !(j.needSkills || []).includes(filterSkill)) return false;
@@ -773,6 +880,10 @@ export default function DispatchTab() {
 
     if (loading) {
         return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: T.inkMuted, fontFamily: T.sans }}>Loading dispatch…</div>;
+    }
+
+    if (loadError) {
+        return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: T.danger, fontFamily: T.sans, fontSize: 13 }}>{loadError}</div>;
     }
 
     return (
@@ -841,7 +952,7 @@ export default function DispatchTab() {
                     {
                         key: 'vehicles', active: filterVehicle,
                         label: filterVehicle ? (vehicles.find(v => v.id === filterVehicle)?.name || 'Vehicle') : 'All vehicles',
-                        items: [{ id: null, name: 'All vehicles' }, ...vehicles],
+                        items: [{ id: null, name: 'All vehicles' }, ...vehicles.map(v => ({ id: v.id, name: v.name }))],
                         onSelect: (id) => { setFilterVehicle(id); closeFilter(); },
                     },
                     {
