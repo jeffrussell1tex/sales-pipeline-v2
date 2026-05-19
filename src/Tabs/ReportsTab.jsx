@@ -32,8 +32,6 @@ export default function ReportsTab({ leadsEnabled = true }) {
         allPipelines,
         isMobile,
         setViewingAccount,
-        setOpportunities,
-        setContacts,
     } = useApp();
 
     const isAdmin = userRole === 'Admin';
@@ -2451,8 +2449,6 @@ ${bodyHtml}
                                 userRole={userRole}
                                 settings={settings}
                                 canSeeAll={canSeeAll}
-                                setOpportunities={setOpportunities}
-                                setContacts={setContacts}
                                 onSaveReport={(report) => setSavedReportsList(prev => [report, ...prev.filter(r => r.id !== report.id)])}
                             />
                         )}
@@ -4941,7 +4937,7 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
 // ─────────────────────────────────────────────────────────────
 //  Activity History Tab — Account History + Contact History
 // ─────────────────────────────────────────────────────────────
-function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, setOpportunities, setContacts, onSaveReport }) {
+function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, onSaveReport }) {
 
     const T = {
         bg: '#f0ece4', surface: '#fbf8f3', surface2: '#f5efe3',
@@ -4970,9 +4966,6 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     const accRef = React.useRef(null);
     const conRef = React.useRef(null);
     const oppRef = React.useRef(null);
-    const [contactMenuId,   setContactMenuId]   = React.useState(null);
-    const [personaPickerId, setPersonaPickerId] = React.useState(null);
-    const contactMenuRef = React.useRef(null);
 
     const currentUserName = currentUser?.name || currentUser || '';
     const isAdmin = userRole === 'Admin';
@@ -4984,7 +4977,6 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
             if (accRef.current && !accRef.current.contains(e.target)) setAccOpen(false);
             if (conRef.current && !conRef.current.contains(e.target)) setConOpen(false);
             if (oppRef.current && !oppRef.current.contains(e.target)) setOppOpen(false);
-            if (contactMenuRef.current && !contactMenuRef.current.contains(e.target)) { setContactMenuId(null); setPersonaPickerId(null); }
         };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
@@ -5274,11 +5266,11 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
         lost:     { bg: 'rgba(156,58,46,0.10)', ink: '#9c3a2e' },
         deal:     { bg: 'rgba(58,90,122,0.10)', ink: '#3a5a7a' },
     };
-    const typeLabels = { Call:'CALL', Email:'EMAIL', Meeting:'MEETING', Task:'TASK', Won:'WON', Lost:'LOST', Deal:'DEAL', Note:'NOTE', Activity:'ACTIVITY', Quote:'QUOTE' };
+    const typeLabels = { Call:'CALL', Email:'EMAIL', Meeting:'MEETING', Task:'TASK', 'Task Done':'TASK DONE', Won:'WON', Lost:'LOST', Deal:'DEAL', Note:'NOTE', Activity:'ACTIVITY', Quote:'QUOTE' };
 
     const EventRow = ({ event }) => {
         const cfg = typeConfig[event.type] || typeConfig.activity;
-        const label = typeLabels[event.actType] || (event.actType||'').toUpperCase().slice(0,8);
+        const label = typeLabels[event.actType] || (event.actType||'').toUpperCase().slice(0,12);
         const timeStr = event.date ? new Date(event.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}).toLowerCase() : '';
         return (
             <div style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 0', borderBottom:`1px solid ${T.border}` }}>
@@ -5290,7 +5282,7 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
                 </div>
                 <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                        <span style={{ display:'inline-block', padding:'2px 7px', background:cfg.bg, color:cfg.ink, fontSize:10, fontWeight:700, borderRadius:3, letterSpacing:0.5, fontFamily:T.sans }}>{label}</span>
+                        <span style={{ display:'inline-block', padding:'2px 7px', background:cfg.bg, color:cfg.ink, fontSize:10, fontWeight:700, borderRadius:999, letterSpacing:0.5, fontFamily:T.sans }}>{label}</span>
                         <span style={{ fontSize:13, color:T.ink, fontWeight:500, fontFamily:T.sans }}>{event.label}</span>
                         {event.amount > 0 && <span style={{ fontSize:12, fontWeight:700, color: event.type==='won' ? T.ok : event.type==='lost' ? T.danger : T.inkMid, fontFamily:T.sans, marginLeft:'auto' }}>{fmtMoney(event.amount)}</span>}
                     </div>
@@ -6156,54 +6148,21 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                             </div>
                                         </div>
                                         <div style={{ overflowX:'auto' }}>
-                                            <div style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1.2fr 1fr 1fr 1fr 36px', gap:14,
+                                            <div style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1.2fr 1fr 1fr 1fr', gap:14,
                                                 padding:'8px 22px', background:T.surface2, borderBottom:`1px solid ${T.border}`,
                                                 fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5, fontFamily:T.sans }}>
-                                                <div>Name</div><div>Title</div><div>Email</div><div>Phone</div><div>Buyer persona</div><div>Engagement</div><div/>
+                                                <div>Name</div><div>Title</div><div>Email</div><div>Phone</div><div>Buyer persona</div><div>Engagement</div>
                                             </div>
                                             {oppContacts.map((c,i) => {
                                                 const personaId = c.buyerPersona || c.persona || '';
-                                                const persona = personaId ? (() => {
-                                                    const found = (settings?.buyerPersonas||[]).find(p =>
-                                                        typeof p === 'string' ? p === personaId : p.id === personaId || p.name === personaId
-                                                    );
-                                                    if (typeof found === 'string') return { name: found, color: T.inkMuted };
-                                                    return found || null;
-                                                })() : null;
+                                                const persona = (settings?.buyerPersonas||[]).find(p => p.id === personaId || p.name === personaId);
                                                 const personaColor = persona?.color || T.inkMuted;
                                                 const fullName = ((c.firstName||'')+' '+(c.lastName||'')).trim();
                                                 const initials = fullName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-                                                const menuOpen = contactMenuId === c.id;
-                                                const pickerOpen = personaPickerId === c.id;
-
-                                                const handleRemoveFromOpp = () => {
-                                                    setContactMenuId(null);
-                                                    const updatedIds = (selectedOpp.contactIds||[]).filter(id => id !== c.id);
-                                                    const updated = { ...selectedOpp, contactIds: updatedIds };
-                                                    setOpportunities(prev => prev.map(o => o.id === selectedOpp.id ? updated : o));
-                                                    dbFetch('/.netlify/functions/opportunities', {
-                                                        method: 'PUT',
-                                                        headers: { 'Content-Type': 'application/json' },
-                                                        body: JSON.stringify(updated),
-                                                    }).catch(err => console.error('Failed to remove contact from opp:', err));
-                                                };
-
-                                                const handleSetPersona = (personaName) => {
-                                                    setPersonaPickerId(null);
-                                                    setContactMenuId(null);
-                                                    const updated = { ...c, buyerPersona: personaName };
-                                                    setContacts(prev => prev.map(ct => ct.id === c.id ? updated : ct));
-                                                    dbFetch('/.netlify/functions/contacts', {
-                                                        method: 'PUT',
-                                                        headers: { 'Content-Type': 'application/json' },
-                                                        body: JSON.stringify(updated),
-                                                    }).catch(err => console.error('Failed to update buyer persona:', err));
-                                                };
-
                                                 return (
-                                                    <div key={c.id||i} style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1.2fr 1fr 1fr 1fr 36px', gap:14,
+                                                    <div key={c.id||i} style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1.2fr 1fr 1fr 1fr', gap:14,
                                                         padding:'12px 22px', borderBottom:`1px solid ${T.border}`, fontSize:12.5, fontFamily:T.sans,
-                                                        alignItems:'center', background:T.surface, position:'relative' }}>
+                                                        alignItems:'center', background:T.surface }}>
                                                         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                                                             <div style={{ width:32, height:32, borderRadius:'50%', background:T.ink, color:'#fbf8f3',
                                                                 fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
@@ -6224,7 +6183,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                         <div>
                                                             {persona ? (
                                                                 <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'2px 8px 2px 4px',
-                                                                    borderRadius:999, background:`${personaColor}14`, border:`1px solid ${personaColor}40` }}>
+                                                                    borderRadius:12, background:`${personaColor}14`, border:`1px solid ${personaColor}40` }}>
                                                                     <span style={{ width:16, height:16, borderRadius:'50%', background:personaColor, color:'#fbf8f3',
                                                                         display:'inline-flex', alignItems:'center', justifyContent:'center',
                                                                         fontSize:9, fontWeight:700, fontFamily:T.serif }}>
@@ -6243,89 +6202,6 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                                     <span style={{ fontSize:11.5, color:T.inkMid, textTransform:'capitalize' }}>{eng}</span>
                                                                 </span>;
                                                             })()}
-                                                        </div>
-                                                        {/* ── Kebab ── */}
-                                                        <div ref={menuOpen || pickerOpen ? contactMenuRef : null} style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                                                            <button
-                                                                onClick={() => { setContactMenuId(menuOpen ? null : c.id); setPersonaPickerId(null); }}
-                                                                style={{ width:26, height:26, borderRadius:6, border:`1px solid ${menuOpen ? T.borderStrong : 'transparent'}`,
-                                                                    background: menuOpen ? T.surface2 : 'transparent', color:T.inkMuted, cursor:'pointer',
-                                                                    fontSize:14, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center',
-                                                                    fontFamily:'inherit', lineHeight:1 }}>
-                                                                ⋯
-                                                            </button>
-                                                            {menuOpen && !pickerOpen && (
-                                                                <div style={{ position:'absolute', top:'100%', right:0, marginTop:4, zIndex:200,
-                                                                    background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+2,
-                                                                    boxShadow:'0 8px 24px rgba(42,38,34,0.14)', minWidth:170, overflow:'hidden' }}>
-                                                                    <button
-                                                                        onClick={() => setPersonaPickerId(c.id)}
-                                                                        style={{ width:'100%', padding:'9px 14px', border:'none', background:'transparent',
-                                                                            color:T.ink, fontSize:12.5, fontWeight:500, cursor:'pointer', fontFamily:T.sans,
-                                                                            textAlign:'left', display:'flex', alignItems:'center', gap:8 }}
-                                                                        onMouseEnter={e => e.currentTarget.style.background=T.surface2}
-                                                                        onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                                                                        <span style={{ fontSize:13 }}>👤</span> Buyer persona
-                                                                    </button>
-                                                                    <div style={{ height:1, background:T.border, margin:'0 10px' }}/>
-                                                                    <button
-                                                                        onClick={handleRemoveFromOpp}
-                                                                        style={{ width:'100%', padding:'9px 14px', border:'none', background:'transparent',
-                                                                            color:T.danger, fontSize:12.5, fontWeight:500, cursor:'pointer', fontFamily:T.sans,
-                                                                            textAlign:'left', display:'flex', alignItems:'center', gap:8 }}
-                                                                        onMouseEnter={e => e.currentTarget.style.background='rgba(156,58,46,0.06)'}
-                                                                        onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                                                                        <span style={{ fontSize:13 }}>✕</span> Remove from deal
-                                                                    </button>
-                                                                </div>
-                                                            )}
-                                                            {pickerOpen && (
-                                                                <div style={{ position:'absolute', top:'100%', right:0, marginTop:4, zIndex:200,
-                                                                    background:T.surface, border:`1px solid ${T.borderStrong}`, borderRadius:T.r+2,
-                                                                    boxShadow:'0 8px 24px rgba(42,38,34,0.14)', minWidth:190, overflow:'hidden' }}>
-                                                                    <div style={{ padding:'8px 12px 6px', fontSize:9.5, fontWeight:700, color:T.inkMuted,
-                                                                        textTransform:'uppercase', letterSpacing:0.6, borderBottom:`1px solid ${T.border}` }}>
-                                                                        Buyer persona
-                                                                    </div>
-                                                                    {(settings?.buyerPersonas||[]).filter(p => p.active !== false).map((p, pi) => {
-                                                                        const pName = typeof p === 'string' ? p : p.name;
-                                                                        const pColor = typeof p === 'object' ? (p.color || T.inkMuted) : T.inkMuted;
-                                                                        const isSelected = personaId === pName;
-                                                                        return (
-                                                                            <button key={pi}
-                                                                                onClick={() => handleSetPersona(pName)}
-                                                                                style={{ width:'100%', padding:'8px 12px', border:'none',
-                                                                                    background: isSelected ? `${pColor}14` : 'transparent',
-                                                                                    cursor:'pointer', fontFamily:T.sans, textAlign:'left',
-                                                                                    display:'flex', alignItems:'center', gap:8 }}
-                                                                                onMouseEnter={e => e.currentTarget.style.background=`${pColor}14`}
-                                                                                onMouseLeave={e => e.currentTarget.style.background=isSelected?`${pColor}14`:'transparent'}>
-                                                                                <span style={{ width:14, height:14, borderRadius:'50%', background:pColor, flexShrink:0 }}/>
-                                                                                <span style={{ fontSize:12.5, fontWeight:isSelected?700:500, color: isSelected ? pColor : T.ink }}>{pName}</span>
-                                                                                {isSelected && <span style={{ marginLeft:'auto', fontSize:11, color:pColor }}>✓</span>}
-                                                                            </button>
-                                                                        );
-                                                                    })}
-                                                                    {(settings?.buyerPersonas||[]).filter(p => p.active !== false).length === 0 && (
-                                                                        <div style={{ padding:'10px 12px', fontSize:12, color:T.inkMuted, fontStyle:'italic' }}>
-                                                                            No personas defined — add in Settings
-                                                                        </div>
-                                                                    )}
-                                                                    {personaId && (
-                                                                        <>
-                                                                        <div style={{ height:1, background:T.border, margin:'0 10px' }}/>
-                                                                        <button
-                                                                            onClick={() => handleSetPersona('')}
-                                                                            style={{ width:'100%', padding:'8px 12px', border:'none', background:'transparent',
-                                                                                cursor:'pointer', fontFamily:T.sans, textAlign:'left', fontSize:12, color:T.inkMuted }}
-                                                                            onMouseEnter={e => e.currentTarget.style.background=T.surface2}
-                                                                            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                                                                            Clear persona
-                                                                        </button>
-                                                                        </>
-                                                                    )}
-                                                                </div>
-                                                            )}
                                                         </div>
                                                     </div>
                                                 );

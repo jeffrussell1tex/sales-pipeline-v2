@@ -597,14 +597,23 @@ export default function ContactsTab() {
     const sorted = useMemo(() => {
         let list = visibleContacts;
         if (search.trim()) {
-            const q = search.toLowerCase();
-            list = list.filter(c =>
-                (c.firstName||'').toLowerCase().includes(q) ||
-                (c.lastName||'').toLowerCase().includes(q) ||
-                (c.company||'').toLowerCase().includes(q) ||
-                (c.email||'').toLowerCase().includes(q) ||
-                (c.title||'').toLowerCase().includes(q)
-            );
+            // Tokenise so "paul c" and "paul crivello" both work.
+            // Build a combined haystack per contact, then require EVERY
+            // token to appear somewhere in that haystack.
+            const tokens = search.toLowerCase().split(/\s+/).filter(Boolean);
+            list = list.filter(c => {
+                const haystack = [
+                    (c.firstName||''),
+                    (c.lastName||''),
+                    // full name in both orders so "paul crivello" and "crivello paul" both hit
+                    ((c.firstName||'') + ' ' + (c.lastName||'')),
+                    ((c.lastName||'') + ' ' + (c.firstName||'')),
+                    (c.company||''),
+                    (c.email||''),
+                    (c.title||''),
+                ].join(' ').toLowerCase();
+                return tokens.every(token => haystack.includes(token));
+            });
         }
         return [...list].sort((a, b) => {
             if (contactsSortBy === 'lastName')  return (a.lastName||'').localeCompare(b.lastName||'');

@@ -14790,7 +14790,166 @@ const NewExportModal = ({ onClose, onSave, existing }) => {
     );
 };
 
-// 3. Restore from snapshot modal
+// 2b. Import from backup file modal
+// Lets the user upload a JSON backup file exported from any org and restore
+// its entities into the current org. Safe to run on a fresh empty org.
+const ImportBackupModal = ({ onClose, onSuccess }) => {
+    const [file,      setFile]      = useState(null);
+    const [parsed,    setParsed]    = useState(null);
+    const [parseErr,  setParseErr]  = useState('');
+    const [loading,   setLoading]   = useState(false);
+    const [result,    setResult]    = useState(null);
+    const [error,     setError]     = useState('');
+    const fileRef = useRef();
+
+    const handleFile = e => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        setFile(f);
+        setParsed(null);
+        setParseErr('');
+        setResult(null);
+        setError('');
+        const reader = new FileReader();
+        reader.onload = ev => {
+            try {
+                const data = JSON.parse(ev.target.result);
+                if (!data.entities || typeof data.entities !== 'object') {
+                    setParseErr('This file does not look like an Accelerep backup (missing "entities" key).');
+                    return;
+                }
+                setParsed(data);
+            } catch {
+                setParseErr('Could not parse file — make sure it is a valid JSON backup.');
+            }
+        };
+        reader.readAsText(f);
+    };
+
+    const handleImport = async () => {
+        if (!parsed) return;
+        setLoading(true);
+        setError('');
+        try {
+            const res = await dbFetch('/.netlify/functions/backup', {
+                method: 'PATCH',
+                body: JSON.stringify(parsed),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Import failed');
+            setResult(data);
+            onSuccess && onSuccess(data);
+        } catch (e) {
+            setError(e.message || 'Import failed. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Summary counts from the parsed file
+    const counts = parsed ? Object.entries(parsed.entities)
+        .filter(([, v]) => Array.isArray(v) && v.length > 0)
+        .map(([k, v]) => `${v.length} ${k}`)
+        : [];
+
+    return (
+        <DataModal width={520} onClose={onClose}>
+            <DataModalHead onClose={onClose}
+                title="Import from backup file"
+                sub="Upload a JSON backup to restore data into this workspace."/>
+            <div style={{ flex:1, overflowY:'auto', padding:22 }}>
+
+                {/* File picker */}
+                {!result && (
+                    <>
+                        <div
+                            onClick={() => fileRef.current?.click()}
+                            style={{
+                                border: `2px dashed ${file && !parseErr ? T.ok : T.border}`,
+                                borderRadius: T.r, padding: '24px 16px', textAlign: 'center',
+                                cursor: 'pointer', marginBottom: 14, background: T.surface2,
+                                transition: 'border-color 150ms',
+                            }}>
+                            <LIcon name="upload" size={22} color={T.inkMuted}/>
+                            <div style={{ fontSize:13, fontWeight:600, color:T.ink, marginTop:8 }}>
+                                {file ? file.name : 'Click to choose a backup file'}
+                            </div>
+                            <div style={{ fontSize:11.5, color:T.inkMuted, marginTop:4 }}>
+                                {file ? `${(file.size / 1024).toFixed(1)} KB` : 'JSON files only · exported from Accelerep'}
+                            </div>
+                            <input ref={fileRef} type="file" accept=".json,application/json"
+                                style={{ display:'none' }} onChange={handleFile}/>
+                        </div>
+
+                        {parseErr && (
+                            <div style={{ fontSize:12.5, color:T.danger, fontWeight:600, marginBottom:12 }}>
+                                ✕ {parseErr}
+                            </div>
+                        )}
+
+                        {/* Preview what will be imported */}
+                        {parsed && counts.length > 0 && (
+                            <div style={{ background:T.surface2, border:`1px solid ${T.border}`, borderRadius:4, padding:'12px 14px', marginBottom:14, fontSize:12 }}>
+                                <div style={{ fontWeight:700, color:T.ink, marginBottom:8 }}>File contents</div>
+                                {counts.map(c => (
+                                    <div key={c} style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                                        <span style={{ color:T.inkMid }}>{c.split(' ').slice(1).join(' ')}</span>
+                                        <span style={{ fontWeight:600, color:T.ink }}>{c.split(' ')[0]}</span>
+                                    </div>
+                                ))}
+                                {parsed.exportedAt && (
+                                    <div style={{ marginTop:8, paddingTop:8, borderTop:`1px solid ${T.border}`, color:T.inkMuted, fontSize:11 }}>
+                                        Exported {new Date(parsed.exportedAt).toLocaleString()}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <div style={{ padding:'10px 12px', background:'rgba(58,90,122,0.08)', borderLeft:`3px solid ${T.info}`, borderRadius:3, marginBottom:14, fontSize:12, color:T.inkMid }}>
+                            <b style={{ color:T.info }}>Safe to run on empty orgs.</b> Existing records with matching IDs will be updated. Records not in the file are left untouched.
+                        </div>
+
+                        {error && (
+                            <div style={{ fontSize:12.5, color:T.danger, fontWeight:600, marginBottom:8 }}>
+                                ✕ {error}
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {/* Success state */}
+                {result && (
+                    <div style={{ textAlign:'center', padding:'16px 0' }}>
+                        <div style={{ fontSize:32, marginBottom:12 }}>✓</div>
+                        <div style={{ fontSize:15, fontWeight:700, color:T.ok, marginBottom:6 }}>
+                            Import complete
+                        </div>
+                        <div style={{ fontSize:13, color:T.inkMid }}>
+                            {result.imported.toLocaleString()} records restored into this workspace.
+                        </div>
+                        {result.errors?.length > 0 && (
+                            <div style={{ marginTop:12, fontSize:12, color:T.warn }}>
+                                Some entities had errors: {result.errors.join(', ')}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+            <DataModalFoot>
+                <DataBtn label={result ? 'Close' : 'Cancel'} onClick={onClose}/>
+                {!result && (
+                    <DataBtn
+                        label={loading ? 'Importing…' : 'Import records'}
+                        primary
+                        disabled={!parsed || !!parseErr || loading}
+                        onClick={handleImport}/>
+                )}
+            </DataModalFoot>
+        </DataModal>
+    );
+};
+
+
 // Downloads the stored JSON payload so the admin has the data file.
 // A destructive server-side overwrite is intentionally not supported —
 // the safe flow is: download JSON → verify → reimport via Settings → Import.
@@ -15984,6 +16143,7 @@ const BackupDetail = ({ onBack }) => {
 
     // ── Action state
     const [restoreSnap,  setRestoreSnap]  = useState(null);
+    const [showImport,   setShowImport]   = useState(false);
     const [runningBackup,setRunningBackup]= useState(false);
     const [backupError,  setBackupError]  = useState('');
     const [backupSuccess,setBackupSuccess]= useState('');
@@ -16140,6 +16300,7 @@ const BackupDetail = ({ onBack }) => {
     return (
         <div style={{ fontFamily:T.sans }}>
             {restoreSnap && <RestoreModal snap={restoreSnap} onClose={()=>setRestoreSnap(null)}/>}
+            {showImport  && <ImportBackupModal onClose={()=>setShowImport(false)} onSuccess={() => { setShowImport(false); }}/>}
 
             <DataCrumb page="Backup & restore" onBack={onBack}/>
             <DataTitle
@@ -16149,6 +16310,9 @@ const BackupDetail = ({ onBack }) => {
                 updatedBy="System"
                 updatedAt={lastSnap ? fmtWhen(lastSnap.createdAt) : '—'}
                 actions={[
+                    <DataBtn key="imp"
+                        label="Import from file"
+                        onClick={() => setShowImport(true)}/>,
                     <DataBtn key="res"
                         label="Restore from backup"
                         disabled={!lastSnap}
