@@ -4937,6 +4937,241 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
 // ─────────────────────────────────────────────────────────────
 //  Activity History Tab — Account History + Contact History
 // ─────────────────────────────────────────────────────────────
+// ── Contact Row Kebab Menu ────────────────────────────────────────────────────
+// Kebab for each contact row in the Opp History contacts table.
+// Must be module-scope (not defined inside the render loop) to prevent remount.
+// Renders the dropdown via a portal-style fixed div so it escapes table overflow.
+function ContactRowKebab({ contact, buyerPersonas, onRemove, onSetPersona }) {
+    const [open,       setOpen]       = React.useState(false);
+    const [rect,       setRect]       = React.useState(null);
+    const [showPersona,setShowPersona]= React.useState(false);
+    const btnRef = React.useRef();
+
+    const T2 = {
+        surface:'#fbf8f3', border:'#e6ddd0', borderStrong:'#d4c8b4',
+        ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378',
+        danger:'#9c3a2e', sans:'"Plus Jakarta Sans", system-ui, sans-serif',
+    };
+
+    const toggle = (e) => {
+        e.stopPropagation();
+        if (open) { setOpen(false); setRect(null); setShowPersona(false); return; }
+        const r = btnRef.current?.getBoundingClientRect();
+        if (r) setRect(r);
+        setOpen(true);
+        setShowPersona(false);
+    };
+
+    React.useEffect(() => {
+        if (!open) return;
+        const close = () => { setOpen(false); setRect(null); setShowPersona(false); };
+        document.addEventListener('click', close);
+        return () => document.removeEventListener('click', close);
+    }, [open]);
+
+    const menuStyle = rect ? {
+        position: 'fixed',
+        top:  rect.bottom + 4,
+        left: rect.right - (showPersona ? 180 : 160),
+        zIndex: 9999,
+        background: T2.surface,
+        border: `1px solid ${T2.borderStrong}`,
+        borderRadius: 6,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+        minWidth: showPersona ? 180 : 160,
+        fontFamily: T2.sans,
+        overflow: 'hidden',
+    } : null;
+
+    const itemStyle = (danger) => ({
+        padding: '9px 14px', fontSize: 12.5, cursor: 'pointer',
+        color: danger ? T2.danger : T2.ink, display: 'flex',
+        alignItems: 'center', gap: 8, userSelect: 'none',
+        transition: 'background 80ms',
+    });
+
+    return (
+        <>
+            <button ref={btnRef} onClick={toggle}
+                style={{ background:'none', border:'none', cursor:'pointer', padding:'4px 6px',
+                    borderRadius:4, color: T2.inkMuted, fontSize:16, lineHeight:1,
+                    display:'flex', alignItems:'center', justifyContent:'center' }}>
+                ⋮
+            </button>
+            {open && rect && menuStyle && (
+                <div style={menuStyle} onClick={e => e.stopPropagation()}>
+                    {!showPersona ? (
+                        <>
+                            <div style={itemStyle(false)}
+                                onMouseEnter={e=>e.currentTarget.style.background='#f5efe3'}
+                                onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                                onClick={() => { setShowPersona(true); }}>
+                                <span>🎭</span> Buyer Persona
+                                <span style={{ marginLeft:'auto', fontSize:10, color:T2.inkMuted }}>▶</span>
+                            </div>
+                            <div style={{ borderTop:`1px solid ${T2.border}` }}/>
+                            <div style={itemStyle(true)}
+                                onMouseEnter={e=>e.currentTarget.style.background='#f5efe3'}
+                                onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                                onClick={() => { setOpen(false); onRemove(contact); }}>
+                                <span>✕</span> Remove from deal
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div style={{ padding:'8px 14px 6px', fontSize:10, fontWeight:700,
+                                color:T2.inkMuted, textTransform:'uppercase', letterSpacing:0.5,
+                                borderBottom:`1px solid ${T2.border}`, display:'flex', alignItems:'center', gap:6 }}>
+                                <span style={{ cursor:'pointer', color:T2.inkMid }}
+                                    onClick={() => setShowPersona(false)}>◀</span>
+                                Assign persona
+                            </div>
+                            {(buyerPersonas||[]).map(p => {
+                                const active = (contact.buyerPersona === p.id || contact.buyerPersona === p.name);
+                                return (
+                                    <div key={p.id} style={{ ...itemStyle(false), gap:10 }}
+                                        onMouseEnter={e=>e.currentTarget.style.background='#f5efe3'}
+                                        onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                                        onClick={() => { setOpen(false); onSetPersona(contact, p.id); }}>
+                                        <span style={{ width:14, height:14, borderRadius:'50%',
+                                            background: p.color || T2.inkMuted, flexShrink:0,
+                                            display:'inline-block' }}/>
+                                        <span>{p.name}</span>
+                                        {active && <span style={{ marginLeft:'auto', fontSize:11, color:p.color || T2.inkMuted }}>✓</span>}
+                                    </div>
+                                );
+                            })}
+                            {(!buyerPersonas||buyerPersonas.length===0) && (
+                                <div style={{ padding:'10px 14px', fontSize:12, color:T2.inkMuted, fontStyle:'italic' }}>
+                                    No personas configured
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            )}
+        </>
+    );
+}
+
+
+// Inline picker rendered below the section header. Shows all org contacts not
+// already on the deal. Search + multi-select + Save PUTs updated contactIds.
+function AddContactToOppPanel({ opp, allContacts, onSave, onCancel, saving }) {
+    const alreadyIds = new Set(opp?.contactIds || []);
+    const [search,   setSearch]   = React.useState('');
+    const [selected, setSelected] = React.useState(new Set());
+    const searchRef = React.useRef();
+
+    React.useEffect(() => { searchRef.current?.focus(); }, []);
+
+    const T2 = {
+        bg:'#f0ece4', surface:'#fbf8f3', surface2:'#f5efe3',
+        border:'#e6ddd0', borderStrong:'#d4c8b4',
+        ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378',
+        ok:'#4d6b3d', info:'#3a5a7a', danger:'#9c3a2e',
+        gold:'#c8b99a', goldInk:'#7a6a48',
+        sans:'"Plus Jakarta Sans", system-ui, sans-serif',
+    };
+
+    const available = (allContacts || []).filter(c => {
+        if (alreadyIds.has(c.id)) return false;
+        if (!search.trim()) return true;
+        const tokens = search.toLowerCase().split(/\s+/).filter(Boolean);
+        const hay = [
+            (c.firstName||''), (c.lastName||''),
+            ((c.firstName||'')+' '+(c.lastName||'')),
+            (c.company||''), (c.email||''), (c.title||''),
+        ].join(' ').toLowerCase();
+        return tokens.every(t => hay.includes(t));
+    });
+
+    const toggle = (id) => setSelected(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+    });
+
+    return (
+        <div style={{ borderTop:`1px solid ${T2.border}`, background:T2.surface2, padding:'14px 22px' }}>
+            <div style={{ marginBottom:10, fontSize:12, fontWeight:700, color:T2.inkMid, fontFamily:T2.sans }}>
+                Select contacts to add to this deal
+            </div>
+            {/* Search */}
+            <input
+                ref={searchRef}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search contacts by name, company, email…"
+                style={{ width:'100%', boxSizing:'border-box', padding:'7px 10px', fontSize:12.5,
+                    border:`1px solid ${T2.borderStrong}`, borderRadius:4, background:T2.surface,
+                    color:T2.ink, fontFamily:T2.sans, outline:'none', marginBottom:10 }}
+            />
+            {/* Contact list */}
+            <div style={{ maxHeight:220, overflowY:'auto', border:`1px solid ${T2.border}`, borderRadius:4,
+                background:T2.surface, marginBottom:12 }}>
+                {available.length === 0 ? (
+                    <div style={{ padding:'16px', fontSize:12.5, color:T2.inkMuted, fontStyle:'italic',
+                        textAlign:'center', fontFamily:T2.sans }}>
+                        {search.trim() ? 'No contacts match that search.' : 'All contacts are already on this deal.'}
+                    </div>
+                ) : available.map((c, i) => {
+                    const fullName = ((c.firstName||'')+' '+(c.lastName||'')).trim() || c.name || '—';
+                    const initials = fullName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+                    const checked = selected.has(c.id);
+                    return (
+                        <div key={c.id} onClick={() => toggle(c.id)}
+                            style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 14px',
+                                cursor:'pointer', borderBottom: i < available.length-1 ? `1px solid ${T2.border}` : 'none',
+                                background: checked ? `${T2.goldInk}10` : 'transparent',
+                                transition:'background 100ms' }}
+                            onMouseEnter={e => { if (!checked) e.currentTarget.style.background = T2.surface2; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = checked ? `${T2.goldInk}10` : 'transparent'; }}>
+                            <input type="checkbox" checked={checked} onChange={() => toggle(c.id)}
+                                onClick={e => e.stopPropagation()}
+                                style={{ width:14, height:14, accentColor:T2.goldInk, flexShrink:0, cursor:'pointer' }}/>
+                            <div style={{ width:28, height:28, borderRadius:'50%', background:T2.ink, color:'#fbf8f3',
+                                fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                {initials}
+                            </div>
+                            <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ fontSize:12.5, fontWeight:700, color:T2.ink, fontFamily:T2.sans }}>{fullName}</div>
+                                <div style={{ fontSize:11, color:T2.inkMuted, fontFamily:T2.sans }}>
+                                    {[c.title, c.company].filter(Boolean).join(' · ') || c.email || '—'}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+            {/* Footer */}
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <button onClick={onCancel} disabled={saving}
+                    style={{ padding:'7px 16px', fontSize:12.5, fontWeight:600, borderRadius:4,
+                        border:`1px solid ${T2.borderStrong}`, background:T2.surface, color:T2.inkMid,
+                        cursor:'pointer', fontFamily:T2.sans }}>
+                    Cancel
+                </button>
+                <button
+                    onClick={() => onSave([...selected])}
+                    disabled={selected.size === 0 || saving}
+                    style={{ padding:'7px 18px', fontSize:12.5, fontWeight:700, borderRadius:4,
+                        border:'none', background: selected.size === 0 ? T2.border : T2.ink,
+                        color: selected.size === 0 ? T2.inkMuted : '#fbf8f3',
+                        cursor: selected.size === 0 ? 'default' : 'pointer', fontFamily:T2.sans,
+                        transition:'background 150ms' }}>
+                    {saving ? 'Saving…' : `Add ${selected.size > 0 ? selected.size : ''} contact${selected.size !== 1 ? 's' : ''}`}
+                </button>
+                {selected.size > 0 && (
+                    <span style={{ fontSize:11.5, color:T2.inkMuted, fontFamily:T2.sans }}>
+                        {selected.size} selected
+                    </span>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, onSaveReport }) {
 
     const T = {
@@ -4954,6 +5189,10 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     const [selectedAccountId, setSelectedAccountId] = React.useState('');
     const [selectedContactId, setSelectedContactId] = React.useState('');
     const [selectedOppId,     setSelectedOppId]     = React.useState('');
+    const [showAddContact,    setShowAddContact]    = React.useState(false);
+    const [addContactSaving,  setAddContactSaving]  = React.useState(false);
+    const [localContactIds,   setLocalContactIds]   = React.useState(null);
+    const [localPersonaMap,   setLocalPersonaMap]   = React.useState({}); // contactId → personaId override
     const [period, setPeriod] = React.useState('6months');
     const [oppPeriod, setOppPeriod] = React.useState('all');
     const [showFilter, setShowFilter] = React.useState('all');
@@ -5845,8 +6084,8 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                     personaLookup[p.id] = { color: p.color || T.inkMuted, icon: (p.name||'?')[0] };
                 });
 
-                // Opp contacts
-                const oppContactIds = selectedOpp?.contactIds || [];
+                // Opp contacts — use localContactIds override when set (after adding a contact)
+                const oppContactIds = localContactIds ?? (selectedOpp?.contactIds || []);
                 const oppContacts = (contacts||[]).filter(c =>
                     (c.opportunityId === selectedOppId) ||
                     oppContactIds.includes(c.id)
@@ -5908,7 +6147,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                         <div style={{ maxHeight:260, overflowY:'auto' }}>
                                             {visibleOpps.slice(0,12).map(o => (
                                                 <div key={o.id}
-                                                    onClick={() => { setSelectedOppId(o.id); setOppOpen(false); setOppSearch(''); }}
+                                                    onClick={() => { setSelectedOppId(o.id); setOppOpen(false); setOppSearch(''); setLocalContactIds(null); setShowAddContact(false); setLocalPersonaMap({}); }}
                                                     style={{ padding:'9px 12px', borderRadius:T.r, cursor:'pointer',
                                                         background: o.id === selectedOppId ? `${T.goldInk}14` : 'transparent',
                                                         display:'flex', alignItems:'center', gap:10 }}
@@ -6139,74 +6378,179 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                 })()}
 
                                 {/* ── Section 3: Contacts on this deal ── */}
-                                {oppContacts.length > 0 && (
+                                {(oppContacts.length > 0 || selectedOpp) && (
                                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
                                         <div style={{ padding:'14px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center' }}>
                                             <div style={{ flex:1 }}>
                                                 <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:4 }}>Opportunity contacts</div>
                                                 <div style={{ fontSize:17, fontWeight:700, color:T.ink }}>Contacts on this deal ({oppContacts.length})</div>
                                             </div>
+                                            {selectedOpp && (
+                                                <button
+                                                    onClick={() => setShowAddContact(v => !v)}
+                                                    style={{ padding:'7px 14px', fontSize:12, fontWeight:700, borderRadius:4,
+                                                        border:`1px solid ${showAddContact ? T.borderStrong : T.borderStrong}`,
+                                                        background: showAddContact ? T.ink : T.surface,
+                                                        color: showAddContact ? '#fbf8f3' : T.inkMid,
+                                                        cursor:'pointer', fontFamily:T.sans, display:'flex', alignItems:'center', gap:5,
+                                                        transition:'background 150ms, color 150ms' }}>
+                                                    <span style={{ fontSize:14, lineHeight:1 }}>{showAddContact ? '×' : '+'}</span>
+                                                    Contact to opp
+                                                </button>
+                                            )}
                                         </div>
+                                        {showAddContact && selectedOpp && (
+                                            <AddContactToOppPanel
+                                                opp={{ ...selectedOpp, contactIds: oppContactIds }}
+                                                allContacts={contacts || []}
+                                                saving={addContactSaving}
+                                                onCancel={() => setShowAddContact(false)}
+                                                onSave={async (newIds) => {
+                                                    if (!newIds.length) return;
+                                                    setAddContactSaving(true);
+                                                    try {
+                                                        const mergedIds = [...new Set([...oppContactIds, ...newIds])];
+                                                        const mergedNames = mergedIds.map(id => {
+                                                            const c = (contacts||[]).find(x => x.id === id);
+                                                            return c ? ((c.firstName||'')+' '+(c.lastName||'')).trim() : null;
+                                                        }).filter(Boolean);
+                                                        const res = await dbFetch(`/.netlify/functions/opportunities?id=${selectedOpp.id}`, {
+                                                            method: 'PUT',
+                                                            body: JSON.stringify({
+                                                                ...selectedOpp,
+                                                                contactIds: mergedIds,
+                                                                contacts:   mergedNames,
+                                                            }),
+                                                        });
+                                                        if (res.ok) {
+                                                            setLocalContactIds(mergedIds);
+                                                            setShowAddContact(false);
+                                                        }
+                                                    } catch (e) {
+                                                        console.error('Add contact to opp failed:', e);
+                                                    } finally {
+                                                        setAddContactSaving(false);
+                                                    }
+                                                }}
+                                            />
+                                        )}
+                                        {oppContacts.length > 0 && (
                                         <div style={{ overflowX:'auto' }}>
-                                            <div style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1.2fr 1fr 1fr 1fr', gap:14,
-                                                padding:'8px 22px', background:T.surface2, borderBottom:`1px solid ${T.border}`,
-                                                fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5, fontFamily:T.sans }}>
-                                                <div>Name</div><div>Title</div><div>Email</div><div>Phone</div><div>Buyer persona</div><div>Engagement</div>
-                                            </div>
-                                            {oppContacts.map((c,i) => {
-                                                const personaId = c.buyerPersona || c.persona || '';
-                                                const persona = (settings?.buyerPersonas||[]).find(p => p.id === personaId || p.name === personaId);
-                                                const personaColor = persona?.color || T.inkMuted;
-                                                const fullName = ((c.firstName||'')+' '+(c.lastName||'')).trim();
-                                                const initials = fullName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-                                                return (
-                                                    <div key={c.id||i} style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1.2fr 1fr 1fr 1fr', gap:14,
-                                                        padding:'12px 22px', borderBottom:`1px solid ${T.border}`, fontSize:12.5, fontFamily:T.sans,
-                                                        alignItems:'center', background:T.surface }}>
-                                                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                                                            <div style={{ width:32, height:32, borderRadius:'50%', background:T.ink, color:'#fbf8f3',
-                                                                fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                                                                {initials}
-                                                            </div>
-                                                            <div>
-                                                                <div style={{ fontWeight:700, color:T.ink }}>{fullName}</div>
-                                                                <div style={{ fontSize:10.5, color:T.inkMuted }}>
-                                                                    last touch {c.lastTouch || '—'} · {c.activities || 0} activities
+                                            <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans, tableLayout:'fixed' }}>
+                                                <colgroup>
+                                                    <col style={{ width:'21%' }}/>
+                                                    <col style={{ width:'15%' }}/>
+                                                    <col style={{ width:'20%' }}/>
+                                                    <col style={{ width:'13%' }}/>
+                                                    <col style={{ width:'13%' }}/>
+                                                    <col style={{ width:'12%' }}/>
+                                                    <col style={{ width:'36px' }}/>
+                                                </colgroup>
+                                                <thead>
+                                                    <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                                                        {['Name','Title','Email','Phone','Buyer persona','Engagement',''].map(h => (
+                                                            <th key={h} style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted,
+                                                                textTransform:'uppercase', letterSpacing:0.5, textAlign:'left', fontFamily:T.sans }}>
+                                                                {h}
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                {oppContacts.map((c,i) => {
+                                                    const personaId = localPersonaMap[c.id] ?? c.buyerPersona ?? c.persona ?? '';
+                                                    const persona = (settings?.buyerPersonas||[]).find(p => p.id === personaId || p.name === personaId);
+                                                    const personaColor = persona?.color || T.inkMuted;
+                                                    const fullName = ((c.firstName||'')+' '+(c.lastName||'')).trim();
+                                                    const initials = fullName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+
+                                                    const handleRemove = async (contact) => {
+                                                        const merged = (localContactIds ?? oppContactIds).filter(id => id !== contact.id);
+                                                        const mergedNames = merged.map(id => {
+                                                            const cx = (contacts||[]).find(x => x.id === id);
+                                                            return cx ? ((cx.firstName||'')+' '+(cx.lastName||'')).trim() : null;
+                                                        }).filter(Boolean);
+                                                        try {
+                                                            const res = await dbFetch(`/.netlify/functions/opportunities?id=${selectedOpp.id}`, {
+                                                                method: 'PUT',
+                                                                body: JSON.stringify({ ...selectedOpp, contactIds: merged, contacts: mergedNames }),
+                                                            });
+                                                            if (res.ok) setLocalContactIds(merged);
+                                                        } catch(e) { console.error('Remove contact failed:', e); }
+                                                    };
+
+                                                    const handleSetPersona = async (contact, personaId) => {
+                                                        setLocalPersonaMap(prev => ({ ...prev, [contact.id]: personaId }));
+                                                        try {
+                                                            await dbFetch(`/.netlify/functions/contacts?id=${contact.id}`, {
+                                                                method: 'PUT',
+                                                                body: JSON.stringify({ ...contact, buyerPersona: personaId }),
+                                                            });
+                                                        } catch(e) {
+                                                            console.error('Set persona failed:', e);
+                                                            setLocalPersonaMap(prev => { const n={...prev}; delete n[contact.id]; return n; });
+                                                        }
+                                                    };
+
+                                                    return (
+                                                        <tr key={c.id||i} style={{ borderBottom:`1px solid ${T.border}`, background:T.surface, verticalAlign:'middle' }}>
+                                                            <td style={{ padding:'12px 16px' }}>
+                                                                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                                                    <div style={{ width:32, height:32, borderRadius:'50%', background:T.ink, color:'#fbf8f3',
+                                                                        fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                                                        {initials}
+                                                                    </div>
+                                                                    <div>
+                                                                        <div style={{ fontWeight:700, color:T.ink, fontSize:12.5 }}>{fullName}</div>
+                                                                        <div style={{ fontSize:10.5, color:T.inkMuted }}>
+                                                                            last touch {c.lastTouch || '—'} · {c.activities || 0} activities
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        </div>
-                                                        <div style={{ color:T.inkMid }}>{c.title || '—'}</div>
-                                                        <div>
-                                                            {c.email ? <a href={`mailto:${c.email}`} style={{ color:T.info, fontWeight:500, fontSize:12 }}>{c.email}</a> : <span style={{ color:T.inkMuted }}>—</span>}
-                                                        </div>
-                                                        <div style={{ color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{c.phone || '—'}</div>
-                                                        <div>
-                                                            {persona ? (
-                                                                <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'2px 8px 2px 4px',
-                                                                    borderRadius:12, background:`${personaColor}14`, border:`1px solid ${personaColor}40` }}>
-                                                                    <span style={{ width:16, height:16, borderRadius:'50%', background:personaColor, color:'#fbf8f3',
-                                                                        display:'inline-flex', alignItems:'center', justifyContent:'center',
-                                                                        fontSize:9, fontWeight:700, fontFamily:T.serif }}>
-                                                                        {(persona.name||'?')[0]}
+                                                            </td>
+                                                            <td style={{ padding:'12px 16px', fontSize:12.5, color:T.inkMid }}>{c.title || '—'}</td>
+                                                            <td style={{ padding:'12px 16px', fontSize:12.5 }}>
+                                                                {c.email ? <a href={`mailto:${c.email}`} style={{ color:T.info, fontWeight:500, fontSize:12 }}>{c.email}</a> : <span style={{ color:T.inkMuted }}>—</span>}
+                                                            </td>
+                                                            <td style={{ padding:'12px 16px', fontSize:12.5, color:T.inkMid, fontFamily:T.sans }}>{c.phone || '—'}</td>
+                                                            <td style={{ padding:'12px 16px' }}>
+                                                                {persona ? (
+                                                                    <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'2px 8px 2px 4px',
+                                                                        borderRadius:12, background:`${personaColor}14`, border:`1px solid ${personaColor}40` }}>
+                                                                        <span style={{ width:16, height:16, borderRadius:'50%', background:personaColor, color:'#fbf8f3',
+                                                                            display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                                                            fontSize:9, fontWeight:700, fontFamily:T.serif }}>
+                                                                            {(persona.name||'?')[0]}
+                                                                        </span>
+                                                                        <span style={{ fontSize:11, fontWeight:600, color:personaColor }}>{persona.name}</span>
                                                                     </span>
-                                                                    <span style={{ fontSize:11, fontWeight:600, color:personaColor }}>{persona.name}</span>
-                                                                </span>
-                                                            ) : <span style={{ color:T.inkMuted, fontStyle:'italic', fontSize:11 }}>—</span>}
-                                                        </div>
-                                                        <div>
-                                                            {(() => {
-                                                                const eng = c.engagement || 'warm';
-                                                                const ec = eng==='hot' ? T.danger : eng==='cool' ? T.info : eng==='stale' ? T.inkMuted : T.warn;
-                                                                return <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
-                                                                    <span style={{ width:7, height:7, borderRadius:'50%', background:ec }}/>
-                                                                    <span style={{ fontSize:11.5, color:T.inkMid, textTransform:'capitalize' }}>{eng}</span>
-                                                                </span>;
-                                                            })()}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
+                                                                ) : <span style={{ color:T.inkMuted, fontStyle:'italic', fontSize:11 }}>—</span>}
+                                                            </td>
+                                                            <td style={{ padding:'12px 16px' }}>
+                                                                {(() => {
+                                                                    const eng = c.engagement || 'warm';
+                                                                    const ec = eng==='hot' ? T.danger : eng==='cool' ? T.info : eng==='stale' ? T.inkMuted : T.warn;
+                                                                    return <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                                                                        <span style={{ width:7, height:7, borderRadius:'50%', background:ec, flexShrink:0 }}/>
+                                                                        <span style={{ fontSize:11.5, color:T.inkMid, textTransform:'capitalize' }}>{eng}</span>
+                                                                    </span>;
+                                                                })()}
+                                                            </td>
+                                                            <td style={{ padding:'12px 8px', textAlign:'center', width:36 }}>
+                                                                <ContactRowKebab
+                                                                    contact={{ ...c, buyerPersona: personaId }}
+                                                                    buyerPersonas={settings?.buyerPersonas || []}
+                                                                    onRemove={handleRemove}
+                                                                    onSetPersona={handleSetPersona}
+                                                                />
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                                </tbody>
+                                            </table>
                                         </div>
+                                        )}
                                     </div>
                                 )}
 
