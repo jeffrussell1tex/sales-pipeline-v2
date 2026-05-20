@@ -253,14 +253,26 @@ export const handler = async (event) => {
                 'created_at','updated_at','checked_out_at','actual_start','actual_end','invoice_paid_at',
             ]);
 
-            // Stamp orgId onto every row AND coerce timestamp strings → Date objects
-            // so Drizzle doesn't blow up with "value.toISOString is not a function"
+            // JSONB columns that must be stringified when coming in as arrays/objects
+            const JSONB_KEYS = new Set([
+                'serviceZones','skills','certifications','workingHours',
+                'coTechIds','equipmentIds','tags','customFields',
+                'co_tech_ids','equipment_ids','custom_fields',
+            ]);
+
+            // Stamp orgId, coerce timestamps → Date, stringify JSONB arrays/objects
             const stamp = rows => (rows || []).map(r => {
                 const out = { ...r, orgId };
                 TIMESTAMP_KEYS.forEach(k => {
                     if (out[k] && typeof out[k] === 'string') {
                         const d = new Date(out[k]);
                         out[k] = isNaN(d.getTime()) ? null : d;
+                    }
+                    // null stays null, Date stays Date
+                });
+                JSONB_KEYS.forEach(k => {
+                    if (k in out && (Array.isArray(out[k]) || (out[k] !== null && typeof out[k] === 'object'))) {
+                        out[k] = JSON.stringify(out[k]);
                     }
                 });
                 return out;
