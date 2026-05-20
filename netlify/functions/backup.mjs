@@ -248,7 +248,23 @@ export const handler = async (event) => {
                 return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing entities key' }) };
             }
 
-            const stamp = rows => (rows || []).map(r => ({ ...r, orgId }));
+            const TIMESTAMP_KEYS = new Set([
+                'createdAt','updatedAt','checkedOutAt','actualStart','actualEnd','invoicePaidAt',
+                'created_at','updated_at','checked_out_at','actual_start','actual_end','invoice_paid_at',
+            ]);
+
+            // Stamp orgId onto every row AND coerce timestamp strings → Date objects
+            // so Drizzle doesn't blow up with "value.toISOString is not a function"
+            const stamp = rows => (rows || []).map(r => {
+                const out = { ...r, orgId };
+                TIMESTAMP_KEYS.forEach(k => {
+                    if (out[k] && typeof out[k] === 'string') {
+                        const d = new Date(out[k]);
+                        out[k] = isNaN(d.getTime()) ? null : d;
+                    }
+                });
+                return out;
+            });
 
             const CHUNK = 50;
             async function upsertChunked(table, rows, conflictTarget) {
