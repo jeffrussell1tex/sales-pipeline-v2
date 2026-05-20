@@ -4937,7 +4937,124 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
 // ─────────────────────────────────────────────────────────────
 //  Activity History Tab — Account History + Contact History
 // ─────────────────────────────────────────────────────────────
-// ── Add Contact to Opportunity Panel ─────────────────────────────────────────
+// ── Contact Row Kebab Menu ────────────────────────────────────────────────────
+// Kebab for each contact row in the Opp History contacts table.
+// Must be module-scope (not defined inside the render loop) to prevent remount.
+// Renders the dropdown via a portal-style fixed div so it escapes table overflow.
+function ContactRowKebab({ contact, buyerPersonas, onRemove, onSetPersona }) {
+    const [open,       setOpen]       = React.useState(false);
+    const [rect,       setRect]       = React.useState(null);
+    const [showPersona,setShowPersona]= React.useState(false);
+    const btnRef = React.useRef();
+
+    const T2 = {
+        surface:'#fbf8f3', border:'#e6ddd0', borderStrong:'#d4c8b4',
+        ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378',
+        danger:'#9c3a2e', sans:'"Plus Jakarta Sans", system-ui, sans-serif',
+    };
+
+    const toggle = (e) => {
+        e.stopPropagation();
+        if (open) { setOpen(false); setRect(null); setShowPersona(false); return; }
+        const r = btnRef.current?.getBoundingClientRect();
+        if (r) setRect(r);
+        setOpen(true);
+        setShowPersona(false);
+    };
+
+    React.useEffect(() => {
+        if (!open) return;
+        const close = () => { setOpen(false); setRect(null); setShowPersona(false); };
+        document.addEventListener('click', close);
+        return () => document.removeEventListener('click', close);
+    }, [open]);
+
+    const menuStyle = rect ? {
+        position: 'fixed',
+        top:  rect.bottom + 4,
+        left: rect.right - (showPersona ? 180 : 160),
+        zIndex: 9999,
+        background: T2.surface,
+        border: `1px solid ${T2.borderStrong}`,
+        borderRadius: 6,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+        minWidth: showPersona ? 180 : 160,
+        fontFamily: T2.sans,
+        overflow: 'hidden',
+    } : null;
+
+    const itemStyle = (danger) => ({
+        padding: '9px 14px', fontSize: 12.5, cursor: 'pointer',
+        color: danger ? T2.danger : T2.ink, display: 'flex',
+        alignItems: 'center', gap: 8, userSelect: 'none',
+        transition: 'background 80ms',
+    });
+
+    return (
+        <>
+            <button ref={btnRef} onClick={toggle}
+                style={{ background:'none', border:'none', cursor:'pointer', padding:'4px 6px',
+                    borderRadius:4, color: T2.inkMuted, fontSize:16, lineHeight:1,
+                    display:'flex', alignItems:'center', justifyContent:'center' }}>
+                ⋮
+            </button>
+            {open && rect && menuStyle && (
+                <div style={menuStyle} onClick={e => e.stopPropagation()}>
+                    {!showPersona ? (
+                        <>
+                            <div style={itemStyle(false)}
+                                onMouseEnter={e=>e.currentTarget.style.background='#f5efe3'}
+                                onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                                onClick={() => { setShowPersona(true); }}>
+                                <span>🎭</span> Buyer Persona
+                                <span style={{ marginLeft:'auto', fontSize:10, color:T2.inkMuted }}>▶</span>
+                            </div>
+                            <div style={{ borderTop:`1px solid ${T2.border}` }}/>
+                            <div style={itemStyle(true)}
+                                onMouseEnter={e=>e.currentTarget.style.background='#f5efe3'}
+                                onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                                onClick={() => { setOpen(false); onRemove(contact); }}>
+                                <span>✕</span> Remove from deal
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div style={{ padding:'8px 14px 6px', fontSize:10, fontWeight:700,
+                                color:T2.inkMuted, textTransform:'uppercase', letterSpacing:0.5,
+                                borderBottom:`1px solid ${T2.border}`, display:'flex', alignItems:'center', gap:6 }}>
+                                <span style={{ cursor:'pointer', color:T2.inkMid }}
+                                    onClick={() => setShowPersona(false)}>◀</span>
+                                Assign persona
+                            </div>
+                            {(buyerPersonas||[]).map(p => {
+                                const active = (contact.buyerPersona === p.id || contact.buyerPersona === p.name);
+                                return (
+                                    <div key={p.id} style={{ ...itemStyle(false), gap:10 }}
+                                        onMouseEnter={e=>e.currentTarget.style.background='#f5efe3'}
+                                        onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                                        onClick={() => { setOpen(false); onSetPersona(contact, p.id); }}>
+                                        <span style={{ width:14, height:14, borderRadius:'50%',
+                                            background: p.color || T2.inkMuted, flexShrink:0,
+                                            display:'inline-block' }}/>
+                                        <span>{p.name}</span>
+                                        {active && <span style={{ marginLeft:'auto', fontSize:11, color:p.color || T2.inkMuted }}>✓</span>}
+                                    </div>
+                                );
+                            })}
+                            {(!buyerPersonas||buyerPersonas.length===0) && (
+                                <div style={{ padding:'10px 14px', fontSize:12, color:T2.inkMuted, fontStyle:'italic' }}>
+                                    No personas configured
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            )}
+        </>
+    );
+}
+
+
 // Inline picker rendered below the section header. Shows all org contacts not
 // already on the deal. Search + multi-select + Save PUTs updated contactIds.
 function AddContactToOppPanel({ opp, allContacts, onSave, onCancel, saving }) {
@@ -5074,7 +5191,8 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     const [selectedOppId,     setSelectedOppId]     = React.useState('');
     const [showAddContact,    setShowAddContact]    = React.useState(false);
     const [addContactSaving,  setAddContactSaving]  = React.useState(false);
-    const [localContactIds,   setLocalContactIds]   = React.useState(null); // null = use opp's own contactIds
+    const [localContactIds,   setLocalContactIds]   = React.useState(null);
+    const [localPersonaMap,   setLocalPersonaMap]   = React.useState({}); // contactId → personaId override
     const [period, setPeriod] = React.useState('6months');
     const [oppPeriod, setOppPeriod] = React.useState('all');
     const [showFilter, setShowFilter] = React.useState('all');
@@ -6029,7 +6147,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                         <div style={{ maxHeight:260, overflowY:'auto' }}>
                                             {visibleOpps.slice(0,12).map(o => (
                                                 <div key={o.id}
-                                                    onClick={() => { setSelectedOppId(o.id); setOppOpen(false); setOppSearch(''); setLocalContactIds(null); setShowAddContact(false); }}
+                                                    onClick={() => { setSelectedOppId(o.id); setOppOpen(false); setOppSearch(''); setLocalContactIds(null); setShowAddContact(false); setLocalPersonaMap({}); }}
                                                     style={{ padding:'9px 12px', borderRadius:T.r, cursor:'pointer',
                                                         background: o.id === selectedOppId ? `${T.goldInk}14` : 'transparent',
                                                         display:'flex', alignItems:'center', gap:10 }}
@@ -6320,16 +6438,17 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                         <div style={{ overflowX:'auto' }}>
                                             <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans, tableLayout:'fixed' }}>
                                                 <colgroup>
-                                                    <col style={{ width:'22%' }}/>
-                                                    <col style={{ width:'16%' }}/>
-                                                    <col style={{ width:'22%' }}/>
-                                                    <col style={{ width:'14%' }}/>
-                                                    <col style={{ width:'14%' }}/>
+                                                    <col style={{ width:'21%' }}/>
+                                                    <col style={{ width:'15%' }}/>
+                                                    <col style={{ width:'20%' }}/>
+                                                    <col style={{ width:'13%' }}/>
+                                                    <col style={{ width:'13%' }}/>
                                                     <col style={{ width:'12%' }}/>
+                                                    <col style={{ width:'36px' }}/>
                                                 </colgroup>
                                                 <thead>
                                                     <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
-                                                        {['Name','Title','Email','Phone','Buyer persona','Engagement'].map(h => (
+                                                        {['Name','Title','Email','Phone','Buyer persona','Engagement',''].map(h => (
                                                             <th key={h} style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted,
                                                                 textTransform:'uppercase', letterSpacing:0.5, textAlign:'left', fontFamily:T.sans }}>
                                                                 {h}
@@ -6339,11 +6458,40 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                 </thead>
                                                 <tbody>
                                                 {oppContacts.map((c,i) => {
-                                                    const personaId = c.buyerPersona || c.persona || '';
+                                                    const personaId = localPersonaMap[c.id] ?? c.buyerPersona ?? c.persona ?? '';
                                                     const persona = (settings?.buyerPersonas||[]).find(p => p.id === personaId || p.name === personaId);
                                                     const personaColor = persona?.color || T.inkMuted;
                                                     const fullName = ((c.firstName||'')+' '+(c.lastName||'')).trim();
                                                     const initials = fullName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+
+                                                    const handleRemove = async (contact) => {
+                                                        const merged = (localContactIds ?? oppContactIds).filter(id => id !== contact.id);
+                                                        const mergedNames = merged.map(id => {
+                                                            const cx = (contacts||[]).find(x => x.id === id);
+                                                            return cx ? ((cx.firstName||'')+' '+(cx.lastName||'')).trim() : null;
+                                                        }).filter(Boolean);
+                                                        try {
+                                                            const res = await dbFetch(`/.netlify/functions/opportunities?id=${selectedOpp.id}`, {
+                                                                method: 'PUT',
+                                                                body: JSON.stringify({ ...selectedOpp, contactIds: merged, contacts: mergedNames }),
+                                                            });
+                                                            if (res.ok) setLocalContactIds(merged);
+                                                        } catch(e) { console.error('Remove contact failed:', e); }
+                                                    };
+
+                                                    const handleSetPersona = async (contact, personaId) => {
+                                                        setLocalPersonaMap(prev => ({ ...prev, [contact.id]: personaId }));
+                                                        try {
+                                                            await dbFetch(`/.netlify/functions/contacts?id=${contact.id}`, {
+                                                                method: 'PUT',
+                                                                body: JSON.stringify({ ...contact, buyerPersona: personaId }),
+                                                            });
+                                                        } catch(e) {
+                                                            console.error('Set persona failed:', e);
+                                                            setLocalPersonaMap(prev => { const n={...prev}; delete n[contact.id]; return n; });
+                                                        }
+                                                    };
+
                                                     return (
                                                         <tr key={c.id||i} style={{ borderBottom:`1px solid ${T.border}`, background:T.surface, verticalAlign:'middle' }}>
                                                             <td style={{ padding:'12px 16px' }}>
@@ -6387,6 +6535,14 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                                         <span style={{ fontSize:11.5, color:T.inkMid, textTransform:'capitalize' }}>{eng}</span>
                                                                     </span>;
                                                                 })()}
+                                                            </td>
+                                                            <td style={{ padding:'12px 8px', textAlign:'center', width:36 }}>
+                                                                <ContactRowKebab
+                                                                    contact={{ ...c, buyerPersona: personaId }}
+                                                                    buyerPersonas={settings?.buyerPersonas || []}
+                                                                    onRemove={handleRemove}
+                                                                    onSetPersona={handleSetPersona}
+                                                                />
                                                             </td>
                                                         </tr>
                                                     );
