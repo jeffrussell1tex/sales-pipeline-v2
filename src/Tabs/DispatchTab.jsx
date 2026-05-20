@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../AppContext';
-import { dbFetch } from '../utils/storage';
+import { dbFetch, waitForToken } from '../utils/storage';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const T = {
@@ -708,10 +708,8 @@ export default function DispatchTab() {
             setLoading(true);
             setLoadError('');
             try {
-                // Wait for Clerk token to be available
-                if (typeof window.__getClerkToken === 'function') {
-                    await window.__getClerkToken().catch(() => {});
-                }
+                // Wait for Clerk JWT to be available before hitting DB
+                await waitForToken();
 
                 const [techsRes, vehiclesRes, equipRes, custsRes, jobsRes] = await Promise.all([
                     dbFetch('/.netlify/functions/dispatch-technicians'),
