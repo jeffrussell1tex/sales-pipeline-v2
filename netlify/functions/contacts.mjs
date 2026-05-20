@@ -27,6 +27,7 @@ export const handler = async (event) => {
         phone:             d.phone             || null,
         mobile:            d.mobile            || null,
         address:           d.address           || null,
+        address2:          d.address2          || null,
         city:              d.city              || null,
         state:             d.state             || null,
         zip:               d.zip               || null,
