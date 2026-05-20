@@ -15,6 +15,7 @@
         "npm:@clerk/clerk-react@5",
         "npm:@neondatabase/serverless@^1.0.2",
         "npm:@netlify/neon@~0.1.2",
+        "npm:@playwright/test@^1.60.0",
         "npm:@vitejs/plugin-react@^4.3.1",
         "npm:drizzle-kit@~0.31.9",
         "npm:drizzle-orm@~0.45.1",
