@@ -279,23 +279,28 @@ export const handler = async (event) => {
             });
 
             const CHUNK = 50;
-            async function upsertChunked(table, rows, conflictTarget) {
+            async function upsertChunked(table, rows) {
                 if (!rows || rows.length === 0) return 0;
                 const stamped = stamp(rows);
+                let count = 0;
                 for (let i = 0; i < stamped.length; i += CHUNK) {
                     const chunk = stamped.slice(i, i + CHUNK);
-                    const setCols = Object.fromEntries(
-                        Object.keys(chunk[0])
-                            .filter(k => k !== 'id' && k !== 'orgId')
-                            .map(k => [k, table[k]])
-                            .filter(([, v]) => v !== undefined)
-                    );
-                    await db.insert(table)
-                        .values(chunk)
-                        .onConflictDoUpdate({ target: conflictTarget || table.id, set: setCols })
-                        .catch(() => {});
+                    try {
+                        // Use onConflictDoNothing for bulk — safe for seed/restore
+                        // since we want existing records preserved and new ones inserted
+                        await db.insert(table).values(chunk).onConflictDoNothing();
+                        count += chunk.length;
+                    } catch {
+                        // Bulk failed — fall back row-by-row to skip any single bad record
+                        for (const row of chunk) {
+                            try {
+                                await db.insert(table).values(row).onConflictDoNothing();
+                                count++;
+                            } catch { /* truly bad row — skip silently */ }
+                        }
+                    }
                 }
-                return stamped.length;
+                return count;
             }
 
             let imported = 0;
