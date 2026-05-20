@@ -198,13 +198,17 @@ const UnassignedCard = ({ job, skills, onClick }) => {
 };
 
 // ── Timeline job block ────────────────────────────────────────────────────────
-const TimelineBlock = ({ job, conflict, colWidth, onClick }) => {
+const TimelineBlock = ({ job, conflict, colWidth, onClick, lane, laneCount }) => {
     const pc = prioColor(job.priority);
     const left = (job.start - 7) * colWidth + 4;
     const width = job.durationHrs * colWidth - 8;
+    const LANE_H = 56; // height per lane
+    const PAD = 4;
+    const top  = PAD + lane * LANE_H;
+    const height = LANE_H - PAD * 2;
     return (
         <div onClick={onClick} style={{
-            position: 'absolute', left, top: 4, width, bottom: 4,
+            position: 'absolute', left, top, width, height,
             background: `${pc}18`, border: `1.5px solid ${conflict ? T.danger : pc}`,
             borderRadius: T.r, padding: '5px 7px', cursor: 'pointer', overflow: 'hidden',
             boxShadow: conflict ? `0 0 0 2px ${T.danger}33` : 'none', zIndex: 1,
@@ -212,27 +216,59 @@ const TimelineBlock = ({ job, conflict, colWidth, onClick }) => {
             <div style={{ fontSize: 11, fontWeight: 700, color: T.ink, marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {job.customer}
             </div>
-            <div style={{ fontSize: 10, color: T.inkMid, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {(job.needSkills || []).slice(0, 2).map(id => {
-                    // We don't have skills here — parent passes down via closure if needed
-                    return id;
-                }).join(' · ')}
-            </div>
-            <div style={{ fontSize: 10, color: T.inkMuted, marginTop: 2 }}>
+            <div style={{ fontSize: 10, color: T.inkMuted, marginTop: 2, whiteSpace: 'nowrap' }}>
                 {job.durationHrs}h · {fmt12(job.start + job.durationHrs)}
             </div>
         </div>
     );
 };
 
+// Assign lanes to jobs so overlapping jobs stack vertically instead of painting over each other.
+// Returns an array of { job, lane } in the same order as the input jobs array.
+function assignLanes(jobs) {
+    // Sort by start time so earlier jobs get lower lanes
+    const sorted = [...jobs].sort((a, b) => (a.start || 0) - (b.start || 0));
+    const lanes = []; // lanes[i] = end time of last job in lane i
+    const result = new Map();
+
+    for (const job of sorted) {
+        const jobEnd = (job.start || 0) + (job.durationHrs || 0);
+        let placed = false;
+        for (let l = 0; l < lanes.length; l++) {
+            if (lanes[l] <= (job.start || 0)) {
+                lanes[l] = jobEnd;
+                result.set(job.id, l);
+                placed = true;
+                break;
+            }
+        }
+        if (!placed) {
+            result.set(job.id, lanes.length);
+            lanes.push(jobEnd);
+        }
+    }
+    return { laneMap: result, laneCount: Math.max(1, lanes.length) };
+}
+
 // ── DISPATCH BOARD VIEW ───────────────────────────────────────────────────────
 const BoardView = ({ jobs, techs, skills, onJobClick }) => {
-    const COL_W = 80;
+    const COL_W  = 80;
     const RAIL_W = 220;
-    const ROW_H = 72;
+    const LANE_H = 56; // must match TimelineBlock
+    const MIN_ROW_H = LANE_H; // single-lane row height
 
-    const assignedJobs = jobs.filter(j => j.start != null && (j.assignedTechIds || []).length > 0);
+    const assignedJobs   = jobs.filter(j => j.start != null && (j.assignedTechIds || []).length > 0);
     const unassignedJobs = jobs.filter(j => !j.start || (j.assignedTechIds || []).length === 0);
+
+    // Pre-compute lane assignments per tech
+    const techLanes = useMemo(() => {
+        const map = {};
+        techs.forEach(tech => {
+            const tj = assignedJobs.filter(j => (j.assignedTechIds || []).includes(tech.id));
+            map[tech.id] = assignLanes(tj);
+        });
+        return map;
+    }, [assignedJobs, techs]);
 
     const techConflicts = useMemo(() => {
         const conflicts = new Set();
@@ -251,9 +287,9 @@ const BoardView = ({ jobs, techs, skills, onJobClick }) => {
         return conflicts;
     }, [assignedJobs, techs]);
 
-    const overHours = new Set(techs.filter(t => (t.hoursThisWeek || 0) > (t.hoursCap || 40)).map(t => t.id));
+    const overHours        = new Set(techs.filter(t => (t.hoursThisWeek || 0) > (t.hoursCap || 40)).map(t => t.id));
     const urgentUnassigned = unassignedJobs.filter(j => j.priority === 'urgent').length;
-    const overbookings = techConflicts.size > 0 ? 1 : 0;
+    const overbookings     = techConflicts.size > 0 ? 1 : 0;
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -309,13 +345,15 @@ const BoardView = ({ jobs, techs, skills, onJobClick }) => {
                         ))}
                     </div>
 
-                    {/* Tech rows */}
+                    {/* Tech rows — height expands to fit lane count */}
                     {techs.map(tech => {
-                        const techJobs = assignedJobs.filter(j => (j.assignedTechIds || []).includes(tech.id));
+                        const techJobs  = assignedJobs.filter(j => (j.assignedTechIds || []).includes(tech.id));
+                        const { laneMap, laneCount } = techLanes[tech.id] || { laneMap: new Map(), laneCount: 1 };
+                        const rowH = Math.max(MIN_ROW_H, laneCount * LANE_H);
                         const over = overHours.has(tech.id);
                         return (
                             <div key={tech.id} style={{ display: 'flex', borderBottom: `1px solid ${T.border}`,
-                                height: ROW_H, flexShrink: 0, background: T.surface,
+                                height: rowH, flexShrink: 0, background: T.surface,
                                 ...(over ? { boxShadow: `inset 3px 0 0 ${T.danger}` } : {}) }}>
                                 {/* Tech header cell */}
                                 <div style={{ width: 190, flexShrink: 0, borderRight: `1px solid ${T.border}`,
@@ -338,7 +376,7 @@ const BoardView = ({ jobs, techs, skills, onJobClick }) => {
                                     </div>
                                 </div>
 
-                                {/* Hour cells */}
+                                {/* Hour cells + job blocks */}
                                 <div style={{ position: 'relative', display: 'flex', flex: 1 }}>
                                     {DSP_HOURS.map(h => (
                                         <div key={h} style={{ width: COL_W, flexShrink: 0, height: '100%',
@@ -346,7 +384,9 @@ const BoardView = ({ jobs, techs, skills, onJobClick }) => {
                                     ))}
                                     {techJobs.map(j => (
                                         <TimelineBlock key={j.id} job={j} conflict={techConflicts.has(j.id)}
-                                            colWidth={COL_W} onClick={() => onJobClick(j)}/>
+                                            colWidth={COL_W} onClick={() => onJobClick(j)}
+                                            lane={laneMap.get(j.id) || 0}
+                                            laneCount={laneCount}/>
                                     ))}
                                 </div>
                             </div>
