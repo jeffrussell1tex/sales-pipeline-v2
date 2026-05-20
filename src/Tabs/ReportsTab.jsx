@@ -4937,6 +4937,124 @@ function RecommendationReport({ currentUser, canSeeAll, settings }) {
 // ─────────────────────────────────────────────────────────────
 //  Activity History Tab — Account History + Contact History
 // ─────────────────────────────────────────────────────────────
+// ── Add Contact to Opportunity Panel ─────────────────────────────────────────
+// Inline picker rendered below the section header. Shows all org contacts not
+// already on the deal. Search + multi-select + Save PUTs updated contactIds.
+function AddContactToOppPanel({ opp, allContacts, onSave, onCancel, saving }) {
+    const alreadyIds = new Set(opp?.contactIds || []);
+    const [search,   setSearch]   = React.useState('');
+    const [selected, setSelected] = React.useState(new Set());
+    const searchRef = React.useRef();
+
+    React.useEffect(() => { searchRef.current?.focus(); }, []);
+
+    const T2 = {
+        bg:'#f0ece4', surface:'#fbf8f3', surface2:'#f5efe3',
+        border:'#e6ddd0', borderStrong:'#d4c8b4',
+        ink:'#2a2622', inkMid:'#5a544c', inkMuted:'#8a8378',
+        ok:'#4d6b3d', info:'#3a5a7a', danger:'#9c3a2e',
+        gold:'#c8b99a', goldInk:'#7a6a48',
+        sans:'"Plus Jakarta Sans", system-ui, sans-serif',
+    };
+
+    const available = (allContacts || []).filter(c => {
+        if (alreadyIds.has(c.id)) return false;
+        if (!search.trim()) return true;
+        const tokens = search.toLowerCase().split(/\s+/).filter(Boolean);
+        const hay = [
+            (c.firstName||''), (c.lastName||''),
+            ((c.firstName||'')+' '+(c.lastName||'')),
+            (c.company||''), (c.email||''), (c.title||''),
+        ].join(' ').toLowerCase();
+        return tokens.every(t => hay.includes(t));
+    });
+
+    const toggle = (id) => setSelected(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+    });
+
+    return (
+        <div style={{ borderTop:`1px solid ${T2.border}`, background:T2.surface2, padding:'14px 22px' }}>
+            <div style={{ marginBottom:10, fontSize:12, fontWeight:700, color:T2.inkMid, fontFamily:T2.sans }}>
+                Select contacts to add to this deal
+            </div>
+            {/* Search */}
+            <input
+                ref={searchRef}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search contacts by name, company, email…"
+                style={{ width:'100%', boxSizing:'border-box', padding:'7px 10px', fontSize:12.5,
+                    border:`1px solid ${T2.borderStrong}`, borderRadius:4, background:T2.surface,
+                    color:T2.ink, fontFamily:T2.sans, outline:'none', marginBottom:10 }}
+            />
+            {/* Contact list */}
+            <div style={{ maxHeight:220, overflowY:'auto', border:`1px solid ${T2.border}`, borderRadius:4,
+                background:T2.surface, marginBottom:12 }}>
+                {available.length === 0 ? (
+                    <div style={{ padding:'16px', fontSize:12.5, color:T2.inkMuted, fontStyle:'italic',
+                        textAlign:'center', fontFamily:T2.sans }}>
+                        {search.trim() ? 'No contacts match that search.' : 'All contacts are already on this deal.'}
+                    </div>
+                ) : available.map((c, i) => {
+                    const fullName = ((c.firstName||'')+' '+(c.lastName||'')).trim() || c.name || '—';
+                    const initials = fullName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+                    const checked = selected.has(c.id);
+                    return (
+                        <div key={c.id} onClick={() => toggle(c.id)}
+                            style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 14px',
+                                cursor:'pointer', borderBottom: i < available.length-1 ? `1px solid ${T2.border}` : 'none',
+                                background: checked ? `${T2.goldInk}10` : 'transparent',
+                                transition:'background 100ms' }}
+                            onMouseEnter={e => { if (!checked) e.currentTarget.style.background = T2.surface2; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = checked ? `${T2.goldInk}10` : 'transparent'; }}>
+                            <input type="checkbox" checked={checked} onChange={() => toggle(c.id)}
+                                onClick={e => e.stopPropagation()}
+                                style={{ width:14, height:14, accentColor:T2.goldInk, flexShrink:0, cursor:'pointer' }}/>
+                            <div style={{ width:28, height:28, borderRadius:'50%', background:T2.ink, color:'#fbf8f3',
+                                fontSize:10, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                {initials}
+                            </div>
+                            <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ fontSize:12.5, fontWeight:700, color:T2.ink, fontFamily:T2.sans }}>{fullName}</div>
+                                <div style={{ fontSize:11, color:T2.inkMuted, fontFamily:T2.sans }}>
+                                    {[c.title, c.company].filter(Boolean).join(' · ') || c.email || '—'}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+            {/* Footer */}
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <button onClick={onCancel} disabled={saving}
+                    style={{ padding:'7px 16px', fontSize:12.5, fontWeight:600, borderRadius:4,
+                        border:`1px solid ${T2.borderStrong}`, background:T2.surface, color:T2.inkMid,
+                        cursor:'pointer', fontFamily:T2.sans }}>
+                    Cancel
+                </button>
+                <button
+                    onClick={() => onSave([...selected])}
+                    disabled={selected.size === 0 || saving}
+                    style={{ padding:'7px 18px', fontSize:12.5, fontWeight:700, borderRadius:4,
+                        border:'none', background: selected.size === 0 ? T2.border : T2.ink,
+                        color: selected.size === 0 ? T2.inkMuted : '#fbf8f3',
+                        cursor: selected.size === 0 ? 'default' : 'pointer', fontFamily:T2.sans,
+                        transition:'background 150ms' }}>
+                    {saving ? 'Saving…' : `Add ${selected.size > 0 ? selected.size : ''} contact${selected.size !== 1 ? 's' : ''}`}
+                </button>
+                {selected.size > 0 && (
+                    <span style={{ fontSize:11.5, color:T2.inkMuted, fontFamily:T2.sans }}>
+                        {selected.size} selected
+                    </span>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tasks, currentUser, userRole, settings, canSeeAll, onSaveReport }) {
 
     const T = {
@@ -4954,6 +5072,9 @@ function ActivityHistoryTab({ accounts, contacts, activities, opportunities, tas
     const [selectedAccountId, setSelectedAccountId] = React.useState('');
     const [selectedContactId, setSelectedContactId] = React.useState('');
     const [selectedOppId,     setSelectedOppId]     = React.useState('');
+    const [showAddContact,    setShowAddContact]    = React.useState(false);
+    const [addContactSaving,  setAddContactSaving]  = React.useState(false);
+    const [localContactIds,   setLocalContactIds]   = React.useState(null); // null = use opp's own contactIds
     const [period, setPeriod] = React.useState('6months');
     const [oppPeriod, setOppPeriod] = React.useState('all');
     const [showFilter, setShowFilter] = React.useState('all');
@@ -5845,8 +5966,8 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                     personaLookup[p.id] = { color: p.color || T.inkMuted, icon: (p.name||'?')[0] };
                 });
 
-                // Opp contacts
-                const oppContactIds = selectedOpp?.contactIds || [];
+                // Opp contacts — use localContactIds override when set (after adding a contact)
+                const oppContactIds = localContactIds ?? (selectedOpp?.contactIds || []);
                 const oppContacts = (contacts||[]).filter(c =>
                     (c.opportunityId === selectedOppId) ||
                     oppContactIds.includes(c.id)
@@ -5908,7 +6029,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                         <div style={{ maxHeight:260, overflowY:'auto' }}>
                                             {visibleOpps.slice(0,12).map(o => (
                                                 <div key={o.id}
-                                                    onClick={() => { setSelectedOppId(o.id); setOppOpen(false); setOppSearch(''); }}
+                                                    onClick={() => { setSelectedOppId(o.id); setOppOpen(false); setOppSearch(''); setLocalContactIds(null); setShowAddContact(false); }}
                                                     style={{ padding:'9px 12px', borderRadius:T.r, cursor:'pointer',
                                                         background: o.id === selectedOppId ? `${T.goldInk}14` : 'transparent',
                                                         display:'flex', alignItems:'center', gap:10 }}
@@ -6139,14 +6260,63 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                 })()}
 
                                 {/* ── Section 3: Contacts on this deal ── */}
-                                {oppContacts.length > 0 && (
+                                {(oppContacts.length > 0 || selectedOpp) && (
                                     <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, overflow:'hidden' }}>
                                         <div style={{ padding:'14px 22px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center' }}>
                                             <div style={{ flex:1 }}>
                                                 <div style={{ fontSize:9.5, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.7, marginBottom:4 }}>Opportunity contacts</div>
                                                 <div style={{ fontSize:17, fontWeight:700, color:T.ink }}>Contacts on this deal ({oppContacts.length})</div>
                                             </div>
+                                            {selectedOpp && (
+                                                <button
+                                                    onClick={() => setShowAddContact(v => !v)}
+                                                    style={{ padding:'7px 14px', fontSize:12, fontWeight:700, borderRadius:4,
+                                                        border:`1px solid ${showAddContact ? T.borderStrong : T.borderStrong}`,
+                                                        background: showAddContact ? T.ink : T.surface,
+                                                        color: showAddContact ? '#fbf8f3' : T.inkMid,
+                                                        cursor:'pointer', fontFamily:T.sans, display:'flex', alignItems:'center', gap:5,
+                                                        transition:'background 150ms, color 150ms' }}>
+                                                    <span style={{ fontSize:14, lineHeight:1 }}>{showAddContact ? '×' : '+'}</span>
+                                                    Contact to opp
+                                                </button>
+                                            )}
                                         </div>
+                                        {showAddContact && selectedOpp && (
+                                            <AddContactToOppPanel
+                                                opp={{ ...selectedOpp, contactIds: oppContactIds }}
+                                                allContacts={contacts || []}
+                                                saving={addContactSaving}
+                                                onCancel={() => setShowAddContact(false)}
+                                                onSave={async (newIds) => {
+                                                    if (!newIds.length) return;
+                                                    setAddContactSaving(true);
+                                                    try {
+                                                        const mergedIds = [...new Set([...oppContactIds, ...newIds])];
+                                                        const mergedNames = mergedIds.map(id => {
+                                                            const c = (contacts||[]).find(x => x.id === id);
+                                                            return c ? ((c.firstName||'')+' '+(c.lastName||'')).trim() : null;
+                                                        }).filter(Boolean);
+                                                        const res = await dbFetch(`/.netlify/functions/opportunities?id=${selectedOpp.id}`, {
+                                                            method: 'PUT',
+                                                            body: JSON.stringify({
+                                                                ...selectedOpp,
+                                                                contactIds: mergedIds,
+                                                                contacts:   mergedNames,
+                                                            }),
+                                                        });
+                                                        if (res.ok) {
+                                                            setLocalContactIds(mergedIds);
+                                                            setShowAddContact(false);
+                                                        }
+                                                    } catch (e) {
+                                                        console.error('Add contact to opp failed:', e);
+                                                    } finally {
+                                                        setAddContactSaving(false);
+                                                    }
+                                                }}
+                                            />
+                                        )}
+                                        {oppContacts.length > 0 && (
                                         <div style={{ overflowX:'auto' }}>
                                             <div style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1.2fr 1fr 1fr 1fr', gap:14,
                                                 padding:'8px 22px', background:T.surface2, borderBottom:`1px solid ${T.border}`,
@@ -6207,6 +6377,7 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                                 );
                                             })}
                                         </div>
+                                        )}
                                     </div>
                                 )}
 
