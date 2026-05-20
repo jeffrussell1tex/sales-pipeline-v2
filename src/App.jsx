@@ -187,6 +187,32 @@ function App() {
         return () => window.removeEventListener('resize', onResize);
     }, []);
 
+    // ── Scroll lock — prevent background scroll when any modal/panel is open ──
+    // Covers all modals from modalState, calState, and inline panels.
+    useEffect(() => {
+        const anyOpen = !!(
+            showModal || showAccountModal || showContactModal || showTaskModal ||
+            showActivityModal || showUserModal || showShortcuts || showProfilePanel ||
+            showCsvImportModal || showLeadImportModal || showLeadModal ||
+            showOutlookImportModal || showSpiffClaimModal ||
+            confirmModal || blockedDeleteModal || lostReasonModal ||
+            viewingContact || viewingAccount || viewingTask ||
+            meetingPrepOpen || logFromCalOpen || showCalConfig ||
+            quickLogOpen || showNavGuard
+        );
+        document.body.style.overflow = anyOpen ? 'hidden' : '';
+        return () => { document.body.style.overflow = ''; };
+    }, [
+        showModal, showAccountModal, showContactModal, showTaskModal,
+        showActivityModal, showUserModal, showShortcuts, showProfilePanel,
+        showCsvImportModal, showLeadImportModal, showLeadModal,
+        showOutlookImportModal, showSpiffClaimModal,
+        confirmModal, blockedDeleteModal, lostReasonModal,
+        viewingContact, viewingAccount, viewingTask,
+        meetingPrepOpen, logFromCalOpen, showCalConfig,
+        quickLogOpen, showNavGuard,
+    ]);
+
     // ── Phase 1: Custom Hooks ─────────────────────────────────────────
     const {
         settings, setSettings, settingsReady,
