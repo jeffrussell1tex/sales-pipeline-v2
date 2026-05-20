@@ -187,32 +187,6 @@ function App() {
         return () => window.removeEventListener('resize', onResize);
     }, []);
 
-    // ── Scroll lock — prevent background scroll when any modal/panel is open ──
-    // Covers all modals from modalState, calState, and inline panels.
-    useEffect(() => {
-        const anyOpen = !!(
-            showModal || showAccountModal || showContactModal || showTaskModal ||
-            showActivityModal || showUserModal || showShortcuts || showProfilePanel ||
-            showCsvImportModal || showLeadImportModal || showLeadModal ||
-            showOutlookImportModal || showSpiffClaimModal ||
-            confirmModal || blockedDeleteModal || lostReasonModal ||
-            viewingContact || viewingAccount || viewingTask ||
-            meetingPrepOpen || logFromCalOpen || showCalConfig ||
-            quickLogOpen || showNavGuard
-        );
-        document.body.style.overflow = anyOpen ? 'hidden' : '';
-        return () => { document.body.style.overflow = ''; };
-    }, [
-        showModal, showAccountModal, showContactModal, showTaskModal,
-        showActivityModal, showUserModal, showShortcuts, showProfilePanel,
-        showCsvImportModal, showLeadImportModal, showLeadModal,
-        showOutlookImportModal, showSpiffClaimModal,
-        confirmModal, blockedDeleteModal, lostReasonModal,
-        viewingContact, viewingAccount, viewingTask,
-        meetingPrepOpen, logFromCalOpen, showCalConfig,
-        quickLogOpen, showNavGuard,
-    ]);
-
     // ── Phase 1: Custom Hooks ─────────────────────────────────────────
     const {
         settings, setSettings, settingsReady,
@@ -1246,6 +1220,32 @@ dbFetch('/.netlify/functions/users?me=true')
     const [pendingNavTab, setPendingNavTab] = React.useState(null);
     const [showNavGuard, setShowNavGuard]   = React.useState(false);
     const settingsSaveRef = React.useRef(null);
+
+    // ── Scroll lock — prevent background scroll when any modal/panel is open ──
+    // Placed here so ALL state variables it depends on are already initialized.
+    useEffect(() => {
+        const anyOpen = !!(
+            showModal || showAccountModal || showContactModal || showTaskModal ||
+            showActivityModal || showUserModal || showShortcuts || showProfilePanel ||
+            showCsvImportModal || showLeadImportModal || showLeadModal ||
+            showOutlookImportModal || showSpiffClaimModal ||
+            confirmModal || blockedDeleteModal || lostReasonModal ||
+            viewingContact || viewingAccount || viewingTask ||
+            meetingPrepOpen || logFromCalOpen || showCalConfig ||
+            quickLogOpen || showNavGuard
+        );
+        document.body.style.overflow = anyOpen ? 'hidden' : '';
+        return () => { document.body.style.overflow = ''; };
+    }, [
+        showModal, showAccountModal, showContactModal, showTaskModal,
+        showActivityModal, showUserModal, showShortcuts, showProfilePanel,
+        showCsvImportModal, showLeadImportModal, showLeadModal,
+        showOutlookImportModal, showSpiffClaimModal,
+        confirmModal, blockedDeleteModal, lostReasonModal,
+        viewingContact, viewingAccount, viewingTask,
+        meetingPrepOpen, logFromCalOpen, showCalConfig,
+        quickLogOpen, showNavGuard,
+    ]);
 
     const handleNavClick = React.useCallback((tab) => {
         if (activeTab === 'settings' && settingsDirty && tab !== 'settings') {
