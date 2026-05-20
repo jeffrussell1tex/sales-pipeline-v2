@@ -6318,64 +6318,81 @@ td { padding: 6px 10px; border-bottom: 1px solid #f5efe3; }
                                         )}
                                         {oppContacts.length > 0 && (
                                         <div style={{ overflowX:'auto' }}>
-                                            <div style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1.2fr 1fr 1fr 1fr', gap:14,
-                                                padding:'8px 22px', background:T.surface2, borderBottom:`1px solid ${T.border}`,
-                                                fontSize:10, fontWeight:700, color:T.inkMuted, textTransform:'uppercase', letterSpacing:0.5, fontFamily:T.sans }}>
-                                                <div>Name</div><div>Title</div><div>Email</div><div>Phone</div><div>Buyer persona</div><div>Engagement</div>
-                                            </div>
-                                            {oppContacts.map((c,i) => {
-                                                const personaId = c.buyerPersona || c.persona || '';
-                                                const persona = (settings?.buyerPersonas||[]).find(p => p.id === personaId || p.name === personaId);
-                                                const personaColor = persona?.color || T.inkMuted;
-                                                const fullName = ((c.firstName||'')+' '+(c.lastName||'')).trim();
-                                                const initials = fullName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-                                                return (
-                                                    <div key={c.id||i} style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1.2fr 1fr 1fr 1fr', gap:14,
-                                                        padding:'12px 22px', borderBottom:`1px solid ${T.border}`, fontSize:12.5, fontFamily:T.sans,
-                                                        alignItems:'center', background:T.surface }}>
-                                                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                                                            <div style={{ width:32, height:32, borderRadius:'50%', background:T.ink, color:'#fbf8f3',
-                                                                fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                                                                {initials}
-                                                            </div>
-                                                            <div>
-                                                                <div style={{ fontWeight:700, color:T.ink }}>{fullName}</div>
-                                                                <div style={{ fontSize:10.5, color:T.inkMuted }}>
-                                                                    last touch {c.lastTouch || '—'} · {c.activities || 0} activities
+                                            <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:T.sans, tableLayout:'fixed' }}>
+                                                <colgroup>
+                                                    <col style={{ width:'22%' }}/>
+                                                    <col style={{ width:'16%' }}/>
+                                                    <col style={{ width:'22%' }}/>
+                                                    <col style={{ width:'14%' }}/>
+                                                    <col style={{ width:'14%' }}/>
+                                                    <col style={{ width:'12%' }}/>
+                                                </colgroup>
+                                                <thead>
+                                                    <tr style={{ background:T.surface2, borderBottom:`1px solid ${T.border}` }}>
+                                                        {['Name','Title','Email','Phone','Buyer persona','Engagement'].map(h => (
+                                                            <th key={h} style={{ padding:'8px 16px', fontSize:10, fontWeight:700, color:T.inkMuted,
+                                                                textTransform:'uppercase', letterSpacing:0.5, textAlign:'left', fontFamily:T.sans }}>
+                                                                {h}
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                {oppContacts.map((c,i) => {
+                                                    const personaId = c.buyerPersona || c.persona || '';
+                                                    const persona = (settings?.buyerPersonas||[]).find(p => p.id === personaId || p.name === personaId);
+                                                    const personaColor = persona?.color || T.inkMuted;
+                                                    const fullName = ((c.firstName||'')+' '+(c.lastName||'')).trim();
+                                                    const initials = fullName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+                                                    return (
+                                                        <tr key={c.id||i} style={{ borderBottom:`1px solid ${T.border}`, background:T.surface, verticalAlign:'middle' }}>
+                                                            <td style={{ padding:'12px 16px' }}>
+                                                                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                                                                    <div style={{ width:32, height:32, borderRadius:'50%', background:T.ink, color:'#fbf8f3',
+                                                                        fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                                                                        {initials}
+                                                                    </div>
+                                                                    <div>
+                                                                        <div style={{ fontWeight:700, color:T.ink, fontSize:12.5 }}>{fullName}</div>
+                                                                        <div style={{ fontSize:10.5, color:T.inkMuted }}>
+                                                                            last touch {c.lastTouch || '—'} · {c.activities || 0} activities
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        </div>
-                                                        <div style={{ color:T.inkMid }}>{c.title || '—'}</div>
-                                                        <div>
-                                                            {c.email ? <a href={`mailto:${c.email}`} style={{ color:T.info, fontWeight:500, fontSize:12 }}>{c.email}</a> : <span style={{ color:T.inkMuted }}>—</span>}
-                                                        </div>
-                                                        <div style={{ color:T.inkMid, fontFamily:'ui-monospace,Menlo,monospace', fontSize:12 }}>{c.phone || '—'}</div>
-                                                        <div>
-                                                            {persona ? (
-                                                                <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'2px 8px 2px 4px',
-                                                                    borderRadius:12, background:`${personaColor}14`, border:`1px solid ${personaColor}40` }}>
-                                                                    <span style={{ width:16, height:16, borderRadius:'50%', background:personaColor, color:'#fbf8f3',
-                                                                        display:'inline-flex', alignItems:'center', justifyContent:'center',
-                                                                        fontSize:9, fontWeight:700, fontFamily:T.serif }}>
-                                                                        {(persona.name||'?')[0]}
+                                                            </td>
+                                                            <td style={{ padding:'12px 16px', fontSize:12.5, color:T.inkMid }}>{c.title || '—'}</td>
+                                                            <td style={{ padding:'12px 16px', fontSize:12.5 }}>
+                                                                {c.email ? <a href={`mailto:${c.email}`} style={{ color:T.info, fontWeight:500, fontSize:12 }}>{c.email}</a> : <span style={{ color:T.inkMuted }}>—</span>}
+                                                            </td>
+                                                            <td style={{ padding:'12px 16px', fontSize:12.5, color:T.inkMid, fontFamily:T.sans }}>{c.phone || '—'}</td>
+                                                            <td style={{ padding:'12px 16px' }}>
+                                                                {persona ? (
+                                                                    <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'2px 8px 2px 4px',
+                                                                        borderRadius:12, background:`${personaColor}14`, border:`1px solid ${personaColor}40` }}>
+                                                                        <span style={{ width:16, height:16, borderRadius:'50%', background:personaColor, color:'#fbf8f3',
+                                                                            display:'inline-flex', alignItems:'center', justifyContent:'center',
+                                                                            fontSize:9, fontWeight:700, fontFamily:T.serif }}>
+                                                                            {(persona.name||'?')[0]}
+                                                                        </span>
+                                                                        <span style={{ fontSize:11, fontWeight:600, color:personaColor }}>{persona.name}</span>
                                                                     </span>
-                                                                    <span style={{ fontSize:11, fontWeight:600, color:personaColor }}>{persona.name}</span>
-                                                                </span>
-                                                            ) : <span style={{ color:T.inkMuted, fontStyle:'italic', fontSize:11 }}>—</span>}
-                                                        </div>
-                                                        <div>
-                                                            {(() => {
-                                                                const eng = c.engagement || 'warm';
-                                                                const ec = eng==='hot' ? T.danger : eng==='cool' ? T.info : eng==='stale' ? T.inkMuted : T.warn;
-                                                                return <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
-                                                                    <span style={{ width:7, height:7, borderRadius:'50%', background:ec }}/>
-                                                                    <span style={{ fontSize:11.5, color:T.inkMid, textTransform:'capitalize' }}>{eng}</span>
-                                                                </span>;
-                                                            })()}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
+                                                                ) : <span style={{ color:T.inkMuted, fontStyle:'italic', fontSize:11 }}>—</span>}
+                                                            </td>
+                                                            <td style={{ padding:'12px 16px' }}>
+                                                                {(() => {
+                                                                    const eng = c.engagement || 'warm';
+                                                                    const ec = eng==='hot' ? T.danger : eng==='cool' ? T.info : eng==='stale' ? T.inkMuted : T.warn;
+                                                                    return <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}>
+                                                                        <span style={{ width:7, height:7, borderRadius:'50%', background:ec, flexShrink:0 }}/>
+                                                                        <span style={{ fontSize:11.5, color:T.inkMid, textTransform:'capitalize' }}>{eng}</span>
+                                                                    </span>;
+                                                                })()}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                                </tbody>
+                                            </table>
                                         </div>
                                         )}
                                     </div>
