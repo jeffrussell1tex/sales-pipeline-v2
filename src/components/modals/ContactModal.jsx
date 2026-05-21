@@ -76,8 +76,8 @@ export default function ContactModal({
         const saveData = { ...formData, company: companySearch, assignedRep: contactRepSearch };
         if (!contact && contacts) {
             const dup = contacts.find(c =>
-                c.firstName.toLowerCase().trim() === saveData.firstName.toLowerCase().trim() &&
-                c.lastName.toLowerCase().trim()  === saveData.lastName.toLowerCase().trim()
+                (c.firstName || '').toLowerCase().trim() === saveData.firstName.toLowerCase().trim() &&
+                (c.lastName  || '').toLowerCase().trim() === saveData.lastName.toLowerCase().trim()
             );
             if (dup && !duplicateContactWarning) {
                 setDuplicateContactWarning(dup);
