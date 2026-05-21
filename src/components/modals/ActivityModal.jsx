@@ -110,9 +110,9 @@ export default function ActivityModal({ activity, opportunities, contacts, accou
     const filteredContacts = contactSearch.length === 0 ? [] : (contacts || []).filter(c => {
         if (selectedContactIds.has(c.id)) return false;
         const s = contactSearch.toLowerCase();
-        return `${c.firstName} ${c.lastName}`.toLowerCase().startsWith(s) ||
-               c.firstName.toLowerCase().startsWith(s) ||
-               c.lastName.toLowerCase().startsWith(s);
+        return `${c.firstName || ''} ${c.lastName || ''}`.toLowerCase().startsWith(s) ||
+               (c.firstName || '').toLowerCase().startsWith(s) ||
+               (c.lastName  || '').toLowerCase().startsWith(s);
     });
 
     return (

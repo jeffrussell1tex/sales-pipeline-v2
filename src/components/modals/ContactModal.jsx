@@ -123,8 +123,8 @@ export default function ContactModal({
         const filtered = hasSearch
             ? allContacts.filter(c =>
                 ((c.firstName + ' ' + c.lastName).toLowerCase().startsWith(searchVal.toLowerCase()) ||
-                 c.firstName.toLowerCase().startsWith(searchVal.toLowerCase()) ||
-                 c.lastName.toLowerCase().startsWith(searchVal.toLowerCase())) &&
+                 (c.firstName || '').toLowerCase().startsWith(searchVal.toLowerCase()) ||
+                 (c.lastName  || '').toLowerCase().startsWith(searchVal.toLowerCase())) &&
                 !(selectedItems || []).some(s => s.id === c.id)
               )
             : [];
