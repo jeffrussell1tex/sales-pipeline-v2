@@ -14,7 +14,6 @@ import LeadModal from '../modals/LeadModal';
 import LostReasonModal from '../modals/LostReasonModal';
 import ViewingContactPanel from '../panels/ViewingContactPanel';
 import ViewingAccountPanel from '../panels/ViewingAccountPanel';
-import ViewingTaskPanel from '../panels/ViewingTaskPanel';
 
 export default function ModalLayer() {
     const {
@@ -231,13 +230,6 @@ export default function ModalLayer() {
                 />
             )}
 
-            <ViewingTaskPanel
-                    setEditingTask={setEditingTask} setShowTaskModal={setShowTaskModal}
-                    setEditingOpp={setEditingOpp} setShowModal={setShowModal}
-                    setEditingContact={setEditingContact} setShowContactModal={setShowContactModal}
-                    setEditingAccount={setEditingAccount} setEditingSubAccount={setEditingSubAccount} setShowAccountModal={setShowAccountModal}
-                    setEditingActivity={setEditingActivity} setShowActivityModal={setShowActivityModal} setActivityInitialContext={setActivityInitialContext}
-                />
 
             {showContactModal && (
                 <ContactModal

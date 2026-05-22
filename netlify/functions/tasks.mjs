@@ -27,6 +27,7 @@ export const handler = async (event) => {
         completedDate: d.completedDate || null,
         opportunityId: d.opportunityId || null,
         contactId:     d.contactId     || null,
+        contacts:      d.contacts      ?? null,
         accountId:     d.accountId     || null,
         relatedTo:     d.relatedTo     || null,
     });
