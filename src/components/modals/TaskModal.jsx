@@ -44,8 +44,18 @@ export default function TaskModal({
     onOpenNestedContact,
     onOpenNestedAccount,
 }) {
+    // Normalize legacy single contactId into contacts[] on edit
+    const normalizeTaskContacts = (t) => {
+        if (Array.isArray(t.contacts) && t.contacts.length > 0) return t.contacts;
+        if (t.contactId) {
+            const c = (contacts || []).find(x => x.id === t.contactId);
+            if (c) return [{ id: c.id, name: `${c.firstName} ${c.lastName}`.trim(), title: c.title || '', primary: true }];
+        }
+        return [];
+    };
+
     const [formData, setFormData] = useState(task
-        ? { ...task, status: task.status || (task.completed ? 'Completed' : 'Open'), assignedTo: task.assignedTo || '', priority: task.priority || 'Medium', addToCalendar: false }
+        ? { ...task, contacts: normalizeTaskContacts(task), status: task.status || (task.completed ? 'Completed' : 'Open'), assignedTo: task.assignedTo || '', priority: task.priority || 'Medium', addToCalendar: false }
         : {
             title: '',
             description: '',
@@ -57,6 +67,7 @@ export default function TaskModal({
             relatedTo: '',
             opportunityId: '',
             contactId: '',
+            contacts: [],
             accountId: '',
             completed: false,
             status: 'Open',
@@ -82,6 +93,7 @@ export default function TaskModal({
     const [showOpportunitySuggestions, setShowOpportunitySuggestions] = useState(false);
     const [contactSearch,    setContactSearch]    = useState('');
     const [showContactSugg,  setShowContactSugg]  = useState(false);
+    const contactInputRef = useRef(null);
     const [accountSearch,    setAccountSearch]    = useState('');
     const [showAccountSugg,  setShowAccountSugg]  = useState(false);
 
@@ -348,50 +360,93 @@ export default function TaskModal({
                                     )}
                                 </div>
 
-                                {/* Contact — full width */}
+                                {/* Contacts — multi-select */}
                                 <div style={{ ...formGroupStyle, gridColumn: 'span 2', position: 'relative' }}>
-                                    <label style={labelStyle}>Contact</label>
-                                    <input type="text" value={contactSearch}
+                                    <label style={labelStyle}>Contacts</label>
+
+                                    {/* Selected contact chips */}
+                                    {(formData.contacts || []).length > 0 && (
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                                            {(formData.contacts || []).map((c, i) => (
+                                                <div key={c.id || i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px 4px 10px', background: T.surface2, border: `1px solid ${T.borderStrong}`, borderRadius: 999, fontSize: 12, fontWeight: 500, color: T.ink, fontFamily: T.sans }}>
+                                                    {c.primary && (
+                                                        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: T.goldInk, background: 'rgba(200,185,154,0.28)', padding: '1px 5px', borderRadius: 2, flexShrink: 0 }}>Primary</span>
+                                                    )}
+                                                    <span>{c.name}</span>
+                                                    <button type="button"
+                                                        onClick={() => {
+                                                            const next = (formData.contacts || []).filter((_, j) => j !== i);
+                                                            // If we removed the primary, promote the first remaining
+                                                            const hasPrimary = next.some(x => x.primary);
+                                                            handleChange('contacts', !hasPrimary && next.length > 0 ? next.map((x, j) => j === 0 ? { ...x, primary: true } : x) : next);
+                                                        }}
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: '0 0 0 2px', flexShrink: 0 }}>×</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Search input — stays open to allow adding multiple */}
+                                    <input
+                                        ref={contactInputRef}
+                                        type="text"
+                                        value={contactSearch}
                                         onChange={e => { setContactSearch(e.target.value); setShowContactSugg(e.target.value.length > 0); }}
-                                        onFocus={() => { if (contactSearch.length > 0) setShowContactSugg(true); }}
-                                        placeholder="Type contact name…"
+                                        onFocus={() => setShowContactSugg(contactSearch.length > 0)}
+                                        placeholder={(formData.contacts || []).length > 0 ? 'Add another contact…' : 'Type contact name…'}
                                         autoComplete="off"
                                         style={inputStyle}
                                     />
-                                    {formData.contactId && (
-                                        <div style={{ marginTop: 6, padding: '6px 10px', background: T.surface2, borderRadius: T.rMd, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, border: `1px solid ${T.border}` }}>
-                                            <span>{contacts.find(c => c.id === formData.contactId)?.firstName} {contacts.find(c => c.id === formData.contactId)?.lastName}</span>
-                                            <button type="button" onClick={() => { handleChange('contactId', ''); setContactSearch(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: T.inkMid, lineHeight: 1 }}>×</button>
-                                        </div>
-                                    )}
-                                    {showContactSugg && (
-                                        <div style={{ ...suggBoxStyle, top: undefined, bottom: '100%', borderRadius: `${T.rMd}px ${T.rMd}px 0 0` }}>
-                                            {contacts.filter(c =>
-                                                `${c.firstName} ${c.lastName}`.toLowerCase().startsWith(contactSearch.toLowerCase()) ||
-                                                c.firstName?.toLowerCase().startsWith(contactSearch.toLowerCase()) ||
-                                                c.lastName?.toLowerCase().startsWith(contactSearch.toLowerCase())
-                                            ).map(c => (
-                                                <div key={c.id}
-                                                    onClick={() => { handleChange('contactId', c.id); setContactSearch(''); setShowContactSugg(false); }}
-                                                    style={suggItemStyle(false)}
+
+                                    {/* Dropdown suggestions */}
+                                    {showContactSugg && (() => {
+                                        const alreadyIds = new Set((formData.contacts || []).map(c => c.id));
+                                        const q = contactSearch.toLowerCase();
+                                        const matched = contacts.filter(c =>
+                                            !alreadyIds.has(c.id) && (
+                                                `${c.firstName} ${c.lastName}`.toLowerCase().startsWith(q) ||
+                                                c.firstName?.toLowerCase().startsWith(q) ||
+                                                c.lastName?.toLowerCase().startsWith(q)
+                                            )
+                                        );
+                                        return (
+                                            <div style={{ ...suggBoxStyle, top: undefined, bottom: '100%', borderRadius: `${T.rMd}px ${T.rMd}px 0 0` }}>
+                                                {matched.map(c => (
+                                                    <div key={c.id}
+                                                        onMouseDown={e => e.preventDefault()}
+                                                        onClick={() => {
+                                                            const existing = formData.contacts || [];
+                                                            const newEntry = { id: c.id, name: `${c.firstName} ${c.lastName}`.trim(), title: c.title || '', primary: existing.length === 0 };
+                                                            handleChange('contacts', [...existing, newEntry]);
+                                                            setContactSearch('');
+                                                            // Keep dropdown open for more; re-focus input
+                                                            setTimeout(() => { contactInputRef.current?.focus(); }, 0);
+                                                        }}
+                                                        style={suggItemStyle(false)}
+                                                        onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                            <div style={{ flex: 1 }}>
+                                                                <div style={{ fontWeight: 600 }}>{c.firstName} {c.lastName}</div>
+                                                                {c.title && <div style={{ fontSize: 12, color: T.inkMid }}>{c.title}</div>}
+                                                            </div>
+                                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.ok} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {matched.length === 0 && (
+                                                    <div style={{ padding: '10px 12px', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>No matches found</div>
+                                                )}
+                                                <div onMouseDown={e => e.preventDefault()}
+                                                    onClick={e => { e.stopPropagation(); setShowContactSugg(false); onOpenNestedContact && onOpenNestedContact({ firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }}
+                                                    style={{ ...newLinkStyle }}
                                                     onMouseEnter={e => e.currentTarget.style.background = T.surface2}
                                                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                                    <div style={{ fontWeight: 600 }}>{c.firstName} {c.lastName}</div>
-                                                    {c.title && <div style={{ fontSize: 12, color: T.inkMid }}>{c.title}</div>}
+                                                    + New Contact
                                                 </div>
-                                            ))}
-                                            {contacts.filter(c => `${c.firstName} ${c.lastName}`.toLowerCase().startsWith(contactSearch.toLowerCase())).length === 0 && (
-                                                <div style={{ padding: '10px 12px', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>No matches found</div>
-                                            )}
-                                            <div onMouseDown={e => e.preventDefault()}
-                                                onClick={e => { e.stopPropagation(); setShowContactSugg(false); onOpenNestedContact && onOpenNestedContact({ firstName: contactSearch.split(/\s+/)[0] || '', lastName: contactSearch.split(/\s+/).slice(1).join(' ') || '' }); setContactSearch(''); }}
-                                                style={{ ...newLinkStyle }}
-                                                onMouseEnter={e => e.currentTarget.style.background = T.surface2}
-                                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                                + New Contact
                                             </div>
-                                        </div>
-                                    )}
+                                        );
+                                    })()}
                                 </div>
 
                                 {/* Account — full width */}

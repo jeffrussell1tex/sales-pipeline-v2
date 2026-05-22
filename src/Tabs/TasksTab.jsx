@@ -627,7 +627,8 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
             const data = await res.json();
             if (res.ok && data.task) {
                 setTasks(prev => prev.map(t => t.id === task.id ? data.task : t));
-                setLocalContacts(null); // let server state win
+                // Do NOT clear localContacts — viewingTask still points to the old
+                // task object so the rail would flash back to the pre-add state.
             }
         } catch {
             // keep optimistic state on network error
