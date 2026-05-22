@@ -407,13 +407,151 @@ function applyFilters(feed, { source, type, range, account, scope, search, curre
     });
 }
 
+// ── ContactPicker — inline search-and-add dropdown ─────────────
+// Module-scope. Renders below the "+ Add" button as a fixed-position popover.
+function ContactPicker({ contacts, existingIds, onAdd, onClose, anchorRect }) {
+    const [query, setQuery] = useState('');
+    const ref    = useRef(null);
+    const inputRef = useRef(null);
+
+    // Close on outside click
+    useEffect(() => {
+        const handler = e => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [onClose]);
+
+    // Auto-focus search
+    useEffect(() => { inputRef.current?.focus(); }, []);
+
+    const q = query.trim().toLowerCase();
+    const filtered = contacts
+        .filter(c => !existingIds.has(c.id))
+        .filter(c => !q || `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) || (c.company || '').toLowerCase().includes(q))
+        .slice(0, 8);
+
+    // Position: open above the anchor if too close to bottom
+    const POPOVER_H = 280;
+    const MARGIN    = 6;
+    const top  = anchorRect && (anchorRect.bottom + POPOVER_H + MARGIN > window.innerHeight)
+        ? anchorRect.top - POPOVER_H - MARGIN
+        : (anchorRect ? anchorRect.bottom + MARGIN : 200);
+    const right = anchorRect ? window.innerWidth - anchorRect.right : 24;
+
+    return (
+        <div ref={ref} style={{
+            position: 'fixed', top, right, zIndex: 9999,
+            width: 280,
+            background: T.surface, border: `1px solid ${T.borderStrong}`,
+            borderRadius: T.rMd, boxShadow: '0 8px 24px rgba(42,38,34,0.16)',
+            overflow: 'hidden', fontFamily: T.sans,
+        }}>
+            {/* Search input */}
+            <div style={{ padding: '8px 10px', borderBottom: `1px solid ${T.border}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: T.bg, border: `1px solid ${T.border}`, borderRadius: T.r, padding: '5px 8px' }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.inkMuted} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                    <input
+                        ref={inputRef}
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        placeholder="Search contacts…"
+                        style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 12, color: T.ink, fontFamily: T.sans, width: '100%' }}
+                    />
+                    {query && (
+                        <button onClick={() => setQuery('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkMuted, fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
+                    )}
+                </div>
+            </div>
+
+            {/* Results list */}
+            <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                {filtered.length === 0 ? (
+                    <div style={{ padding: '16px 12px', fontSize: 12, color: T.inkMuted, textAlign: 'center' }}>
+                        {q ? 'No matches.' : 'All contacts already added.'}
+                    </div>
+                ) : (
+                    filtered.map(c => (
+                        <div key={c.id}
+                            onClick={() => { onAdd(c); onClose(); }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', borderBottom: `1px solid ${T.border}` }}
+                            onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            <Avatar name={`${c.firstName} ${c.lastName}`} size={28}/>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={{ fontSize: 12.5, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {c.firstName} {c.lastName}
+                                </div>
+                                {(c.title || c.company) && (
+                                    <div style={{ fontSize: 11, color: T.inkMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {[c.title, c.company].filter(Boolean).join(' · ')}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ── ContactRowMenu — ⋯ per-contact action menu ──────────────────
+function ContactRowMenu({ contact, isPrimary, onSetPrimary, onRemove, onClose, anchorRect }) {
+    const ref = useRef(null);
+
+    useEffect(() => {
+        const handler = e => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [onClose]);
+
+    const MENU_W = 180;
+    const top    = anchorRect ? anchorRect.bottom + 4 : 0;
+    const right  = anchorRect ? window.innerWidth - anchorRect.right : 24;
+
+    const items = [
+        !isPrimary && { label: 'Set as primary', action: onSetPrimary },
+        { label: 'Remove from task', action: onRemove, danger: true },
+    ].filter(Boolean);
+
+    return (
+        <div ref={ref} style={{
+            position: 'fixed', top, right, zIndex: 9999,
+            width: MENU_W, background: T.surface,
+            border: `1px solid ${T.borderStrong}`, borderRadius: T.rMd,
+            boxShadow: '0 6px 18px rgba(42,38,34,0.13)', overflow: 'hidden', fontFamily: T.sans,
+        }}>
+            {items.map((item, i) => (
+                <button key={i} onClick={() => { item.action(); onClose(); }}
+                    style={{ display: 'block', width: '100%', padding: '9px 14px', fontSize: 12.5, fontWeight: 500, color: item.danger ? T.danger : T.ink, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: T.sans, borderBottom: i < items.length - 1 ? `1px solid ${T.border}` : 'none' }}
+                    onMouseEnter={e => e.currentTarget.style.background = T.surface2}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    {item.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
 // ── TaskViewRail — right-rail task detail panel ─────────────────
 // Module-scope so React never unmounts on re-render.
 function TaskViewRail({ task, opportunities, contacts, accounts, activities, canEdit, currentUser, handleCompleteTask, handleSaveTask, setTasks, setViewingTask, setEditingTask, setShowTaskModal, setActivityInitialContext, setEditingActivity, setShowActivityModal }) {
-    const [completing, setCompleting] = useState(false);
-    const [snoozeOpen, setSnoozeOpen] = useState(false);
-    const [snoozeRect, setSnoozeRect] = useState(null);
-    const snoozeRef                   = useRef(null);
+    const [completing,    setCompleting]    = useState(false);
+    const [snoozeOpen,    setSnoozeOpen]    = useState(false);
+    const [snoozeRect,    setSnoozeRect]    = useState(null);
+    const snoozeRef                         = useRef(null);
+
+    // Contact picker
+    const [pickerOpen,    setPickerOpen]    = useState(false);
+    const [pickerRect,    setPickerRect]    = useState(null);
+    const addBtnRef                         = useRef(null);
+
+    // Per-contact ⋯ menu
+    const [menuContactId, setMenuContactId] = useState(null);
+    const [menuRect,      setMenuRect]      = useState(null);
+
+    // Local contacts list — optimistically updated, null = use derived
+    const [localContacts, setLocalContacts] = useState(null);
 
     // Resolve linked records
     const opp     = task.opportunityId ? opportunities.find(o => o.id === task.opportunityId) : null;
@@ -435,12 +573,13 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
             .slice(0, 8);
     }, [activities, task.opportunityId, task.accountId]);
 
-    // Multi-contact support: prefer task.contacts[] array, fallback to legacy contactId
+    // Multi-contact support: prefer localContacts (optimistic) > task.contacts[] > legacy contactId
     const taskContacts = useMemo(() => {
+        if (localContacts !== null) return localContacts;
         if (Array.isArray(task.contacts) && task.contacts.length > 0) return task.contacts;
         if (contact) return [{ id: contact.id, name: contact.firstName + ' ' + contact.lastName, title: contact.title || '', primary: true }];
         return [];
-    }, [task.contacts, contact]);
+    }, [localContacts, task.contacts, contact]);
 
     const statusDisplay = task.status || (task.completed ? 'Completed' : 'Open');
 
@@ -476,6 +615,47 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
         }
         setShowActivityModal(true);
         setEditingActivity(null);
+    };
+
+    // Save contacts[] to DB and update local + global state
+    const saveContacts = async (newContacts) => {
+        setLocalContacts(newContacts);
+        const updated = { ...task, contacts: newContacts };
+        setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+        try {
+            const res  = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+            const data = await res.json();
+            if (res.ok && data.task) {
+                setTasks(prev => prev.map(t => t.id === task.id ? data.task : t));
+                setLocalContacts(null); // let server state win
+            }
+        } catch {
+            // keep optimistic state on network error
+        }
+    };
+
+    const handleAddContact = (c) => {
+        const newEntry = {
+            id:      c.id,
+            name:    `${c.firstName} ${c.lastName}`.trim(),
+            title:   c.title || '',
+            primary: taskContacts.length === 0, // first contact auto-primary
+        };
+        saveContacts([...taskContacts, newEntry]);
+    };
+
+    const handleRemoveContact = (id) => {
+        const remaining = taskContacts.filter(c => c.id !== id);
+        // If we removed the primary and there are others, promote the first
+        const hasPrimary = remaining.some(c => c.primary);
+        const next = (!hasPrimary && remaining.length > 0)
+            ? remaining.map((c, i) => i === 0 ? { ...c, primary: true } : c)
+            : remaining;
+        saveContacts(next);
+    };
+
+    const handleSetPrimary = (id) => {
+        saveContacts(taskContacts.map(c => ({ ...c, primary: c.id === id })));
     };
 
     const handleEdit = e => {
@@ -623,40 +803,81 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
                     </div>
 
                     {/* Contacts section */}
-                    <div style={{ marginBottom: 22 }}>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
+                    <div style={{ marginBottom: 22, position: 'relative' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                             <div style={{ fontSize: 10.5, fontWeight: 700, color: T.ink, textTransform: 'uppercase', letterSpacing: 0.8 }}>Contacts</div>
                             {taskContacts.length > 0 && <div style={{ fontSize: 11, color: T.inkMuted }}>{taskContacts.length} involved</div>}
                             <div style={{ flex: 1 }}/>
                             {canEdit && (
-                                <button style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: T.goldInk, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: T.sans }}>
-                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                                    Add
-                                </button>
+                                <div ref={addBtnRef} style={{ position: 'relative' }}>
+                                    <button
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            if (addBtnRef.current) setPickerRect(addBtnRef.current.getBoundingClientRect());
+                                            setPickerOpen(o => !o);
+                                        }}
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: T.goldInk, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: T.sans }}>
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                                        Add
+                                    </button>
+                                    {pickerOpen && pickerRect && (
+                                        <ContactPicker
+                                            contacts={contacts}
+                                            existingIds={new Set(taskContacts.map(c => c.id))}
+                                            onAdd={handleAddContact}
+                                            onClose={() => setPickerOpen(false)}
+                                            anchorRect={pickerRect}
+                                        />
+                                    )}
+                                </div>
                             )}
                         </div>
                         {taskContacts.length === 0 ? (
                             <div style={{ fontSize: 12.5, color: T.inkMuted, fontStyle: 'italic', padding: '8px 0' }}>No contacts on this task yet.</div>
                         ) : (
-                            taskContacts.map((c, i) => (
-                                <div key={c.id || i} style={{ borderBottom: i < taskContacts.length - 1 ? `1px solid ${T.border}` : 'none' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', cursor: 'pointer' }}>
-                                        <Avatar name={c.name} size={32}/>
-                                        <div style={{ minWidth: 0, flex: 1 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                                                {c.primary && (
-                                                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: T.goldInk, background: 'rgba(200,185,154,0.22)', padding: '2px 6px', borderRadius: 2, flexShrink: 0 }}>Primary</span>
-                                                )}
+                            taskContacts.map((c, i) => {
+                                const isMenuOpen = menuContactId === (c.id || i);
+                                return (
+                                    <div key={c.id || i} style={{ borderBottom: i < taskContacts.length - 1 ? `1px solid ${T.border}` : 'none' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
+                                            <Avatar name={c.name} size={32}/>
+                                            <div style={{ minWidth: 0, flex: 1 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    <div style={{ fontSize: 13, fontWeight: 600, color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                                                    {c.primary && (
+                                                        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: T.goldInk, background: 'rgba(200,185,154,0.22)', padding: '2px 6px', borderRadius: 2, flexShrink: 0 }}>Primary</span>
+                                                    )}
+                                                </div>
+                                                {c.title && <div style={{ fontSize: 11.5, color: T.inkMid, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</div>}
                                             </div>
-                                            {c.title && <div style={{ fontSize: 11.5, color: T.inkMid, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</div>}
+                                            {canEdit && (
+                                                <div style={{ position: 'relative', flexShrink: 0 }}>
+                                                    <button
+                                                        onClick={e => {
+                                                            e.stopPropagation();
+                                                            const rect = e.currentTarget.getBoundingClientRect();
+                                                            setMenuRect(rect);
+                                                            setMenuContactId(isMenuOpen ? null : (c.id || i));
+                                                        }}
+                                                        style={{ width: 26, height: 26, borderRadius: T.rMd, border: `1px solid ${T.border}`, background: T.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.inkMid} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                                                    </button>
+                                                    {isMenuOpen && menuRect && (
+                                                        <ContactRowMenu
+                                                            contact={c}
+                                                            isPrimary={!!c.primary}
+                                                            onSetPrimary={() => handleSetPrimary(c.id)}
+                                                            onRemove={() => handleRemoveContact(c.id)}
+                                                            onClose={() => setMenuContactId(null)}
+                                                            anchorRect={menuRect}
+                                                        />
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
-                                        <button style={{ width: 26, height: 26, borderRadius: T.rMd, border: `1px solid ${T.border}`, background: T.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.inkMid} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-                                        </button>
                                     </div>
-                                </div>
-                            ))
+                                );
+                            })
                         )}
                     </div>
 
