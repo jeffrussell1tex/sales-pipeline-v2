@@ -153,6 +153,7 @@ export const tasks = pgTable('tasks', {
     completedDate: varchar('completed_date', { length: 20 }),
     opportunityId: text('opportunity_id'),
     contactId:     text('contact_id'),
+    contacts:      jsonb('contacts'),
     accountId:     text('account_id'),
     relatedTo:     text('related_to'),
     createdAt:     timestamp('created_at').notNull().defaultNow(),

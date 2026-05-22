@@ -245,9 +245,8 @@ function QRow({ task, isOverdue, isCompleted, opportunities, canEdit, handleComp
         const updated = { ...task, dueDate: newDate, status: 'Open', completed: false };
         setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
         try {
-            const res  = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
-            const data = await res.json();
-            if (res.ok && data.task) {
+            const data = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+            if (data?.task) {
                 setTasks(prev => prev.map(t => t.id === task.id ? data.task : t));
             } else {
                 setTasks(prev => prev.map(t => t.id === task.id ? task : t));
@@ -596,9 +595,8 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
         const updated = { ...task, dueDate: newDate, status: 'Open', completed: false };
         setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
         try {
-            const res  = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
-            const data = await res.json();
-            if (res.ok && data.task) {
+            const data = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+            if (data?.task) {
                 setTasks(prev => prev.map(t => t.id === task.id ? data.task : t));
             } else {
                 setTasks(prev => prev.map(t => t.id === task.id ? task : t));
@@ -623,9 +621,8 @@ function TaskViewRail({ task, opportunities, contacts, accounts, activities, can
         const updated = { ...task, contacts: newContacts };
         setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
         try {
-            const res  = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
-            const data = await res.json();
-            if (res.ok && data.task) {
+            const data = await dbFetch('/.netlify/functions/tasks', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+            if (data?.task) {
                 setTasks(prev => prev.map(t => t.id === task.id ? data.task : t));
                 // Do NOT clear localContacts — viewingTask still points to the old
                 // task object so the rail would flash back to the pre-add state.
