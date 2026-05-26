@@ -423,7 +423,7 @@ function CompanyTwoPane({
             </div>
 
             {/* RIGHT — Company detail + contacts — sticky so it stays in view while left list scrolls */}
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, alignSelf: 'flex-start', maxHeight: '100vh', overflowY: 'auto' }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, alignSelf: 'flex-start', maxHeight: '100vh', overflow: 'hidden' }}>
                 {/* Company header card */}
                 <div style={{
                     background: T.surface, border: `1px solid ${T.border}`,
@@ -502,7 +502,7 @@ function CompanyTwoPane({
                 </div>
 
                 {/* Contact cards for selected company */}
-                <div style={{ flex: 1, overflowY: 'auto' }}>
+                <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
                         {activeCompany.contacts.length === 0 ? (
                             <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>No contacts at this company.</div>
