@@ -246,12 +246,15 @@ export function useDraggable({ transparent = false } = {}) {
 
     const dragOffsetStyle = dragContainerStyle;
 
+    const clickCatcherProps = { style: clickCatcherStyle };
+
     return {
         dragHandleProps,
         dragOffsetStyle,
         dragContainerStyle,
         overlayStyle,
         clickCatcherStyle,
+        clickCatcherProps,
         isDragging,
         isMobile: mobile,
         bringToFront,

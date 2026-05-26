@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
 import { useApp } from '../AppContext';
 import { dbFetch } from '../utils/storage';
 
@@ -312,6 +312,17 @@ function CompanyTwoPane({
     handleEditContact,
 }) {
     const [coSearch, setCoSearch] = useState('');
+    const [stickyTop, setStickyTop] = useState(0);
+    const rightPanelRef = useRef(null);
+
+    // Measure the actual pixel distance from the right panel's natural top edge
+    // to the top of the viewport on mount. This accounts for the fixed AppHeader
+    // + nav-tabs above the tab content without needing to know their CSS height.
+    useLayoutEffect(() => {
+        if (!rightPanelRef.current) return;
+        const rect = rightPanelRef.current.getBoundingClientRect();
+        setStickyTop(rect.top);
+    }, []);
 
     const filteredCompanies = useMemo(() => {
         if (!coSearch.trim()) return companyList;
@@ -364,7 +375,7 @@ function CompanyTwoPane({
     );
 
     return (
-        <div style={{ display: 'flex', gap: 14, flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <div ref={rightPanelRef} style={{ display: 'flex', gap: 14, overflow: 'hidden', height: `calc(100vh - ${stickyTop}px)` }}>
 
             {/* LEFT — Company list */}
             <div style={{ width: 280, flexShrink: 0, background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -502,7 +513,7 @@ function CompanyTwoPane({
                 </div>
 
                 {/* Contact cards for selected company */}
-                <div style={{ flex: 1, overflowY: 'auto' }}>
+                <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                     <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: T.r+1, overflow: 'hidden' }}>
                         {activeCompany.contacts.length === 0 ? (
                             <div style={{ padding: '2rem', textAlign: 'center', color: T.inkMuted, fontSize: 13, fontFamily: T.sans }}>No contacts at this company.</div>
@@ -752,7 +763,7 @@ export default function ContactsTab() {
     }, [sorted, contactsSortBy, sortField]);
 
     return (
-        <div className="tab-page" style={{ fontFamily: T.sans, display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div className="tab-page" style={{ fontFamily: T.sans, display: 'flex', flexDirection: 'column' }}>
 
             {/* ── Page header ── */}
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 20, paddingBottom: 12, flexShrink: 0 }}>
@@ -841,7 +852,7 @@ export default function ContactsTab() {
 
             {/* ── Company two-pane (Company mode) ── */}
             {contactsSortBy === 'company' && (
-                <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', paddingTop: 12 }}>
+                <div style={{ paddingTop: 12 }}>
                     {sorted.length === 0
                         ? <EmptyState search={search} canEdit={canEdit} handleAddContact={handleAddContact} />
                         : <CompanyTwoPane
